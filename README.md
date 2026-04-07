@@ -1,3 +1,0 @@
-# 📚 Class Tracker — Web App
-
-
