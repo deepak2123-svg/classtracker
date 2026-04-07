@@ -1,4 +1,11 @@
-// ─── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyCCPbJdMU0xQHWCtVLakaFeeRCdY3kMP4s",
+  authDomain: "classtracker-84920.firebaseapp.com",
+  projectId: "classtracker-84920",
+  storageBucket: "classtracker-84920.firebasestorage.app",
+  messagingSenderId: "170006710635",
+  appId: "1:170006710635:web:cf27aa33008adb93daa42e"
+};// ─── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────────────
 // 1. console.firebase.google.com → your project → Project Settings → Web app
 // 2. Authentication → Sign-in method → enable Google + Email/Password
 // 3. Firestore → Rules → paste the rules block shown below
