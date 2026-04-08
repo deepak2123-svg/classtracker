@@ -3,57 +3,125 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1E2A3A" />
+    <meta name="theme-color" content="#1A3328" />
     <meta name="description" content="Track your classes and daily notes" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <title>Class Tracker</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #F8FAFB; font-family: 'DM Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
+      body { background: #F2F7F3; font-family: 'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
 
-      /* ── Ripple ── */
-      .ripple-root { position: relative; overflow: hidden; cursor: pointer; }
-      .ripple-root:active { transform: scale(0.985); }
-      .ripple-wave {
+      /* Ripple */
+      .rw {
         position: absolute; border-radius: 50%;
-        background: rgba(255,255,255,0.28);
+        background: rgba(255,255,255,0.22);
         transform: scale(0); pointer-events: none;
-        animation: ripple-expand 0.52s cubic-bezier(0.4,0,0.2,1) forwards;
+        animation: rx 0.5s cubic-bezier(0.4,0,0.2,1) forwards;
       }
-      .ripple-wave.dark { background: rgba(30,42,58,0.10); }
-      @keyframes ripple-expand {
-        to { transform: scale(2.8); opacity: 0; }
-      }
+      .rw.dark { background: rgba(26,51,40,0.1); }
+      @keyframes rx { to { transform: scale(3); opacity: 0; } }
 
-      /* ── Tap scale on all interactive elements ── */
-      button { transition: transform 0.1s cubic-bezier(0.4,0,0.2,1), background 0.15s, color 0.15s, box-shadow 0.15s; }
-      button:active { transform: scale(0.96) !important; }
+      button { transition: transform 0.1s cubic-bezier(0.4,0,0.2,1), opacity 0.1s; }
+      button:active { transform: scale(0.96); }
 
-      /* ── Smooth card lifts ── */
-      .ct-card { transition: transform 0.18s cubic-bezier(0.4,0,0.2,1), box-shadow 0.18s; }
-      .ct-card:active { transform: scale(0.988) !important; }
+      .ct-card { transition: box-shadow 0.18s, transform 0.18s; }
+      .ct-card:active { transform: scale(0.988); }
 
-      /* ── Smooth page transitions ── */
-      #root > * { animation: page-in 0.2s cubic-bezier(0.4,0,0.2,1); }
-      @keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-
-      /* ── Input focus ring ── */
-      input:focus, textarea:focus, select:focus {
+      input:focus, textarea:focus {
         outline: none;
-        border-color: #3D7FD4 !important;
-        box-shadow: 0 0 0 3px rgba(61,127,212,0.15);
-        transition: border-color 0.15s, box-shadow 0.15s;
+        border-color: #16A34A !important;
+        box-shadow: 0 0 0 3px rgba(22,163,74,0.15);
       }
 
-      /* ── Scrollbar styling ── */
-      ::-webkit-scrollbar { width: 4px; height: 4px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: #D1D9E0; border-radius: 4px; }
+      ::-webkit-scrollbar { width: 3px; height: 3px; }
+      ::-webkit-scrollbar-thumb { background: #C8DDD0; border-radius: 4px; }
 
-      /* ── Touch-friendly tap targets ── */
-      button { min-height: 32px; }
+      /* Date carousel */
+      .date-carousel-wrap {
+        position: relative;
+        overflow: hidden;
+      }
+      .date-carousel-wrap::before,
+      .date-carousel-wrap::after {
+        content: '';
+        position: absolute;
+        top: 0; bottom: 0;
+        width: 80px;
+        z-index: 2;
+        pointer-events: none;
+      }
+      .date-carousel-wrap::before { left: 0; background: linear-gradient(to right, #1A3328, transparent); }
+      .date-carousel-wrap::after  { right: 0; background: linear-gradient(to left, #1A3328, transparent); }
+
+      .date-carousel {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 14px 60px;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .date-carousel::-webkit-scrollbar { display: none; }
+
+      .dc {
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+        position: relative;
+        border: 1.5px solid transparent;
+        scroll-snap-align: center;
+        user-select: none;
+      }
+      .dc[data-dist="0"] { width: 72px; height: 82px; background: #4ADE80; border-color: #4ADE80; box-shadow: 0 4px 20px rgba(74,222,128,0.4), 0 0 0 4px rgba(74,222,128,0.15); }
+      .dc[data-dist="1"] { width: 58px; height: 66px; background: #2A5040; border-color: #3A6050; }
+      .dc[data-dist="2"] { width: 47px; height: 54px; background: #223C30; border-color: #2E4E3E; }
+      .dc[data-dist="3"] { width: 38px; height: 44px; background: #1D3228; border-color: #27412F; }
+      .dc[data-dist="4"],
+      .dc[data-dist="5"],
+      .dc[data-dist="6"],
+      .dc[data-dist="7"] { width: 30px; height: 36px; background: #192C22; border-color: #1F3328; }
+
+      .dc .dn { font-family: 'Syne', sans-serif; font-weight: 700; line-height: 1; transition: all 0.25s; }
+      .dc .dd { font-family: 'JetBrains Mono', monospace; line-height: 1; margin-top: 3px; text-transform: uppercase; font-size: 8px; letter-spacing: 0.5px; transition: all 0.25s; }
+      .dc .dt { font-size: 7px; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; text-transform: uppercase; margin-top: 3px; }
+      .dc .de { position: absolute; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; }
+
+      .dc[data-dist="0"] .dn { font-size: 26px; color: #1A3328; }
+      .dc[data-dist="0"] .dd { color: rgba(26,51,40,0.65); }
+      .dc[data-dist="0"] .dt { color: rgba(26,51,40,0.55); }
+      .dc[data-dist="0"] .de { background: rgba(26,51,40,0.4); }
+
+      .dc[data-dist="1"] .dn { font-size: 18px; color: #fff; }
+      .dc[data-dist="1"] .dd { color: rgba(255,255,255,0.4); }
+      .dc[data-dist="1"] .de { background: #4ADE80; }
+
+      .dc[data-dist="2"] .dn { font-size: 14px; color: rgba(255,255,255,0.7); }
+      .dc[data-dist="2"] .dd { display: none; }
+
+      .dc[data-dist="3"] .dn { font-size: 11px; color: rgba(255,255,255,0.45); }
+      .dc[data-dist="3"] .dd { display: none; }
+
+      .dc[data-dist="4"] .dn,
+      .dc[data-dist="5"] .dn,
+      .dc[data-dist="6"] .dn,
+      .dc[data-dist="7"] .dn { font-size: 9px; color: rgba(255,255,255,0.25); }
+      .dc[data-dist="4"] .dd,
+      .dc[data-dist="5"] .dd,
+      .dc[data-dist="6"] .dd,
+      .dc[data-dist="7"] .dd { display: none; }
+
+      @keyframes page-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+      #root > div { animation: page-in 0.22s cubic-bezier(0.4,0,0.2,1); }
     </style>
   </head>
   <body>
