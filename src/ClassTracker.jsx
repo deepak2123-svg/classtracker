@@ -93,6 +93,19 @@ function CreatableDropdown({ value, onChange, options, onAddOption, placeholder,
   );
 }
 
+// ── Indian public holidays (YYYY-MM-DD) ───────────────────────────────────────
+const HOLIDAYS = new Set([
+  // 2025
+  "2025-01-26","2025-03-17","2025-04-14","2025-04-18","2025-05-12",
+  "2025-06-07","2025-08-15","2025-08-27","2025-10-02","2025-10-02",
+  "2025-10-20","2025-10-21","2025-11-05","2025-12-25",
+  // 2026
+  "2026-01-26","2026-03-20","2026-03-27","2026-04-03","2026-04-06",
+  "2026-04-14","2026-05-01","2026-06-27","2026-08-15","2026-08-24",
+  "2026-10-02","2026-10-08","2026-10-09","2026-10-19","2026-11-25",
+  "2026-12-25",
+]);
+
 // ── Calendar ──────────────────────────────────────────────────────────────────
 function Calendar({ accentColor, notes, onSelectDate, selectedDate }) {
   const today=new Date();
@@ -106,42 +119,53 @@ function Calendar({ accentColor, notes, onSelectDate, selectedDate }) {
   const prev=()=>{ if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1); };
   const next=()=>{ if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1); };
   const accent = accentColor || T.blue;
+
+  // Compact size — 28px per cell max
   return (
-    <div style={{background:T.surface,borderRadius:10,overflow:"hidden",border:`1px solid ${T.border}`}}>
-      <div style={{background:T.navy,padding:"7px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <button onClick={prev} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-        <div style={{textAlign:"center"}}>
-          <span style={{color:"#fff",fontSize:12,fontWeight:500,fontFamily:T.mono}}>{MONTHS[calMonth]} {calYear}</span>
-        </div>
-        <button onClick={next} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+    <div style={{background:T.surface,borderRadius:9,overflow:"hidden",border:`1px solid ${T.border}`,maxWidth:220}}>
+      <div style={{background:T.navy,padding:"5px 10px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <button onClick={prev} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:5,width:18,height:18,cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+        <span style={{color:"#fff",fontSize:11,fontWeight:500,fontFamily:T.mono}}>{MONTHS[calMonth].slice(0,3)} {calYear}</span>
+        <button onClick={next} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:5,width:18,height:18,cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"5px 5px 1px"}}>
-        {DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:8,color:T.textL,fontFamily:T.mono,padding:"2px 0"}}>{d}</div>)}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"4px 3px 1px"}}>
+        {["S","M","T","W","T","F","S"].map((d,i)=>(
+          <div key={i} style={{textAlign:"center",fontSize:7,fontFamily:T.mono,padding:"1px 0",
+            color:i===0?"#EF4444":T.textL}}>{d}</div>
+        ))}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"0 5px 5px",gap:1}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"0 3px 4px",gap:1}}>
         {cells.map((day,i)=>{
           if(!day) return <div key={`e${i}`}/>;
           const dk=toDateKey(calYear,calMonth,day);
+          const dow=new Date(calYear,calMonth,day).getDay();
           const isToday=dk===tk, isSel=dk===selectedDate;
+          const isSunday=dow===0;
+          const isHoliday=HOLIDAYS.has(dk);
+          const isOff=isSunday||isHoliday;
           const count=(notes[dk]||[]).length;
-          const firstTime=(notes[dk]||[]).filter(n=>n.timeStart).sort((a,b)=>a.timeStart.localeCompare(b.timeStart))[0]?.timeStart;
           return (
             <div key={dk} onClick={()=>onSelectDate(dk)}
-              style={{position:"relative",aspectRatio:"1",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",borderRadius:5,cursor:"pointer",
+              style={{position:"relative",aspectRatio:"1",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",borderRadius:4,cursor:"pointer",
                 background:isSel?accent:isToday?T.blueL:"transparent",transition:"all 0.1s"}}
               onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.blueL;}}
               onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background=isToday?T.blueL:"transparent";}}>
-              <span style={{fontSize:10,fontWeight:isToday||isSel?600:400,color:isSel?"#fff":isToday?accent:T.textS,lineHeight:1,fontFamily:T.sans}}>{day}</span>
-              {firstTime&&<span style={{fontSize:7,color:isSel?"rgba(255,255,255,0.8)":T.textL,fontFamily:T.mono,lineHeight:1.1}}>{fmt(firstTime)}</span>}
+              <span style={{fontSize:9,fontWeight:isToday||isSel?600:400,lineHeight:1,fontFamily:T.sans,
+                color:isSel?"#fff":isToday?accent:isOff?"#EF4444":T.textS}}>{day}</span>
               {count>0&&(
-                <div style={{position:"absolute",bottom:2,display:"flex",gap:1}}>
-                  {count<=3?Array.from({length:count}).map((_,di)=><div key={di} style={{width:3,height:3,borderRadius:"50%",background:isSel?"rgba(255,255,255,0.75)":accent}}/>)
-                    :<div style={{fontSize:7,fontFamily:T.mono,color:isSel?"rgba(255,255,255,0.8)":accent,fontWeight:600}}>{count}</div>}
+                <div style={{position:"absolute",bottom:1,display:"flex",gap:1}}>
+                  {count<=3?Array.from({length:count}).map((_,di)=><div key={di} style={{width:2.5,height:2.5,borderRadius:"50%",background:isSel?"rgba(255,255,255,0.8)":accent}}/>)
+                    :<div style={{fontSize:6,fontFamily:T.mono,color:isSel?"rgba(255,255,255,0.9)":accent,fontWeight:600}}>{count}</div>}
                 </div>
               )}
+              {isHoliday&&!isSel&&<div style={{position:"absolute",top:1,right:1,width:3,height:3,borderRadius:"50%",background:"#EF4444",opacity:0.5}}/>}
             </div>
           );
         })}
+      </div>
+      <div style={{padding:"2px 4px 4px",display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:5,height:5,borderRadius:"50%",background:"#EF4444",opacity:0.6}}/><span style={{fontSize:7,color:T.textL,fontFamily:T.mono}}>sun/holiday</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:5,height:5,borderRadius:"50%",background:accent}}/><span style={{fontSize:7,color:T.textL,fontFamily:T.mono}}>entries</span></div>
       </div>
     </div>
   );
