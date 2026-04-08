@@ -110,23 +110,18 @@ function DateCarousel({ selectedDate, onSelectDate, noteDates=new Set() }) {
   const dates = buildDateWindow();
   const selIdx = dates.findIndex(d=>d.key===selectedDate);
   const centerIdx = selIdx >= 0 ? selIdx : 7;
-  const scrollRef = useRef(null);
   const itemRefs = useRef([]);
 
   useEffect(() => {
-    const container = scrollRef.current;
-    const item = itemRefs.current[centerIdx];
-    if (container && item) {
-      const containerWidth = container.offsetWidth;
-      const itemLeft = item.offsetLeft;
-      const itemWidth = item.offsetWidth;
-      container.scrollLeft = itemLeft - containerWidth / 2 + itemWidth / 2;
-    }
+    requestAnimationFrame(() => {
+      const item = itemRefs.current[centerIdx];
+      if (item) item.scrollIntoView({ inline: "center", block: "nearest" });
+    });
   }, [centerIdx]);
 
   return (
-    <div className="date-carousel-wrap">
-      <div className="date-carousel" ref={scrollRef}>
+    <div className="date-carousel-wrap" style={{overflowX:"hidden",width:"100%"}}>
+      <div className="date-carousel" style={{display:"flex",overflowX:"auto",scrollbarWidth:"none",msOverflowStyle:"none",WebkitOverflowScrolling:"touch"}}>
         {dates.map((d,i)=>{
           const dist=Math.min(Math.abs(i-centerIdx),7);
           const isSel=i===centerIdx;
