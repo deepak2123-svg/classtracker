@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { loadUserData, saveUserData, logout } from "./firebase";
-import { COLORS, TAG_STYLES, DAYS, MONTHS, inp, Spinner, Avatar, toDateKey, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
+import { COLORS, TAG_STYLES, DAYS, MONTHS, inp, Spinner, Avatar, toDateKey, todayKey, formatDateLabel, fmt, formatPeriod, useRipple } from "./shared.jsx";
 
 // Theme C palette
 const T = {
@@ -122,19 +122,19 @@ function Calendar({ accentColor, notes, onSelectDate, selectedDate }) {
 
   // Compact size — 28px per cell max
   return (
-    <div style={{background:T.surface,borderRadius:9,overflow:"hidden",border:`1px solid ${T.border}`,maxWidth:220}}>
-      <div style={{background:T.navy,padding:"5px 10px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <button onClick={prev} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:5,width:18,height:18,cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-        <span style={{color:"#fff",fontSize:11,fontWeight:500,fontFamily:T.mono}}>{MONTHS[calMonth].slice(0,3)} {calYear}</span>
-        <button onClick={next} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:5,width:18,height:18,cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+    <div style={{background:T.surface,borderRadius:9,overflow:"hidden",border:`1px solid ${T.border}`,maxWidth:300}}>
+      <div style={{background:T.navy,padding:"7px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <button onClick={prev} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+        <span style={{color:"#fff",fontSize:12,fontWeight:500,fontFamily:T.mono}}>{MONTHS[calMonth]} {calYear}</span>
+        <button onClick={next} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"4px 3px 1px"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"5px 5px 1px"}}>
         {["S","M","T","W","T","F","S"].map((d,i)=>(
-          <div key={i} style={{textAlign:"center",fontSize:7,fontFamily:T.mono,padding:"1px 0",
+          <div key={i} style={{textAlign:"center",fontSize:7,fontFamily:T.mono,padding:"2px 0",
             color:i===0?"#EF4444":T.textL}}>{d}</div>
         ))}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"0 3px 4px",gap:1}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"0 5px 5px",gap:2}}>
         {cells.map((day,i)=>{
           if(!day) return <div key={`e${i}`}/>;
           const dk=toDateKey(calYear,calMonth,day);
@@ -150,7 +150,7 @@ function Calendar({ accentColor, notes, onSelectDate, selectedDate }) {
                 background:isSel?accent:isToday?T.blueL:"transparent",transition:"all 0.1s"}}
               onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.blueL;}}
               onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background=isToday?T.blueL:"transparent";}}>
-              <span style={{fontSize:9,fontWeight:isToday||isSel?600:400,lineHeight:1,fontFamily:T.sans,
+              <span style={{fontWeight:isToday||isSel?600:400,lineHeight:1,fontFamily:T.sans,fontSize:11,
                 color:isSel?"#fff":isToday?accent:isOff?"#EF4444":T.textS}}>{day}</span>
               {count>0&&(
                 <div style={{position:"absolute",bottom:1,display:"flex",gap:1}}>
@@ -289,7 +289,8 @@ export default function ClassTracker({ user }) {
                 {/* Color accent bar */}
                 <div style={{width:4,alignSelf:"stretch",background:color.bg,flexShrink:0}}/>
                 <div onClick={()=>{setActiveClass(cls);setView("class");setSelectedDate(todayKey());setSearch("");}}
-                  style={{flex:1,display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer",minWidth:0}}>
+                  style={{flex:1,display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer",minWidth:0,position:"relative",overflow:"hidden"}}
+                  onPointerDown={e=>{const r=e.currentTarget;const rect=r.getBoundingClientRect();const s=Math.max(rect.width,rect.height)*2;const x=e.clientX-rect.left-s/2;const y=e.clientY-rect.top-s/2;const w=document.createElement("span");w.className="ripple-wave dark";w.style.cssText=`width:${s}px;height:${s}px;left:${x}px;top:${y}px`;r.appendChild(w);w.addEventListener("animationend",()=>w.remove());}}>
                   <div style={{width:38,height:38,borderRadius:9,background:T.blueL,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600,color:T.blue,fontFamily:T.mono,letterSpacing:-1}}>
                     {(cls.section||"?").slice(0,2).toUpperCase()}
                   </div>
@@ -333,8 +334,8 @@ export default function ClassTracker({ user }) {
             <input value={newClass.teacher} onChange={e=>setNewClass(c=>({...c,teacher:e.target.value}))} placeholder="e.g. Mr. Johnson" style={inpC}/>
 
             <button onClick={addClass} disabled={!newClass.institute.trim()||!newClass.section.trim()}
-              style={{marginTop:4,background:(newClass.institute.trim()&&newClass.section.trim())?T.navy:"#D1D9E0",color:"#fff",border:"none",borderRadius:8,padding:"10px 20px",fontSize:12,cursor:(newClass.institute.trim()&&newClass.section.trim())?"pointer":"not-allowed",fontFamily:T.mono,letterSpacing:1,fontWeight:500}}>
-              ADD CLASS
+              style={{marginTop:4,background:(newClass.institute.trim()&&newClass.section.trim())?T.navy:"#D1D9E0",color:"#fff",border:"none",borderRadius:8,padding:"10px 20px",fontSize:12,cursor:(newClass.institute.trim()&&newClass.section.trim())?"pointer":"not-allowed",fontFamily:T.mono,letterSpacing:1,fontWeight:500,position:"relative",overflow:"hidden"}}
+              onPointerDown={e=>{const r=e.currentTarget;const rect=r.getBoundingClientRect();const s=Math.max(rect.width,rect.height)*2;const x=e.clientX-rect.left-s/2;const y=e.clientY-rect.top-s/2;const w=document.createElement("span");w.className="ripple-wave";w.style.cssText=`width:${s}px;height:${s}px;left:${x}px;top:${y}px`;r.appendChild(w);w.addEventListener("animationend",()=>w.remove());}}>ADD CLASS
             </button>
           </div>
         </div>
@@ -408,11 +409,10 @@ export default function ClassTracker({ user }) {
                 const isActive=cls.id===activeClass.id;
                 return(
                   <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setSearch("");}}
-                    style={{padding:"8px 10px",borderRadius:8,cursor:"pointer",transition:"all 0.12s",
+                    className="ct-card" style={{padding:"8px 10px",borderRadius:8,cursor:"pointer",
                       background:isActive?T.blueL:T.surface,
-                      borderLeft:`3px solid ${isActive?T.blue:"#E8ECF0"}`,
-                      border:`1px solid ${isActive?T.blue+"33":T.border}`,
-                      borderLeft:`3px solid ${isActive?T.blue:"#D1D9E0"}`}}>
+                      borderLeft:`3px solid ${isActive?T.blue:"#D1D9E0"}`,
+                      border:`1px solid ${isActive?T.blue+"33":T.border}`}}>
                     <div style={{fontSize:12,fontWeight:isActive?500:400,color:isActive?T.blue:T.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                     <div style={{fontSize:9,color:T.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:T.mono}}>{cls.institute}</div>
                   </div>
@@ -432,8 +432,8 @@ export default function ClassTracker({ user }) {
                   <div style={{fontSize:10,color:T.textL,fontFamily:T.mono,marginTop:1}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
                 </div>
                 <button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}}
-                  style={{background:T.blue,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:11,cursor:"pointer",fontFamily:T.mono,fontWeight:500,letterSpacing:0.5,boxShadow:"0 2px 8px rgba(61,127,212,0.3)"}}>
-                  + Add Entry
+                  style={{background:T.blue,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:11,cursor:"pointer",fontFamily:T.mono,fontWeight:500,letterSpacing:0.5,boxShadow:"0 2px 8px rgba(61,127,212,0.3)",position:"relative",overflow:"hidden"}}
+                  onPointerDown={e=>{const r=e.currentTarget;const rect=r.getBoundingClientRect();const s=Math.max(rect.width,rect.height)*2;const x=e.clientX-rect.left-s/2;const y=e.clientY-rect.top-s/2;const w=document.createElement("span");w.className="ripple-wave";w.style.cssText=`width:${s}px;height:${s}px;left:${x}px;top:${y}px`;r.appendChild(w);w.addEventListener("animationend",()=>w.remove());}}>+ Add Entry
                 </button>
               </div>
 
@@ -450,9 +450,7 @@ export default function ClassTracker({ user }) {
                 {filtered.map(note=>{
                   const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
                   return(
-                    <div key={note.id} style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(30,42,58,0.04)"}}
-                      onMouseEnter={e=>e.currentTarget.style.boxShadow="0 3px 12px rgba(30,42,58,0.09)"}
-                      onMouseLeave={e=>e.currentTarget.style.boxShadow="0 1px 3px rgba(30,42,58,0.04)"}>
+                    <div key={note.id} className="ct-card" style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(30,42,58,0.04)"}}>
                       <div style={{height:3,background:tag.bg}}/>
                       <div style={{padding:"10px 13px"}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -490,7 +488,8 @@ export default function ClassTracker({ user }) {
                   const entries=classNotes[dk]||[];
                   const isSel=dk===selectedDate;
                   return(
-                    <div key={dk} onClick={()=>setSelectedDate(dk)} style={{cursor:"pointer",display:"flex",gap:8,paddingBottom:12,position:"relative"}}>
+                    <div key={dk} onClick={()=>setSelectedDate(dk)} style={{cursor:"pointer",display:"flex",gap:8,paddingBottom:12,position:"relative",overflow:"hidden",borderRadius:6}}
+                    onPointerDown={e=>{const r=e.currentTarget;const rect=r.getBoundingClientRect();const s=Math.max(rect.width,rect.height)*2;const x=e.clientX-rect.left-s/2;const y=e.clientY-rect.top-s/2;const w=document.createElement("span");w.className="ripple-wave dark";w.style.cssText=`width:${s}px;height:${s}px;left:${x}px;top:${y}px`;r.appendChild(w);w.addEventListener("animationend",()=>w.remove());}}>
                       {i<allDates.length-1&&<div style={{position:"absolute",left:4,top:12,bottom:0,width:1,background:T.border}}/>}
                       <div style={{width:9,height:9,borderRadius:"50%",background:isSel?T.blue:T.surface,border:`2px solid ${isSel?T.blue:T.borderM}`,flexShrink:0,marginTop:3,zIndex:1,transition:"all 0.12s",boxShadow:isSel?`0 0 0 3px rgba(61,127,212,0.15)`:"none"}}/>
                       <div style={{flex:1,minWidth:0}}>
@@ -565,7 +564,8 @@ export default function ClassTracker({ user }) {
           <textarea ref={noteRef} value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Write your notes, tasks, or resources here…" rows={7} style={{...inpC,resize:"vertical",lineHeight:1.7,marginBottom:0}}/>
 
           <button onClick={save}
-            style={{marginTop:14,background:T.navy,color:"#fff",border:"none",borderRadius:8,padding:"11px 26px",fontSize:12,cursor:"pointer",fontFamily:T.mono,letterSpacing:1,fontWeight:500}}>
+            style={{marginTop:14,background:T.navy,color:"#fff",border:"none",borderRadius:8,padding:"11px 26px",fontSize:12,cursor:"pointer",fontFamily:T.mono,letterSpacing:1,fontWeight:500,position:"relative",overflow:"hidden"}}
+          onPointerDown={e=>{const r=e.currentTarget;const rect=r.getBoundingClientRect();const s=Math.max(rect.width,rect.height)*2;const x=e.clientX-rect.left-s/2;const y=e.clientY-rect.top-s/2;const w=document.createElement("span");w.className="ripple-wave";w.style.cssText=`width:${s}px;height:${s}px;left:${x}px;top:${y}px`;r.appendChild(w);w.addEventListener("animationend",()=>w.remove());}}>
             {isEdit?"SAVE CHANGES":"SAVE ENTRY"}
           </button>
         </div>
