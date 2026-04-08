@@ -11,7 +11,49 @@
     <title>Class Tracker</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #F8FAFB; font-family: 'DM Sans', sans-serif; }
+      body { background: #F8FAFB; font-family: 'DM Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
+
+      /* ── Ripple ── */
+      .ripple-root { position: relative; overflow: hidden; cursor: pointer; }
+      .ripple-root:active { transform: scale(0.985); }
+      .ripple-wave {
+        position: absolute; border-radius: 50%;
+        background: rgba(255,255,255,0.28);
+        transform: scale(0); pointer-events: none;
+        animation: ripple-expand 0.52s cubic-bezier(0.4,0,0.2,1) forwards;
+      }
+      .ripple-wave.dark { background: rgba(30,42,58,0.10); }
+      @keyframes ripple-expand {
+        to { transform: scale(2.8); opacity: 0; }
+      }
+
+      /* ── Tap scale on all interactive elements ── */
+      button { transition: transform 0.1s cubic-bezier(0.4,0,0.2,1), background 0.15s, color 0.15s, box-shadow 0.15s; }
+      button:active { transform: scale(0.96) !important; }
+
+      /* ── Smooth card lifts ── */
+      .ct-card { transition: transform 0.18s cubic-bezier(0.4,0,0.2,1), box-shadow 0.18s; }
+      .ct-card:active { transform: scale(0.988) !important; }
+
+      /* ── Smooth page transitions ── */
+      #root > * { animation: page-in 0.2s cubic-bezier(0.4,0,0.2,1); }
+      @keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+      /* ── Input focus ring ── */
+      input:focus, textarea:focus, select:focus {
+        outline: none;
+        border-color: #3D7FD4 !important;
+        box-shadow: 0 0 0 3px rgba(61,127,212,0.15);
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
+
+      /* ── Scrollbar styling ── */
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #D1D9E0; border-radius: 4px; }
+
+      /* ── Touch-friendly tap targets ── */
+      button { min-height: 32px; }
     </style>
   </head>
   <body>
