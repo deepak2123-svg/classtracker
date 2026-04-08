@@ -158,22 +158,22 @@ function Calendar({ notes, onSelectDate, selectedDate }) {
   const prev=()=>{ if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1); };
   const next=()=>{ if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1); };
   return (
-    <div style={{...card,overflow:"hidden",maxWidth:300,borderRadius:10}}>
+    <div style={{...card,overflow:"hidden",borderRadius:10}}>
       {/* Header */}
-      <div style={{background:T.navy,padding:"8px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <button onClick={prev} style={{background:"rgba(255,255,255,0.09)",border:"none",borderRadius:6,width:24,height:24,cursor:"pointer",color:"rgba(255,255,255,0.65)",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-        <span style={{color:"#fff",fontSize:12,fontWeight:500,fontFamily:T.mono}}>{MONTHS[calMonth]} {calYear}</span>
-        <button onClick={next} style={{background:"rgba(255,255,255,0.09)",border:"none",borderRadius:6,width:24,height:24,cursor:"pointer",color:"rgba(255,255,255,0.65)",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+      <div style={{background:T.navy,padding:"11px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <button onClick={prev} style={{background:"rgba(255,255,255,0.09)",border:"none",borderRadius:7,width:28,height:28,cursor:"pointer",color:"rgba(255,255,255,0.65)",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+        <span style={{color:"#fff",fontSize:14,fontWeight:500,fontFamily:T.mono,letterSpacing:0.3}}>{MONTHS[calMonth]} {calYear}</span>
+        <button onClick={next} style={{background:"rgba(255,255,255,0.09)",border:"none",borderRadius:7,width:28,height:28,cursor:"pointer",color:"rgba(255,255,255,0.65)",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
       </div>
       {/* Day labels */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"5px 6px 1px",background:T.bg}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"8px 8px 2px",background:T.bg}}>
         {["S","M","T","W","T","F","S"].map((d,i)=>(
           <div key={i} style={{textAlign:"center",fontSize:9,fontFamily:T.mono,padding:"1px 0",
-            color:i===0?T.red:T.textL,fontWeight:i===0?500:400}}>{d}</div>
+            color:i===0?T.red:T.textL,fontWeight:i===0?500:400,fontSize:10}}>{d}</div>
         ))}
       </div>
       {/* Cells */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"2px 6px 6px",gap:2,background:T.surface}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",padding:"4px 8px 8px",gap:3,background:T.surface}}>
         {cells.map((day,i)=>{
           if(!day) return <div key={`e${i}`}/>;
           const dk=toDateKey(calYear,calMonth,day);
@@ -192,7 +192,7 @@ function Calendar({ notes, onSelectDate, selectedDate }) {
               onMouseEnter={e=>{if(allowed&&!isSel)e.currentTarget.style.background=T.blueL;}}
               onMouseLeave={e=>{if(allowed&&!isSel)e.currentTarget.style.background=isToday?T.blueL:"transparent";}}>
               <span style={{fontSize:11,fontWeight:isToday||isSel?600:400,lineHeight:1,fontFamily:T.sans,
-                color:isSel?"#fff":isToday?T.blue:isSunday?T.red:T.textS}}>{day}</span>
+                color:isSel?"#fff":isToday?T.blue:isSunday?T.red:T.textS,fontSize:13}}>{day}</span>
               {count>0&&allowed&&(
                 <div style={{position:"absolute",bottom:2,display:"flex",gap:1}}>
                   {count<=3
@@ -205,17 +205,17 @@ function Calendar({ notes, onSelectDate, selectedDate }) {
         })}
       </div>
       {/* Legend */}
-      <div style={{padding:"3px 8px 5px",display:"flex",gap:10,background:T.bg,borderTop:`1px solid ${T.border}`}}>
+      <div style={{padding:"6px 10px 7px",display:"flex",gap:12,background:T.bg,borderTop:`1px solid ${T.border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:3}}>
           <div style={{width:5,height:5,borderRadius:"50%",background:T.red,opacity:0.7}}/>
-          <span style={{fontSize:8,color:T.textL,fontFamily:T.mono}}>sunday</span>
+          <span style={{fontSize:9,color:T.textL,fontFamily:T.mono}}>sunday</span>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:3}}>
           <div style={{width:5,height:5,borderRadius:"50%",background:T.blue}}/>
-          <span style={{fontSize:8,color:T.textL,fontFamily:T.mono}}>entries</span>
+          <span style={{fontSize:9,color:T.textL,fontFamily:T.mono}}>entries</span>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:3}}>
-          <span style={{fontSize:8,color:T.textL,fontFamily:T.mono,opacity:0.5}}>dimmed = outside ±7 days</span>
+          <span style={{fontSize:9,color:T.textL,fontFamily:T.mono,opacity:0.5}}>dimmed = outside ±7 days</span>
         </div>
       </div>
     </div>
@@ -359,11 +359,16 @@ export default function ClassTracker({ user }) {
                   </div>
                 </div>
                 <button
-                  onClick={()=>{if(window.confirm(`Delete "${cls.section} · ${cls.institute}"?\nAll entries will be lost.`))deleteClass(cls.id);}}
-                  style={{padding:"0 16px",alignSelf:"stretch",background:"none",border:"none",
-                    borderLeft:`1px solid ${T.border}`,cursor:"pointer",color:T.textL,fontSize:14,flexShrink:0,transition:"all 0.15s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.background=T.redL;e.currentTarget.style.color=T.red;}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.textL;}}>
+                  onClick={()=>{
+                    if(window.confirm(`🗑 Delete class?\n\n"${cls.section} · ${cls.institute}"\n\nThis will permanently delete all ${Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+arr.length,0)} entries. This cannot be undone.`))
+                      deleteClass(cls.id);
+                  }}
+                  title="Delete class"
+                  style={{padding:"0 18px",alignSelf:"stretch",background:"none",border:"none",
+                    borderLeft:`1px solid ${T.border}`,cursor:"pointer",color:T.textL,
+                    fontSize:18,flexShrink:0,transition:"all 0.15s",display:"flex",alignItems:"center",justifyContent:"center"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=T.redL;e.currentTarget.style.color=T.red;e.currentTarget.style.borderLeftColor="#FEE2E2";}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.textL;e.currentTarget.style.borderLeftColor=T.border;}}>
                   🗑
                 </button>
               </div>
@@ -457,7 +462,7 @@ export default function ClassTracker({ user }) {
         <div style={{maxWidth:1140,margin:"0 auto",padding:"18px 24px",display:"flex",gap:16,alignItems:"flex-start"}}>
 
           {/* LEFT — Switcher */}
-          <div style={{width:160,flexShrink:0}}>
+          <div style={{width:210,flexShrink:0}}>
             <div style={{fontSize:9,fontFamily:T.mono,letterSpacing:2,color:T.textL,marginBottom:9,textTransform:"uppercase"}}>My Classes</div>
             <div style={{display:"flex",flexDirection:"column",gap:3}}>
               {data.classes.map(cls=>{
@@ -465,14 +470,14 @@ export default function ClassTracker({ user }) {
                 return(
                   <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setSearch("");}}
                     data-ripple-dark="true" onPointerDown={rpl}
-                    style={{padding:"9px 11px",borderRadius:9,cursor:"pointer",transition:"all 0.12s",
+                    style={{padding:"11px 13px",borderRadius:9,cursor:"pointer",transition:"all 0.12s",
                       position:"relative",overflow:"hidden",
                       background:isActive?T.blueL:T.surface,
                       borderLeft:`3px solid ${isActive?T.blue:T.border}`,
                       border:`1px solid ${isActive?"rgba(61,127,212,0.2)":T.border}`}}>
-                    <div style={{fontSize:12,fontWeight:isActive?500:400,color:isActive?T.blue:T.textS,
+                    <div style={{fontSize:13,fontWeight:isActive?500:400,color:isActive?T.blue:T.textS,
                       whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                    <div style={{fontSize:9,color:T.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",
+                    <div style={{fontSize:10,color:T.textL,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",
                       textOverflow:"ellipsis",fontFamily:T.mono}}>{cls.institute}</div>
                   </div>
                 );
