@@ -633,9 +633,48 @@ export default function ClassTracker({ user }) {
           <div style={{fontSize:9,color:T.textL,fontFamily:T.mono,letterSpacing:1,marginBottom:4,textTransform:"uppercase"}}>
             {isEdit?"Editing Entry":"New Entry For"}
           </div>
-          <h2 style={{margin:"0 0 20px",fontSize:20,fontWeight:500,color:T.text,letterSpacing:-0.3}}>
+          <h2 style={{margin:"0 0 16px",fontSize:20,fontWeight:500,color:T.text,letterSpacing:-0.3}}>
             {isEdit?form.title||"Entry":formatDateLabel(selectedDate)}
           </h2>
+
+          {/* Date slider — only show when adding new entry */}
+          {!isEdit&&(()=>{
+            const { min, max } = getDateWindow();
+            // Build ordered list of allowed dates
+            const dates = [];
+            const cur = new Date(min);
+            const end = new Date(max);
+            while(cur <= end) {
+              const y=cur.getFullYear(), m=String(cur.getMonth()+1).padStart(2,"0"), d=String(cur.getDate()).padStart(2,"0");
+              dates.push(`${y}-${m}-${d}`);
+              cur.setDate(cur.getDate()+1);
+            }
+            const idx = dates.indexOf(selectedDate);
+            const todayIdx = dates.indexOf(todayKey());
+            return (
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:9,color:T.textL,fontFamily:T.mono,letterSpacing:1,textTransform:"uppercase"}}>Date</span>
+                  <span style={{fontSize:10,color:T.textM,fontFamily:T.mono}}>
+                    {idx < todayIdx ? `${todayIdx - idx}d ago` : idx > todayIdx ? `in ${idx - todayIdx}d` : "today"}
+                  </span>
+                </div>
+                {/* Slider track */}
+                <div style={{position:"relative",height:44}}>
+                  <input type="range" min={0} max={dates.length-1} value={idx>=0?idx:todayIdx}
+                    onChange={e=>setSelectedDate(dates[parseInt(e.target.value)])}
+                    style={{width:"100%",position:"absolute",top:"50%",transform:"translateY(-50%)",
+                      accentColor:T.blue,cursor:"pointer",height:4}}/>
+                </div>
+                {/* Date pip labels */}
+                <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
+                  <span style={{fontSize:9,color:T.textL,fontFamily:T.mono}}>{MONTHS[new Date(min).getMonth()].slice(0,3)} {new Date(min).getDate()}</span>
+                  <span style={{fontSize:10,color:T.blue,fontFamily:T.mono,fontWeight:500}}>Today</span>
+                  <span style={{fontSize:9,color:T.textL,fontFamily:T.mono}}>{MONTHS[new Date(max).getMonth()].slice(0,3)} {new Date(max).getDate()}</span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Tag picker */}
           <div style={{marginBottom:4}}>
