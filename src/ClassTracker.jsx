@@ -110,14 +110,28 @@ function DateCarousel({ selectedDate, onSelectDate, noteDates=new Set() }) {
   const dates = buildDateWindow();
   const selIdx = dates.findIndex(d=>d.key===selectedDate);
   const centerIdx = selIdx >= 0 ? selIdx : 7;
+  const scrollRef = useRef(null);
+  const itemRefs = useRef([]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    const item = itemRefs.current[centerIdx];
+    if (container && item) {
+      const containerWidth = container.offsetWidth;
+      const itemLeft = item.offsetLeft;
+      const itemWidth = item.offsetWidth;
+      container.scrollLeft = itemLeft - containerWidth / 2 + itemWidth / 2;
+    }
+  }, [centerIdx]);
+
   return (
     <div className="date-carousel-wrap">
-      <div className="date-carousel">
+      <div className="date-carousel" ref={scrollRef}>
         {dates.map((d,i)=>{
           const dist=Math.min(Math.abs(i-centerIdx),7);
           const isSel=i===centerIdx;
           return (
-            <div key={d.key} className="dc" data-dist={dist} onClick={()=>onSelectDate(d.key)}>
+            <div key={d.key} className="dc" data-dist={dist} onClick={()=>onSelectDate(d.key)} ref={el=>itemRefs.current[i]=el}>
               <div className="dn">{d.num}</div>
               {dist<=2&&<div className="dd">{d.dayName}</div>}
               {isSel&&<div className="dt">Today</div>}
