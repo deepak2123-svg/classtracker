@@ -127,7 +127,7 @@ export default function ClassTracker({ user, profile }) {
   const [view,setView]         = useState("home");
   const [selectedDate,setSelectedDate] = useState(todayKey());
   const [newNote,setNewNote]   = useState({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});
-  const [newClass,setNewClass] = useState({name:"",subject:"",teacher:"",institute:"",batch:"",timeStart:"",timeEnd:""});
+  const [newClass,setNewClass] = useState({name:"",subject:"",teacher:"",institute:"",batch:""});
   const [search,setSearch]     = useState("");
   const [editNote,setEditNote] = useState(null);
   const noteRef  = useRef(null);
@@ -158,7 +158,7 @@ export default function ClassTracker({ user, profile }) {
     if(!newClass.name.trim()) return;
     const id=Date.now().toString();
     setData(d=>({...d,classes:[...d.classes,{id,...newClass,name:newClass.name.trim(),subject:newClass.subject.trim(),teacher:newClass.teacher.trim(),institute:newClass.institute.trim(),batch:newClass.batch.trim(),colorIdx:d.classes.length%COLORS.length,created:Date.now()}],notes:{...d.notes,[id]:{}}}));
-    setNewClass({name:"",subject:"",teacher:"",institute:"",batch:"",timeStart:"",timeEnd:""});
+    setNewClass({name:"",subject:"",teacher:"",institute:"",batch:""});
   };
   const deleteClass=(id)=>{ setData(d=>({...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id))})); setView("home"); setActiveClass(null); };
   const getClassNotes=(cid)=>data.notes[cid]||{};
@@ -238,12 +238,6 @@ export default function ClassTracker({ user, profile }) {
           <input value={newClass.teacher} onChange={e=>setNewClass(c=>({...c,teacher:e.target.value}))} placeholder="e.g. Mr. Johnson" style={inp}/>
           <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4,marginTop:2}}>INSTITUTE NAME</label>
           <input value={newClass.institute} onChange={e=>setNewClass(c=>({...c,institute:e.target.value}))} placeholder="e.g. Delhi Public School" style={inp}/>
-          <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4,marginTop:2}}>CLASS PERIOD</label>
-          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
-            <input type="time" value={newClass.timeStart} onChange={e=>setNewClass(c=>({...c,timeStart:e.target.value}))} style={{...inp,marginBottom:0,flex:1}}/>
-            <span style={{color:"#aaa",fontSize:13,flexShrink:0}}>to</span>
-            <input type="time" value={newClass.timeEnd} onChange={e=>setNewClass(c=>({...c,timeEnd:e.target.value}))} style={{...inp,marginBottom:0,flex:1}}/>
-          </div>
           <button onClick={addClass} disabled={!newClass.name.trim()}
             style={{marginTop:4,background:newClass.name.trim()?"#1A1A1A":"#D5D5D5",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:13,cursor:newClass.name.trim()?"pointer":"not-allowed",fontFamily:"monospace",letterSpacing:1}}>
             ADD CLASS
