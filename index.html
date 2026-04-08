@@ -48,7 +48,7 @@
         content: '';
         position: absolute;
         top: 0; bottom: 0;
-        width: 80px;
+        width: 40px;
         z-index: 2;
         pointer-events: none;
       }
@@ -58,16 +58,19 @@
       .date-carousel {
         display: flex;
         align-items: center;
-        justify-content: center;
         gap: 8px;
-        padding: 14px 60px;
+        padding: 14px 24px;
         overflow-x: auto;
         scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
         -ms-overflow-style: none;
         scrollbar-width: none;
+        cursor: grab;
       }
+      .date-carousel:active { cursor: grabbing; }
       .date-carousel::-webkit-scrollbar { display: none; }
 
+      /* All cards same height, width varies by state only slightly */
       .dc {
         flex-shrink: 0;
         display: flex;
@@ -76,52 +79,79 @@
         justify-content: center;
         border-radius: 12px;
         cursor: pointer;
-        transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+        transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
         position: relative;
         border: 1.5px solid transparent;
-        scroll-snap-align: center;
+        scroll-snap-align: start;
         user-select: none;
+        height: 76px;
       }
-      .dc[data-dist="0"] { width: 72px; height: 82px; background: #4ADE80; border-color: #4ADE80; box-shadow: 0 4px 20px rgba(74,222,128,0.4), 0 0 0 4px rgba(74,222,128,0.15); }
-      .dc[data-dist="1"] { width: 58px; height: 66px; background: #2A5040; border-color: #3A6050; }
-      .dc[data-dist="2"] { width: 47px; height: 54px; background: #223C30; border-color: #2E4E3E; }
-      .dc[data-dist="3"] { width: 38px; height: 44px; background: #1D3228; border-color: #27412F; }
-      .dc[data-dist="4"],
+
+      /* Today card — stands out */
+      .dc[data-dist="0"] { width: 68px; background: #4ADE80; border-color: #4ADE80; box-shadow: 0 4px 18px rgba(74,222,128,0.4), 0 0 0 3px rgba(74,222,128,0.15); opacity: 1; }
+      /* Adjacent — full size, slightly muted */
+      .dc[data-dist="1"] { width: 58px; background: #2A5040; border-color: #3A6050; opacity: 0.9; }
+      /* Getting smaller */
+      .dc[data-dist="2"] { width: 52px; background: #223C30; border-color: #2E4E3E; opacity: 0.75; }
+      .dc[data-dist="3"] { width: 46px; background: #1D3228; border-color: #27412F; opacity: 0.55; }
+      .dc[data-dist="4"] { width: 40px; background: #192C22; border-color: #1F3328; opacity: 0.38; }
       .dc[data-dist="5"],
       .dc[data-dist="6"],
-      .dc[data-dist="7"] { width: 30px; height: 36px; background: #192C22; border-color: #1F3328; }
+      .dc[data-dist="7"] { width: 36px; background: #172820; border-color: #1C2E25; opacity: 0.25; }
 
-      .dc .dn { font-family: 'Syne', sans-serif; font-weight: 700; line-height: 1; transition: all 0.25s; }
-      .dc .dd { font-family: 'JetBrains Mono', monospace; line-height: 1; margin-top: 3px; text-transform: uppercase; font-size: 8px; letter-spacing: 0.5px; transition: all 0.25s; }
-      .dc .dt { font-size: 7px; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; text-transform: uppercase; margin-top: 3px; }
+      .dc .dn { font-family: 'Syne', sans-serif; font-weight: 700; line-height: 1; }
+      .dc .dd { font-family: 'JetBrains Mono', monospace; line-height: 1; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+      .dc .dt { font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; text-transform: uppercase; margin-top: 3px; }
       .dc .de { position: absolute; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; }
 
-      .dc[data-dist="0"] .dn { font-size: 26px; color: #1A3328; }
-      .dc[data-dist="0"] .dd { color: rgba(26,51,40,0.65); }
-      .dc[data-dist="0"] .dt { color: rgba(26,51,40,0.55); }
+      .dc[data-dist="0"] .dn { font-size: 24px; color: #1A3328; }
+      .dc[data-dist="0"] .dd { font-size: 9px; color: rgba(26,51,40,0.6); }
+      .dc[data-dist="0"] .dt { font-size: 7px; color: rgba(26,51,40,0.5); }
       .dc[data-dist="0"] .de { background: rgba(26,51,40,0.4); }
 
       .dc[data-dist="1"] .dn { font-size: 18px; color: #fff; }
-      .dc[data-dist="1"] .dd { color: rgba(255,255,255,0.4); }
+      .dc[data-dist="1"] .dd { font-size: 8px; color: rgba(255,255,255,0.4); }
       .dc[data-dist="1"] .de { background: #4ADE80; }
 
-      .dc[data-dist="2"] .dn { font-size: 14px; color: rgba(255,255,255,0.7); }
-      .dc[data-dist="2"] .dd { display: none; }
+      .dc[data-dist="2"] .dn { font-size: 15px; color: rgba(255,255,255,0.8); }
+      .dc[data-dist="2"] .dd { font-size: 7px; color: rgba(255,255,255,0.3); }
 
-      .dc[data-dist="3"] .dn { font-size: 11px; color: rgba(255,255,255,0.45); }
-      .dc[data-dist="3"] .dd { display: none; }
+      .dc[data-dist="3"] .dn { font-size: 13px; color: rgba(255,255,255,0.65); }
+      .dc[data-dist="3"] .dd { font-size: 7px; color: rgba(255,255,255,0.25); }
 
-      .dc[data-dist="4"] .dn,
-      .dc[data-dist="5"] .dn,
-      .dc[data-dist="6"] .dn,
-      .dc[data-dist="7"] .dn { font-size: 9px; color: rgba(255,255,255,0.25); }
+      .dc[data-dist="4"] .dn { font-size: 11px; color: rgba(255,255,255,0.5); }
       .dc[data-dist="4"] .dd,
       .dc[data-dist="5"] .dd,
       .dc[data-dist="6"] .dd,
       .dc[data-dist="7"] .dd { display: none; }
 
+      .dc[data-dist="5"] .dn,
+      .dc[data-dist="6"] .dn,
+      .dc[data-dist="7"] .dn { font-size: 10px; color: rgba(255,255,255,0.35); }
+
       @keyframes page-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
       #root > div { animation: page-in 0.22s cubic-bezier(0.4,0,0.2,1); }
+
+      /* drag-to-scroll */
+      document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.date-carousel').forEach(el => {
+          let isDown = false, startX, scrollLeft;
+          el.addEventListener('mousedown', e => {
+            isDown = true;
+            el.style.cursor = 'grabbing';
+            startX = e.pageX - el.offsetLeft;
+            scrollLeft = el.scrollLeft;
+          });
+          el.addEventListener('mouseleave', () => { isDown = false; el.style.cursor = 'grab'; });
+          el.addEventListener('mouseup', () => { isDown = false; el.style.cursor = 'grab'; });
+          el.addEventListener('mousemove', e => {
+            if (!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - el.offsetLeft;
+            el.scrollLeft = scrollLeft - (x - startX) * 1.2;
+          });
+        });
+      });
     </style>
   </head>
   <body>
