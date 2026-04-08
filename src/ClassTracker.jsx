@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { loadUserData, saveUserData, logout } from "./firebase";
-import { COLORS, TAG_STYLES, DAYS, MONTHS, inp, Spinner, Avatar, toDateKey, todayKey, formatDateLabel, fmt, formatPeriod, useRipple } from "./shared.jsx";
+import { COLORS, TAG_STYLES, DAYS, MONTHS, inp, Spinner, Avatar, toDateKey, todayKey, formatDateLabel, fmt, formatPeriod, ripple } from "./shared.jsx";
 
 // Theme C palette
 const T = {

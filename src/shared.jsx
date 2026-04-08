@@ -66,24 +66,6 @@ export function Avatar({ user, size=36 }) {
 }
 
 export function friendlyError(code) {
-
-// ── Ripple effect hook ────────────────────────────────────────────────────────
-export function useRipple(dark = false) {
-  const trigger = (e) => {
-    const el = e.currentTarget;
-    const rect = el.getBoundingClientRect();
-    const size = Math.max(rect.width, rect.height) * 2;
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left - size / 2;
-    const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top - size / 2;
-    const wave = document.createElement("span");
-    wave.className = "ripple-wave" + (dark ? " dark" : "");
-    wave.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px`;
-    el.appendChild(wave);
-    wave.addEventListener("animationend", () => wave.remove());
-  };
-  return { onPointerDown: trigger, className: "ripple-root" };
-}
-
   const map = {
     "auth/email-already-in-use":   "That email is already registered.",
     "auth/invalid-email":          "Please enter a valid email address.",
@@ -96,4 +78,18 @@ export function useRipple(dark = false) {
     "auth/network-request-failed": "Network error. Check your connection.",
   };
   return map[code] || "Something went wrong. Please try again.";
+}
+
+// ── Ripple effect ─────────────────────────────────────────────────────────────
+export function ripple(e, dark = false) {
+  const el = e.currentTarget;
+  const rect = el.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height) * 2;
+  const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left - size / 2;
+  const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top - size / 2;
+  const wave = document.createElement("span");
+  wave.className = "ripple-wave" + (dark ? " dark" : "");
+  wave.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px`;
+  el.appendChild(wave);
+  wave.addEventListener("animationend", () => wave.remove());
 }
