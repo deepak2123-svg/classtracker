@@ -3,155 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1A3328" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="description" content="Track your classes and daily notes" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <title>Class Tracker</title>
+    <title>ClassLog</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #F2F7F3; font-family: 'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
+      body { background: #F5F6F8; font-family: 'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
 
-      /* Ripple */
       .rw {
         position: absolute; border-radius: 50%;
-        background: rgba(255,255,255,0.22);
+        background: rgba(255,255,255,0.25);
         transform: scale(0); pointer-events: none;
         animation: rx 0.5s cubic-bezier(0.4,0,0.2,1) forwards;
       }
-      .rw.dark { background: rgba(26,51,40,0.1); }
+      .rw.dark { background: rgba(17,24,39,0.07); }
+      .rw.white { background: rgba(255,255,255,0.25); }
       @keyframes rx { to { transform: scale(3); opacity: 0; } }
 
-      button { transition: transform 0.1s cubic-bezier(0.4,0,0.2,1), opacity 0.1s; }
-      button:active { transform: scale(0.96); }
+      button { transition: transform 0.1s cubic-bezier(0.4,0,0.2,1); }
+      button:active { transform: scale(0.97); }
 
-      .ct-card { transition: box-shadow 0.18s, transform 0.18s; }
-      .ct-card:active { transform: scale(0.988); }
-
-      input:focus, textarea:focus {
+      input:focus, textarea:focus, select:focus {
         outline: none;
         border-color: #16A34A !important;
-        box-shadow: 0 0 0 3px rgba(22,163,74,0.15);
+        box-shadow: 0 0 0 3px rgba(22,163,74,0.12);
       }
 
       ::-webkit-scrollbar { width: 3px; height: 3px; }
-      ::-webkit-scrollbar-thumb { background: #C8DDD0; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb { background: #C8D4D0; border-radius: 4px; }
 
-      /* Date carousel */
-      .date-carousel-wrap {
-        position: relative;
-        overflow: hidden;
-      }
-      .date-carousel-wrap::before,
-      .date-carousel-wrap::after {
-        content: '';
-        position: absolute;
-        top: 0; bottom: 0;
-        width: 40px;
-        z-index: 2;
-        pointer-events: none;
-      }
-      .date-carousel-wrap::before { left: 0; background: linear-gradient(to right, #1A3328, transparent); }
-      .date-carousel-wrap::after  { right: 0; background: linear-gradient(to left, #1A3328, transparent); }
-
-      .date-carousel {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 14px 24px;
-        overflow-x: auto;
-        scroll-snap-type: x mandatory;
-        -webkit-overflow-scrolling: touch;
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-        cursor: grab;
-      }
-      .date-carousel:active { cursor: grabbing; }
-      .date-carousel::-webkit-scrollbar { display: none; }
-
-      /* All cards same height, width varies by state only slightly */
-      .dc {
-        flex-shrink: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        border-radius: 12px;
-        cursor: pointer;
-        transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
-        position: relative;
-        border: 1.5px solid transparent;
-        scroll-snap-align: start;
-        user-select: none;
-        height: 76px;
-      }
-
-      /* Today card — stands out */
-      .dc[data-dist="0"] { width: 68px; background: #4ADE80; border-color: #4ADE80; box-shadow: 0 4px 18px rgba(74,222,128,0.4), 0 0 0 3px rgba(74,222,128,0.15); opacity: 1; }
-      /* Adjacent — full size, slightly muted */
-      .dc[data-dist="1"] { width: 58px; background: #2A5040; border-color: #3A6050; opacity: 0.9; }
-      /* Getting smaller */
-      .dc[data-dist="2"] { width: 52px; background: #223C30; border-color: #2E4E3E; opacity: 0.75; }
-      .dc[data-dist="3"] { width: 46px; background: #1D3228; border-color: #27412F; opacity: 0.55; }
-      .dc[data-dist="4"] { width: 40px; background: #192C22; border-color: #1F3328; opacity: 0.38; }
-      .dc[data-dist="5"],
-      .dc[data-dist="6"],
-      .dc[data-dist="7"] { width: 36px; background: #172820; border-color: #1C2E25; opacity: 0.25; }
-
-      .dc .dn { font-family: 'Syne', sans-serif; font-weight: 700; line-height: 1; }
-      .dc .dd { font-family: 'JetBrains Mono', monospace; line-height: 1; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
-      .dc .dt { font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; text-transform: uppercase; margin-top: 3px; }
-      .dc .de { position: absolute; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; }
-
-      .dc[data-dist="0"] .dn { font-size: 24px; color: #1A3328; }
-      .dc[data-dist="0"] .dd { font-size: 9px; color: rgba(26,51,40,0.6); }
-      .dc[data-dist="0"] .dt { font-size: 7px; color: rgba(26,51,40,0.5); }
-      .dc[data-dist="0"] .de { background: rgba(26,51,40,0.4); }
-
-      .dc[data-dist="1"] .dn { font-size: 18px; color: #fff; }
-      .dc[data-dist="1"] .dd { font-size: 8px; color: rgba(255,255,255,0.4); }
-      .dc[data-dist="1"] .de { background: #4ADE80; }
-
-      .dc[data-dist="2"] .dn { font-size: 15px; color: rgba(255,255,255,0.8); }
-      .dc[data-dist="2"] .dd { font-size: 7px; color: rgba(255,255,255,0.3); }
-
-      .dc[data-dist="3"] .dn { font-size: 13px; color: rgba(255,255,255,0.65); }
-      .dc[data-dist="3"] .dd { font-size: 7px; color: rgba(255,255,255,0.25); }
-
-      .dc[data-dist="4"] .dn { font-size: 11px; color: rgba(255,255,255,0.5); }
-      .dc[data-dist="4"] .dd,
-      .dc[data-dist="5"] .dd,
-      .dc[data-dist="6"] .dd,
-      .dc[data-dist="7"] .dd { display: none; }
-
-      .dc[data-dist="5"] .dn,
-      .dc[data-dist="6"] .dn,
-      .dc[data-dist="7"] .dn { font-size: 10px; color: rgba(255,255,255,0.35); }
-
-      @keyframes page-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
-      #root > div { animation: page-in 0.22s cubic-bezier(0.4,0,0.2,1); }
-
-      /* drag-to-scroll */
-      document.addEventListener('DOMContentLoaded', () => {
-        document.querySelectorAll('.date-carousel').forEach(el => {
-          let isDown = false, startX, scrollLeft;
-          el.addEventListener('mousedown', e => {
-            isDown = true;
-            el.style.cursor = 'grabbing';
-            startX = e.pageX - el.offsetLeft;
-            scrollLeft = el.scrollLeft;
-          });
-          el.addEventListener('mouseleave', () => { isDown = false; el.style.cursor = 'grab'; });
-          el.addEventListener('mouseup', () => { isDown = false; el.style.cursor = 'grab'; });
-          el.addEventListener('mousemove', e => {
-            if (!isDown) return;
-            e.preventDefault();
-            const x = e.pageX - el.offsetLeft;
-            el.scrollLeft = scrollLeft - (x - startX) * 1.2;
-          });
-        });
-      });
+      @keyframes page-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+      #root > div { animation: page-in 0.2s cubic-bezier(0.4,0,0.2,1); }
     </style>
   </head>
   <body>
