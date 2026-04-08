@@ -118,7 +118,7 @@ function Calendar({ color, notes, onSelectDate, selectedDate }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function ClassTracker({ user, profile }) {
+export default function ClassTracker({ user }) {
   const [data,setData]         = useState(DEFAULT_DATA);
   const [loading,setLoading]   = useState(true);
   const [saving,setSaving]     = useState(false);
@@ -229,15 +229,15 @@ export default function ClassTracker({ user, profile }) {
         <div style={{marginTop:18,background:"#fff",borderRadius:14,padding:"16px 18px",border:"1.5px dashed #D0D0D0"}}>
           <div style={{fontSize:11,fontWeight:600,color:"#555",marginBottom:12,fontFamily:"monospace",letterSpacing:1}}>+ ADD CLASS</div>
           <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>CLASS NAME</label>
-          <CreatableDropdown value={newClass.name} onChange={n=>setNewClass(c=>({...c,name:n}))} options={data.classNames||[]} onAddOption={addClassName} placeholder="e.g. Calculus II" addPlaceholder="Type class name…"/>
+          <CreatableDropdown value={newClass.name} onChange={n=>setNewClass(c=>({...c,name:n}))} options={data.classNames||[]} onAddOption={addClassName} placeholder="e.g. 9th A" addPlaceholder="Type class name…"/>
+          <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4,marginTop:2}}>INSTITUTE NAME</label>
+          <input value={newClass.institute} onChange={e=>setNewClass(c=>({...c,institute:e.target.value}))} placeholder="e.g. KIS, SDT" style={inp}/>
           <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4,marginTop:2}}>BATCH NAME</label>
           <input value={newClass.batch} onChange={e=>setNewClass(c=>({...c,batch:e.target.value}))} placeholder="e.g. Batch 2024-A" style={inp}/>
           <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4,marginTop:2}}>SUBJECT</label>
           <CreatableDropdown value={newClass.subject} onChange={s=>setNewClass(c=>({...c,subject:s}))} options={data.subjects||[]} onAddOption={addSubjectName} placeholder="e.g. Mathematics" addPlaceholder="Type subject…"/>
           <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4,marginTop:2}}>TEACHER NAME</label>
           <input value={newClass.teacher} onChange={e=>setNewClass(c=>({...c,teacher:e.target.value}))} placeholder="e.g. Mr. Johnson" style={inp}/>
-          <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4,marginTop:2}}>INSTITUTE NAME</label>
-          <input value={newClass.institute} onChange={e=>setNewClass(c=>({...c,institute:e.target.value}))} placeholder="e.g. Delhi Public School" style={inp}/>
           <button onClick={addClass} disabled={!newClass.name.trim()}
             style={{marginTop:4,background:newClass.name.trim()?"#1A1A1A":"#D5D5D5",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:13,cursor:newClass.name.trim()?"pointer":"not-allowed",fontFamily:"monospace",letterSpacing:1}}>
             ADD CLASS
@@ -263,11 +263,10 @@ export default function ClassTracker({ user, profile }) {
               <div style={{flex:1,minWidth:0}}>
                 <h2 style={{margin:0,fontSize:24,fontWeight:700,color:"#fff",letterSpacing:-0.5}}>{activeClass.name}</h2>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:5}}>
+                  {activeClass.institute&&<span style={{color:"rgba(255,255,255,0.85)",fontSize:12}}>🏫 {activeClass.institute}</span>}
                   {activeClass.batch&&<span style={{color:"rgba(255,255,255,0.85)",fontSize:12}}>📋 {activeClass.batch}</span>}
                   {activeClass.subject&&<span style={{color:"rgba(255,255,255,0.85)",fontSize:12}}>{activeClass.subject}</span>}
                   {activeClass.teacher&&<span style={{color:"rgba(255,255,255,0.85)",fontSize:12}}>👤 {activeClass.teacher}</span>}
-                  {activeClass.institute&&<span style={{color:"rgba(255,255,255,0.85)",fontSize:12}}>🏫 {activeClass.institute}</span>}
-                  {activeClass.timeStart&&<span style={{color:"rgba(255,255,255,0.85)",fontSize:12}}>🕐 {formatPeriod(activeClass.timeStart,activeClass.timeEnd)}</span>}
                 </div>
               </div>
               <button onClick={()=>deleteClass(activeClass.id)} style={{background:"rgba(0,0,0,0.15)",border:"none",borderRadius:8,padding:"5px 11px",fontSize:11,cursor:"pointer",color:"#fff",fontFamily:"monospace",flexShrink:0,marginLeft:10}}>🗑</button>
@@ -344,7 +343,7 @@ export default function ClassTracker({ user, profile }) {
               </button>
             ))}
           </div>
-          <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>CLASS PERIOD (optional)</label>
+          <label style={{fontSize:10,color:"#aaa",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>CLASS TIME (optional)</label>
           <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
             <input type="time" value={form.timeStart||""} onChange={e=>setForm({...form,timeStart:e.target.value})} style={{...inp,marginBottom:0,flex:1}}/>
             <span style={{color:"#aaa",fontSize:13,flexShrink:0}}>to</span>
