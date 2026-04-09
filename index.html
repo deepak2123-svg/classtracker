@@ -4,39 +4,182 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#ffffff" />
-    <meta name="description" content="Track your classes and daily notes" />
+    <meta name="description" content="ClassLog — Academic class tracker for teachers" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <title>ClassLog</title>
     <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #F5F6F8; font-family: 'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+      :root {
+        --forest:    #152B22;
+        --forest-s:  #1E3D2F;
+        --green:     #1B8A4C;
+        --green-v:   #34D077;
+        --green-l:   #E8F8EF;
+        --green-m:   #6FCF97;
+        --bg:        #F7F8F6;
+        --surface:   #FFFFFF;
+        --border:    #E6EAE8;
+        --border-m:  #C8D4CE;
+        --text:      #0E1F18;
+        --text-s:    #2D4039;
+        --text-m:    #5C7268;
+        --text-l:    #94ADA5;
+        --red:       #C93030;
+        --red-l:     #FDF1F1;
+        --navy:      #0E1F18;
+        --shadow-sm: 0 1px 3px rgba(14,31,24,0.06), 0 1px 2px rgba(14,31,24,0.04);
+        --shadow-md: 0 4px 12px rgba(14,31,24,0.08), 0 2px 4px rgba(14,31,24,0.04);
+        --shadow-lg: 0 12px 32px rgba(14,31,24,0.12), 0 4px 8px rgba(14,31,24,0.06);
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-xl: 20px;
+      }
+
+      html { font-size: 16px; }
+      body {
+        background: var(--bg);
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        color: var(--text);
+        -webkit-tap-highlight-color: transparent;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        line-height: 1.5;
+      }
+
+      /* ── Ripple ── */
       .rw {
         position: absolute; border-radius: 50%;
-        background: rgba(255,255,255,0.25);
+        background: rgba(255,255,255,0.3);
         transform: scale(0); pointer-events: none;
-        animation: rx 0.5s cubic-bezier(0.4,0,0.2,1) forwards;
+        animation: rw-anim 0.55s cubic-bezier(0.4,0,0.2,1) forwards;
       }
-      .rw.dark { background: rgba(17,24,39,0.07); }
-      .rw.white { background: rgba(255,255,255,0.25); }
-      @keyframes rx { to { transform: scale(3); opacity: 0; } }
+      .rw.dark { background: rgba(14,31,24,0.07); }
+      .rw.white { background: rgba(255,255,255,0.3); }
+      @keyframes rw-anim { to { transform: scale(2.8); opacity: 0; } }
 
-      button { transition: transform 0.1s cubic-bezier(0.4,0,0.2,1); }
+      /* ── Buttons feel ── */
+      button {
+        transition: transform 0.12s cubic-bezier(0.4,0,0.2,1),
+                    box-shadow 0.12s, opacity 0.12s;
+        cursor: pointer;
+      }
       button:active { transform: scale(0.97); }
+      button:disabled { cursor: not-allowed; opacity: 0.5; }
 
+      /* ── Inputs ── */
+      input, textarea, select {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
       input:focus, textarea:focus, select:focus {
         outline: none;
-        border-color: #16A34A !important;
-        box-shadow: 0 0 0 3px rgba(22,163,74,0.12);
+        border-color: var(--green) !important;
+        box-shadow: 0 0 0 3px rgba(27,138,76,0.14);
       }
 
-      ::-webkit-scrollbar { width: 3px; height: 3px; }
-      ::-webkit-scrollbar-thumb { background: #C8D4D0; border-radius: 4px; }
+      /* ── Scrollbars ── */
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--border-m); border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--text-l); }
 
-      @keyframes page-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
-      #root > div { animation: page-in 0.2s cubic-bezier(0.4,0,0.2,1); }
+      /* ── Card hover ── */
+      .card-hover {
+        transition: box-shadow 0.2s, transform 0.2s;
+      }
+      .card-hover:hover {
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+      }
+
+      /* ── Page animation ── */
+      @keyframes page-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: none; }
+      }
+      #root > div {
+        animation: page-in 0.24s cubic-bezier(0.4,0,0.2,1);
+      }
+
+      /* ── Stagger animation for cards ── */
+      @keyframes card-in {
+        from { opacity: 0; transform: translateY(16px); }
+        to   { opacity: 1; transform: none; }
+      }
+      .card-in { animation: card-in 0.3s cubic-bezier(0.4,0,0.2,1) both; }
+      .card-in:nth-child(1) { animation-delay: 0ms; }
+      .card-in:nth-child(2) { animation-delay: 60ms; }
+      .card-in:nth-child(3) { animation-delay: 120ms; }
+      .card-in:nth-child(4) { animation-delay: 180ms; }
+      .card-in:nth-child(5) { animation-delay: 240ms; }
+
+      /* ── Date strip ── */
+      .date-strip-wrap {
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+      }
+      .date-strip {
+        display: flex;
+        gap: 2px;
+        overflow-x: auto;
+        padding: 6px 8px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        cursor: grab;
+      }
+      .date-strip:active { cursor: grabbing; }
+      .date-strip::-webkit-scrollbar { display: none; }
+      .date-cell {
+        flex-shrink: 0;
+        width: 72px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px 4px 9px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+        position: relative;
+        user-select: none;
+      }
+      .date-cell:hover:not(.selected) { background: var(--green-l); }
+      .date-cell.selected {
+        background: var(--forest);
+      }
+      .date-cell.selected .dc-day { color: rgba(255,255,255,0.5); }
+      .date-cell.selected .dc-num { color: #fff; }
+      .date-cell.selected .dc-today { color: rgba(255,255,255,0.45); }
+      .date-cell.sunday .dc-day { color: var(--red); }
+      .date-cell.sunday .dc-num { color: var(--red); }
+      .date-cell.sunday.selected .dc-day { color: rgba(255,180,180,0.6); }
+      .date-cell.sunday.selected .dc-num { color: #fff; }
+      .date-cell.dimmed { opacity: 0.35; pointer-events: none; }
+      .dc-day { font-size: 9px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; color: var(--text-l); margin-bottom: 5px; }
+      .dc-num  { font-size: 22px; font-weight: 700; font-family: 'Syne', sans-serif; color: var(--text); line-height: 1; }
+      .dc-today { font-size: 7px; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; color: var(--text-l); margin-top: 4px; text-transform: uppercase; }
+      .dc-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--green); margin-top: 4px; }
+
+      /* ── Badges ── */
+      .badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 3px 10px; border-radius: 20px;
+        font-size: 11px; font-weight: 500; white-space: nowrap;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+      }
+      .badge-green { background: var(--green-l); color: var(--green); }
+      .badge-session { background: var(--green-l); color: var(--green); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+      .badge-red { background: var(--red-l); color: var(--red); }
+
+      /* ── Headings ── */
+      h1, h2, h3 { font-family: 'Syne', sans-serif; font-weight: 700; }
     </style>
   </head>
   <body>
