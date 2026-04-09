@@ -130,9 +130,9 @@ function TopNav({user,teacherName,onEditName,right}){
             <span style={{fontWeight:500}}>{teacherName}</span>
             <span style={{fontSize:11,opacity:0.5}}>✏</span>
           </button>
-          <button onClick={logout} style={{background:"none",border:"none",fontSize:12,color:G.textL,cursor:"pointer",fontFamily:G.mono,padding:"4px 6px",transition:"color 0.12s"}}
-            onMouseEnter={e=>e.currentTarget.style.color=G.red}
-            onMouseLeave={e=>e.currentTarget.style.color=G.textL}>sign out</button>
+          <button onClick={logout} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,fontSize:12,color:G.textM,cursor:"pointer",fontFamily:G.sans,padding:"6px 13px",fontWeight:500,transition:"all 0.15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background=G.redL;e.currentTarget.style.color=G.red;e.currentTarget.style.borderColor="#F5CACA";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textM;e.currentTarget.style.borderColor=G.border;}}>Sign Out</button>
         </div>
       </div>
     </div>
@@ -448,13 +448,13 @@ export default function ClassTracker({user}){
                       </div>
                       <div style={{display:"flex",gap:3}}>
                         <button onClick={e=>{e.stopPropagation();setEditingClass(cls);}}
-                          style={{background:"none",border:"none",cursor:"pointer",color:G.textL,fontSize:13,padding:"5px 7px",borderRadius:7,transition:"all 0.12s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.color=G.green;}}
-                          onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textL;}}>✏</button>
+                          style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textM,fontSize:12,padding:"5px 11px",borderRadius:8,transition:"all 0.15s",fontFamily:G.sans,fontWeight:500}}
+                          onMouseEnter={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.color=G.green;e.currentTarget.style.borderColor=G.green;}}
+                          onMouseLeave={e=>{e.currentTarget.style.background=G.bg;e.currentTarget.style.color=G.textM;e.currentTarget.style.borderColor=G.border;}}>✏ Edit</button>
                         <button onClick={e=>{e.stopPropagation();if(window.confirm(`Delete "${cls.section} · ${cls.institute}"?\n\nAll ${count} entries will be moved to the Recycle Bin.`))deleteClass(cls.id);}}
-                          style={{background:"none",border:"none",cursor:"pointer",color:G.textL,fontSize:15,padding:"5px 7px",borderRadius:7,transition:"all 0.12s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.background=G.redL;e.currentTarget.style.color=G.red;}}
-                          onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textL;}}>🗑</button>
+                          style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:12,padding:"5px 11px",borderRadius:8,transition:"all 0.15s",fontFamily:G.sans,fontWeight:500}}
+                          onMouseEnter={e=>{e.currentTarget.style.background="#FAD0D0";e.currentTarget.style.borderColor="#EAA0A0";}}
+                          onMouseLeave={e=>{e.currentTarget.style.background=G.redL;e.currentTarget.style.borderColor="#F5CACA";}}>🗑 Delete</button>
                       </div>
                     </div>
 
