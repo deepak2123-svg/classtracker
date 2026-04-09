@@ -86,8 +86,8 @@ function rpl(e,white=false){
 
 // ── Shared style objects ──────────────────────────────────────────────────────
 const card={background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,boxShadow:G.shadowSm};
-const lbl={fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.5,display:"block",marginBottom:6,textTransform:"uppercase",fontWeight:400};
-const inp={width:"100%",padding:"11px 14px",borderRadius:10,border:`1px solid ${G.border}`,fontSize:14,fontFamily:G.sans,outline:"none",background:G.surface,color:G.text,marginBottom:10,transition:"border-color 0.15s, box-shadow 0.15s"};
+const lbl={fontSize:12,color:G.textM,fontFamily:G.mono,letterSpacing:0.5,display:"block",marginBottom:7,textTransform:"uppercase",fontWeight:500};
+const inp={width:"100%",padding:"11px 14px",borderRadius:10,border:`1px solid ${G.border}`,fontSize:15,fontFamily:G.sans,outline:"none",background:G.surface,color:G.text,marginBottom:10,transition:"border-color 0.15s, box-shadow 0.15s"};
 
 // ── Primary button ────────────────────────────────────────────────────────────
 function PrimaryBtn({onClick,children,disabled,style={},onPointerDown}){
@@ -393,7 +393,7 @@ export default function ClassTracker({user}){
       {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} addInstituteName={addInstituteName} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
         right={<>
-          <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{data.classes.length} {data.classes.length===1?"class":"classes"} · {totalNotes} entries</span>
+          <span style={{fontSize:13,color:G.textM,fontFamily:G.sans,fontWeight:500}}>{data.classes.length} {data.classes.length===1?"class":"classes"} · {totalNotes} entries</span>
           <TrashBadge count={trashCount} onClick={()=>setView("trash")}/>
           <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)}
             style={{background:G.green,color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:600,display:"flex",alignItems:"center",gap:6,position:"relative",overflow:"hidden",boxShadow:`0 2px 10px rgba(27,138,76,0.3)`,transition:"box-shadow 0.15s"}}
@@ -407,9 +407,9 @@ export default function ClassTracker({user}){
       <div style={{maxWidth:1320,margin:"0 auto",padding:"32px 32px 72px"}}>
         {/* Greeting */}
         <div style={{marginBottom:36}}>
-          <p style={{fontSize:13,color:G.textL,fontFamily:G.mono,marginBottom:4,letterSpacing:0.3}}>Good day,</p>
+          <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:4,fontWeight:500}}>Good day,</p>
           <h1 style={{fontSize:30,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.8,marginBottom:12}}>{teacherName} 👋</h1>
-          <span className="badge badge-session">📅 Academic Session {currentSession()}</span>
+          <span style={{display:"inline-flex",alignItems:"center",gap:7,background:G.greenL,borderRadius:20,padding:"5px 14px",fontSize:13,color:G.green,fontWeight:600}}>📅 Academic Session {currentSession()}</span>
         </div>
 
         {data.classes.length===0?(
@@ -440,7 +440,7 @@ export default function ClassTracker({user}){
                         </div>
                         <div>
                           <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1.1,letterSpacing:-0.3}}>{cls.section}</div>
-                          <div style={{fontSize:12,color:G.textM,marginTop:4,display:"flex",alignItems:"center",gap:5}}>
+                          <div style={{fontSize:13,color:G.textM,marginTop:5,display:"flex",alignItems:"center",gap:5,fontWeight:400}}>
                             <span>🏫</span>
                             <span>{cls.institute}{cls.subject?<> <span style={{color:G.textL}}>·</span> {cls.subject}</>:null}</span>
                           </div>
@@ -460,12 +460,12 @@ export default function ClassTracker({user}){
 
                     <div style={{display:"flex",gap:10,marginBottom:16}}>
                       <div style={{flex:1,background:G.bg,borderRadius:10,padding:"11px 14px",border:`1px solid ${G.border}`}}>
-                        <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,marginBottom:3,letterSpacing:0.5}}>TOTAL ENTRIES</div>
-                        <div style={{fontSize:26,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{count}</div>
+                        <div style={{fontSize:12,color:G.textM,fontFamily:G.mono,marginBottom:4,letterSpacing:0.3,fontWeight:500}}>TOTAL ENTRIES</div>
+                        <div style={{fontSize:28,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{count}</div>
                       </div>
                       {todayCount>0&&<div style={{flex:1,background:G.greenL,borderRadius:10,padding:"11px 14px",border:`1px solid rgba(27,138,76,0.15)`}}>
-                        <div style={{fontSize:10,color:G.green,fontFamily:G.mono,marginBottom:3,letterSpacing:0.5}}>TODAY</div>
-                        <div style={{fontSize:26,fontWeight:700,color:G.green,fontFamily:G.display,lineHeight:1}}>+{todayCount}</div>
+                        <div style={{fontSize:12,color:G.green,fontFamily:G.mono,marginBottom:4,letterSpacing:0.3,fontWeight:500}}>TODAY</div>
+                        <div style={{fontSize:28,fontWeight:700,color:G.green,fontFamily:G.display,lineHeight:1}}>+{todayCount}</div>
                       </div>}
                     </div>
 
@@ -527,17 +527,17 @@ export default function ClassTracker({user}){
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <h2 style={{fontSize:24,fontWeight:700,color:G.text,letterSpacing:-0.5,marginBottom:4}}>{activeClass.section}</h2>
-                <div style={{fontSize:13,color:G.textM,display:"flex",alignItems:"center",gap:6}}>
+                <div style={{fontSize:14,color:G.textM,display:"flex",alignItems:"center",gap:6,marginTop:2,fontWeight:400}}>
                   <span>🏫 {activeClass.institute}</span>
                   {activeClass.subject&&<><span style={{color:G.textL}}>·</span><span>{activeClass.subject}</span></>}
-                  <button onClick={()=>setEditingClass(activeClass)} style={{background:"none",border:"none",cursor:"pointer",color:G.textL,fontSize:11,fontFamily:G.mono,padding:"2px 6px",borderRadius:6,marginLeft:4}} onMouseEnter={e=>e.currentTarget.style.color=G.green} onMouseLeave={e=>e.currentTarget.style.color=G.textL}>✏ edit</button>
+                  <button onClick={()=>setEditingClass(activeClass)} style={{background:"none",border:`1px solid ${G.border}`,cursor:"pointer",color:G.textL,fontSize:11,fontFamily:G.mono,padding:"2px 8px",borderRadius:6,marginLeft:4,transition:"all 0.12s"}} onMouseEnter={e=>{e.currentTarget.style.color=G.green;e.currentTarget.style.borderColor=G.green;}} onMouseLeave={e=>{e.currentTarget.style.color=G.textL;e.currentTarget.style.borderColor=G.border;}}>✏ edit</button>
                 </div>
               </div>
               <div style={{display:"flex",gap:10}}>
                 {[{n:totalEntries,l:"entries"},{n:allDates.length,l:"days"}].map(({n,l})=>(
                   <div key={l} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 18px",textAlign:"center",boxShadow:G.shadowSm}}>
-                    <div style={{fontSize:22,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{n}</div>
-                    <div style={{fontSize:9,color:G.textL,fontFamily:G.mono,letterSpacing:1,marginTop:3}}>{l.toUpperCase()}</div>
+                    <div style={{fontSize:24,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{n}</div>
+                    <div style={{fontSize:11,color:G.textM,fontFamily:G.mono,letterSpacing:0.5,marginTop:4,fontWeight:500}}>{l.toUpperCase()}</div>
                   </div>
                 ))}
               </div>
@@ -556,7 +556,7 @@ export default function ClassTracker({user}){
 
           {/* LEFT — switcher */}
           <div style={{width:210,flexShrink:0}}>
-            <p style={{fontSize:10,fontFamily:G.mono,letterSpacing:1,color:G.textL,marginBottom:10,textTransform:"uppercase"}}>My Classes</p>
+            <p style={{fontSize:12,fontFamily:G.mono,letterSpacing:0.5,color:G.textM,marginBottom:10,textTransform:"uppercase",fontWeight:500}}>My Classes</p>
             <div style={{display:"flex",flexDirection:"column",gap:4}}>
               {data.classes.map(cls=>{
                 const c=COLORS[cls.colorIdx%COLORS.length];
@@ -564,8 +564,8 @@ export default function ClassTracker({user}){
                 return(
                   <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setSearch("");}}
                     style={{padding:"11px 13px",borderRadius:11,cursor:"pointer",transition:"all 0.15s",background:isActive?G.greenL:G.surface,border:`1px solid ${isActive?"rgba(27,138,76,0.2)":G.border}`,borderLeft:`3px solid ${isActive?G.green:G.border}`,boxShadow:isActive?G.shadowSm:"none"}}>
-                    <div style={{fontSize:13,fontWeight:isActive?600:400,color:isActive?G.green:G.textS,fontFamily:isActive?G.display:G.sans,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                    <div style={{fontSize:10,color:G.textL,marginTop:3,fontFamily:G.mono,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.institute}</div>
+                    <div style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?G.green:G.textS,fontFamily:isActive?G.display:G.sans,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
+                    <div style={{fontSize:12,color:isActive?G.green:G.textM,marginTop:3,fontFamily:G.sans,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:400}}>{cls.institute}</div>
                   </div>
                 );
               })}
@@ -576,8 +576,8 @@ export default function ClassTracker({user}){
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <div>
-                <h3 style={{fontSize:17,fontWeight:700,color:G.text,letterSpacing:-0.2}}>{formatDateLabel(selectedDate)}</h3>
-                <p style={{fontSize:11,color:G.textL,fontFamily:G.mono,marginTop:2}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</p>
+                <h3 style={{fontSize:19,fontWeight:700,color:G.text,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</h3>
+                <p style={{fontSize:13,color:G.textM,marginTop:3,fontWeight:400}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</p>
               </div>
               {canAdd
                 ?<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
@@ -613,7 +613,7 @@ export default function ClassTracker({user}){
                             <span style={{background:tag.bg,color:tag.text,fontSize:10,borderRadius:12,padding:"2px 9px",fontFamily:G.mono,fontWeight:500}}>{tag.label}</span>
                             {note.timeStart&&<span style={{fontSize:10,color:G.textL,fontFamily:G.mono,background:G.bg,borderRadius:12,padding:"2px 9px",border:`1px solid ${G.border}`}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
                           </div>
-                          {note.title&&<div style={{fontWeight:700,fontSize:15,color:G.text,fontFamily:G.display,letterSpacing:-0.2}}>{note.title}</div>}
+                          {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display,letterSpacing:-0.2}}>{note.title}</div>}
                         </div>
                         <div style={{display:"flex",gap:5,flexShrink:0}}>
                           <button onClick={()=>{setEditNote({...note});setView("editNote");}}
@@ -624,7 +624,7 @@ export default function ClassTracker({user}){
                             style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:7,padding:"4px 11px",fontSize:11,cursor:"pointer",color:G.red,fontFamily:G.mono}}>✕</button>
                         </div>
                       </div>
-                      {note.body&&<p style={{margin:"9px 0 0",fontSize:13,color:G.textM,lineHeight:1.7,whiteSpace:"pre-wrap",borderTop:`1px solid ${G.border}`,paddingTop:9}}>{note.body}</p>}
+                      {note.body&&<p style={{margin:"9px 0 0",fontSize:14,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap",borderTop:`1px solid ${G.border}`,paddingTop:9}}>{note.body}</p>}
                     </div>
                   </div>
                 );
@@ -634,14 +634,14 @@ export default function ClassTracker({user}){
 
           {/* RIGHT — grouped timeline */}
           <div style={{width:215,flexShrink:0}}>
-            <p style={{fontSize:10,fontFamily:G.mono,letterSpacing:1,color:G.textL,marginBottom:8,textTransform:"uppercase"}}>Past Entries</p>
+            <p style={{fontSize:12,fontFamily:G.mono,letterSpacing:0.5,color:G.textM,marginBottom:8,textTransform:"uppercase",fontWeight:500}}>Past Entries</p>
             <span className="badge badge-session" style={{marginBottom:14,display:"inline-block"}}>Session {currentSession()}</span>
             {allDates.length===0
               ?<p style={{fontSize:12,color:G.textL,fontStyle:"italic",fontFamily:G.sans}}>No entries yet.</p>
               :<div style={{display:"flex",flexDirection:"column",gap:0}}>
                 {groupDatesByPeriod(allDates).map(({label,dates:gDates})=>(
                   <div key={label} style={{marginBottom:16}}>
-                    <div style={{fontSize:9,fontFamily:G.mono,letterSpacing:1,color:G.textL,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${G.border}`}}>{label}</div>
+                    <div style={{fontSize:11,fontFamily:G.mono,letterSpacing:0.5,color:G.textM,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${G.border}`,fontWeight:600}}>{label}</div>
                     {gDates.map((dk,i)=>{
                       const entries=classNotes[dk]||[];
                       const isSel=dk===selectedDate;
@@ -653,7 +653,7 @@ export default function ClassTracker({user}){
                           {i<gDates.length-1&&<div style={{position:"absolute",left:4,top:12,bottom:0,width:1,background:G.border}}/>}
                           <div style={{width:9,height:9,borderRadius:"50%",flexShrink:0,marginTop:3,zIndex:1,transition:"all 0.15s",background:isSel?G.green:G.surface,border:`2px solid ${isSel?G.green:G.borderM}`,boxShadow:isSel?`0 0 0 3px rgba(27,138,76,0.15)`:"none"}}/>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:11,fontWeight:isSel?600:400,color:isSel?G.green:G.textM,fontFamily:isSel?G.display:G.mono}}>{formatDateLabel(dk)}</div>
+                            <div style={{fontSize:12,fontWeight:isSel?600:400,color:isSel?G.green:G.textM,fontFamily:G.sans}}>{formatDateLabel(dk)}</div>
                             <div style={{marginTop:3,display:"flex",flexDirection:"column",gap:2}}>
                               {entries.slice(0,2).map(n=>{const tag=TAG_STYLES[n.tag]||TAG_STYLES.note;return(
                                 <div key={n.id} style={{fontSize:10,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:4}}>
@@ -681,8 +681,8 @@ export default function ClassTracker({user}){
         right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}
       />
       <div style={{maxWidth:520,margin:"40px auto",padding:"0 24px 80px"}}>
-        <p style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,marginBottom:6,textTransform:"uppercase"}}>New Class</p>
-        <h2 style={{marginBottom:28,fontSize:26,letterSpacing:-0.5}}>Add a class</h2>
+        <p style={{fontSize:12,color:G.textM,fontFamily:G.mono,letterSpacing:0.5,marginBottom:6,textTransform:"uppercase",fontWeight:500}}>New Class</p>
+        <h2 style={{marginBottom:28,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>Add a class</h2>
         <div style={{...card,padding:"26px"}}>
           <div style={{background:G.greenL,borderRadius:10,padding:"10px 14px",marginBottom:22,fontSize:12,color:G.green,fontFamily:G.mono,display:"flex",alignItems:"center",gap:8}}>
             <span>👤</span><span>Teacher: <strong>{teacherName}</strong> — auto-attached to all entries</span>
@@ -827,8 +827,8 @@ export default function ClassTracker({user}){
           </div>
         )}
         <div style={{maxWidth:660,margin:"0 auto",padding:"32px 24px 72px"}}>
-          <p style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:1,marginBottom:5,textTransform:"uppercase"}}>{isEdit?"Editing Entry":"New Entry For"}</p>
-          <h2 style={{marginBottom:22,fontSize:24,letterSpacing:-0.4}}>{isEdit?form.title||"Entry":formatDateLabel(selectedDate)}</h2>
+          <p style={{fontSize:12,color:G.textM,fontFamily:G.mono,letterSpacing:0.5,marginBottom:5,textTransform:"uppercase",fontWeight:500}}>{isEdit?"Editing Entry":"New Entry For"}</p>
+          <h2 style={{marginBottom:22,fontSize:26,letterSpacing:-0.5,fontFamily:G.display}}>{isEdit?form.title||"Entry":formatDateLabel(selectedDate)}</h2>
           <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:12,color:G.green,fontFamily:G.mono,display:"flex",alignItems:"center",gap:8}}>
             <span>👤</span><span>Logged as: <strong>{teacherName}</strong></span>
           </div>
@@ -838,7 +838,7 @@ export default function ClassTracker({user}){
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                 {Object.entries(TAG_STYLES).map(([key,val])=>(
                   <button key={key} onClick={()=>setForm({...form,tag:key})}
-                    style={{background:form.tag===key?val.bg:G.surface,color:form.tag===key?val.text:G.textM,border:`1.5px solid ${form.tag===key?val.bg:G.border}`,borderRadius:20,padding:"7px 16px",fontSize:12,cursor:"pointer",fontFamily:G.sans,fontWeight:form.tag===key?600:400,transition:"all 0.15s"}}>
+                    style={{background:form.tag===key?val.bg:G.surface,color:form.tag===key?val.text:G.textM,border:`1.5px solid ${form.tag===key?val.bg:G.border}`,borderRadius:20,padding:"8px 18px",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:form.tag===key?600:500,transition:"all 0.15s"}}>
                     {val.label}
                   </button>
                 ))}
