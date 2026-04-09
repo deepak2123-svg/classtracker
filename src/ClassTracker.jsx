@@ -139,34 +139,64 @@ function TopNav({user,teacherName,onEditName,right}){
   );
 }
 
-// ── Date Strip ────────────────────────────────────────────────────────────────
-function DateStrip({selectedDate,onSelectDate,noteDates=new Set()}){
-  const dates=buildDateWindow();
-  const stripRef=useRef(null);
-  useEffect(()=>{
-    const s=stripRef.current;if(!s)return;
-    const idx=dates.findIndex(d=>d.key===selectedDate);
-    s.scrollLeft=idx*76-s.clientWidth/2+38;
-  },[selectedDate]);
-  return(
-    <div className="date-strip-wrap">
-      <div ref={stripRef} className="date-strip"
-        onMouseDown={e=>{const el=e.currentTarget;let sl=el.scrollLeft,sx=e.pageX-el.offsetLeft,dn=true;const mm=mv=>{if(!dn)return;el.scrollLeft=sl-(mv.pageX-el.offsetLeft-sx)*1.3;};const mu=()=>{dn=false;document.removeEventListener("mousemove",mm);document.removeEventListener("mouseup",mu);};document.addEventListener("mousemove",mm);document.addEventListener("mouseup",mu);}}>
-        {dates.map(d=>{
-          const isSel=d.key===selectedDate;
-          const allowed=isDateAllowed(d.key);
-          const hasE=noteDates.has(d.key);
-          let cls="date-cell";
-          if(isSel)cls+=" selected";
-          if(d.isSun)cls+=" sunday";
-          if(!allowed)cls+=" dimmed";
-          return(
-            <div key={d.key} className={cls} onClick={()=>allowed&&onSelectDate(d.key)}>
+// ── Date Carousel ─────────────────────────────────────────────────────────────
+function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
+  // noteDates: { "2026-04-09": 3, "2026-04-07": 1, ... }
+  const dates = buildDateWindow();
+  const trackRef = useRef(null);
+
+  // Scroll selected cell to centre on mount / change
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const idx = dates.findIndex(d => d.key === selectedDate);
+    if (idx < 0) return;
+    // Each cell is ~82px wide + 2px gap
+    const cellW = 82;
+    const target = idx * cellW - track.clientWidth / 2 + cellW / 2;
+    track.scrollTo({ left: target, behavior: 'smooth' });
+  }, [selectedDate]);
+
+  // Drag-to-scroll
+  const drag = useRef({ down: false, startX: 0, scrollLeft: 0 });
+  const onMouseDown = e => {
+    drag.current = { down: true, startX: e.pageX - trackRef.current.offsetLeft, scrollLeft: trackRef.current.scrollLeft };
+  };
+  const onMouseMove = e => {
+    if (!drag.current.down) return;
+    e.preventDefault();
+    trackRef.current.scrollLeft = drag.current.scrollLeft - (e.pageX - trackRef.current.offsetLeft - drag.current.startX) * 1.1;
+  };
+  const onMouseUp = () => { drag.current.down = false; };
+
+  return (
+    <div className="strip-wrap">
+      <div ref={trackRef} className="strip-track"
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}>
+        {dates.map(d => {
+          const isSel   = d.key === selectedDate;
+          const isToday = d.key === todayKey();
+          const allowed = isDateAllowed(d.key);
+          const count   = noteDates[d.key] || 0;
+
+          let cls = "dc";
+          if (isSel)    cls += " dc-sel";
+          if (d.isSun)  cls += " dc-sun";
+          if (!allowed) cls += " dc-dim";
+
+          return (
+            <div key={d.key} className={cls} onClick={() => allowed && onSelectDate(d.key)}>
               <div className="dc-day">{d.dayName}</div>
               <div className="dc-num">{d.num}</div>
-              {isSel&&d.key===todayKey()&&<div className="dc-today">Today</div>}
-              {hasE&&!isSel&&<div className="dc-dot"/>}
-              {!hasE&&!isSel&&<div style={{height:8}}/>}
+              {isToday && isSel && <div className="dc-today">Today</div>}
+              <div className="dc-area">
+                {count > 0
+                  ? <div className="dc-badge">{count}</div>
+                  : <div className="dc-empty" />}
+              </div>
             </div>
           );
         })}
@@ -174,6 +204,7 @@ function DateStrip({selectedDate,onSelectDate,noteDates=new Set()}){
     </div>
   );
 }
+
 
 // ── Creatable Dropdown ────────────────────────────────────────────────────────
 function CreatableDropdown({value,onChange,options,onAddOption,placeholder,addPlaceholder}){
@@ -503,7 +534,11 @@ export default function ClassTracker({user}){
     const filtered=dateNotes.filter(n=>!search||n.title.toLowerCase().includes(search.toLowerCase())||n.body.toLowerCase().includes(search.toLowerCase()));
     const allDates=Object.keys(classNotes).filter(dk=>classNotes[dk]?.length>0).sort((a,b)=>b.localeCompare(a));
     const totalEntries=Object.values(classNotes).reduce((s,arr)=>s+arr.length,0);
-    const noteDates=getAllNoteDates(activeClass.id);
+    const noteDates = Object.fromEntries(
+      Object.entries(classNotes)
+        .filter(([,arr]) => arr.length > 0)
+        .map(([dk, arr]) => [dk, arr.length])
+    );
 
     return(
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
@@ -822,7 +857,7 @@ export default function ClassTracker({user}){
                 <span style={{fontSize:13,color:G.green}}>📅</span>
                 <span style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
               </div>
-              <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={new Set()}/>
+              <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={{}}/>
             </div>
           </div>
         )}
