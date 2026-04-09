@@ -26,7 +26,7 @@ const COLORS = [
   {bg:"#2563EB",light:"#DBEAFE",text:"#1E3A8A"},
 ];
 
-const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:{name:""}};
+const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:{name:""},trash:{classes:[],notes:[]}};
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function buildDateWindow() {
@@ -40,6 +40,46 @@ function buildDateWindow() {
   return days;
 }
 function isDateAllowed(dk){ return buildDateWindow().some(d=>d.key===dk); }
+
+
+// ── Academic session helpers (India: Apr–Mar) ─────────────────────────────
+function getAcademicSession(dk) {
+  const [y,m] = dk.split("-").map(Number);
+  return m >= 4 ? `${y}-${String(y+1).slice(2)}` : `${y-1}-${String(y).slice(2)}`;
+}
+function currentSession() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth()+1;
+  return m >= 4 ? `${y}-${String(y+1).slice(2)}` : `${y-1}-${String(y).slice(2)}`;
+}
+function groupDatesByPeriod(dates) {
+  const now = new Date();
+  const todayKey2 = todayKey();
+  const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay());
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const curSession = currentSession();
+
+  const groups = {};
+  dates.forEach(dk => {
+    const d = new Date(dk);
+    let group;
+    if (dk === todayKey2) group = "Today";
+    else if (d >= weekStart) group = "This Week";
+    else if (d >= monthStart) group = "This Month";
+    else {
+      const sess = getAcademicSession(dk);
+      group = sess === curSession ? `Session ${curSession}` : `Session ${sess}`;
+    }
+    if (!groups[group]) groups[group] = [];
+    groups[group].push(dk);
+  });
+  // Return in order
+  const order = ["Today","This Week","This Month",`Session ${curSession}`];
+  const result = [];
+  order.forEach(g => { if (groups[g]) result.push({label:g,dates:groups[g]}); });
+  Object.keys(groups).forEach(g => { if (!order.includes(g)) result.push({label:g,dates:groups[g]}); });
+  return result;
+}
 
 function rpl(e,light=false){
   const el=e.currentTarget,rect=el.getBoundingClientRect();
@@ -201,6 +241,45 @@ function EditNameModal({current,onSave,onClose}){
   );
 }
 
+
+
+// ── Trash indicator in nav ────────────────────────────────────────────────
+function TrashBadge({count,onClick}){
+  if(count===0) return null;
+  return(
+    <button onClick={onClick} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:8,padding:"5px 11px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans,display:"flex",alignItems:"center",gap:5,position:"relative"}}>
+      🗑 <span style={{fontSize:11}}>{count}</span>
+      <span style={{position:"absolute",top:-4,right:-4,width:8,height:8,borderRadius:"50%",background:G.red}}/>
+    </button>
+  );
+}
+
+// ── Edit Class Modal ──────────────────────────────────────────────────────────
+function EditClassModal({cls,data,onSave,onClose,sortedByUsage,addInstituteName,addSectionName,addSubjectName}){
+  const [section,setSection]=useState(cls.section||"");
+  const [institute,setInstitute]=useState(cls.institute||"");
+  const [subject,setSubject]=useState(cls.subject||"");
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:G.surface,borderRadius:16,padding:"28px 24px",width:"100%",maxWidth:440,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+        <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Edit class</div>
+        <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginBottom:20}}>Update the details for this class</div>
+        <label style={lbl}>Institute</label>
+        <CreatableDropdown value={institute} onChange={setInstitute} options={sortedByUsage(data.institutes||[],"institute")} onAddOption={addInstituteName} placeholder="e.g. Genesis Karnal, KIS" addPlaceholder="Type institute name…"/>
+        <label style={{...lbl,marginTop:8}}>Class / Section</label>
+        <CreatableDropdown value={section} onChange={setSection} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
+        <label style={{...lbl,marginTop:8}}>Subject</label>
+        <CreatableDropdown value={subject} onChange={setSubject} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics" addPlaceholder="Type subject…"/>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
+          <button onClick={onClose} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:8,padding:"9px 18px",fontSize:13,cursor:"pointer",color:G.textM,fontFamily:G.sans}}>Cancel</button>
+          <button onClick={()=>institute.trim()&&section.trim()&&onSave({section:section.trim(),institute:institute.trim(),subject:subject.trim()})} onPointerDown={e=>rpl(e,true)}
+            style={{background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"9px 20px",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden"}}>Save Changes</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function ClassTracker({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
@@ -215,6 +294,7 @@ export default function ClassTracker({user}){
   const [newClass,setNewClass] = useState({institute:"",section:"",subject:""});
   const [search,setSearch]     = useState("");
   const [editingName,setEditingName] = useState(false);
+  const [editingClass,setEditingClass] = useState(null); // holds class object being edited
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
 
@@ -250,7 +330,25 @@ export default function ClassTracker({user}){
     setData(d=>{ const inst=newClass.institute.trim(),sec=newClass.section.trim(),subj=newClass.subject.trim(); return {...d,classes:[...d.classes,{id,institute:inst,section:sec,subject:subj,colorIdx:d.classes.length%COLORS.length,created:Date.now()}],notes:{...d.notes,[id]:{}},institutes:(d.institutes||[]).includes(inst)?d.institutes||[]:[...(d.institutes||[]),inst],sections:(d.sections||[]).includes(sec)?d.sections||[]:[...(d.sections||[]),sec],subjects:subj&&!(d.subjects||[]).includes(subj)?[...(d.subjects||[]),subj]:d.subjects||[]}; });
     setNewClass({institute:"",section:"",subject:""}); setView("home");
   };
-  const deleteClass=(id)=>{ setData(d=>({...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id))})); if(activeClass?.id===id){setActiveClass(null);setView("home");} };
+  const deleteClass=(id)=>{
+    setData(d=>{
+      const cls=d.classes.find(c=>c.id===id);
+      if(!cls) return d;
+      const trashedCls={...cls,deletedAt:Date.now(),savedNotes:d.notes[id]||{}};
+      const newTrash={...d.trash,classes:[...(d.trash?.classes||[]),trashedCls]};
+      return {...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id)),trash:newTrash};
+    });
+    if(activeClass?.id===id){setActiveClass(null);setView("home");}
+  };
+  const updateClass=(id,updates)=>{ setData(d=>({...d,classes:d.classes.map(c=>c.id===id?{...c,...updates}:c)})); if(activeClass?.id===id) setActiveClass(ac=>({...ac,...updates})); setEditingClass(null); };
+  const restoreClass=(trashedCls)=>{
+    setData(d=>{
+      const {deletedAt,savedNotes,...cls}=trashedCls;
+      const newTrashClasses=(d.trash?.classes||[]).filter(c=>c.id!==cls.id);
+      return {...d,classes:[...d.classes,cls],notes:{...d.notes,[cls.id]:savedNotes||{}},trash:{...d.trash,classes:newTrashClasses}};
+    });
+  };
+  const permDeleteClass=(id)=>setData(d=>({...d,trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==id)}}));
   const getClassNotes=(cid)=>data.notes[cid]||{};
   const getDateNotes=(cid,dk)=>(data.notes[cid]||{})[dk]||[];
   const getAllNoteDates=(cid)=>new Set(Object.keys(data.notes[cid]||{}).filter(dk=>(data.notes[cid][dk]||[]).length>0));
@@ -264,9 +362,24 @@ export default function ClassTracker({user}){
     setData(d=>{ const cn=d.notes[activeClass.id]||{}; const dn=cn[selectedDate]||[]; return {...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}}; });
     setEditNote(null); setView("class");
   };
-  const deleteNote=(noteId)=>setData(d=>{ const cn=d.notes[activeClass.id]||{}; const dn=cn[selectedDate]||[]; return {...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.filter(n=>n.id!==noteId)}}}; });
+  const deleteNote=(noteId)=>setData(d=>{
+    const cn=d.notes[activeClass.id]||{}; const dn=cn[selectedDate]||[];
+    const note=dn.find(n=>n.id===noteId); if(!note) return d;
+    const trashedNote={...note,classId:activeClass.id,className:activeClass.section,institute:activeClass.institute,dateKey:selectedDate,deletedAt:Date.now()};
+    return {...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.filter(n=>n.id!==noteId)}},trash:{...d.trash,notes:[...(d.trash?.notes||[]),trashedNote]}};
+  });
+  const restoreNote=(tn)=>{
+    setData(d=>{
+      const {classId,dateKey,deletedAt,className,institute,...note}=tn;
+      const cn=d.notes[classId]||{}; const dn=cn[dateKey]||[];
+      const newTrashNotes=(d.trash?.notes||[]).filter(n=>n.id!==note.id);
+      return {...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:[note,...dn]}},trash:{...d.trash,notes:newTrashNotes}};
+    });
+  };
+  const permDeleteNote=(id)=>setData(d=>({...d,trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==id)}}));
 
   const totalNotes=data.classes.reduce((s,c)=>{ const cn=data.notes[c.id]||{}; return s+Object.values(cn).reduce((a,arr)=>a+arr.length,0); },0);
+  const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
   const canAdd=isDateAllowed(selectedDate);
 
   // ── HOME ──────────────────────────────────────────────────────────────────
@@ -274,9 +387,11 @@ export default function ClassTracker({user}){
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
       <SaveBadge/>
       {editingName&&<EditNameModal current={teacherName} onSave={name=>{setData(d=>({...d,profile:{name}}));setEditingName(false);}} onClose={()=>setEditingName(false)}/>}
+      {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={updates=>updateClass(editingClass.id,updates)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} addInstituteName={addInstituteName} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
         right={<>
           <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{data.classes.length} {data.classes.length===1?"class":"classes"} · {totalNotes} entries</span>
+          <TrashBadge count={trashCount} onClick={()=>setView("trash")}/>
           <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)}
             style={{background:G.green,color:"#fff",border:"none",borderRadius:9,padding:"8px 18px",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:600,display:"flex",alignItems:"center",gap:6,position:"relative",overflow:"hidden"}}>
             <span style={{fontSize:17,lineHeight:1}}>+</span> Add Class
@@ -290,6 +405,10 @@ export default function ClassTracker({user}){
           <div style={{fontSize:13,color:G.textL,fontFamily:G.mono,marginBottom:4}}>Good day,</div>
           <div style={{fontSize:28,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.5}}>
             {teacherName} 👋
+          </div>
+          <div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:6,background:G.greenL,borderRadius:20,padding:"4px 12px"}}>
+            <span style={{fontSize:10,color:G.green,fontFamily:G.mono,letterSpacing:1}}>ACADEMIC SESSION</span>
+            <span style={{fontSize:12,fontWeight:600,color:G.green,fontFamily:G.display}}>{currentSession()}</span>
           </div>
         </div>
 
@@ -327,10 +446,16 @@ export default function ClassTracker({user}){
                           <div style={{fontSize:11,color:G.textM,marginTop:3}}>🏫 {cls.institute}{cls.subject?` · ${cls.subject}`:""}</div>
                         </div>
                       </div>
-                      <button onClick={e=>{e.stopPropagation();if(window.confirm(`Delete "${cls.section} · ${cls.institute}"?\n\nAll ${count} entries will be permanently lost.`))deleteClass(cls.id);}}
-                        style={{background:"none",border:"none",cursor:"pointer",color:G.textL,fontSize:14,padding:"4px 6px",borderRadius:6,transition:"all 0.12s",flexShrink:0}}
-                        onMouseEnter={e=>{e.currentTarget.style.background=G.redL;e.currentTarget.style.color=G.red;}}
-                        onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textL;}}>🗑</button>
+                      <div style={{display:"flex",gap:4}}>
+                        <button onClick={e=>{e.stopPropagation();setEditingClass(cls);}}
+                          style={{background:"none",border:"none",cursor:"pointer",color:G.textL,fontSize:13,padding:"4px 6px",borderRadius:6,transition:"all 0.12s",flexShrink:0}}
+                          onMouseEnter={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.color=G.green;}}
+                          onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textL;}}>✏</button>
+                        <button onClick={e=>{e.stopPropagation();if(window.confirm(`Delete "${cls.section} · ${cls.institute}"?\n\nAll ${count} entries will be permanently lost.`))deleteClass(cls.id);}}
+                          style={{background:"none",border:"none",cursor:"pointer",color:G.textL,fontSize:14,padding:"4px 6px",borderRadius:6,transition:"all 0.12s",flexShrink:0}}
+                          onMouseEnter={e=>{e.currentTarget.style.background=G.redL;e.currentTarget.style.color=G.red;}}
+                          onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textL;}}>🗑</button>
+                      </div>
                     </div>
 
                     <div style={{display:"flex",gap:8,marginBottom:14}}>
@@ -386,6 +511,7 @@ export default function ClassTracker({user}){
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
         <SaveBadge/>
         {editingName&&<EditNameModal current={teacherName} onSave={name=>{setData(d=>({...d,profile:{name}}));setEditingName(false);}} onClose={()=>setEditingName(false)}/>}
+        {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={updates=>updateClass(editingClass.id,updates)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} addInstituteName={addInstituteName} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
         <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
           right={<>
             <button onClick={()=>setView("home")} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:8,padding:"6px 14px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans,transition:"all 0.12s"}}
@@ -508,33 +634,39 @@ export default function ClassTracker({user}){
             </div>
           </div>
 
-          {/* RIGHT — timeline */}
-          <div style={{width:200,flexShrink:0}}>
+          {/* RIGHT — grouped timeline */}
+          <div style={{width:210,flexShrink:0}}>
             <div style={{fontSize:10,fontFamily:G.mono,letterSpacing:1,color:G.textL,marginBottom:10,textTransform:"uppercase"}}>Past Entries</div>
+            <div style={{fontSize:10,color:G.green,fontFamily:G.mono,marginBottom:12,background:G.greenL,borderRadius:8,padding:"4px 9px",display:"inline-block"}}>Session {currentSession()}</div>
             {allDates.length===0
               ?<div style={{fontSize:11,color:G.textL,fontStyle:"italic"}}>No entries yet.</div>
-              :<div style={{display:"flex",flexDirection:"column"}}>
-                {allDates.map((dk,i)=>{
-                  const entries=classNotes[dk]||[];
-                  const isSel=dk===selectedDate;
-                  return(
-                    <div key={dk} onClick={()=>setSelectedDate(dk)}
-                      style={{cursor:"pointer",display:"flex",gap:10,paddingBottom:14,position:"relative",borderRadius:6,padding:"2px 4px 14px 0"}}>
-                      {i<allDates.length-1&&<div style={{position:"absolute",left:4,top:13,bottom:0,width:1,background:G.border}}/>}
-                      <div style={{width:9,height:9,borderRadius:"50%",flexShrink:0,marginTop:3,zIndex:1,transition:"all 0.15s",background:isSel?G.green:G.surface,border:`2px solid ${isSel?G.green:G.borderM}`,boxShadow:isSel?`0 0 0 3px rgba(22,163,74,0.15)`:"none"}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:10,fontWeight:isSel?600:400,color:isSel?G.green:G.textM,fontFamily:G.mono}}>{formatDateLabel(dk)}</div>
-                        <div style={{marginTop:3,display:"flex",flexDirection:"column",gap:2}}>
-                          {entries.slice(0,2).map(n=>{ const tag=TAG_STYLES[n.tag]||TAG_STYLES.note; return(
-                            <div key={n.id} style={{fontSize:10,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:3}}>
-                              <span style={{width:5,height:5,borderRadius:"50%",background:tag.bg,flexShrink:0}}/>{n.title||n.body||"—"}
-                            </div>); })}
-                          {entries.length>2&&<div style={{fontSize:9,color:G.textL,fontFamily:G.mono}}>+{entries.length-2} more</div>}
+              :<div style={{display:"flex",flexDirection:"column",gap:0}}>
+                {groupDatesByPeriod(allDates).map(({label,dates:grpDates})=>(
+                  <div key={label} style={{marginBottom:14}}>
+                    <div style={{fontSize:9,fontFamily:G.mono,letterSpacing:1,color:G.textL,textTransform:"uppercase",marginBottom:7,paddingBottom:5,borderBottom:`1px solid ${G.border}`}}>{label}</div>
+                    {grpDates.map((dk,i)=>{
+                      const entries=classNotes[dk]||[];
+                      const isSel=dk===selectedDate;
+                      return(
+                        <div key={dk} onClick={()=>setSelectedDate(dk)}
+                          style={{cursor:"pointer",display:"flex",gap:9,paddingBottom:10,position:"relative"}}>
+                          {i<grpDates.length-1&&<div style={{position:"absolute",left:4,top:12,bottom:0,width:1,background:G.border}}/>}
+                          <div style={{width:9,height:9,borderRadius:"50%",flexShrink:0,marginTop:3,zIndex:1,transition:"all 0.15s",background:isSel?G.green:G.surface,border:`2px solid ${isSel?G.green:G.borderM}`,boxShadow:isSel?`0 0 0 3px rgba(22,163,74,0.15)`:"none"}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:10,fontWeight:isSel?600:400,color:isSel?G.green:G.textM,fontFamily:G.mono}}>{formatDateLabel(dk)}</div>
+                            <div style={{marginTop:2,display:"flex",flexDirection:"column",gap:2}}>
+                              {entries.slice(0,2).map(n=>{ const tag=TAG_STYLES[n.tag]||TAG_STYLES.note; return(
+                                <div key={n.id} style={{fontSize:10,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:3}}>
+                                  <span style={{width:5,height:5,borderRadius:"50%",background:tag.bg,flexShrink:0}}/>{n.title||n.body||"—"}
+                                </div>); })}
+                              {entries.length>2&&<div style={{fontSize:9,color:G.textL,fontFamily:G.mono}}>+{entries.length-2} more</div>}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                ))}
               </div>}
           </div>
         </div>
@@ -637,5 +769,106 @@ export default function ClassTracker({user}){
       </div>
     );
   }
+
+  // ── TRASH VIEW ────────────────────────────────────────────────────────────
+  if(view==="trash") {
+    const trashedClasses=(data.trash?.classes||[]).sort((a,b)=>b.deletedAt-a.deletedAt);
+    const trashedNotes=(data.trash?.notes||[]).sort((a,b)=>b.deletedAt-a.deletedAt);
+    const daysLeft=(ts)=>Math.max(0,30-Math.floor((Date.now()-ts)/(1000*60*60*24)));
+    return(
+      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+        <SaveBadge/>
+        {editingName&&<EditNameModal current={teacherName} onSave={name=>{setData(d=>({...d,profile:{name}}));setEditingName(false);}} onClose={()=>setEditingName(false)}/>}
+        <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
+          right={<button onClick={()=>setView("home")} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:8,padding:"6px 14px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans}}>← Back</button>}
+        />
+        <div style={{maxWidth:860,margin:"0 auto",padding:"28px 28px 60px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+            <span style={{fontSize:22}}>🗑</span>
+            <h2 style={{fontSize:22,fontWeight:700,color:G.text,fontFamily:G.display,margin:0}}>Recycle Bin</h2>
+          </div>
+          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginBottom:24}}>Items are permanently deleted after 30 days.</div>
+
+          {trashedClasses.length===0&&trashedNotes.length===0&&(
+            <div style={{textAlign:"center",padding:"60px 20px",background:G.surface,borderRadius:14,border:`1px solid ${G.border}`}}>
+              <div style={{fontSize:40,marginBottom:10}}>✅</div>
+              <div style={{fontSize:15,color:G.textM}}>Recycle bin is empty</div>
+            </div>
+          )}
+
+          {trashedClasses.length>0&&(
+            <div style={{marginBottom:28}}>
+              <div style={{fontSize:11,fontFamily:G.mono,letterSpacing:1,color:G.textL,textTransform:"uppercase",marginBottom:12}}>Deleted Classes ({trashedClasses.length})</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {trashedClasses.map(tc=>{
+                  const color=COLORS[tc.colorIdx%COLORS.length];
+                  const entryCount=Object.values(tc.savedNotes||{}).reduce((s,arr)=>s+arr.length,0);
+                  const dl=daysLeft(tc.deletedAt);
+                  return(
+                    <div key={tc.id} style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:14}}>
+                      <div style={{width:40,height:40,borderRadius:10,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:color.bg,fontFamily:G.mono}}>
+                        {(tc.section||"?").slice(0,2).toUpperCase()}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.display}}>{tc.section}</div>
+                        <div style={{fontSize:11,color:G.textM,marginTop:2}}>🏫 {tc.institute}{tc.subject?` · ${tc.subject}`:""} · {entryCount} entries</div>
+                        <div style={{fontSize:10,color:dl<=7?G.red:G.textL,fontFamily:G.mono,marginTop:3}}>⏳ {dl} days until permanent deletion</div>
+                      </div>
+                      <div style={{display:"flex",gap:8,flexShrink:0}}>
+                        <button onClick={()=>restoreClass(tc)} onPointerDown={e=>rpl(e,false)}
+                          style={{background:G.greenL,border:`1px solid ${G.green}33`,color:G.green,borderRadius:8,padding:"7px 14px",fontSize:12,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden"}}>↩ Restore</button>
+                        <button onClick={()=>{if(window.confirm("Permanently delete this class and all its entries? This cannot be undone."))permDeleteClass(tc.id);}}
+                          style={{background:G.redL,border:"1px solid #FEE2E2",color:G.red,borderRadius:8,padding:"7px 14px",fontSize:12,cursor:"pointer",fontFamily:G.sans}}>Delete Forever</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {trashedNotes.length>0&&(
+            <div>
+              <div style={{fontSize:11,fontFamily:G.mono,letterSpacing:1,color:G.textL,textTransform:"uppercase",marginBottom:12}}>Deleted Entries ({trashedNotes.length})</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {trashedNotes.map(tn=>{
+                  const tag=TAG_STYLES[tn.tag]||TAG_STYLES.note;
+                  const dl=daysLeft(tn.deletedAt);
+                  // check if class still exists
+                  const classExists=data.classes.some(c=>c.id===tn.classId);
+                  return(
+                    <div key={tn.id} style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,overflow:"hidden"}}>
+                      <div style={{height:3,background:tag.bg}}/>
+                      <div style={{padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:12}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:"flex",gap:6,marginBottom:4,flexWrap:"wrap",alignItems:"center"}}>
+                            <span style={{background:tag.bg,color:tag.text,fontSize:9,borderRadius:10,padding:"2px 8px",fontFamily:G.mono}}>{tag.label}</span>
+                            <span style={{fontSize:10,color:G.textL,fontFamily:G.mono}}>{formatDateLabel(tn.dateKey)}</span>
+                            <span style={{fontSize:10,color:G.textM,fontFamily:G.mono}}>· {tn.className} · {tn.institute}</span>
+                          </div>
+                          {tn.title&&<div style={{fontSize:13,fontWeight:600,color:G.text,fontFamily:G.display}}>{tn.title}</div>}
+                          {tn.body&&<div style={{fontSize:12,color:G.textM,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tn.body}</div>}
+                          <div style={{fontSize:10,color:dl<=7?G.red:G.textL,fontFamily:G.mono,marginTop:4}}>⏳ {dl} days until permanent deletion</div>
+                        </div>
+                        <div style={{display:"flex",gap:8,flexShrink:0}}>
+                          {classExists
+                            ?<button onClick={()=>restoreNote(tn)} onPointerDown={e=>rpl(e,false)}
+                                style={{background:G.greenL,border:`1px solid ${G.green}33`,color:G.green,borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden"}}>↩ Restore</button>
+                            :<div style={{fontSize:10,color:G.textL,fontFamily:G.mono,padding:"6px 8px"}}>Class deleted</div>}
+                          <button onClick={()=>{if(window.confirm("Permanently delete this entry?"))permDeleteNote(tn.id);}}
+                            style={{background:G.redL,border:"1px solid #FEE2E2",color:G.red,borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:G.sans}}>✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return null;
 }
