@@ -63,7 +63,7 @@ export default function AdminAuth({ onVerified }) {
   }
 
   return (
-    <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,position:"relative",overflow:"hidden"}}>
+    <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 16px",position:"relative",overflow:"hidden"}}>
 
       {/* Subtle background pattern */}
       <div style={{position:"absolute",inset:0,opacity:0.03,backgroundImage:"radial-gradient(circle, #fff 1px, transparent 1px)",backgroundSize:"28px 28px",pointerEvents:"none"}}/>
@@ -102,10 +102,10 @@ export default function AdminAuth({ onVerified }) {
           <form onSubmit={handleEmail} style={{display:"flex",flexDirection:"column",gap:10}}>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
               placeholder="Admin email" required autoFocus
-              style={{width:"100%",padding:"12px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.09)",color:"#fff",fontSize:14,fontFamily:G.sans,outline:"none"}}/>
+              style={{width:"100%",padding:"12px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.09)",color:"#fff",fontSize:16,fontFamily:G.sans,outline:"none",WebkitAppearance:"none"}}/>
             <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
               placeholder="Password" required
-              style={{width:"100%",padding:"12px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.09)",color:"#fff",fontSize:14,fontFamily:G.sans,outline:"none"}}/>
+              style={{width:"100%",padding:"12px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.09)",color:"#fff",fontSize:16,fontFamily:G.sans,outline:"none",WebkitAppearance:"none"}}/>
             <button type="submit" disabled={loading||!email||!pass}
               style={{width:"100%",padding:"13px",background:loading?"rgba(52,208,119,0.3)":G.greenV,color:G.forest,border:"none",borderRadius:11,fontSize:14,cursor:loading||!email||!pass?"not-allowed":"pointer",fontFamily:G.sans,fontWeight:700,opacity:!email||!pass?0.5:1,transition:"all 0.15s"}}>
               {loading?"Verifying…":"Sign In"}
