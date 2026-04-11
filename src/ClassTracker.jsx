@@ -393,12 +393,14 @@ export default function ClassTracker({user}){
   const getAllNoteDates=(cid)=>new Set(Object.keys(data.notes[cid]||{}).filter(dk=>(data.notes[cid][dk]||[]).length>0));
 
   const addNote=()=>{
+    if(!newNote.timeStart){alert("Please enter the class start time.");return;}
     if(!newNote.title.trim()&&!newNote.body.trim())return;
     const note={id:Date.now().toString(),...newNote,teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
     setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("class");
   };
   const saveEdit=()=>{
+    if(!editNote.timeStart){alert("Please enter the class start time.");return;}
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};});
     setEditNote(null);setView("class");
   };
@@ -892,11 +894,30 @@ export default function ClassTracker({user}){
               </div>
             </div>
             <div style={{marginBottom:16}}>
-              <label style={lbl}>Class Time (optional)</label>
+              <label style={lbl}>Class Time <span style={{color:G.red,marginLeft:3}}>*</span></label>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <input type="time" value={form.timeStart||""} onChange={e=>setForm({...form,timeStart:e.target.value})} style={{...inp,marginBottom:0,flex:1}}/>
-                {form.timeStart&&<><span style={{color:G.textL,fontSize:14,flexShrink:0}}>→</span><input type="time" value={form.timeEnd||""} onChange={e=>setForm({...form,timeEnd:e.target.value})} style={{...inp,marginBottom:0,flex:1}}/></>}
+                <input
+                  type="time"
+                  value={form.timeStart||""}
+                  onChange={e=>{
+                    setForm({...form,timeStart:e.target.value});
+                    // Auto-focus end time after start is picked (mobile clock dismisses and jumps)
+                    if(e.target.value) setTimeout(()=>{ const el=document.getElementById("timeEnd"); if(el) el.focus(); },150);
+                  }}
+                  style={{...inp,marginBottom:0,flex:1}}
+                  placeholder="Start"
+                />
+                <span style={{color:G.textL,fontSize:14,flexShrink:0}}>→</span>
+                <input
+                  id="timeEnd"
+                  type="time"
+                  value={form.timeEnd||""}
+                  onChange={e=>setForm({...form,timeEnd:e.target.value})}
+                  style={{...inp,marginBottom:0,flex:1}}
+                  placeholder="End"
+                />
               </div>
+              {!form.timeStart&&<div style={{fontSize:11,color:G.red,marginTop:5,fontFamily:G.sans}}>Start time is required to save this entry.</div>}
             </div>
             <div style={{marginBottom:14}}>
               <label style={lbl}>Title</label>
@@ -906,7 +927,7 @@ export default function ClassTracker({user}){
               <label style={lbl}>Notes</label>
               <textarea ref={noteRef} value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Write your notes, tasks, or resources here…" rows={6} style={{...inp,resize:"vertical",lineHeight:1.7,marginBottom:0}}/>
             </div>
-            <PrimaryBtn onClick={save} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:14}}>
+            <PrimaryBtn onClick={save} disabled={!form.timeStart} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:14,opacity:form.timeStart?1:0.45,cursor:form.timeStart?"pointer":"not-allowed"}}>
               {isEdit?"Save Changes":"Save Entry"}
             </PrimaryBtn>
           </div>
