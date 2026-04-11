@@ -52,20 +52,25 @@ function daysAgo(ts){
 }
 function lastEntryTs(notes={}){
   let latest=0;
-  Object.values(notes).forEach(byDate=>{
-    Object.values(byDate).forEach(arr=>{
-      arr.forEach(n=>{if(n.created>latest)latest=n.created;});
+  try {
+    Object.values(notes||{}).forEach(byDate=>{
+      if(!byDate||typeof byDate!=="object") return;
+      Object.values(byDate).forEach(arr=>{
+        if(!Array.isArray(arr)) return;
+        arr.forEach(n=>{if(n&&n.created>latest)latest=n.created;});
+      });
     });
-  });
+  } catch(e){}
   return latest||null;
 }
 function getEntriesInRange(classNotes={}, days=null){
   // returns flat array of {dateKey, entry} sorted by time asc
   const cutoff=days?Date.now()-days*24*60*60*1000:0;
   const result=[];
-  Object.entries(classNotes).forEach(([dk,arr])=>{
+  Object.entries(classNotes||{}).forEach(([dk,arr])=>{
     if(days && new Date(dk).getTime()<cutoff) return;
-    arr.forEach(e=>result.push({dateKey:dk,entry:e}));
+    if(!Array.isArray(arr)) return;
+    arr.forEach(e=>{ if(e) result.push({dateKey:dk,entry:e}); });
   });
   // sort by date desc, within date by timeStart asc
   result.sort((a,b)=>{
@@ -96,8 +101,35 @@ const sidePanel={flexShrink:0,background:"#0D160F",borderRight:"1px solid rgba(2
 const panelLabel={fontSize:8,letterSpacing:2,color:"rgba(255,255,255,0.18)",fontFamily:G.mono,textTransform:"uppercase",padding:"10px 13px 6px",flexShrink:0};
 const siBase={padding:"9px 10px",borderRadius:8,cursor:"pointer",marginBottom:2,borderLeft:"3px solid transparent",transition:"background 0.1s"};
 
+// ── Error Boundary ───────────────────────────────────────────────────────────
+import React from "react";
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state={error:null}; }
+  static getDerivedStateFromError(e){ return {error:e}; }
+  render(){
+    if(this.state.error) return(
+      <div style={{minHeight:"100vh",background:"#F7F8F6",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Plus Jakarta Sans',sans-serif",padding:24}}>
+        <div style={{textAlign:"center",maxWidth:400}}>
+          <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
+          <h2 style={{color:"#0E1F18",fontFamily:"'Syne',sans-serif",marginBottom:8}}>Something went wrong</h2>
+          <p style={{color:"#5C7268",fontSize:13,marginBottom:20,lineHeight:1.6}}>
+            There was an error loading this data. This may be caused by unexpected data format in Firestore.
+          </p>
+          <p style={{color:"#94ADA5",fontSize:11,fontFamily:"'JetBrains Mono',monospace",background:"#F7F8F6",padding:"8px 12px",borderRadius:8,marginBottom:20,wordBreak:"break-all"}}>
+            {this.state.error?.message}
+          </p>
+          <button onClick={()=>window.location.reload()} style={{background:"#1B8A4C",color:"#fff",border:"none",borderRadius:9,padding:"10px 22px",fontSize:13,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:600}}>
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function AdminPanel({user}){
+function AdminPanelInner({user}){
   const [teachers,    setTeachers]    = useState([]);
   const [fullData,    setFullData]    = useState({});
   const [roles,       setRoles]       = useState({});
@@ -129,7 +161,7 @@ export default function AdminPanel({user}){
   const institutes=useMemo(()=>{
     const set=new Set();
     Object.values(fullData).forEach(d=>{
-      (d.classes||[]).forEach(c=>{if(c.institute)set.add(c.institute);});
+      (d.classes||[]).forEach(c=>{if(c.institute)set.add(c.institute.trim());});
     });
     return Array.from(set).sort();
   },[fullData]);
@@ -138,7 +170,8 @@ export default function AdminPanel({user}){
     let t=0;
     Object.values(fullData).forEach(d=>{
       Object.values(d.notes||{}).forEach(byDate=>{
-        Object.values(byDate).forEach(arr=>{t+=arr.length;});
+        if(!byDate||typeof byDate!=="object") return;
+        Object.values(byDate).forEach(arr=>{if(Array.isArray(arr))t+=arr.length;});
       });
     });
     return t;
@@ -147,9 +180,15 @@ export default function AdminPanel({user}){
   // ── Teachers at selected institute ────────────────────────────────────────
   const instTeachers=useMemo(()=>{
     if(!selInst) return [];
+    const norm = s => (s||"").trim().toLowerCase();
     return teachers.filter(t=>{
       const d=fullData[t.uid];
-      return d&&(d.classes||[]).some(c=>c.institute===selInst);
+      if(d){
+        // fullData loaded — use it as ground truth (handles stale index)
+        return (d.classes||[]).some(c=>norm(c.institute)===norm(selInst));
+      }
+      // fullData not yet loaded — use index as approximation
+      return (t.institutes||[]).some(i=>norm(i)===norm(selInst));
     });
   },[selInst,teachers,fullData]);
 
@@ -157,13 +196,21 @@ export default function AdminPanel({user}){
   const instClasses=useMemo(()=>{
     if(!selInst) return [];
     const map={};
-    teachers.forEach(t=>{
+    // Use teachers that belong to this institute (from index or fullData)
+    const normI = s => (s||"").trim().toLowerCase();
+    const relevantTeachers=teachers.filter(t=>{
       const d=fullData[t.uid];
-      if(!d) return;
-      (d.classes||[]).filter(c=>c.institute===selInst).forEach(c=>{
+      if(d) return (d.classes||[]).some(c=>normI(c.institute)===normI(selInst));
+      return (t.institutes||[]).some(i=>normI(i)===normI(selInst));
+    });
+    const norm = s => (s||"").trim().toLowerCase();
+    relevantTeachers.forEach(t=>{
+      const d=fullData[t.uid];
+      if(!d) return; // fullData not loaded yet for this teacher
+      (d.classes||[]).filter(c=>norm(c.institute)===norm(selInst)).forEach(c=>{
         const key=c.section;
         if(!map[key]) map[key]={raw:c.section,display:normaliseName(c.section),subject:c.subject,teachers:[]};
-        const entryCount=Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+a.length,0);
+        const entryCount=Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0);
         const lastActive=lastEntryTs((d.notes||{})[c.id]||{});
         map[key].teachers.push({uid:t.uid,name:d.profile?.name||t.name,entryCount,lastActive,classId:c.id});
       });
@@ -179,13 +226,13 @@ export default function AdminPanel({user}){
       const d=fullData[selP2];
       if(!d) return [];
       return (d.classes||[])
-        .filter(c=>c.institute===selInst)
+        .filter(c=>(c.institute||"").trim().toLowerCase()===(selInst||"").trim().toLowerCase())
         .map(c=>({
           display:normaliseName(c.section),
           raw:c.section,
           subject:c.subject,
           classId:c.id,
-          entryCount:Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+a.length,0),
+          entryCount:Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0),
         }))
         .sort((a,b)=>classNum(b.display)-classNum(a.display));
     } else {
@@ -353,10 +400,17 @@ export default function AdminPanel({user}){
             )}
             {institutes.map(inst=>{
               const isSel=inst===selInst;
-              const clsCount=Object.values(fullData).reduce((s,d)=>{
-                return s+(d.classes||[]).filter(c=>c.institute===inst).length;
-              },0);
-              const tCount=teachers.filter(t=>(fullData[t.uid]?.classes||[]).some(c=>c.institute===inst)).length;
+              // Use index data first (available immediately), supplement with fullData
+              const tCount=teachers.filter(t=>{
+                const idxInsts=t.institutes||[];
+                if(idxInsts.includes(inst)) return true;
+                return (fullData[t.uid]?.classes||[]).some(c=>c.institute===inst);
+              }).length;
+              const clsCount=instClasses.length > 0 && inst===selInst
+                ? instClasses.length
+                : Object.values(fullData).reduce((s,d)=>{
+                    return s+(d.classes||[]).filter(c=>c.institute===inst).length;
+                  },0) || teachers.filter(t=>(t.institutes||[]).includes(inst)).length;
               return(
                 <div key={inst} onClick={()=>{setSelInst(inst);resetNav();setMobileStep(1);}}
                   style={{...siBase,background:isSel?"rgba(52,208,119,0.1)":"transparent",borderLeftColor:isSel?G.greenV:"transparent"}}
@@ -392,9 +446,16 @@ export default function AdminPanel({user}){
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
             {!selInst&&<div style={{padding:"20px 10px",textAlign:"center",color:"rgba(255,255,255,0.2)",fontSize:12,fontStyle:"italic"}}>Select an institute</div>}
+            {selInst&&tab==="teacher"&&instTeachers.length===0&&loadingUids.size>0&&(
+              <div style={{padding:"20px 10px",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:G.mono}}>
+                <div style={{width:18,height:18,borderRadius:"50%",border:"2px solid rgba(52,208,119,0.2)",borderTopColor:G.greenV,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
+                loading teachers…
+              </div>
+            )}
             {selInst&&tab==="teacher"&&instTeachers.map(t=>{
               const d=fullData[t.uid]||{};
               const name=d.profile?.name||t.name||"?";
+              const isLoading=loadingUids.has(t.uid)&&!fullData[t.uid];
               const totalEnt=Object.values(fullData[t.uid]?.notes||{}).reduce((s,byDate)=>s+Object.values(byDate).reduce((a,arr)=>a+arr.length,0),0);
               const isSel=selP2===t.uid;
               return(
@@ -412,6 +473,12 @@ export default function AdminPanel({user}){
                 </div>
               );
             })}
+            {selInst&&tab==="class"&&instClasses.length===0&&loadingUids.size>0&&(
+              <div style={{padding:"20px 10px",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:G.mono}}>
+                <div style={{width:18,height:18,borderRadius:"50%",border:"2px solid rgba(52,208,119,0.2)",borderTopColor:G.greenV,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
+                loading classes…
+              </div>
+            )}
             {selInst&&tab==="class"&&instClasses.map(cls=>{
               const isSel=selP2===cls.raw;
               return(
@@ -601,4 +668,8 @@ export default function AdminPanel({user}){
       </div>
     </div>
   );
+}
+
+export default function AdminPanel(props){
+  return <ErrorBoundary><AdminPanelInner {...props}/></ErrorBoundary>;
 }
