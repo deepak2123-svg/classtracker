@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, Component } from "react";
 import {
   logout, getAllTeachers, getTeacherFullData,
-  getAllRoles, promoteToAdmin, demoteToTeacher,
+  getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES } from "./shared.jsx";
 
@@ -140,6 +140,8 @@ function AdminPanelInner({user}){
   const [loading,     setLoading]     = useState(true);
   const [loadingUids, setLoadingUids] = useState(new Set());
   const [view,        setView]        = useState("main"); // main | manage
+  const [inviteLink,  setInviteLink]  = useState(null);
+  const [inviteLoading,setInviteLoading]=useState(false);
   // navigation state
   const [selInst,     setSelInst]     = useState(null);
   const [tab,         setTab]         = useState("teacher"); // teacher | class
@@ -260,6 +262,16 @@ function AdminPanelInner({user}){
   },[selP3,fullData,period]);
 
   // ── Role actions ──────────────────────────────────────────────────────────
+  const handleGenerateInvite=async()=>{
+    setInviteLoading(true); setInviteLink(null);
+    try {
+      const token = await createInviteLink(user.uid);
+      const link = `${window.location.origin}?invite=${token}`;
+      setInviteLink(link);
+    } catch(e) { alert("Failed to generate link: "+e.message); }
+    finally { setInviteLoading(false); }
+  };
+
   const handlePromote=async(uid)=>{
     if(!window.confirm("Promote to Admin? They will see all data.")) return;
     await promoteToAdmin(uid,user.uid);
@@ -300,7 +312,41 @@ function AdminPanelInner({user}){
       </div>
       <div style={{maxWidth:860,margin:"0 auto",padding:"28px 28px 72px"}}>
         <h2 style={{fontSize:22,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:6}}>Manage Access</h2>
-        <p style={{fontSize:13,color:G.textM,marginBottom:24}}>Promote teachers to admin. Admins can view all data — they cannot add or edit entries.</p>
+        <p style={{fontSize:13,color:G.textM,marginBottom:20}}>Promote teachers to admin, or generate an invite link to give someone direct admin access.</p>
+
+        {/* Invite link generator */}
+        <div style={{background:G.blueL||"#DBEAFE",border:"1px solid #BFDBFE",borderRadius:13,padding:"16px 18px",marginBottom:24}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:600,color:G.navy||"#1A2F5A",fontFamily:G.display}}>Generate Invite Link</div>
+              <div style={{fontSize:12,color:"#3B82F6",marginTop:3}}>Single-use · expires in 7 days · anyone with the link becomes admin</div>
+            </div>
+            <button onClick={handleGenerateInvite} disabled={inviteLoading}
+              style={{...pill(G.navy||"#1A2F5A","#fff","transparent"),padding:"8px 18px",fontSize:13,flexShrink:0}}>
+              {inviteLoading?"Generating…":"🔗 Generate Link"}
+            </button>
+          </div>
+          {inviteLink&&(
+            <div style={{marginTop:14}}>
+              <div style={{background:"#fff",border:"1px solid #BFDBFE",borderRadius:9,padding:"10px 14px",fontSize:12,fontFamily:G.mono,color:"#1A2F5A",wordBreak:"break-all",marginBottom:10}}>
+                {inviteLink}
+              </div>
+              <div style={{display:"flex",gap:8"}}>
+                <button onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>alert("Link copied!"))}
+                  style={{...pill("#1D4ED8","#fff","transparent"),fontSize:12,padding:"6px 16px"}}>
+                  Copy Link
+                </button>
+                <button onClick={()=>setInviteLink(null)}
+                  style={{...pill("none",G.textM,G.border),fontSize:12,padding:"6px 16px"}}>
+                  Dismiss
+                </button>
+              </div>
+              <div style={{fontSize:11,color:"#3B82F6",marginTop:10}}>
+                ⚠ Share this link privately. It grants full admin access and can only be used once.
+              </div>
+            </div>
+          )}
+        </div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {teachers.map(t=>{
             const d=fullData[t.uid]||{};
