@@ -142,6 +142,14 @@
         cursor: grab;
       }
       .strip-track:active { cursor: grabbing; }
+      @media (max-width: 767px) {
+        /* Full-page forms no side padding collapse */
+        .form-page { padding: 16px 16px 60px !important; }
+        .strip-track { padding: 8px 20px; }
+        .dc { width: 66px !important; }
+        .dc-num { font-size: 22px !important; }
+        .dc-day { font-size: 10px !important; }
+      }
       .strip-track::-webkit-scrollbar { display: none; }
       .dc {
         flex-shrink: 0; width: 80px;
@@ -211,6 +219,101 @@
 
       /* ── Headings ── */
       h1, h2, h3 { font-family: 'Syne', sans-serif; font-weight: 700; }
+
+      /* ══════════════════════════════
+         RESPONSIVE / MOBILE
+      ══════════════════════════════ */
+
+      /* Mobile-first utility — mobile hidden by default, shown only ≤767px */
+      .mobile-only  { display: none !important; }
+
+      @media (max-width: 767px) {
+        .mobile-only { display: flex !important; }
+      }
+
+      /* ── Mobile nav ── */
+      @media (max-width: 767px) {
+        /* Reduce all padding on mobile */
+        .mobile-pad { padding-left: 16px !important; padding-right: 16px !important; }
+        .mobile-pad-sm { padding: 12px 16px !important; }
+
+        /* Nav shrinks */
+        .nav-teacher-name { display: none !important; }
+
+        /* Home grid: single column */
+        .class-grid {
+          grid-template-columns: 1fr !important;
+        }
+
+        /* Class view 3-col → single col */
+        .class-view-body {
+          flex-direction: column !important;
+          padding: 12px 14px 60px !important;
+        }
+
+        /* Hide sidebars on mobile — show as bottom sheet or hide */
+        .class-switcher-sidebar { display: none !important; }
+        .timeline-sidebar       { display: none !important; }
+
+        /* Entries take full width */
+        .entries-col { min-width: 0 !important; width: 100% !important; }
+
+        /* Date strip slightly smaller */
+        .date-cell { width: 60px !important; }
+        .dc-num    { font-size: 20px !important; }
+
+        /* Class header stat boxes smaller */
+        .stat-box { padding: 8px 12px !important; }
+
+        /* Add entry button full width on mobile */
+        .add-entry-row {
+          flex-direction: column !important;
+          align-items: stretch !important;
+          gap: 8px !important;
+        }
+        .add-entry-row button { width: 100% !important; justify-content: center !important; }
+
+        /* Modals full-screen on mobile */
+        .modal-card {
+          border-radius: 16px !important;
+          padding: 22px 18px !important;
+          margin: 0 4px !important;
+        }
+
+        /* Trash view */
+        .trash-row {
+          flex-direction: column !important;
+          align-items: flex-start !important;
+        }
+        .trash-row-btns { width: 100% !important; flex-direction: row !important; }
+
+        /* Add class / add note forms */
+        .form-card { padding: 18px 16px !important; }
+
+        /* Nav height */
+        .top-nav-inner { height: 52px !important; padding: 0 16px !important; }
+
+        /* Hero greeting smaller */
+        .greeting-name { font-size: 22px !important; }
+      }
+
+      /* ── Tablet (768–1023) ── */
+      @media (min-width: 768px) and (max-width: 1023px) {
+        .class-grid {
+          grid-template-columns: repeat(2, 1fr) !important;
+        }
+        .class-view-body {
+          padding: 14px 20px 48px !important;
+        }
+        /* Hide timeline sidebar on tablet, keep class switcher */
+        .timeline-sidebar { display: none !important; }
+      }
+
+      /* ── Larger touch targets for mobile ── */
+      @media (max-width: 767px) {
+        button { min-height: 40px; }
+        input, textarea, select { font-size: 16px !important; } /* prevent iOS zoom */
+      }
     </style>
   </head>
   <body>
