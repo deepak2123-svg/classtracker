@@ -455,7 +455,11 @@ function AdminPanelInner({user}){
               const d=fullData[t.uid]||{};
               const name=d.profile?.name||t.name||"?";
               const isLoading=loadingUids.has(t.uid)&&!fullData[t.uid];
-              const totalEnt=Object.values(fullData[t.uid]?.notes||{}).reduce((s,byDate)=>s+Object.values(byDate).reduce((a,arr)=>a+arr.length,0),0);
+              const totalEnt=(()=>{
+                let n=0;
+                try{Object.values(fullData[t.uid]?.notes||{}).forEach(byDate=>{if(byDate&&typeof byDate==="object")Object.values(byDate).forEach(arr=>{if(Array.isArray(arr))n+=arr.length;});});}catch(e){}
+                return n;
+              })();
               const isSel=selP2===t.uid;
               return(
                 <div key={t.uid} onClick={()=>{setSelP2(t.uid);setSelP3(null);setMobileStep(2);}}
