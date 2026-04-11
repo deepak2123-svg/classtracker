@@ -80,7 +80,7 @@ export async function demoteToTeacher(uid) {
 
 // ── Teacher index (for admin discovery) ───────────────────────────────────────
 // teachers/{uid} = { uid, name, email, photoURL, institutes[], lastActive }
-async function syncTeacherIndex(uid, data) {
+export async function syncTeacherIndex(uid, data) {
   if (!data?.profile?.name) return;
   const institutes = [...new Set(
     (data.classes || []).map(c => c.institute).filter(Boolean)
@@ -99,8 +99,21 @@ async function syncTeacherIndex(uid, data) {
 // ── Admin data reads ──────────────────────────────────────────────────────────
 export async function getAllTeachers() {
   try {
+    // Primary: teacher index (has institute/class summary)
     const snap = await getDocs(collection(db, "teachers"));
-    return snap.docs.map(d => d.data());
+    const indexed = snap.docs.map(d => d.data());
+    const indexedUids = new Set(indexed.map(t => t.uid));
+
+    // Supplement: roles collection catches teachers not yet in index
+    const rolesSnap = await getDocs(collection(db, "roles"));
+    const extras = [];
+    rolesSnap.docs.forEach(d => {
+      if (!indexedUids.has(d.id)) {
+        extras.push({ uid: d.id, name: "", institutes: [], classCount: 0 });
+      }
+    });
+
+    return [...indexed, ...extras];
   } catch { return []; }
 }
 
