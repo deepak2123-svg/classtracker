@@ -115,14 +115,14 @@ function GhostBtn({onClick,children,style={}}){
 function TopNav({user,teacherName,onEditName,right}){
   return(
     <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"0 32px",position:"sticky",top:0,zIndex:100,backdropFilter:"blur(8px)"}}>
-      <div style={{maxWidth:1320,margin:"0 auto",height:62,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div className="top-nav-inner" style={{maxWidth:1320,margin:"0 auto",height:62,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 32px"}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <div style={{width:36,height:36,borderRadius:11,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,boxShadow:`0 2px 8px rgba(27,138,76,0.3)`}}>🎓</div>
           <span style={{fontSize:19,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>ClassLog</span>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {right}
-          <button onClick={onEditName}
+          <button onClick={onEditName} className="nav-teacher-name"
             style={{background:G.surface,border:`1.5px solid ${G.border}`,borderRadius:10,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.textM,fontFamily:G.sans,display:"flex",alignItems:"center",gap:9,transition:"all 0.15s",boxShadow:G.shadowSm}}
             onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textM;}}>
@@ -276,7 +276,7 @@ function ProfileSetup({user,onSave}){
 function Modal({title,subtitle,onClose,children}){
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.45)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
-      <div style={{background:G.surface,borderRadius:20,padding:"28px 26px",width:"100%",maxWidth:460,boxShadow:G.shadowLg}}>
+      <div className="modal-card" style={{background:G.surface,borderRadius:20,padding:"28px 26px",width:"100%",maxWidth:460,boxShadow:G.shadowLg}}>
         <div style={{marginBottom:20}}>
           <h3 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{title}</h3>
           {subtitle&&<p style={{fontSize:13,color:G.textM,fontFamily:G.sans}}>{subtitle}</p>}
@@ -435,11 +435,11 @@ export default function ClassTracker({user}){
         </>}
       />
 
-      <div style={{maxWidth:1320,margin:"0 auto",padding:"32px 32px 72px"}}>
+      <div className="mobile-pad" style={{maxWidth:1320,margin:"0 auto",padding:"32px 32px 72px"}}>
         {/* Greeting */}
         <div style={{marginBottom:36}}>
           <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:4,fontWeight:500}}>Good day,</p>
-          <h1 style={{fontSize:30,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.8,marginBottom:12}}>{teacherName} 👋</h1>
+          <h1 className="greeting-name" style={{fontSize:30,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.8,marginBottom:12}}>{teacherName} 👋</h1>
           <span style={{display:"inline-flex",alignItems:"center",gap:7,background:G.greenL,borderRadius:20,padding:"5px 14px",fontSize:13,color:G.green,fontWeight:600}}>📅 Academic Session {currentSession()}</span>
         </div>
 
@@ -451,7 +451,7 @@ export default function ClassTracker({user}){
             <PrimaryBtn onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)} style={{padding:"12px 28px",fontSize:14}}>+ Add First Class</PrimaryBtn>
           </div>
         ):(
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:18}}>
+          <div className="class-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
             {data.classes.map((cls,idx)=>{
               const color=COLORS[cls.colorIdx%COLORS.length];
               const cn=data.notes[cls.id]||{};
@@ -553,14 +553,26 @@ export default function ClassTracker({user}){
           </>}
         />
 
+        {/* Mobile class switcher dropdown */}
+        {data.classes.length>1&&(
+          <div className="mobile-only" style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"10px 16px",alignItems:"center",gap:8,display:"flex"}}>
+            <span style={{fontSize:12,color:G.textM,fontWeight:500,flexShrink:0}}>Class:</span>
+            <select
+              value={activeClass.id}
+              onChange={e=>{const cls=data.classes.find(c=>c.id===e.target.value);if(cls){setActiveClass(cls);setSelectedDate(todayKey());setSearch("");}}}
+              style={{flex:1,padding:"8px 12px",borderRadius:9,border:`1px solid ${G.border}`,fontSize:14,fontFamily:G.sans,background:G.surface,color:G.text,outline:"none",WebkitAppearance:"none"}}>
+              {data.classes.map(cls=><option key={cls.id} value={cls.id}>{cls.section} — {cls.institute}</option>)}
+            </select>
+          </div>
+        )}
         {/* Class header */}
-        <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"20px 32px 16px"}}>
+        <div className="mobile-pad-sm" style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"20px 32px 16px"}}>
           <div style={{maxWidth:1320,margin:"0 auto"}}>
             <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:18}}>
               <div style={{width:54,height:54,borderRadius:15,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:color.bg,fontFamily:G.mono,letterSpacing:-1}}>
                 {(activeClass.section||"?").slice(0,2).toUpperCase()}
               </div>
-              <div style={{flex:1,minWidth:0}}>
+              <div className="entries-col" style={{flex:1,minWidth:0}}>
                 <h2 style={{fontSize:24,fontWeight:700,color:G.text,letterSpacing:-0.5,marginBottom:4}}>{activeClass.section}</h2>
                 <div style={{fontSize:14,color:G.textM,display:"flex",alignItems:"center",gap:6,marginTop:2,fontWeight:400}}>
                   <span>🏫 {activeClass.institute}</span>
@@ -570,7 +582,7 @@ export default function ClassTracker({user}){
               </div>
               <div style={{display:"flex",gap:10}}>
                 {[{n:totalEntries,l:"entries"},{n:allDates.length,l:"days"}].map(({n,l})=>(
-                  <div key={l} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 18px",textAlign:"center",boxShadow:G.shadowSm}}>
+                  <div key={l} className="stat-box" style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 18px",textAlign:"center",boxShadow:G.shadowSm}}>
                     <div style={{fontSize:24,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{n}</div>
                     <div style={{fontSize:11,color:G.textM,fontFamily:G.sans,marginTop:4,fontWeight:600}}>{l.toUpperCase()}</div>
                   </div>
@@ -578,7 +590,7 @@ export default function ClassTracker({user}){
               </div>
             </div>
 
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div className="mobile-pad" style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
               <span style={{fontSize:13,color:G.green}}>📅</span>
               <span style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
             </div>
@@ -587,10 +599,10 @@ export default function ClassTracker({user}){
         </div>
 
         {/* 3-column body */}
-        <div style={{maxWidth:1320,margin:"0 auto",padding:"22px 32px 60px",display:"flex",gap:20,alignItems:"flex-start"}}>
+        <div className="class-view-body" style={{maxWidth:1320,margin:"0 auto",padding:"22px 32px 60px",display:"flex",gap:20,alignItems:"flex-start"}}>
 
           {/* LEFT — switcher */}
-          <div style={{width:210,flexShrink:0}}>
+          <div className="class-switcher-sidebar" style={{width:210,flexShrink:0}}>
             <p style={{fontSize:12,fontFamily:G.sans,color:G.textM,marginBottom:10,textTransform:"uppercase",fontWeight:600}}>My Classes</p>
             <div style={{display:"flex",flexDirection:"column",gap:4}}>
               {data.classes.map(cls=>{
@@ -609,7 +621,7 @@ export default function ClassTracker({user}){
 
           {/* MIDDLE — entries */}
           <div style={{flex:1,minWidth:0}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div className="add-entry-row" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <div>
                 <h3 style={{fontSize:19,fontWeight:700,color:G.text,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</h3>
                 <p style={{fontSize:13,color:G.textM,marginTop:3,fontWeight:400}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</p>
@@ -668,7 +680,7 @@ export default function ClassTracker({user}){
           </div>
 
           {/* RIGHT — grouped timeline */}
-          <div style={{width:215,flexShrink:0}}>
+          <div className="timeline-sidebar" style={{width:215,flexShrink:0}}>
             <p style={{fontSize:12,fontFamily:G.sans,color:G.textM,marginBottom:8,textTransform:"uppercase",fontWeight:700}}>Past Entries</p>
             <span className="badge badge-session" style={{marginBottom:14,display:"inline-block"}}>Session {currentSession()}</span>
             {allDates.length===0
@@ -718,7 +730,7 @@ export default function ClassTracker({user}){
       <div style={{maxWidth:520,margin:"40px auto",padding:"0 24px 80px"}}>
         <p style={{fontSize:12,color:G.textM,fontFamily:G.sans,marginBottom:6,textTransform:"uppercase",fontWeight:600}}>New Class</p>
         <h2 style={{marginBottom:28,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>Add a class</h2>
-        <div style={{...card,padding:"26px"}}>
+        <div className="form-card" style={{...card,padding:"26px"}}>
           <div style={{background:G.greenL,borderRadius:10,padding:"10px 14px",marginBottom:22,fontSize:13,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
             <span>👤</span><span>Teacher: <strong>{teacherName}</strong> — auto-attached to all entries</span>
           </div>
@@ -743,7 +755,7 @@ export default function ClassTracker({user}){
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
         <SaveBadge/>
         <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
-        <div style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
+        <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:26}}>🗑</span>
             <h2 style={{fontSize:24,letterSpacing:-0.5}}>Recycle Bin</h2>
@@ -776,7 +788,7 @@ export default function ClassTracker({user}){
                         <div style={{fontSize:12,color:G.textM,marginTop:2}}>🏫 {tc.institute}{tc.subject?` · ${tc.subject}`:""} · {ec} entries</div>
                         <div style={{fontSize:12,color:dl<=7?G.red:G.textM,fontFamily:G.sans,marginTop:4}}>⏳ {dl} day{dl!==1?"s":""} until permanent deletion</div>
                       </div>
-                      <div style={{display:"flex",gap:8,flexShrink:0}}>
+                      <div className="trash-row-btns" style={{display:"flex",gap:8,flexShrink:0}}>
                         <button onClick={()=>restoreClass(tc)} onPointerDown={e=>rpl(e,false)}
                           style={{background:G.greenL,border:`1px solid rgba(27,138,76,0.2)`,color:G.green,borderRadius:9,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden"}}>↩ Restore</button>
                         <button onClick={()=>{if(window.confirm("Permanently delete? Cannot be undone."))permDeleteClass(tc.id);}}
@@ -861,13 +873,13 @@ export default function ClassTracker({user}){
             </div>
           </div>
         )}
-        <div style={{maxWidth:660,margin:"0 auto",padding:"32px 24px 72px"}}>
+        <div className="mobile-pad" style={{maxWidth:660,margin:"0 auto",padding:"32px 24px 72px"}}>
           <p style={{fontSize:12,color:G.textM,fontFamily:G.sans,marginBottom:5,textTransform:"uppercase",fontWeight:600}}>{isEdit?"Editing Entry":"New Entry For"}</p>
           <h2 style={{marginBottom:22,fontSize:26,letterSpacing:-0.5,fontFamily:G.display}}>{isEdit?form.title||"Entry":formatDateLabel(selectedDate)}</h2>
           <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:13,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
             <span>👤</span><span>Logged as: <strong>{teacherName}</strong></span>
           </div>
-          <div style={{...card,padding:"24px"}}>
+          <div className="form-card" style={{...card,padding:"24px"}}>
             <div style={{marginBottom:18}}>
               <label style={lbl}>Type</label>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
