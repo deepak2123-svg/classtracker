@@ -331,7 +331,7 @@ function AdminPanelInner({user}){
               <div style={{background:"#fff",border:"1px solid #BFDBFE",borderRadius:9,padding:"10px 14px",fontSize:12,fontFamily:G.mono,color:"#1A2F5A",wordBreak:"break-all",marginBottom:10}}>
                 {inviteLink}
               </div>
-              <div style={{display:"flex",gap:8"}}>
+              <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>alert("Link copied!"))}
                   style={{...pill("#1D4ED8","#fff","transparent"),fontSize:12,padding:"6px 16px"}}>
                   Copy Link
