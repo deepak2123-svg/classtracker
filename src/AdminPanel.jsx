@@ -7,7 +7,7 @@ import { Avatar, todayKey, formatPeriod, TAG_STYLES } from "./shared.jsx";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const G = {
-  forest:"#152B22", forestS:"#1E3D2F", forestD:"#0D1410",
+  forest:"#152B22", forestS:"#1E3D2F",
   green:"#1B8A4C",  greenV:"#34D077",  greenL:"#E8F8EF",
   bg:"#F7F8F6",     surface:"#FFFFFF",
   border:"#E6EAE8", borderM:"#C8D4CE",
@@ -17,8 +17,8 @@ const G = {
   mono:"'JetBrains Mono',monospace",
   sans:"'Plus Jakarta Sans',sans-serif",
   display:"'Syne',sans-serif",
-  shadowSm:"0 1px 3px rgba(14,31,24,0.06)",
-  shadowMd:"0 4px 12px rgba(14,31,24,0.08)",
+  shadowSm:"0 1px 3px rgba(14,31,24,0.06),0 1px 2px rgba(14,31,24,0.04)",
+  shadowMd:"0 4px 12px rgba(14,31,24,0.08),0 2px 4px rgba(14,31,24,0.04)",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -97,8 +97,8 @@ function formatDateLabel(dk){
 const pill=(bg,color,border)=>({background:bg,color,border:`1px solid ${border||bg}`,borderRadius:8,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:G.sans,fontWeight:500,transition:"all 0.15s"});
 
 // ── Panel styles ──────────────────────────────────────────────────────────────
-const sidePanel={flexShrink:0,background:"#0D160F",borderRight:"1px solid rgba(255,255,255,0.07)",display:"flex",flexDirection:"column",overflow:"hidden"};
-const panelLabel={fontSize:8,letterSpacing:2,color:"rgba(255,255,255,0.18)",fontFamily:G.mono,textTransform:"uppercase",padding:"10px 13px 6px",flexShrink:0};
+const sidePanel={flexShrink:0,background:G.surface,borderRight:`1px solid ${G.border}`,display:"flex",flexDirection:"column",overflow:"hidden"};
+const panelLabel={fontSize:8,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"10px 13px 6px",flexShrink:0};
 const siBase={padding:"9px 10px",borderRadius:8,cursor:"pointer",marginBottom:2,borderLeft:"3px solid transparent",transition:"background 0.1s"};
 
 // ── Error Boundary ───────────────────────────────────────────────────────────
@@ -269,11 +269,11 @@ function AdminPanelInner({user}){
   const resetNav=(newTab)=>{setSelP2(null);setSelP3(null);if(newTab)setTab(newTab);setMobileStep(s=>Math.min(s,1));};
 
   if(loading) return(
-    <div style={{minHeight:"100vh",background:G.forestD,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.sans}}>
+    <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.sans}}>
       <div style={{textAlign:"center"}}>
-        <div style={{width:36,height:36,borderRadius:"50%",border:`3px solid rgba(255,255,255,0.1)`,borderTopColor:G.greenV,animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}/>
+        <div style={{width:36,height:36,borderRadius:"50%",border:`3px solid ${G.border}`,borderTopColor:G.green,animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}/>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-        <div style={{fontSize:13,color:"rgba(255,255,255,0.3)",fontFamily:G.mono}}>Loading data…</div>
+        <div style={{fontSize:13,color:G.textM,fontFamily:G.mono}}>Loading data…</div>
       </div>
     </div>
   );
@@ -367,7 +367,7 @@ function AdminPanelInner({user}){
       </div>
 
       {/* Stats strip */}
-      <div className="admin-stats" style={{background:"#1A3328",padding:"5px 18px",display:"flex",gap:22,alignItems:"center",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+      <div className="admin-stats" style={{background:G.forestS,padding:"5px 18px",display:"flex",gap:22,alignItems:"center",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
         {[
           {n:institutes.length,   l:"institutes"},
           {n:teachers.length,     l:"teachers"},
@@ -376,14 +376,14 @@ function AdminPanelInner({user}){
         ].map(({n,l})=>(
           <div key={l} style={{display:"flex",alignItems:"baseline",gap:4}}>
             <span style={{fontSize:17,fontWeight:700,color:G.greenV,fontFamily:G.display}}>{n}</span>
-            <span style={{fontSize:9,color:"rgba(255,255,255,0.22)",fontFamily:G.mono}}>{l}</span>
+            <span style={{fontSize:9,color:"rgba(255,255,255,0.55)",fontFamily:G.mono}}>{l}</span>
           </div>
         ))}
-        {loadingUids.size>0&&<div style={{marginLeft:"auto",fontSize:10,color:"rgba(255,255,255,0.2)",fontFamily:G.mono}}>syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…</div>}
+        {loadingUids.size>0&&<div style={{marginLeft:"auto",fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:G.mono}}>syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…</div>}
       </div>
 
       {/* Mobile back button */}
-      <div className="admin-mobile-back" style={{background:"#1A3328",borderBottom:"1px solid rgba(255,255,255,0.05)",padding:"8px 16px",flexShrink:0}}
+      <div className="admin-mobile-back" style={{background:G.forestS,borderBottom:`1px solid rgba(255,255,255,0.06)`,padding:"8px 16px",flexShrink:0}}
         onClick={()=>setMobileStep(s=>Math.max(0,s-1))}>
         <span style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:7,padding:"6px 14px",fontSize:12,color:"rgba(255,255,255,0.6)",cursor:"pointer",fontFamily:G.sans}}>← Back</span>
       </div>
@@ -391,11 +391,11 @@ function AdminPanelInner({user}){
       <div className={`admin-panels admin-mobile-step-${mobileStep}`} style={{display:"flex",flex:1,overflow:"hidden"}}>
 
         {/* ── P1: Institutes ── */}
-        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:175}}>
+        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:175,background:G.bg,borderRight:`1px solid ${G.border}`}}>
           <div style={panelLabel}>Institutes</div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
             {institutes.length===0&&(
-              <div style={{padding:"20px 10px",textAlign:"center",color:"rgba(255,255,255,0.2)",fontSize:12,fontStyle:"italic"}}>No institutes yet</div>
+              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:12,fontStyle:"italic"}}>No institutes yet</div>
             )}
             {institutes.map(inst=>{
               const isSel=inst===selInst;
@@ -413,12 +413,12 @@ function AdminPanelInner({user}){
               return(
                 <div key={inst} onClick={()=>{setSelInst(inst);resetNav();setMobileStep(1);}}
                   style={{...siBase,background:isSel?"rgba(52,208,119,0.1)":"transparent",borderLeftColor:isSel?G.greenV:"transparent"}}
-                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
+                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{fontSize:13,fontWeight:isSel?700:500,color:isSel?G.greenV:"rgba(255,255,255,0.6)"}}>{inst}</div>
+                  <div style={{fontSize:13,fontWeight:isSel?700:500,color:isSel?G.green:G.textS}}>{inst}</div>
                   <div style={{display:"flex",gap:5,marginTop:4}}>
                     <span style={{background:"rgba(52,208,119,0.12)",color:"rgba(52,208,119,0.8)",borderRadius:10,padding:"2px 7px",fontSize:9,fontFamily:G.mono}}>{clsCount} class{clsCount!==1?"es":""}</span>
-                    <span style={{fontSize:9,color:"rgba(255,255,255,0.18)",fontFamily:G.mono}}>{tCount} teacher{tCount!==1?"s":""}</span>
+                    <span style={{fontSize:9,color:G.textL,fontFamily:G.mono}}>{tCount} teacher{tCount!==1?"s":""}</span>
                   </div>
                 </div>
               );
@@ -427,27 +427,27 @@ function AdminPanelInner({user}){
         </div>
 
         {/* ── P2: Toggle + Teacher or Class list ── */}
-        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:205,background:"#0A1208"}}>
-          <div style={{padding:"12px 12px 10px",borderBottom:"1px solid rgba(255,255,255,0.05)",flexShrink:0}}>
-            <div style={{fontFamily:G.display,fontSize:14,fontWeight:700,color:"#fff",marginBottom:10}}>{selInst||"—"}</div>
+        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:205,background:G.surface,borderRight:`1px solid ${G.border}`}}>
+          <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
+            <div style={{fontFamily:G.display,fontSize:14,fontWeight:700,color:G.text,marginBottom:10}}>{selInst||"—"}</div>
             {/* Toggle */}
-            <div style={{display:"flex",gap:0,background:"rgba(255,255,255,0.05)",borderRadius:8,padding:3}}>
+            <div style={{display:"flex",gap:0,background:G.bg,borderRadius:8,padding:3,border:`1px solid ${G.border}`}}>
               {["teacher","class"].map(t=>(
                 <button key={t} onClick={()=>{resetNav(t);}}
-                  style={{flex:1,padding:"6px 0",borderRadius:6,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:G.sans,textAlign:"center",transition:"all 0.15s",background:tab===t?"#1B8A4C":"none",color:tab===t?"#fff":"rgba(255,255,255,0.4)"}}>
+                  style={{flex:1,padding:"6px 0",borderRadius:6,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:G.sans,textAlign:"center",transition:"all 0.15s",background:tab===t?G.forest:"none",color:tab===t?"#fff":G.textM}}>
                   By {t.charAt(0).toUpperCase()+t.slice(1)}
                 </button>
               ))}
             </div>
           </div>
-          <div style={{fontSize:8,letterSpacing:2,color:"rgba(255,255,255,0.15)",fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
+          <div style={{fontSize:8,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
             {tab==="teacher"?"Teachers":"Classes ↓ (12th first)"}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
-            {!selInst&&<div style={{padding:"20px 10px",textAlign:"center",color:"rgba(255,255,255,0.2)",fontSize:12,fontStyle:"italic"}}>Select an institute</div>}
+            {!selInst&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:12,fontStyle:"italic"}}>Select an institute</div>}
             {selInst&&tab==="teacher"&&instTeachers.length===0&&loadingUids.size>0&&(
-              <div style={{padding:"20px 10px",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:G.mono}}>
-                <div style={{width:18,height:18,borderRadius:"50%",border:"2px solid rgba(52,208,119,0.2)",borderTopColor:G.greenV,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
+              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:11,fontFamily:G.mono}}>
+                <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${G.greenL}`,borderTopColor:G.green,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
                 loading teachers…
               </div>
             )}
@@ -464,21 +464,21 @@ function AdminPanelInner({user}){
               return(
                 <div key={t.uid} onClick={()=>{setSelP2(t.uid);setSelP3(null);setMobileStep(2);}}
                   style={{...siBase,display:"flex",alignItems:"center",gap:9,background:isSel?"rgba(52,208,119,0.1)":"transparent",borderLeftColor:isSel?G.greenV:"transparent"}}
-                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
+                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{width:28,height:28,borderRadius:7,background:isSel?G.green:"rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",fontFamily:G.mono,flexShrink:0}}>
+                  <div style={{width:28,height:28,borderRadius:7,background:isSel?G.green:G.greenL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:isSel?"#fff":G.green,fontFamily:G.mono,flexShrink:0}}>
                     {(name[0]||"?").toUpperCase()}
                   </div>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:600,color:isSel?G.greenV:"rgba(255,255,255,0.6)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
-                    <div style={{fontSize:9,color:"rgba(255,255,255,0.2)",fontFamily:G.mono,marginTop:2}}>{totalEnt} entries</div>
+                    <div style={{fontSize:12,fontWeight:600,color:isSel?G.green:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
+                    <div style={{fontSize:9,color:G.textL,fontFamily:G.mono,marginTop:2}}>{totalEnt} entries</div>
                   </div>
                 </div>
               );
             })}
             {selInst&&tab==="class"&&instClasses.length===0&&loadingUids.size>0&&(
-              <div style={{padding:"20px 10px",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:11,fontFamily:G.mono}}>
-                <div style={{width:18,height:18,borderRadius:"50%",border:"2px solid rgba(52,208,119,0.2)",borderTopColor:G.greenV,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
+              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:11,fontFamily:G.mono}}>
+                <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${G.greenL}`,borderTopColor:G.green,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
                 loading classes…
               </div>
             )}
@@ -487,10 +487,10 @@ function AdminPanelInner({user}){
               return(
                 <div key={cls.raw} onClick={()=>{setSelP2(cls.raw);setSelP3(null);setMobileStep(2);}}
                   style={{...siBase,background:isSel?"rgba(52,208,119,0.1)":"transparent",borderLeftColor:isSel?G.greenV:"transparent"}}
-                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
+                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{fontSize:13,fontWeight:600,color:isSel?G.greenV:"rgba(255,255,255,0.65)"}}>{cls.display}</div>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,0.22)",fontFamily:G.mono,marginTop:2}}>{cls.subject}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:isSel?G.green:G.textS}}>{cls.display}</div>
+                  <div style={{fontSize:10,color:G.textM,fontFamily:G.mono,marginTop:2}}>{cls.subject}</div>
                   <div style={{marginTop:4}}>
                     <span style={{background:"rgba(52,208,119,0.1)",color:"rgba(52,208,119,0.7)",borderRadius:10,padding:"2px 7px",fontSize:9,fontFamily:G.mono}}>
                       {cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}
@@ -503,30 +503,30 @@ function AdminPanelInner({user}){
         </div>
 
         {/* ── P3: Sub-list ── */}
-        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:200,background:"#071009"}}>
-          <div style={{padding:"12px 12px 8px",borderBottom:"1px solid rgba(255,255,255,0.05)",flexShrink:0}}>
-            <div style={{fontFamily:G.display,fontSize:13,fontWeight:700,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:200,background:G.bg,borderRight:`1px solid ${G.border}`}}>
+          <div style={{padding:"12px 12px 8px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
+            <div style={{fontFamily:G.display,fontSize:13,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
               {!selP2?"—":tab==="teacher"?(fullData[selP2]?.profile?.name||"Teacher"):normaliseName(selP2)}
             </div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.22)",fontFamily:G.mono,marginTop:2}}>
+            <div style={{fontSize:10,color:G.textM,fontFamily:G.mono,marginTop:2}}>
               {tab==="teacher"?"Their classes at "+selInst:"Teachers in this class"}
             </div>
           </div>
-          <div style={{fontSize:8,letterSpacing:2,color:"rgba(255,255,255,0.15)",fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
+          <div style={{fontSize:8,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
             {tab==="teacher"?"Classes":"Teachers"}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
-            {!selP2&&<div style={{padding:"20px 10px",textAlign:"center",color:"rgba(255,255,255,0.2)",fontSize:12,fontStyle:"italic"}}>Select from left</div>}
+            {!selP2&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:12,fontStyle:"italic"}}>Select from left</div>}
 
             {selP2&&tab==="teacher"&&p3Items.map(cls=>{
               const isSel=selP3?.classId===cls.classId;
               return(
                 <div key={cls.classId} onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject});setMobileStep(3);}}
                   style={{...siBase,background:isSel?"rgba(52,208,119,0.1)":"transparent",borderLeftColor:isSel?G.greenV:"transparent"}}
-                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
+                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{fontSize:13,fontWeight:600,color:isSel?G.greenV:"rgba(255,255,255,0.65)"}}>{cls.display}</div>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,0.22)",fontFamily:G.mono,marginTop:2}}>{cls.subject}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:isSel?G.green:G.textS}}>{cls.display}</div>
+                  <div style={{fontSize:10,color:G.textM,fontFamily:G.mono,marginTop:2}}>{cls.subject}</div>
                   <div style={{marginTop:4}}>
                     <span style={{background:"rgba(52,208,119,0.1)",color:"rgba(52,208,119,0.7)",borderRadius:10,padding:"2px 7px",fontSize:9,fontFamily:G.mono}}>
                       {cls.entryCount} entries
@@ -551,29 +551,29 @@ function AdminPanelInner({user}){
                         setMobileStep(3);
                       }}
                       style={{...siBase,display:"flex",alignItems:"center",gap:9,background:isSel?"rgba(52,208,119,0.1)":"transparent",borderLeftColor:isSel?G.greenV:"transparent"}}
-                      onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
+                      onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                       onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                      <div style={{width:26,height:26,borderRadius:7,background:isSel?G.green:"rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",fontFamily:G.mono,flexShrink:0}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:isSel?G.green:G.greenL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:isSel?"#fff":G.green,fontFamily:G.mono,flexShrink:0}}>
                         {(t.name[0]||"?").toUpperCase()}
                       </div>
                       <div style={{minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:600,color:isSel?G.greenV:"rgba(255,255,255,0.6)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name}</div>
-                        <div style={{fontSize:9,color:"rgba(255,255,255,0.2)",fontFamily:G.mono,marginTop:2}}>{t.entryCount} entries · ✓ uploaded</div>
+                        <div style={{fontSize:12,fontWeight:600,color:isSel?G.green:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name}</div>
+                        <div style={{fontSize:9,color:G.textL,fontFamily:G.mono,marginTop:2}}>{t.entryCount} entries · ✓ uploaded</div>
                       </div>
                     </div>
                   );
                 })}
                 {noUpload.length>0&&<>
-                  <div style={{fontSize:8,letterSpacing:1.5,color:"rgba(255,255,255,0.12)",fontFamily:G.mono,textTransform:"uppercase",padding:"10px 6px 4px"}}>No upload yet</div>
+                  <div style={{fontSize:8,letterSpacing:1.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"10px 6px 4px"}}>No upload yet</div>
                   {noUpload.map(t=>(
                     <div key={t.uid}
-                      style={{...siBase,display:"flex",alignItems:"center",gap:9,background:"rgba(255,255,255,0.02)",borderLeftColor:"rgba(255,255,255,0.06)"}}>
-                      <div style={{width:26,height:26,borderRadius:7,background:"rgba(255,255,255,0.06)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.25)",fontFamily:G.mono,flexShrink:0}}>
+                      style={{...siBase,display:"flex",alignItems:"center",gap:9,background:G.bg,borderLeftColor:G.border}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:G.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:G.textL,fontFamily:G.mono,flexShrink:0}}>
                         {(t.name[0]||"?").toUpperCase()}
                       </div>
                       <div style={{minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:500,color:"rgba(255,255,255,0.28)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name}</div>
-                        <div style={{fontSize:9,color:"rgba(255,255,255,0.18)",fontFamily:G.mono,marginTop:2,fontWeight:600}}>⚠ No Entry Uploaded</div>
+                        <div style={{fontSize:12,fontWeight:500,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name}</div>
+                        <div style={{fontSize:9,color:G.textL,fontFamily:G.mono,marginTop:2,fontWeight:600}}>⚠ No Entry Uploaded</div>
                       </div>
                     </div>
                   ))}
