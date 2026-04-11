@@ -83,7 +83,7 @@ export async function demoteToTeacher(uid) {
 export async function syncTeacherIndex(uid, data) {
   if (!data?.profile?.name) return;
   const institutes = [...new Set(
-    (data.classes || []).map(c => c.institute).filter(Boolean)
+    (data.classes || []).map(c => (c.institute||"").trim()).filter(Boolean)
   )];
   try {
     await setDoc(doc(db, "teachers", uid), {
@@ -131,4 +131,47 @@ export async function getAllRoles() {
     snap.docs.forEach(d => { map[d.id] = d.data().role; });
     return map;
   } catch { return {}; }
+}
+
+// ── Invite links ──────────────────────────────────────────────────────────────
+// invites/{token} = { createdAt, createdBy, expiresAt, used }
+export async function createInviteLink(adminUid) {
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+    .map(b => b.toString(36)).join("").slice(0, 32);
+  await setDoc(doc(db, "invites", token), {
+    createdAt: Date.now(),
+    createdBy: adminUid,
+    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+    used: false,
+  });
+  return token;
+}
+
+export async function verifyInviteToken(token) {
+  const snap = await getDoc(doc(db, "invites", token));
+  if (!snap.exists()) throw new Error("Invalid invite link.");
+  const d = snap.data();
+  if (d.used) throw new Error("This invite link has already been used.");
+  if (Date.now() > d.expiresAt) throw new Error("This invite link has expired.");
+  return true;
+}
+
+export async function useInviteToken(token, uid) {
+  // Mark invite as used
+  await setDoc(doc(db, "invites", token), { used: true, usedBy: uid, usedAt: Date.now() }, { merge: true });
+  // Promote to admin
+  await setDoc(doc(db, "roles", uid), {
+    role: "admin",
+    grantedAt: Date.now(),
+    grantedBy: "invite-link",
+    inviteToken: token,
+  });
+}
+
+export async function getInvites(adminUid) {
+  try {
+    const snap = await getDocs(collection(db, "invites"));
+    return snap.docs.map(d => ({ token: d.id, ...d.data() }))
+      .sort((a, b) => b.createdAt - a.createdAt);
+  } catch { return []; }
 }
