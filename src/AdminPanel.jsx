@@ -170,11 +170,16 @@ function AdminPanelInner({user}){
   // ── Derived: institutes ───────────────────────────────────────────────────
   const institutes=useMemo(()=>{
     const set=new Set();
+    // Primary: teacher index (loaded immediately on mount)
+    teachers.forEach(t=>{
+      (t.institutes||[]).forEach(i=>{ if(i) set.add(i.trim()); });
+    });
+    // Supplement: fullData catches institutes added after last index sync
     Object.values(fullData).forEach(d=>{
-      (d.classes||[]).forEach(c=>{if(c.institute)set.add(c.institute.trim());});
+      (d.classes||[]).forEach(c=>{ if(c.institute) set.add(c.institute.trim()); });
     });
     return Array.from(set).sort();
-  },[fullData]);
+  },[teachers,fullData]);
 
   const totalEntries=useMemo(()=>{
     let t=0;
@@ -186,6 +191,13 @@ function AdminPanelInner({user}){
     });
     return t;
   },[fullData]);
+
+  // Class count from index (available immediately without fullData)
+  const totalClasses=useMemo(()=>{
+    const fromIndex=teachers.reduce((s,t)=>s+(t.classCount||0),0);
+    const fromFull=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).length,0);
+    return Math.max(fromIndex,fromFull);
+  },[teachers,fullData]);
 
   // ── Teachers at selected institute ────────────────────────────────────────
   const instTeachers=useMemo(()=>{
@@ -437,7 +449,7 @@ function AdminPanelInner({user}){
         {[
           {n:institutes.length,   l:"institutes"},
           {n:teachers.length,     l:"teachers"},
-          {n:Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).length,0), l:"classes"},
+          {n:totalClasses, l:"classes"},
           {n:totalEntries,        l:"total entries"},
         ].map(({n,l})=>(
           <div key={l} style={{display:"flex",alignItems:"baseline",gap:4}}>
