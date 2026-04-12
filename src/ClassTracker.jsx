@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { loadUserData, saveUserData, logout, syncTeacherIndex } from "./firebase";
+import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes } from "./firebase";
 import { TAG_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
@@ -386,7 +386,7 @@ export default function ClassTracker({user}){
   const deleteClass=(id)=>{setData(d=>{const cls=d.classes.find(c=>c.id===id);if(!cls)return d;const tc={...cls,deletedAt:Date.now(),savedNotes:d.notes[id]||{}};return{...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id)),trash:{...d.trash,classes:[...(d.trash?.classes||[]),tc]}};});if(activeClass?.id===id){setActiveClass(null);setView("home");}};
   const updateClass=(id,updates)=>{setData(d=>({...d,classes:d.classes.map(c=>c.id===id?{...c,...updates}:c)}));if(activeClass?.id===id)setActiveClass(ac=>({...ac,...updates}));setEditingClass(null);};
   const restoreClass=(tc)=>{setData(d=>{const{deletedAt,savedNotes,...cls}=tc;return{...d,classes:[...d.classes,cls],notes:{...d.notes,[cls.id]:savedNotes||{}},trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==cls.id)}};});};
-  const permDeleteClass=(id)=>setData(d=>({...d,trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==id)}}));
+  const permDeleteClass=(id)=>{deleteClassNotes(user.uid,id).catch(()=>{});setData(d=>({...d,trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==id)}}));};
 
   const getClassNotes=(cid)=>data.notes[cid]||{};
   const getDateNotes=(cid,dk)=>(data.notes[cid]||{})[dk]||[];

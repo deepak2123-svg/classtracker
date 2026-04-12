@@ -38,18 +38,64 @@ export async function loginWithEmail(email, password) {
 export function logout() { return signOut(auth); }
 export function onAuth(cb) { return onAuthStateChanged(auth, cb); }
 
-// ── User data ─────────────────────────────────────────────────────────────────
-export function userDocRef(uid) { return doc(db, "users", uid, "appdata", "main"); }
+// ── User data — split architecture ───────────────────────────────────────────
+// Main doc  : users/{uid}/appdata/main         → metadata (classes, profile, trash etc.)
+// Notes docs: users/{uid}/appdata/notes_{cid}  → { [dateKey]: [...entries] }
+// This keeps each document well under Firestore's 1MB limit.
+
+export function userDocRef(uid)         { return doc(db, "users", uid, "appdata", "main"); }
+export function notesDocRef(uid, cid)   { return doc(db, "users", uid, "appdata", `notes_${cid}`); }
+
 export async function loadUserData(uid) {
   try {
+    // 1. Load main metadata doc
     const snap = await getDoc(userDocRef(uid));
-    return snap.exists() ? snap.data() : null;
+    if (!snap.exists()) return null;
+    const main = snap.data();
+
+    // 2. Load notes for each class in parallel
+    const classes = main.classes || [];
+    const notesList = await Promise.all(
+      classes.map(async cls => {
+        try {
+          const ns = await getDoc(notesDocRef(uid, cls.id));
+          return [cls.id, ns.exists() ? ns.data() : {}];
+        } catch { return [cls.id, {}]; }
+      })
+    );
+
+    // 3. Merge into the shape the app expects: { notes: { [cid]: { [dk]: [...] } } }
+    const notes = Object.fromEntries(notesList);
+
+    // Back-compat: if notes were stored in the old main doc, use those
+    return { ...main, notes: Object.keys(notes).length ? notes : (main.notes || {}) };
   } catch { return null; }
 }
+
 export async function saveUserData(uid, data) {
-  await setDoc(userDocRef(uid), data);
-  // Keep teacher index in sync so admin can discover all teachers
+  // Split: save metadata without notes to main doc
+  const { notes, ...meta } = data;
+  await setDoc(userDocRef(uid), meta);
+
+  // Save each class notes to its own doc (only if changed)
+  if (notes) {
+    await Promise.all(
+      Object.entries(notes).map(([cid, dateMap]) =>
+        setDoc(notesDocRef(uid, cid), dateMap || {}).catch(() => {})
+      )
+    );
+  }
+
+  // Keep teacher index fresh
   await syncTeacherIndex(uid, data);
+}
+
+// Delete notes doc when a class is permanently deleted
+export async function deleteClassNotes(uid, classId) {
+  try {
+    const { deleteDoc } = await import("firebase/firestore");
+    await deleteDoc(notesDocRef(uid, classId));
+  } catch {}
 }
 
 // ── Role system ───────────────────────────────────────────────────────────────
@@ -118,10 +164,8 @@ export async function getAllTeachers() {
 }
 
 export async function getTeacherFullData(uid) {
-  try {
-    const snap = await getDoc(userDocRef(uid));
-    return snap.exists() ? snap.data() : null;
-  } catch { return null; }
+  // Reuse loadUserData which handles the split-doc architecture
+  return loadUserData(uid);
 }
 
 export async function getAllRoles() {

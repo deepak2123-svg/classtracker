@@ -152,16 +152,20 @@ function AdminPanelInner({user}){
 
   useEffect(()=>{
     (async()=>{
+      // Load only the index (fast, lightweight) — NOT full teacher data
       const [t,r]=await Promise.all([getAllTeachers(),getAllRoles()]);
       setTeachers(t); setRoles(r); setLoading(false);
-      t.forEach(async teacher=>{
-        setLoadingUids(s=>new Set([...s,teacher.uid]));
-        const d=await getTeacherFullData(teacher.uid);
-        if(d) setFullData(prev=>({...prev,[teacher.uid]:d}));
-        setLoadingUids(s=>{const n=new Set(s);n.delete(teacher.uid);return n;});
-      });
     })();
   },[]);
+
+  // Lazy-load full data for a teacher only when needed
+  const ensureFullData = async (uid) => {
+    if (fullData[uid] || loadingUids.has(uid)) return; // already loaded or loading
+    setLoadingUids(s=>new Set([...s,uid]));
+    const d = await getTeacherFullData(uid);
+    if (d) setFullData(prev=>({...prev,[uid]:d}));
+    setLoadingUids(s=>{const n=new Set(s);n.delete(uid);return n;});
+  };
 
   // ── Derived: institutes ───────────────────────────────────────────────────
   const institutes=useMemo(()=>{
@@ -284,6 +288,17 @@ function AdminPanelInner({user}){
   };
 
   const resetNav=(newTab)=>{setSelP2(null);setSelP3(null);if(newTab)setTab(newTab);setMobileStep(s=>Math.min(s,1));};
+
+  // When institute is selected, pre-load its teachers in background
+  const onSelectInstitute = (inst) => {
+    setSelInst(inst); resetNav();
+    // Pre-fetch full data for teachers at this institute only
+    teachers.filter(t=>{
+      const d=fullData[t.uid];
+      if(d) return (d.classes||[]).some(c=>(c.institute||"").trim()===inst.trim());
+      return (t.institutes||[]).some(i=>i.trim()===inst.trim());
+    }).forEach(t=>ensureFullData(t.uid));
+  };
 
   if(loading) return(
     <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.sans}}>
@@ -462,7 +477,7 @@ function AdminPanelInner({user}){
                     return s+(d.classes||[]).filter(c=>c.institute===inst).length;
                   },0) || teachers.filter(t=>(t.institutes||[]).includes(inst)).length;
               return(
-                <div key={inst} onClick={()=>{setSelInst(inst);resetNav();setMobileStep(1);}}
+                <div key={inst} onClick={()=>{onSelectInstitute(inst);setMobileStep(1);}}
                   style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
@@ -513,7 +528,7 @@ function AdminPanelInner({user}){
               })();
               const isSel=selP2===t.uid;
               return(
-                <div key={t.uid} onClick={()=>{setSelP2(t.uid);setSelP3(null);setMobileStep(2);}}
+                <div key={t.uid} onClick={()=>{setSelP2(t.uid);setSelP3(null);setMobileStep(2);ensureFullData(t.uid);}}
                   style={{...siBase,display:"flex",alignItems:"center",gap:9,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
@@ -536,7 +551,7 @@ function AdminPanelInner({user}){
             {selInst&&tab==="class"&&instClasses.map(cls=>{
               const isSel=selP2===cls.raw;
               return(
-                <div key={cls.raw} onClick={()=>{setSelP2(cls.raw);setSelP3(null);setMobileStep(2);}}
+                <div key={cls.raw} onClick={()=>{setSelP2(cls.raw);setSelP3(null);setMobileStep(2);instClasses.find(c=>c.raw===cls.raw)?.teachers?.forEach(t=>ensureFullData(t.uid));}}
                   style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
