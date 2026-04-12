@@ -149,6 +149,7 @@ function AdminPanelInner({user}){
   const [selP3,       setSelP3]       = useState(null); // { teacherUid, classRaw }
   const [period,      setPeriod]      = useState("today");
   const [mobileStep,  setMobileStep]  = useState(0);
+  const [exportOpen,  setExportOpen]  = useState(false);
 
   useEffect(()=>{
     (async()=>{
@@ -311,6 +312,96 @@ function AdminPanelInner({user}){
       return (t.institutes||[]).some(i=>i.trim()===inst.trim());
     }).forEach(t=>ensureFullData(t.uid));
   };
+
+  // ── Export functions ──────────────────────────────────────────────────────
+  const getExportData = () => {
+    if (!selP3 || !p4Entries) return [];
+    return p4Entries.flatMap(([dk, entries]) =>
+      entries.map(e => ({
+        date:       dk,
+        start_time: e.timeStart || "",
+        end_time:   e.timeEnd   || "",
+        teacher:    selP3.teacherName,
+        institute:  selInst,
+        class:      selP3.className,
+        subject:    selP3.subject,
+        type:       e.tag || "",
+        title:      e.title || "",
+        notes:      (e.body || "").replace(/\n/g, " "),
+      }))
+    );
+  };
+
+  const exportCSV = () => {
+    const rows = getExportData();
+    if (!rows.length) return;
+    const headers = ["Date","Start Time","End Time","Teacher","Institute","Class","Subject","Type","Title","Notes"];
+    const csv = [
+      headers.join(","),
+      ...rows.map(r => headers.map(h => {
+        const key = h.toLowerCase().replace(/ /g,"_");
+        const val = String(r[key] || "").replace(/"/g, '""');
+        return `"${val}"`;
+      }).join(","))
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `${selP3.className}_${selP3.teacherName}_${period}.csv`.replace(/\s+/g,"_");
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportOpen(false);
+  };
+
+  const exportJSON = () => {
+    const rows = getExportData();
+    if (!rows.length) return;
+    const blob = new Blob([JSON.stringify({ export: { teacher:selP3.teacherName, class:selP3.className, institute:selInst, subject:selP3.subject, period }, entries: rows }, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `${selP3.className}_${selP3.teacherName}_${period}.json`.replace(/\s+/g,"_");
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportOpen(false);
+  };
+
+  const exportPDF = () => {
+    const rows = getExportData();
+    if (!rows.length) return;
+    const html = `
+      <html><head><title>Export</title><style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; padding: 32px; color: #0E1F18; }
+        h1 { font-size: 22px; margin-bottom: 4px; }
+        .meta { font-size: 13px; color: #5C7268; margin-bottom: 24px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { background: #1A2F5A; color: #fff; padding: 8px 10px; text-align: left; }
+        td { padding: 8px 10px; border-bottom: 1px solid #E2E8F0; vertical-align: top; }
+        tr:nth-child(even) td { background: #F7F8FC; }
+        .tag { display: inline-block; background: #DBEAFE; color: #1D4ED8; border-radius: 4px; padding: 1px 6px; font-size: 10px; }
+      </style></head><body>
+        <h1>${selP3.className} — ${selP3.teacherName}</h1>
+        <div class="meta">${selInst} · ${selP3.subject} · Period: ${period} · Exported ${new Date().toLocaleDateString()}</div>
+        <table>
+          <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Title</th><th>Notes</th></tr></thead>
+          <tbody>${rows.map(r=>`<tr>
+            <td>${r.date}</td>
+            <td>${r.start_time}${r.end_time?" → "+r.end_time:""}</td>
+            <td><span class="tag">${r.type}</span></td>
+            <td>${r.title}</td>
+            <td>${r.notes}</td>
+          </tr>`).join("")}</tbody>
+        </table>
+      </body></html>`;
+    const w = window.open("", "_blank");
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); }, 400);
+    setExportOpen(false);
+  };
+
 
   if(loading) return(
     <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.sans}}>
@@ -689,7 +780,40 @@ function AdminPanelInner({user}){
                 {l}
               </button>
             ))}
-            <div style={{marginLeft:"auto",fontSize:10,color:G.textL,fontFamily:G.mono}}>Earliest class first</div>
+            {selP3&&(
+              <div style={{marginLeft:"auto",position:"relative"}}>
+                <button onClick={()=>setExportOpen(o=>!o)}
+                  style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:G.sans,fontWeight:600}}>
+                  ↓ Export
+                </button>
+                {exportOpen&&(
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,boxShadow:"0 8px 24px rgba(15,23,42,0.12)",zIndex:999,minWidth:200,overflow:"hidden"}}
+                    onMouseLeave={()=>setExportOpen(false)}>
+                    {[
+                      {icon:"📊",label:"CSV",     sub:"Open in Excel / Sheets",fn:exportCSV},
+                      {icon:"📄",label:"PDF",     sub:"Print or save as PDF",  fn:exportPDF},
+                      {icon:"🗂",label:"JSON",    sub:"Raw data backup",       fn:exportJSON},
+                    ].map(({icon,label,sub,fn},i,arr)=>(
+                      <div key={label} onClick={fn}
+                        style={{padding:"12px 16px",cursor:"pointer",borderBottom:i<arr.length-1?`1px solid ${G.border}`:"none",transition:"background 0.1s"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=G.bg}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <span style={{fontSize:18,width:24,textAlign:"center"}}>{icon}</span>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:600,color:G.text,fontFamily:G.sans}}>Export {label}</div>
+                            <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,marginTop:2}}>{sub}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(!p4Entries||p4Entries.length===0)&&(
+                      <div style={{padding:"10px 16px",fontSize:12,color:G.textL,fontFamily:G.mono,textAlign:"center"}}>No entries to export</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           {/* Entries body */}
           <div style={{flex:1,overflowY:"auto",padding:"16px 20px 32px"}}>
