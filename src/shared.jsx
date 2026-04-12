@@ -44,8 +44,8 @@ export function formatDateLabel(dk){
 
 export function Spinner({ text="Loading…" }) {
   return (
-    <div style={{minHeight:"100vh",background:"#F7F5F0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14}}>
-      <div style={{width:36,height:36,borderRadius:"50%",border:"3px solid #E5E5E5",borderTopColor:"#4ECDC4",animation:"spin 0.8s linear infinite"}}/>
+    <div style={{minHeight:"100vh",background:"#F7F8F6",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14}}>
+      <div style={{width:36,height:36,borderRadius:"50%",border:"3px solid #E5E5E5",borderTopColor:"#1B8A4C",animation:"spin 0.8s linear infinite"}}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <div style={{color:"#aaa",fontSize:13,fontFamily:"monospace"}}>{text}</div>
     </div>

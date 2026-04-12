@@ -46,7 +46,7 @@ export default function Auth() {
   };
 
   return (
-    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
+    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px 14px"}}>
       <div style={{width:"100%",maxWidth:420}}>
 
         {/* Logo */}
@@ -57,7 +57,7 @@ export default function Auth() {
         </div>
 
         {/* Card */}
-        <div style={{background:G.surface,borderRadius:18,padding:"24px 22px",boxShadow:"0 4px 24px rgba(14,31,24,0.08)",border:`1px solid ${G.border}`}}>
+        <div style={{background:G.surface,borderRadius:18,padding:"22px 16px",boxShadow:"0 4px 24px rgba(14,31,24,0.08)",border:`1px solid ${G.border}`}}>
 
           {/* Tabs */}
           <div style={{display:"flex",background:G.bg,borderRadius:10,padding:3,marginBottom:22}}>

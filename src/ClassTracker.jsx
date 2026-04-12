@@ -114,25 +114,28 @@ function GhostBtn({onClick,children,style={}}){
 // ── Top Nav ───────────────────────────────────────────────────────────────────
 function TopNav({user,teacherName,onEditName,right}){
   return(
-    <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"0 32px",position:"sticky",top:0,zIndex:100,backdropFilter:"blur(8px)"}}>
-      <div className="top-nav-inner" style={{maxWidth:1320,margin:"0 auto",height:62,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 32px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:36,height:36,borderRadius:11,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,boxShadow:`0 2px 8px rgba(27,138,76,0.3)`}}>🎓</div>
-          <span style={{fontSize:19,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>Class Tracker</span>
+    <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:100,backdropFilter:"blur(8px)"}}>
+      <div style={{maxWidth:1320,margin:"0 auto",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px",gap:8}}>
+        {/* Logo — compact on mobile */}
+        <div style={{display:"flex",alignItems:"center",gap:9,flexShrink:0}}>
+          <div style={{width:32,height:32,borderRadius:9,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,boxShadow:`0 2px 8px rgba(27,138,76,0.3)`}}>🎓</div>
+          <span style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.3,whiteSpace:"nowrap"}}>Class Tracker</span>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
+        {/* Right actions — scrollable row on mobile */}
+        <div style={{display:"flex",alignItems:"center",gap:7,overflow:"hidden",flexShrink:1,minWidth:0}}>
           {right}
           <button onClick={onEditName} className="nav-teacher-name"
-            style={{background:G.surface,border:`1.5px solid ${G.border}`,borderRadius:10,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.textM,fontFamily:G.sans,display:"flex",alignItems:"center",gap:9,transition:"all 0.15s",boxShadow:G.shadowSm}}
+            style={{background:G.surface,border:`1.5px solid ${G.border}`,borderRadius:9,padding:"5px 11px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans,display:"flex",alignItems:"center",gap:7,transition:"all 0.15s",flexShrink:0}}
             onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textM;}}>
-            <Avatar user={user} size={22}/>
-            <span style={{fontWeight:500}}>{teacherName}</span>
-            <span style={{fontSize:11,opacity:0.5}}>✏</span>
+            <Avatar user={user} size={20}/>
+            <span style={{fontWeight:500,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{teacherName}</span>
           </button>
-          <button onClick={logout} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,fontSize:12,color:G.textM,cursor:"pointer",fontFamily:G.sans,padding:"6px 13px",fontWeight:500,transition:"all 0.15s"}}
+          <button onClick={logout} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,fontSize:12,color:G.textM,cursor:"pointer",fontFamily:G.sans,padding:"5px 11px",fontWeight:500,transition:"all 0.15s",flexShrink:0,whiteSpace:"nowrap"}}
             onMouseEnter={e=>{e.currentTarget.style.background=G.redL;e.currentTarget.style.color=G.red;e.currentTarget.style.borderColor="#F5CACA";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textM;e.currentTarget.style.borderColor=G.border;}}>Sign Out</button>
+            onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textM;e.currentTarget.style.borderColor=G.border;}}>
+            Sign Out
+          </button>
         </div>
       </div>
     </div>
@@ -251,7 +254,7 @@ function CreatableDropdown({value,onChange,options,onAddOption,placeholder,addPl
 function ProfileSetup({user,onSave}){
   const [name,setName]=useState(user.displayName||"");
   return(
-    <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
       <div style={{width:"100%",maxWidth:420}}>
         <div style={{textAlign:"center",marginBottom:36}}>
           <div style={{width:72,height:72,borderRadius:22,background:G.greenV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px",boxShadow:`0 8px 24px rgba(52,208,119,0.35)`}}>🎓</div>
@@ -367,7 +370,7 @@ export default function ClassTracker({user}){
   const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
 
   const SaveBadge=()=>saving||saveErr?(
-    <div style={{position:"fixed",top:16,right:20,borderRadius:20,padding:"5px 14px",fontSize:11,fontFamily:G.mono,zIndex:999,background:saveErr?G.red:G.navy,color:"#fff",boxShadow:G.shadowMd,letterSpacing:0.3}}>
+    <div style={{position:"fixed",top:70,right:16,borderRadius:20,padding:"5px 14px",fontSize:11,fontFamily:G.mono,zIndex:999,background:saveErr?G.red:G.navy,color:"#fff",boxShadow:G.shadowMd,letterSpacing:0.3}}>
       {saveErr?"⚠ save failed":"saving…"}
     </div>
   ):null;
@@ -426,13 +429,13 @@ export default function ClassTracker({user}){
       {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} addInstituteName={addInstituteName} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
         right={<>
-          <span style={{fontSize:13,color:G.textM,fontFamily:G.sans,fontWeight:500}}>{data.classes.length} {data.classes.length===1?"class":"classes"} · {totalNotes} entries</span>
+          <span className="desktop-only" style={{fontSize:12,color:G.textM,fontFamily:G.sans,fontWeight:500,whiteSpace:"nowrap"}}>{data.classes.length} {data.classes.length===1?"class":"classes"} · {totalNotes} entries</span>
           <TrashBadge count={trashCount} onClick={()=>setView("trash")}/>
           <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)}
-            style={{background:G.green,color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:600,display:"flex",alignItems:"center",gap:6,position:"relative",overflow:"hidden",boxShadow:`0 2px 10px rgba(27,138,76,0.3)`,transition:"box-shadow 0.15s"}}
+            style={{background:G.green,color:"#fff",border:"none",borderRadius:9,padding:"7px 14px",fontSize:12,cursor:"pointer",fontFamily:G.sans,fontWeight:600,display:"flex",alignItems:"center",gap:5,position:"relative",overflow:"hidden",boxShadow:`0 2px 10px rgba(27,138,76,0.3)`,transition:"box-shadow 0.15s",whiteSpace:"nowrap",flexShrink:0}}
             onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 4px 16px rgba(27,138,76,0.4)`}
             onMouseLeave={e=>e.currentTarget.style.boxShadow=`0 2px 10px rgba(27,138,76,0.3)`}>
-            <span style={{fontSize:18,lineHeight:1}}>+</span> Add Class
+            + Add Class
           </button>
         </>}
       />
@@ -570,7 +573,7 @@ export default function ClassTracker({user}){
         {/* Class header */}
         <div className="mobile-pad-sm" style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"20px 32px 16px"}}>
           <div style={{maxWidth:1320,margin:"0 auto"}}>
-            <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:18}}>
+            <div className="class-header-inner" style={{display:"flex",alignItems:"center",gap:16,marginBottom:18}}>
               <div style={{width:54,height:54,borderRadius:15,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:color.bg,fontFamily:G.mono,letterSpacing:-1}}>
                 {(activeClass.section||"?").slice(0,2).toUpperCase()}
               </div>
@@ -582,7 +585,7 @@ export default function ClassTracker({user}){
                   <button onClick={()=>setEditingClass(activeClass)} style={{background:"none",border:`1px solid ${G.border}`,cursor:"pointer",color:G.textL,fontSize:12,fontFamily:G.sans,padding:"2px 8px",borderRadius:6,marginLeft:4,transition:"all 0.12s",fontWeight:500}} onMouseEnter={e=>{e.currentTarget.style.color=G.green;e.currentTarget.style.borderColor=G.green;}} onMouseLeave={e=>{e.currentTarget.style.color=G.textL;e.currentTarget.style.borderColor=G.border;}}>✏ edit</button>
                 </div>
               </div>
-              <div style={{display:"flex",gap:10}}>
+              <div className="class-header-stats" style={{display:"flex",gap:10}}>
                 {[{n:totalEntries,l:"entries"},{n:allDates.length,l:"days"}].map(({n,l})=>(
                   <div key={l} className="stat-box" style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 18px",textAlign:"center",boxShadow:G.shadowSm}}>
                     <div style={{fontSize:24,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{n}</div>
@@ -729,7 +732,7 @@ export default function ClassTracker({user}){
       <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
         right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}
       />
-      <div style={{maxWidth:520,margin:"40px auto",padding:"0 24px 80px"}}>
+      <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px 80px"}}>
         <p style={{fontSize:12,color:G.textM,fontFamily:G.sans,marginBottom:6,textTransform:"uppercase",fontWeight:600}}>New Class</p>
         <h2 style={{marginBottom:28,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>Add a class</h2>
         <div className="form-card" style={{...card,padding:"26px"}}>
@@ -781,7 +784,7 @@ export default function ClassTracker({user}){
                   const ec=Object.values(tc.savedNotes||{}).reduce((s,arr)=>s+arr.length,0);
                   const dl=daysLeft(tc.deletedAt);
                   return(
-                    <div key={tc.id} style={{...card,padding:"16px 20px",display:"flex",alignItems:"center",gap:16}}>
+                    <div key={tc.id} className="trash-row" style={{...card,padding:"16px 20px",display:"flex",alignItems:"center",gap:16}}>
                       <div style={{width:44,height:44,borderRadius:12,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:color.bg,fontFamily:G.mono}}>
                         {(tc.section||"?").slice(0,2).toUpperCase()}
                       </div>
@@ -927,7 +930,7 @@ export default function ClassTracker({user}){
               <label style={lbl}>Notes</label>
               <textarea ref={noteRef} value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Write your notes, tasks, or resources here…" rows={6} style={{...inp,resize:"vertical",lineHeight:1.7,marginBottom:0}}/>
             </div>
-            <PrimaryBtn onClick={save} disabled={!form.timeStart} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:14,opacity:form.timeStart?1:0.45,cursor:form.timeStart?"pointer":"not-allowed"}}>
+            <PrimaryBtn onClick={save} disabled={!form.timeStart} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:14,opacity:form.timeStart?1:0.45,cursor:form.timeStart?"pointer":"not-allowed",width:"100%"}}>
               {isEdit?"Save Changes":"Save Entry"}
             </PrimaryBtn>
           </div>

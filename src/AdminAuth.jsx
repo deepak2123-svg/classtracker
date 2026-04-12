@@ -97,7 +97,7 @@ export default function AdminAuth({ onVerified }) {
       </div>
 
       {/* Card */}
-      <div style={{width:"100%",maxWidth:400,background:"rgba(255,255,255,0.06)",borderRadius:20,padding:"26px 24px",border:"1px solid rgba(255,255,255,0.1)",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+      <div style={{width:"100%",maxWidth:400,background:"rgba(255,255,255,0.06)",borderRadius:20,padding:"22px 16px",border:"1px solid rgba(255,255,255,0.1)",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
 
         {/* Invite badge */}
         {inviteValid && (

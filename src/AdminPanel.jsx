@@ -245,7 +245,7 @@ function AdminPanelInner({user}){
   const p3Items=useMemo(()=>{
     if(!selP2) return [];
     if(tab==="teacher"){
-      // P2 = teacher → P3 = their classes at this institute
+      // P2 = teacher → P3 = their classes at this institute only
       const d=fullData[selP2];
       if(!d) return [];
       return (d.classes||[])
@@ -254,6 +254,7 @@ function AdminPanelInner({user}){
           display:normaliseName(c.section),
           raw:c.section,
           subject:c.subject,
+          institute:c.institute||"",
           classId:c.id,
           entryCount:Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0),
         }))
@@ -313,94 +314,148 @@ function AdminPanelInner({user}){
     }).forEach(t=>ensureFullData(t.uid));
   };
 
-  // ── Export functions ──────────────────────────────────────────────────────
-  const getExportData = () => {
-    if (!selP3 || !p4Entries) return [];
-    return p4Entries.flatMap(([dk, entries]) =>
-      entries.map(e => ({
-        date:       dk,
-        start_time: e.timeStart || "",
-        end_time:   e.timeEnd   || "",
-        teacher:    selP3.teacherName,
-        institute:  selInst,
-        class:      selP3.className,
-        subject:    selP3.subject,
-        type:       e.tag || "",
-        title:      e.title || "",
-        notes:      (e.body || "").replace(/\n/g, " "),
-      }))
+  // ── Export helpers ────────────────────────────────────────────────────────
+
+  // Collect rows for a specific teacher + classId
+  const rowsForTeacherClass = (teacherUid, teacherName, classId, className, subject, days) => {
+    const d = fullData[teacherUid];
+    if (!d) return [];
+    const classNotes = (d.notes || {})[classId] || {};
+    const flat = getEntriesInRange(classNotes, days);
+    return flat.map(({dateKey, entry: e}) => ({
+      date: dateKey, start_time: e.timeStart||"", end_time: e.timeEnd||"",
+      teacher: teacherName, institute: selInst,
+      class: className, subject: subject,
+      type: e.tag||"", title: e.title||"",
+      notes: (e.body||"").replace(/
+/g," "),
+    }));
+  };
+
+  const days = period==="today"?1:period==="week"?7:period==="month"?30:null;
+
+  // 1. Current P4 view (specific teacher + class)
+  const getViewRows = () => {
+    if (!selP3) return [];
+    return rowsForTeacherClass(selP3.teacherUid, selP3.teacherName, selP3.classId, selP3.className, selP3.subject, days);
+  };
+
+  // 2. By Teacher — all classes for selected teacher at this institute
+  const getTeacherRows = () => {
+    if (!selP2 || tab!=="teacher") return [];
+    const d = fullData[selP2];
+    if (!d) return [];
+    const teacherName = d.profile?.name || instTeachers.find(t=>t.uid===selP2)?.name || "?";
+    return (d.classes||[])
+      .filter(c=>(c.institute||"").trim()===(selInst||"").trim())
+      .flatMap(c => rowsForTeacherClass(selP2, teacherName, c.id, normaliseName(c.section), c.subject, days));
+  };
+
+  // 3. By Class — all teachers for selected class
+  const getClassRows = () => {
+    if (!selP2 || tab!=="class") return [];
+    const cls = instClasses.find(c=>c.raw===selP2);
+    if (!cls) return [];
+    return (cls.teachers||[]).flatMap(t =>
+      rowsForTeacherClass(t.uid, t.name, t.classId, cls.display, cls.subject, days)
     );
   };
 
-  const exportCSV = () => {
-    const rows = getExportData();
-    if (!rows.length) return;
+  const doExport = (rows, filename, title, meta) => {
+    if (!rows.length) { alert("No entries to export for the selected period."); return; }
+    return { rows, filename, title, meta };
+  };
+
+  const triggerCSV = (rows, filename) => {
     const headers = ["Date","Start Time","End Time","Teacher","Institute","Class","Subject","Type","Title","Notes"];
     const csv = [
       headers.join(","),
-      ...rows.map(r => headers.map(h => {
-        const key = h.toLowerCase().replace(/ /g,"_");
-        const val = String(r[key] || "").replace(/"/g, '""');
+      ...rows.map(r => headers.map(h=>{
+        const key=h.toLowerCase().replace(/ /g,"_");
+        const val=String(r[key]||"").replace(/"/g,'""');
         return `"${val}"`;
       }).join(","))
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url;
-    a.download = `${selP3.className}_${selP3.teacherName}_${period}.csv`.replace(/\s+/g,"_");
-    a.click();
-    URL.revokeObjectURL(url);
+    ].join("
+");
+    const a = Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8;"})),download:filename.replace(/\s+/g,"_")+".csv"});
+    a.click(); setExportOpen(false);
+  };
+
+  const triggerJSON = (rows, filename, meta) => {
+    const blob = new Blob([JSON.stringify({export:meta,entries:rows},null,2)],{type:"application/json"});
+    const a = Object.assign(document.createElement("a"),{href:URL.createObjectURL(blob),download:filename.replace(/\s+/g,"_")+".json"});
+    a.click(); setExportOpen(false);
+  };
+
+  const triggerPDF = (rows, title, meta) => {
+    if (!rows.length) { alert("No entries to export."); return; }
+    const printCSS = `body{font-family:sans-serif;padding:28px;color:#0E1F18}h1{font-size:20px;margin-bottom:3px}.meta{font-size:12px;color:#5C7268;margin-bottom:20px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1A2F5A;color:#fff;padding:7px 9px;text-align:left}td{padding:7px 9px;border-bottom:1px solid #E2E8F0;vertical-align:top}tr:nth-child(even) td{background:#F7F8FC}.tag{background:#DBEAFE;color:#1D4ED8;border-radius:3px;padding:1px 5px;font-size:10px}`;
+    const w = window.open("","_blank");
+    w.document.write(`<html><head><title>${title}</title><style>${printCSS}</style></head><body>
+      <h1>${title}</h1>
+      <div class="meta">${meta} · Exported ${new Date().toLocaleDateString()}</div>
+      <table><thead><tr><th>Date</th><th>Time</th><th>Teacher</th><th>Class</th><th>Type</th><th>Title</th><th>Notes</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.date}</td><td>${r.start_time}${r.end_time?" → "+r.end_time:""}</td><td>${r.teacher}</td><td>${r.class}</td><td><span class="tag">${r.type}</span></td><td>${r.title}</td><td>${r.notes}</td></tr>`).join("")}</tbody>
+      </table></body></html>`);
+    w.document.close(); w.focus();
+    setTimeout(()=>w.print(),400);
     setExportOpen(false);
   };
 
-  const exportJSON = () => {
-    const rows = getExportData();
-    if (!rows.length) return;
-    const blob = new Blob([JSON.stringify({ export: { teacher:selP3.teacherName, class:selP3.className, institute:selInst, subject:selP3.subject, period }, entries: rows }, null, 2)], { type: "application/json" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url;
-    a.download = `${selP3.className}_${selP3.teacherName}_${period}.json`.replace(/\s+/g,"_");
-    a.click();
-    URL.revokeObjectURL(url);
-    setExportOpen(false);
-  };
+  // ── Export action builders ─────────────────────────────────────────────────
+  const exportActions = (() => {
+    const actions = [];
+    const periodLabel = {today:"Today",week:"This Week",month:"This Month",all:"All Time"}[period];
 
-  const exportPDF = () => {
-    const rows = getExportData();
-    if (!rows.length) return;
-    const html = `
-      <html><head><title>Export</title><style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; padding: 32px; color: #0E1F18; }
-        h1 { font-size: 22px; margin-bottom: 4px; }
-        .meta { font-size: 13px; color: #5C7268; margin-bottom: 24px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th { background: #1A2F5A; color: #fff; padding: 8px 10px; text-align: left; }
-        td { padding: 8px 10px; border-bottom: 1px solid #E2E8F0; vertical-align: top; }
-        tr:nth-child(even) td { background: #F7F8FC; }
-        .tag { display: inline-block; background: #DBEAFE; color: #1D4ED8; border-radius: 4px; padding: 1px 6px; font-size: 10px; }
-      </style></head><body>
-        <h1>${selP3.className} — ${selP3.teacherName}</h1>
-        <div class="meta">${selInst} · ${selP3.subject} · Period: ${period} · Exported ${new Date().toLocaleDateString()}</div>
-        <table>
-          <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Title</th><th>Notes</th></tr></thead>
-          <tbody>${rows.map(r=>`<tr>
-            <td>${r.date}</td>
-            <td>${r.start_time}${r.end_time?" → "+r.end_time:""}</td>
-            <td><span class="tag">${r.type}</span></td>
-            <td>${r.title}</td>
-            <td>${r.notes}</td>
-          </tr>`).join("")}</tbody>
-        </table>
-      </body></html>`;
-    const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => { w.print(); }, 400);
-    setExportOpen(false);
-  };
+    // Current view (teacher + class)
+    if (selP3) {
+      const name = `${selP3.teacherName} — ${selP3.className}`;
+      const meta = `${selInst} · ${selP3.subject} · ${periodLabel}`;
+      actions.push({
+        label: `This view`,
+        sub: `${selP3.teacherName} · ${selP3.className}`,
+        icon: "📋",
+        csv:  ()=>triggerCSV(getViewRows(),  name),
+        json: ()=>triggerJSON(getViewRows(),  name, {teacher:selP3.teacherName,class:selP3.className,institute:selInst,period}),
+        pdf:  ()=>triggerPDF(getViewRows(),  name, meta),
+      });
+    }
+
+    // By teacher — all their classes
+    if (tab==="teacher" && selP2 && fullData[selP2]) {
+      const d = fullData[selP2];
+      const tName = d.profile?.name || "Teacher";
+      const name  = `${tName} — All Classes`;
+      const meta  = `${selInst} · ${periodLabel}`;
+      actions.push({
+        label: `All classes`,
+        sub: `${tName} across ${selInst}`,
+        icon: "👤",
+        csv:  ()=>triggerCSV(getTeacherRows(),  name),
+        json: ()=>triggerJSON(getTeacherRows(), name, {teacher:tName,institute:selInst,period}),
+        pdf:  ()=>triggerPDF(getTeacherRows(),  name, meta),
+      });
+    }
+
+    // By class — all teachers in that class
+    if (tab==="class" && selP2) {
+      const cls = instClasses.find(c=>c.raw===selP2);
+      if (cls) {
+        const name = `${cls.display} — All Teachers`;
+        const meta = `${selInst} · ${cls.subject} · ${periodLabel}`;
+        actions.push({
+          label: `All teachers`,
+          sub: `${cls.display} · ${cls.teachers.length} teacher${cls.teachers.length!==1?"s":""}`,
+          icon: "🏫",
+          csv:  ()=>triggerCSV(getClassRows(),  name),
+          json: ()=>triggerJSON(getClassRows(), name, {class:cls.display,institute:selInst,period}),
+          pdf:  ()=>triggerPDF(getClassRows(),  name, meta),
+        });
+      }
+    }
+
+    return actions;
+  })();
 
 
   if(loading) return(
@@ -417,7 +472,7 @@ function AdminPanelInner({user}){
   if(view==="manage") return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
       {/* nav */}
-      <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+      <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <div style={{width:28,height:28,background:G.blueV,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>🎓</div>
           <span style={{fontFamily:G.display,fontSize:15,fontWeight:700,color:"#fff"}}>ClassLog</span>
@@ -428,12 +483,12 @@ function AdminPanelInner({user}){
           <button onClick={logout} style={{...pill("none","rgba(255,255,255,0.35)","rgba(255,255,255,0.15)")}}>Sign Out</button>
         </div>
       </div>
-      <div style={{maxWidth:860,margin:"0 auto",padding:"28px 28px 72px"}}>
+      <div style={{maxWidth:860,margin:"0 auto",padding:"20px 16px 72px"}}>
         <h2 style={{fontSize:22,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:6}}>Manage Access</h2>
         <p style={{fontSize:13,color:G.textM,marginBottom:20}}>Promote teachers to admin, or generate an invite link to give someone direct admin access.</p>
 
         {/* Invite link generator */}
-        <div style={{background:G.blueL||"#DBEAFE",border:"1px solid #BFDBFE",borderRadius:13,padding:"16px 18px",marginBottom:24}}>
+        <div style={{background:G.blueL||"#DBEAFE",border:"1px solid #BFDBFE",borderRadius:13,padding:"14px 16px",marginBottom:20}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
             <div>
               <div style={{fontSize:14,fontWeight:600,color:G.navy||"#1A2F5A",fontFamily:G.display}}>Generate Invite Link</div>
@@ -499,7 +554,7 @@ function AdminPanelInner({user}){
 
   // ── MAIN PANEL VIEW ───────────────────────────────────────────────────────
   return(
-    <div style={{height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg}}>
+    <div style={{minHeight:"100vh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
       <style>{`
         @media (max-width: 767px) {
           .admin-panels { flex-direction: column !important; }
@@ -520,7 +575,7 @@ function AdminPanelInner({user}){
       `}</style>
 
       {/* Nav */}
-      <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 18px",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+      <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <div style={{width:28,height:28,background:G.blueV,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>🎓</div>
           <div>
@@ -641,6 +696,11 @@ function AdminPanelInner({user}){
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,color:isSel?G.blue:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
                     <div style={{fontSize:9,color:G.textL,fontFamily:G.mono,marginTop:2}}>{totalEnt} entries</div>
+                    {(()=>{
+                      const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
+                      if(!otherInsts.length) return null;
+                      return <div style={{fontSize:9,color:G.textL,fontFamily:G.mono,marginTop:2,fontStyle:"italic"}}>also at {otherInsts.join(", ")}</div>;
+                    })()}
                   </div>
                 </div>
               );
@@ -690,7 +750,7 @@ function AdminPanelInner({user}){
             {selP2&&tab==="teacher"&&p3Items.map(cls=>{
               const isSel=selP3?.classId===cls.classId;
               return(
-                <div key={cls.classId} onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject});setMobileStep(3);}}
+                <div key={cls.classId} onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
                   style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
@@ -755,7 +815,7 @@ function AdminPanelInner({user}){
         {/* ── P4: Entries ── */}
         <div className="admin-p4" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:G.bg,minWidth:0}}>
           {/* P4 header */}
-          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"13px 20px",flexShrink:0}}>
+          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"12px 16px",flexShrink:0}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
                 <div style={{fontFamily:G.display,fontSize:16,fontWeight:700,color:G.text}}>
@@ -772,7 +832,7 @@ function AdminPanelInner({user}){
             </div>
           </div>
           {/* Period filter */}
-          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"8px 20px",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"8px 14px",display:"flex",gap:5,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
             <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>Period:</span>
             {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
               <button key={k} onClick={()=>setPeriod(k)}
@@ -787,36 +847,47 @@ function AdminPanelInner({user}){
                   ↓ Export
                 </button>
                 {exportOpen&&(
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,boxShadow:"0 8px 24px rgba(15,23,42,0.12)",zIndex:999,minWidth:200,overflow:"hidden"}}
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,boxShadow:"0 8px 24px rgba(15,23,42,0.12)",zIndex:999,minWidth:240,overflow:"hidden"}}
                     onMouseLeave={()=>setExportOpen(false)}>
-                    {[
-                      {icon:"📊",label:"CSV",     sub:"Open in Excel / Sheets",fn:exportCSV},
-                      {icon:"📄",label:"PDF",     sub:"Print or save as PDF",  fn:exportPDF},
-                      {icon:"🗂",label:"JSON",    sub:"Raw data backup",       fn:exportJSON},
-                    ].map(({icon,label,sub,fn},i,arr)=>(
-                      <div key={label} onClick={fn}
-                        style={{padding:"12px 16px",cursor:"pointer",borderBottom:i<arr.length-1?`1px solid ${G.border}`:"none",transition:"background 0.1s"}}
-                        onMouseEnter={e=>e.currentTarget.style.background=G.bg}
-                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <div style={{display:"flex",alignItems:"center",gap:10}}>
-                          <span style={{fontSize:18,width:24,textAlign:"center"}}>{icon}</span>
+                    {exportActions.length===0&&(
+                      <div style={{padding:"14px 16px",fontSize:12,color:G.textL,fontFamily:G.mono,textAlign:"center"}}>Select a teacher or class first</div>
+                    )}
+                    {exportActions.map((action,ai)=>(
+                      <div key={ai}>
+                        {/* Section header */}
+                        <div style={{padding:"9px 16px 5px",background:G.bg,borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:14}}>{action.icon}</span>
                           <div>
-                            <div style={{fontSize:13,fontWeight:600,color:G.text,fontFamily:G.sans}}>Export {label}</div>
-                            <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,marginTop:2}}>{sub}</div>
+                            <div style={{fontSize:11,fontWeight:700,color:G.textS,fontFamily:G.display}}>{action.label}</div>
+                            <div style={{fontSize:10,color:G.textL,fontFamily:G.mono}}>{action.sub}</div>
                           </div>
                         </div>
+                        {/* Format options */}
+                        {[
+                          {fmt:"CSV",  icon:"📊", sub:"Excel / Sheets", fn:action.csv},
+                          {fmt:"PDF",  icon:"📄", sub:"Print-ready",    fn:action.pdf},
+                          {fmt:"JSON", icon:"🗂", sub:"Raw backup",      fn:action.json},
+                        ].map(({fmt,icon,sub,fn},i,arr)=>(
+                          <div key={fmt} onClick={fn}
+                            style={{padding:"9px 16px 9px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,borderBottom:i<arr.length-1||ai<exportActions.length-1?`1px solid ${G.border}`:"none",transition:"background 0.1s"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=G.bg}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            <span style={{fontSize:15}}>{icon}</span>
+                            <div>
+                              <div style={{fontSize:12,fontWeight:600,color:G.text,fontFamily:G.sans}}>{fmt}</div>
+                              <div style={{fontSize:10,color:G.textL,fontFamily:G.mono}}>{sub}</div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ))}
-                    {(!p4Entries||p4Entries.length===0)&&(
-                      <div style={{padding:"10px 16px",fontSize:12,color:G.textL,fontFamily:G.mono,textAlign:"center"}}>No entries to export</div>
-                    )}
                   </div>
                 )}
               </div>
             )}
           </div>
           {/* Entries body */}
-          <div style={{flex:1,overflowY:"auto",padding:"16px 20px 32px"}}>
+          <div style={{flex:1,overflowY:"auto",padding:"14px 16px 32px"}}>
             {!selP3&&(
               <div style={{textAlign:"center",padding:"60px 20px"}}>
                 <div style={{fontSize:30,marginBottom:10}}>👆</div>
@@ -848,7 +919,7 @@ function AdminPanelInner({user}){
                   return(
                     <div key={note.id||i} style={{background:G.surface,borderRadius:11,border:`1px solid ${G.border}`,marginBottom:7,overflow:"hidden",boxShadow:G.shadowSm}}>
                       <div style={{height:3,background:tag.bg}}/>
-                      <div style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"90px 1fr 110px",alignItems:"center",gap:12}}>
+                      <div style={{padding:"10px 12px",display:"grid",gridTemplateColumns:"80px 1fr 90px",alignItems:"center",gap:10}}>
                         <div>
                           <div style={{fontFamily:G.display,fontSize:14,fontWeight:700,color:G.text,lineHeight:1}}>
                             {note.timeStart?fmt12(note.timeStart):"—"}
