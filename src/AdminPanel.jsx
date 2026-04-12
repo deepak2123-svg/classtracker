@@ -327,8 +327,7 @@ function AdminPanelInner({user}){
       teacher: teacherName, institute: selInst,
       class: className, subject: subject,
       type: e.tag||"", title: e.title||"",
-      notes: (e.body||"").replace(/
-/g," "),
+      notes: (e.body||"").replace(/\n/g," "),
     }));
   };
 
