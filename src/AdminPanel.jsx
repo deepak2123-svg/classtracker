@@ -186,6 +186,7 @@ function AdminPanelInner({user}){
   const [exportOpen,  setExportOpen]  = useState(false);
   const [deleteModal, setDeleteModal] = useState(null); // {type,label,lines,onConfirm}
   const [deleteBusy,  setDeleteBusy]  = useState(false);
+  const [deletedInstitutes, setDeletedInstitutes] = useState(new Set());
 
   useEffect(()=>{
     (async()=>{
@@ -215,8 +216,10 @@ function AdminPanelInner({user}){
     Object.values(fullData).forEach(d=>{
       (d.classes||[]).forEach(c=>{ if(c.institute) set.add(c.institute.trim()); });
     });
+    // Remove locally deleted institutes so they vanish immediately without reload
+    deletedInstitutes.forEach(i=>set.delete(i));
     return Array.from(set).sort();
-  },[teachers,fullData]);
+  },[teachers,fullData,deletedInstitutes]);
 
   const totalEntries=useMemo(()=>{
     let t=0;
@@ -368,6 +371,8 @@ function AdminPanelInner({user}){
       onConfirm: async () => {
         setDeleteBusy(true);
         await removeInstituteFromIndex(inst);
+        // Remove from local derived state immediately
+        setDeletedInstitutes(s => new Set([...s, inst.trim()]));
         // Update local teacher index
         setTeachers(ts => ts.map(t => ({
           ...t,
