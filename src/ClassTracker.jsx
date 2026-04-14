@@ -564,7 +564,7 @@ export default function ClassTracker({user}){
 
                     {dateNotes.length===0?(
                       <div style={{textAlign:"center",padding:"18px 10px",color:G.textL,fontSize:13,fontStyle:"italic"}}>
-                        {canAdd?"No entries yet — tap "+ Add Entry" to log this class.":"No entries for this date."}
+                        {canAdd?'No entries yet — tap "+ Add Entry" to log this class.':"No entries for this date."}
                       </div>
                     ):(
                       <div style={{display:"flex",flexDirection:"column",gap:8}}>
