@@ -614,6 +614,34 @@ function AdminPanelInner({user}){
       </div>
       <div style={{maxWidth:860,margin:"0 auto",padding:"20px 16px 72px"}}>
         <h2 style={{fontSize:22,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:6}}>Manage Access</h2>
+
+        {/* ── Institute Management ── */}
+        <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:24}}>
+          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Manage Institutes</div>
+          <div style={{fontSize:12,color:G.textM,marginBottom:14}}>Delete an institute to remove it from the list. Teachers and their data are not affected.</div>
+          {institutes.length===0
+            ?<div style={{fontSize:13,color:G.textL,fontStyle:"italic"}}>No institutes yet.</div>
+            :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {institutes.map(inst=>{
+                const tCount=teachers.filter(t=>{const d=fullData[t.uid];if(d)return(d.classes||[]).some(c=>(c.institute||"").trim()===inst.trim());return(t.institutes||[]).some(i=>i.trim()===inst.trim());}).length;
+                const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())).length;
+                return(
+                  <div key={inst} style={{background:G.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.display}}>{inst}</div>
+                      <div style={{fontSize:11,color:G.textM,marginTop:2,fontFamily:G.mono}}>{clsCount} class{clsCount!==1?"es":""} · {tCount} teacher{tCount!==1?"s":""}</div>
+                    </div>
+                    <button onClick={()=>handleDeleteInstitute(inst)}
+                      style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"7px 14px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,flexShrink:0,whiteSpace:"nowrap"}}>
+                      Delete Institute
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          }
+        </div>
+
         <p style={{fontSize:13,color:G.textM,marginBottom:20}}>Promote teachers to admin, or generate an invite link to give someone direct admin access.</p>
 
         {/* Invite link generator */}
@@ -776,11 +804,7 @@ function AdminPanelInner({user}){
                       <span style={{fontSize:9,color:G.textL,fontFamily:G.mono}}>{tCount} teacher{tCount!==1?"s":""}</span>
                     </div>
                   </div>
-                  <button onClick={e=>{e.stopPropagation();handleDeleteInstitute(inst);}}
-                    style={{flexShrink:0,background:G.redL,border:"1px solid #F5CACA",borderRadius:7,width:26,height:26,cursor:"pointer",fontSize:12,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}
-                    title="Delete institute">
-                    🗑
-                  </button>
+
                 </div>
               );
             })}
@@ -908,8 +932,6 @@ function AdminPanelInner({user}){
                     🗑
                   </button>
                 </div>
-              );
-            })}
               );
             })}
 
