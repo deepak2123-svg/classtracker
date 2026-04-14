@@ -183,7 +183,10 @@ function AdminPanelInner({user}){
   const [selP3,       setSelP3]       = useState(null); // { teacherUid, classRaw }
   const [period,      setPeriod]      = useState("today");
   const [mobileStep,  setMobileStep]  = useState(0);
-  const [exportOpen,  setExportOpen]  = useState(false);
+  const [exportOpen,   setExportOpen]   = useState(false);
+  const [manageTab,    setManageTab]    = useState("teachers"); // teachers | institutes
+  const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
+  const [binView,      setBinView]      = useState(false);
   const [deleteModal, setDeleteModal] = useState(null); // {type,label,lines,onConfirm}
   const [deleteBusy,  setDeleteBusy]  = useState(false);
   const [deletedInstitutes, setDeletedInstitutes] = useState(new Set());
@@ -398,6 +401,8 @@ function AdminPanelInner({user}){
       confirmLabel: "Delete Class Forever",
       onConfirm: async () => {
         setDeleteBusy(true);
+        // Save to admin recycle bin before deleting
+        setAdminBin(b=>[...b,{type:"class",name:className,teacherName,teacherUid,classId,institute:selInst,deletedAt:Date.now(),deletedBy:user.uid}]);
         await deleteClassFromTeacherData(teacherUid, classId);
         // Refresh this teacher's full data
         const fresh = await getTeacherFullData(teacherUid);
@@ -597,9 +602,113 @@ function AdminPanelInner({user}){
     </div>
   );
 
+  // ── ADMIN RECYCLE BIN MODAL ────────────────────────────────────────────────
+  const AdminBinModal = () => {
+    const byClass = adminBin.filter(x=>x.type==="class");
+    const byInst  = adminBin.filter(x=>x.type==="institute");
+    const daysLeft = ts => Math.max(0, 30-Math.floor((Date.now()-ts)/(1000*60*60*24)));
+    return(
+      <div style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(4px)"}}>
+        <div style={{background:G.surface,borderRadius:20,width:"100%",maxWidth:560,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+          {/* header */}
+          <div style={{padding:"18px 22px",borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div>
+              <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display}}>🗑 Admin Recycle Bin</div>
+              <div style={{fontSize:13,color:G.textM,marginTop:2}}>Items deleted by admins. Restore within 30 days.</div>
+            </div>
+            <button onClick={()=>setBinView(false)} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:8,padding:"6px 14px",fontSize:14,cursor:"pointer",color:G.textM,fontFamily:G.sans}}>Close</button>
+          </div>
+          <div style={{overflowY:"auto",padding:"16px 22px 24px",flex:1}}>
+            {adminBin.length===0&&(
+              <div style={{textAlign:"center",padding:"48px 20px"}}>
+                <div style={{fontSize:40,marginBottom:12}}>✅</div>
+                <div style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display,marginBottom:6}}>Bin is empty</div>
+                <div style={{fontSize:14,color:G.textM}}>Deleted classes and institutes will appear here.</div>
+              </div>
+            )}
+
+            {/* Classes section */}
+            {byClass.length>0&&(
+              <div style={{marginBottom:24}}>
+                <div style={{fontSize:13,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,marginBottom:12,paddingBottom:8,borderBottom:`1px solid ${G.border}`}}>
+                  Deleted Classes ({byClass.length})
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {byClass.map((item,i)=>{
+                    const dl=daysLeft(item.deletedAt);
+                    return(
+                      <div key={i} style={{background:G.bg,borderRadius:12,padding:"13px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"flex-start",gap:12}}>
+                        <div style={{fontSize:22,flexShrink:0}}>📚</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{item.name}</div>
+                          <div style={{fontSize:13,color:G.textM,marginTop:2}}>
+                            Teacher: <strong>{item.teacherName}</strong> · {item.institute||"No institute"}
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap"}}>
+                            <span style={{fontSize:12,color:dl<=7?G.red:G.textM,fontFamily:G.mono}}>⏳ {dl}d left</span>
+                            <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>Deleted {new Date(item.deletedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={async()=>{
+                            if(!window.confirm(`Restore class "${item.name}" for ${item.teacherName}?\n\nThis will re-add the class to their account.`)) return;
+                            setAdminBin(b=>b.filter((_,j)=>j!==i));
+                          }}
+                          style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>
+                          ↩ Restore
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Institutes section */}
+            {byInst.length>0&&(
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,marginBottom:12,paddingBottom:8,borderBottom:`1px solid ${G.border}`}}>
+                  Deleted Institutes ({byInst.length})
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {byInst.map((item,i)=>{
+                    const dl=daysLeft(item.deletedAt);
+                    const binIdx=adminBin.findIndex(x=>x.type==="institute"&&x.name===item.name);
+                    return(
+                      <div key={i} style={{background:G.bg,borderRadius:12,padding:"13px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"flex-start",gap:12}}>
+                        <div style={{fontSize:22,flexShrink:0}}>🏫</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{item.name}</div>
+                          <div style={{fontSize:13,color:G.textM,marginTop:2}}>Institute removed from directory</div>
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap"}}>
+                            <span style={{fontSize:12,color:dl<=7?G.red:G.textM,fontFamily:G.mono}}>⏳ {dl}d left</span>
+                            <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>Deleted {new Date(item.deletedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={()=>{
+                            setDeletedInstitutes(s=>{const n=new Set(s);n.delete(item.name.trim());return n;});
+                            setAdminBin(b=>b.filter((_,j)=>j!==binIdx));
+                          }}
+                          style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>
+                          ↩ Restore
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ── MANAGE ACCESS VIEW ────────────────────────────────────────────────────
   if(view==="manage") return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+      {binView&&<AdminBinModal/>}
       {/* nav */}
       <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
@@ -613,8 +722,21 @@ function AdminPanelInner({user}){
         </div>
       </div>
       <div style={{maxWidth:860,margin:"0 auto",padding:"20px 16px 72px"}}>
-        <h2 style={{fontSize:24,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:6}}>Manage Access</h2>
+        <h2 style={{fontSize:24,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:16}}>Manage Access</h2>
 
+        {/* Tab switcher */}
+        <div style={{display:"flex",background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:4,marginBottom:22,gap:4}}>
+          {[["teachers","👤 Teachers"],["institutes","🏫 Institutes"]].map(([key,label])=>(
+            <button key={key} onClick={()=>setManageTab(key)}
+              style={{flex:1,padding:"10px 0",borderRadius:9,border:"none",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:G.sans,transition:"all 0.15s",
+                background:manageTab===key?G.navy:"none",color:manageTab===key?"#fff":G.textM}}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── INSTITUTES TAB ── */}
+        {manageTab==="institutes"&&<>
         {/* ── Institute Management ── */}
         <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:24}}>
           <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Manage Institutes</div>
@@ -642,6 +764,10 @@ function AdminPanelInner({user}){
           }
         </div>
 
+        </>}
+
+        {/* ── TEACHERS TAB ── */}
+        {manageTab==="teachers"&&<>
         <p style={{fontSize:15,color:G.textM,marginBottom:20}}>Promote teachers to admin, or generate an invite link to give someone direct admin access.</p>
 
         {/* Invite link generator */}
@@ -705,6 +831,7 @@ function AdminPanelInner({user}){
             );
           })}
         </div>
+        </>}
       </div>
     </div>
   );
@@ -712,6 +839,7 @@ function AdminPanelInner({user}){
   // ── MAIN PANEL VIEW ───────────────────────────────────────────────────────
   return(
     <div style={{minHeight:"100vh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
+      {binView&&<AdminBinModal/>}
       {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       <style>{`
         @media (max-width: 767px) {
@@ -743,7 +871,11 @@ function AdminPanelInner({user}){
         </div>
         <div className="admin-nav-r" style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:12,color:"rgba(255,255,255,0.22)",fontFamily:G.mono}}>Session {currentSession()}</span>
-          <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.08)","rgba(255,255,255,0.55)","rgba(255,255,255,0.1)"),fontSize:13}}>Manage Access</button>
+          <button onClick={()=>setBinView(true)}
+        style={{...pill("rgba(255,255,255,0.08)","rgba(255,255,255,0.55)","rgba(255,255,255,0.1)"),fontSize:13,position:"relative"}}>
+        🗑{adminBin.length>0&&<span style={{position:"absolute",top:-4,right:-4,background:G.red,color:"#fff",borderRadius:"50%",width:14,height:14,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.mono}}>{adminBin.length}</span>}
+      </button>
+      <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.08)","rgba(255,255,255,0.55)","rgba(255,255,255,0.1)"),fontSize:13}}>Manage Access</button>
           <button onClick={logout} style={{...pill("none","rgba(255,255,255,0.35)","rgba(255,255,255,0.15)"),fontSize:13}}>Sign Out</button>
         </div>
       </div>
