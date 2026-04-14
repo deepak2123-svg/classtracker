@@ -22,7 +22,7 @@ export const MONTHS = ["January","February","March","April","May","June",
 
 export const inp = {
   width:"100%", padding:"11px 14px", borderRadius:10,
-  border:"1.5px solid #E5E5E5", fontSize:15,
+  border:"1.5px solid #E5E5E5", fontSize:17,
   fontFamily:"Georgia,serif", outline:"none",
   background:"#fff", boxSizing:"border-box", marginBottom:10,
 };
@@ -47,7 +47,7 @@ export function Spinner({ text="Loading…" }) {
     <div style={{minHeight:"100vh",background:"#F7F8F6",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14}}>
       <div style={{width:36,height:36,borderRadius:"50%",border:"3px solid #E5E5E5",borderTopColor:"#1B8A4C",animation:"spin 0.8s linear infinite"}}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{color:"#aaa",fontSize:13,fontFamily:"monospace"}}>{text}</div>
+      <div style={{color:"#aaa",fontSize:15,fontFamily:"'Inter',sans-serif"}}>{text}</div>
     </div>
   );
 }
