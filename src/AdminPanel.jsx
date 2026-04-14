@@ -355,7 +355,11 @@ function AdminPanelInner({user}){
     await promoteToAdmin(uid,user.uid);
     setRoles(r=>({...r,[uid]:"admin"}));
   };
-  const handleDemote=async(uid)=>{\n    if(!window.confirm("Remove admin access?")) return;\n    await demoteToTeacher(uid);\n    setRoles(r=>({...r,[uid]:"teacher"}));\n  };
+  const handleDemote=async(uid)=>{
+    if(!window.confirm("Remove admin access?")) return;
+    await demoteToTeacher(uid);
+    setRoles(r=>({...r,[uid]:"teacher"}));
+  };
 
   // ── Delete handlers ───────────────────────────────────────────────────────
   const confirmDelete = (modal) => setDeleteModal(modal);
