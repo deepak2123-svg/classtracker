@@ -761,11 +761,9 @@ function AdminPanelInner({user}){
                     return s+(d.classes||[]).filter(c=>c.institute===inst).length;
                   },0) || teachers.filter(t=>(t.institutes||[]).includes(inst)).length;
               return(
-                <div key={inst} style={{position:"relative"}}
-                  onMouseEnter={e=>e.currentTarget.querySelector(".inst-del").style.opacity="1"}
-                  onMouseLeave={e=>e.currentTarget.querySelector(".inst-del").style.opacity="0"}>
+                <div key={inst} style={{position:"relative",display:"flex",alignItems:"center",gap:4}}>
                   <div onClick={()=>{onSelectInstitute(inst);setMobileStep(1);}}
-                    style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent",paddingRight:28}}
+                    style={{...siBase,flex:1,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                     onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                     onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
                     <div style={{fontSize:13,fontWeight:isSel?700:500,color:isSel?G.blue:G.textS}}>{inst}</div>
@@ -774,8 +772,9 @@ function AdminPanelInner({user}){
                       <span style={{fontSize:9,color:G.textL,fontFamily:G.mono}}>{tCount} teacher{tCount!==1?"s":""}</span>
                     </div>
                   </div>
-                  <button className="inst-del" onClick={e=>{e.stopPropagation();handleDeleteInstitute(inst);}}
-                    style={{position:"absolute",top:"50%",right:6,transform:"translateY(-50%)",opacity:0,transition:"opacity 0.15s",background:G.redL,border:"none",borderRadius:6,width:20,height:20,cursor:"pointer",fontSize:10,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                  <button onClick={e=>{e.stopPropagation();handleDeleteInstitute(inst);}}
+                    style={{flexShrink:0,background:G.redL,border:"1px solid #F5CACA",borderRadius:7,width:26,height:26,cursor:"pointer",fontSize:12,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}
+                    title="Delete institute">
                     🗑
                   </button>
                 </div>
@@ -881,15 +880,14 @@ function AdminPanelInner({user}){
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
             {!selP2&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:12,fontStyle:"italic"}}>Select from left</div>}
 
+
             {selP2&&tab==="teacher"&&p3Items.map(cls=>{
               const isSel=selP3?.classId===cls.classId;
               const tName=fullData[selP2]?.profile?.name||"";
               return(
-                <div key={cls.classId} style={{position:"relative"}}
-                  onMouseEnter={e=>e.currentTarget.querySelector(".cls-del")&&(e.currentTarget.querySelector(".cls-del").style.opacity="1")}
-                  onMouseLeave={e=>e.currentTarget.querySelector(".cls-del")&&(e.currentTarget.querySelector(".cls-del").style.opacity="0")}>
+                <div key={cls.classId} style={{display:"flex",alignItems:"flex-start",gap:4}}>
                   <div onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
-                    style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent",paddingRight:26}}
+                    style={{...siBase,flex:1,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                     onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                     onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
                     <div style={{fontSize:13,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
@@ -900,11 +898,14 @@ function AdminPanelInner({user}){
                       </span>
                     </div>
                   </div>
-                  <button className="cls-del" onClick={e=>{e.stopPropagation();handleDeleteClass(selP2,cls.classId,cls.display,tName);}}
-                    style={{position:"absolute",top:8,right:5,opacity:0,transition:"opacity 0.15s",background:G.redL,border:"none",borderRadius:6,width:20,height:20,cursor:"pointer",fontSize:10,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                  <button onClick={e=>{e.stopPropagation();handleDeleteClass(selP2,cls.classId,cls.display,tName);}}
+                    style={{flexShrink:0,marginTop:8,background:G.redL,border:"1px solid #F5CACA",borderRadius:7,width:26,height:26,cursor:"pointer",fontSize:12,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}
+                    title="Delete class">
                     🗑
                   </button>
                 </div>
+              );
+            })}
               );
             })}
 
