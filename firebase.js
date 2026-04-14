@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import {
   getFirestore, doc, getDoc, setDoc, collection,
-  getDocs, query, where,
+  getDocs, query, where, deleteDoc,
 } from "firebase/firestore";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup,
@@ -67,27 +67,8 @@ export async function loadUserData(uid) {
     // 3. Merge into the shape the app expects: { notes: { [cid]: { [dk]: [...] } } }
     const notes = Object.fromEntries(notesList);
 
-    // Back-compat: check if ANY separate notes doc actually had data
-    // (not just that the keys exist — they always exist from the classes array)
-    const anyNewNotesExist = Object.values(notes).some(
-      classNotes => Object.keys(classNotes).length > 0
-    );
-
-    if (anyNewNotesExist) {
-      // New split format — use separate docs
-      return { ...main, notes };
-    } else {
-      // Old format — notes embedded in main doc, or teacher has no entries yet
-      // Merge old notes with any empty new-format entries
-      const oldNotes = main.notes || {};
-      const merged = { ...notes };
-      Object.entries(oldNotes).forEach(([cid, dateMap]) => {
-        if (!merged[cid] || Object.keys(merged[cid]).length === 0) {
-          merged[cid] = dateMap;
-        }
-      });
-      return { ...main, notes: merged };
-    }
+    // Back-compat: if notes were stored in the old main doc, use those
+    return { ...main, notes: Object.keys(notes).length ? notes : (main.notes || {}) };
   } catch { return null; }
 }
 
@@ -237,4 +218,62 @@ export async function getInvites(adminUid) {
     return snap.docs.map(d => ({ token: d.id, ...d.data() }))
       .sort((a, b) => b.createdAt - a.createdAt);
   } catch { return []; }
+}
+
+// ── Remove teacher from system ────────────────────────────────────────────────
+// Deletes the teacher index entry and their role doc.
+// Their appdata (classes/notes) is NOT deleted — kept for admin audit trail.
+// Firebase Auth account is also kept (can't delete other users from client SDK).
+export async function removeTeacherFromSystem(uid) {
+  try { await deleteDoc(doc(db, "teachers", uid)); } catch {}
+  try { await deleteDoc(doc(db, "roles", uid)); } catch {}
+}
+
+// ── Remove institute ──────────────────────────────────────────────────────────
+// Strips this institute from every teacher's index entry.
+// Teachers are NOT deleted — they may belong to other institutes.
+export async function removeInstituteFromIndex(instituteName) {
+  try {
+    const snap = await getDocs(collection(db, "teachers"));
+    const norm = (s) => (s||"").trim().toLowerCase();
+    const updates = [];
+    snap.docs.forEach(d => {
+      const data = d.data();
+      const filtered = (data.institutes||[]).filter(i => norm(i) !== norm(instituteName));
+      if (filtered.length !== (data.institutes||[]).length) {
+        updates.push(setDoc(doc(db, "teachers", d.id), { ...data, institutes: filtered }));
+      }
+    });
+    await Promise.all(updates);
+  } catch (e) { console.error("removeInstituteFromIndex", e); }
+}
+
+// ── Delete a class entry from teacher's data ──────────────────────────────────
+export async function deleteEntryFromTeacherData(uid, classId, dateKey, entryId) {
+  try {
+    const data = await loadUserData(uid);
+    if (!data) return;
+    const classNotes = (data.notes || {})[classId] || {};
+    const dayArr = (classNotes[dateKey] || []).filter(e => e.id !== entryId);
+    const updatedNotes = {
+      ...data.notes,
+      [classId]: { ...classNotes, [dateKey]: dayArr },
+    };
+    await saveUserData(uid, { ...data, notes: updatedNotes });
+  } catch (e) { console.error("deleteEntryFromTeacherData", e); }
+}
+
+// ── Delete an entire class from teacher's data ────────────────────────────────
+export async function deleteClassFromTeacherData(uid, classId) {
+  try {
+    const data = await loadUserData(uid);
+    if (!data) return;
+    const updatedClasses = (data.classes || []).filter(c => c.id !== classId);
+    const updatedNotes = Object.fromEntries(
+      Object.entries(data.notes || {}).filter(([k]) => k !== classId)
+    );
+    await saveUserData(uid, { ...data, classes: updatedClasses, notes: updatedNotes });
+    // Also clean up notes sub-docs if any
+    try { await deleteClassNotes(uid, classId); } catch {}
+  } catch (e) { console.error("deleteClassFromTeacherData", e); }
 }
