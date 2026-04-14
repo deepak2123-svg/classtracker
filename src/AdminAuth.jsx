@@ -6,7 +6,7 @@ import { friendlyError } from "./shared.jsx";
 const G = {
   navy:"#1A2F5A", blueV:"#3B82F6", blueL:"#DBEAFE",
   blue:"#1D4ED8", bg:"#F7F8FC", border:"#E2E8F0",
-  text:"#0E1F18", textM:"#64748B", textL:"#94A3B8",
+  text:"#0E1F18", textM:"#4B5563", textL:"#6B7280",
   red:"#C93030", sans:"'Inter',sans-serif",
   display:"'Poppins',sans-serif", mono:"'JetBrains Mono',monospace",
 };
@@ -87,9 +87,9 @@ export default function AdminAuth({ onVerified }) {
       {/* Logo */}
       <div style={{marginBottom:32,textAlign:"center"}}>
         <div style={{width:60,height:60,borderRadius:18,background:G.blueV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(59,130,246,0.4)"}}>🔐</div>
-        <div style={{fontSize:12,fontFamily:G.mono,letterSpacing:3,color:"rgba(255,255,255,0.3)",textTransform:"uppercase",marginBottom:5}}>ClassLog</div>
+        <div style={{fontSize:12,fontFamily:G.mono,letterSpacing:3,color:"rgba(255,255,255,0.65)",textTransform:"uppercase",marginBottom:5}}>ClassLog</div>
         <h1 style={{fontSize:24,fontWeight:700,color:"#fff",fontFamily:G.display,letterSpacing:-0.4,margin:0}}>Admin Portal</h1>
-        <p style={{fontSize:15,color:"rgba(255,255,255,0.35)",marginTop:6}}>
+        <p style={{fontSize:15,color:"rgba(255,255,255,0.7)",marginTop:6}}>
           {inviteValid
             ? "You've been invited — sign in to activate access"
             : "Restricted access · invite required"}
@@ -144,7 +144,7 @@ export default function AdminAuth({ onVerified }) {
                 {loading?"Activating…":"Sign In & Activate Access"}
               </button>
               <button type="button" onClick={()=>{setMode("choose");setError("");}}
-                style={{background:"none",border:"none",color:"rgba(255,255,255,0.3)",fontSize:14,cursor:"pointer",fontFamily:G.mono}}>
+                style={{background:"none",border:"none",color:"rgba(255,255,255,0.65)",fontSize:14,cursor:"pointer",fontFamily:G.mono}}>
                 ← Back
               </button>
             </form>

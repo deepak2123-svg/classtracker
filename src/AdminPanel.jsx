@@ -9,23 +9,22 @@ import { Avatar, todayKey, formatPeriod, TAG_STYLES } from "./shared.jsx";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const G = {
-  // Nav & accents — blue theme (distinct from teacher green)
   navy:  "#1A2F5A",   navyS: "#243D72",
   blue:  "#1D4ED8",   blueV: "#3B82F6",  blueL: "#DBEAFE",
-  // Surfaces — same light palette as teacher
-  bg:     "#F7F8FC",  surface:"#FFFFFF",
-  border: "#E2E8F0",  borderM:"#CBD5E1",
-  // Text — same as teacher
-  text:"#0E1F18", textS:"#2D3748", textM:"#64748B", textL:"#94A3B8",
-  // Status
+  bg:     "#F5F7FA",  surface:"#FFFFFF",
+  border: "#DDE3ED",  borderM:"#BCC8DC",
+  // Text — high contrast for mobile readability
+  text:  "#111827",   // near-black — all primary text
+  textS: "#1F2937",   // dark secondary
+  textM: "#4B5563",   // medium — was #64748B (too light), now darker
+  textL: "#6B7280",   // labels — was #94A3B8 (too faint), now visible
   red:"#C93030",  redL:"#FDF1F1",
   amber:"#B45309",amberL:"#FEF3C7",
-  // Typography
   mono:"'JetBrains Mono',monospace",
   sans:"'Inter',sans-serif",
   display:"'Poppins',sans-serif",
-  shadowSm:"0 1px 3px rgba(15,23,42,0.06),0 1px 2px rgba(15,23,42,0.04)",
-  shadowMd:"0 4px 12px rgba(15,23,42,0.08),0 2px 4px rgba(15,23,42,0.04)",
+  shadowSm:"0 1px 4px rgba(15,23,42,0.08),0 1px 2px rgba(15,23,42,0.05)",
+  shadowMd:"0 4px 14px rgba(15,23,42,0.10),0 2px 4px rgba(15,23,42,0.05)",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -137,8 +136,8 @@ const pill=(bg,color,border)=>({background:bg,color,border:`1px solid ${border||
 
 // ── Panel styles ──────────────────────────────────────────────────────────────
 const sidePanel={flexShrink:0,background:G.surface,borderRight:`1px solid ${G.border}`,display:"flex",flexDirection:"column",overflow:"hidden"};
-const panelLabel={fontSize:12,letterSpacing:1.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"12px 14px 7px",flexShrink:0};
-const siBase={padding:"11px 12px",borderRadius:9,cursor:"pointer",marginBottom:3,borderLeft:"3px solid transparent",transition:"background 0.1s"};
+const panelLabel={fontSize:11,letterSpacing:1.5,color:G.textM,fontFamily:G.sans,fontWeight:600,textTransform:"uppercase",padding:"12px 14px 7px",flexShrink:0};
+const siBase={padding:"12px 13px",borderRadius:9,cursor:"pointer",marginBottom:3,borderLeft:"3px solid transparent",transition:"background 0.1s"};
 
 // ── Error Boundary ───────────────────────────────────────────────────────────
 class ErrorBoundary extends Component {
@@ -751,7 +750,7 @@ function AdminPanelInner({user}){
                   <div key={inst} style={{background:G.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
                     <div>
                       <div style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{inst}</div>
-                      <div style={{fontSize:13,color:G.textM,marginTop:2,fontFamily:G.mono}}>{clsCount} class{clsCount!==1?"es":""} · {tCount} teacher{tCount!==1?"s":""}</div>
+                      <div style={{fontSize:14,color:G.textM,marginTop:3,fontFamily:G.sans,fontWeight:500}}>{clsCount} class{clsCount!==1?"es":""} · {tCount} teacher{tCount!==1?"s":""}</div>
                     </div>
                     <button onClick={()=>handleDeleteInstitute(inst)}
                       style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"7px 14px",fontSize:14,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,flexShrink:0,whiteSpace:"nowrap"}}>
@@ -815,7 +814,7 @@ function AdminPanelInner({user}){
                   {(name[0]||"?").toUpperCase()}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{name}{isMe&&<span style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginLeft:6}}>(you)</span>}</div>
+                  <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{name}{isMe&&<span style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginLeft:6}}>(you)</span>}</div>
                   <div style={{fontSize:14,color:G.textM,marginTop:2}}>{(t.institutes||[]).join(" · ")||"No institute yet"}</div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
@@ -861,22 +860,22 @@ function AdminPanelInner({user}){
       `}</style>
 
       {/* Nav */}
-      <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+      <div style={{background:G.navy,minHeight:64,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 18px",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.08)",gap:12}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
-          <div style={{width:28,height:28,background:G.blueV,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>🎓</div>
+          <div style={{width:36,height:36,background:G.blueV,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🎓</div>
           <div>
-            <div style={{fontFamily:G.display,fontSize:16,fontWeight:700,color:"#fff",lineHeight:1}}>ClassLog</div>
-            <div style={{fontSize:11,letterSpacing:2,color:"rgba(255,255,255,0.25)",fontFamily:G.mono,textTransform:"uppercase",marginTop:1}}>Admin Panel</div>
+            <div style={{fontFamily:G.display,fontSize:18,fontWeight:700,color:"#fff",lineHeight:1.2,letterSpacing:-0.3}}>ClassLog</div>
+            <div style={{fontSize:11,letterSpacing:2,color:"rgba(255,255,255,0.45)",fontFamily:G.mono,textTransform:"uppercase",marginTop:2}}>Admin Panel</div>
           </div>
         </div>
         <div className="admin-nav-r" style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:12,color:"rgba(255,255,255,0.22)",fontFamily:G.mono}}>Session {currentSession()}</span>
+          <span className="desktop-only" style={{fontSize:13,color:"rgba(255,255,255,0.5)",fontFamily:G.sans}}>Session {currentSession()}</span>
           <button onClick={()=>setBinView(true)}
         style={{...pill("rgba(255,255,255,0.08)","rgba(255,255,255,0.55)","rgba(255,255,255,0.1)"),fontSize:13,position:"relative"}}>
         🗑{adminBin.length>0&&<span style={{position:"absolute",top:-4,right:-4,background:G.red,color:"#fff",borderRadius:"50%",width:14,height:14,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.mono}}>{adminBin.length}</span>}
       </button>
-      <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.08)","rgba(255,255,255,0.55)","rgba(255,255,255,0.1)"),fontSize:13}}>Manage Access</button>
-          <button onClick={logout} style={{...pill("none","rgba(255,255,255,0.35)","rgba(255,255,255,0.15)"),fontSize:13}}>Sign Out</button>
+      <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.12)","rgba(255,255,255,0.85)","rgba(255,255,255,0.2)"),fontSize:14,fontWeight:500}}>Manage Access</button>
+          <button onClick={logout} style={{...pill("none","rgba(255,255,255,0.65)","rgba(255,255,255,0.2)"),fontSize:14}}>Sign Out</button>
         </div>
       </div>
 
@@ -946,7 +945,7 @@ function AdminPanelInner({user}){
         {/* ── P2: Toggle + Teacher or Class list ── */}
         <div className="admin-side-panel admin-p2" style={{...sidePanel,width:205,background:G.surface,borderRight:`1px solid ${G.border}`}}>
           <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-            <div style={{fontFamily:G.display,fontSize:16,fontWeight:700,color:G.text,marginBottom:10}}>{selInst||"—"}</div>
+            <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text,marginBottom:10}}>{selInst||"—"}</div>
             {/* Toggle */}
             <div style={{display:"flex",gap:0,background:G.bg,borderRadius:8,padding:3,border:`1px solid ${G.border}`}}>
               {["teacher","class"].map(t=>(
@@ -1012,7 +1011,7 @@ function AdminPanelInner({user}){
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
                   <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
-                  <div style={{fontSize:12,color:G.textM,fontFamily:G.mono,marginTop:2}}>{cls.subject}</div>
+                  <div style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginTop:3}}>{cls.subject}</div>
                   <div style={{marginTop:4}}>
                     <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
                       {cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}
@@ -1173,7 +1172,7 @@ function AdminPanelInner({user}){
             <span style={{fontSize:13,color:G.textL,fontFamily:G.mono}}>Period:</span>
             {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
               <button key={k} onClick={()=>setPeriod(k)}
-                style={{padding:"5px 12px",borderRadius:16,fontSize:13,cursor:"pointer",border:`1px solid ${G.border}`,fontFamily:G.mono,transition:"all 0.12s",background:period===k?G.navy:"none",color:period===k?G.blueV:G.textM,borderColor:period===k?G.navy:G.border}}>
+                style={{padding:"6px 14px",borderRadius:16,fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,transition:"all 0.12s",background:period===k?G.navy:G.surface,color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`}}>
                 {l}
               </button>
             ))}

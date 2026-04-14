@@ -6,14 +6,18 @@ import { TAG_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeri
 const G = {
   forest:"#152B22",  forestS:"#1E3D2F",
   green:"#1B8A4C",   greenV:"#34D077",  greenL:"#E8F8EF",
-  bg:"#F7F8F6",      surface:"#FFFFFF",
-  border:"#E6EAE8",  borderM:"#C8D4CE",
-  text:"#0E1F18",    textS:"#2D4039",  textM:"#5C7268",  textL:"#94ADA5",
+  bg:"#F5F7F5",      surface:"#FFFFFF",
+  border:"#D9E4DC",  borderM:"#B8CEC2",
+  // High contrast text — primary reading on mobile
+  text:  "#111827",   // near-black
+  textS: "#1F2937",
+  textM: "#374151",   // was #5C7268 (too light) — now clearly readable
+  textL: "#6B7280",   // was #94ADA5 (too faint) — now visible
   red:"#C93030",     redL:"#FDF1F1",
-  navy:"#0E1F18",
-  shadowSm:"0 1px 3px rgba(14,31,24,0.06),0 1px 2px rgba(14,31,24,0.04)",
-  shadowMd:"0 4px 12px rgba(14,31,24,0.08),0 2px 4px rgba(14,31,24,0.04)",
-  shadowLg:"0 12px 32px rgba(14,31,24,0.12),0 4px 8px rgba(14,31,24,0.06)",
+  navy:"#111827",
+  shadowSm:"0 1px 4px rgba(14,31,24,0.08)",
+  shadowMd:"0 4px 14px rgba(14,31,24,0.10)",
+  shadowLg:"0 12px 32px rgba(14,31,24,0.12)",
   mono:"'JetBrains Mono',monospace",
   sans:"'Inter',sans-serif",
   display:"'Poppins',sans-serif",
@@ -499,12 +503,12 @@ export default function ClassTracker({user}){
       <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"14px 16px 12px",position:"sticky",top:56,zIndex:90}}>
         <div style={{maxWidth:800,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <h1 className="greeting-name" style={{fontSize:22,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.3,flex:1}}>{teacherName} 👋</h1>
-            <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.greenL,borderRadius:20,padding:"3px 10px",fontSize:13,color:G.green,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>📅 {currentSession()}</span>
+            <h1 className="greeting-name" style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,flex:1}}>{teacherName} 👋</h1>
+            <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.greenL,borderRadius:20,padding:"4px 12px",fontSize:14,color:G.green,fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>📅 {currentSession()}</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-            <span style={{fontSize:14,fontWeight:600,color:G.textM,fontFamily:G.sans}}>{selDateObj.dayName},</span>
-            <span style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>{selDateObj.num} {selDateObj.monthFull} {selDateObj.year}</span>
+            <span style={{fontSize:16,fontWeight:600,color:G.textM,fontFamily:G.sans}}>{selDateObj.dayName},</span>
+            <span style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display}}>{selDateObj.num} {selDateObj.monthFull} {selDateObj.year}</span>
           </div>
           <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={allNoteDates}/>
         </div>
@@ -536,7 +540,7 @@ export default function ClassTracker({user}){
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                      <div style={{fontSize:14,color:G.textM,marginTop:2,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                      <div style={{fontSize:15,color:G.textM,marginTop:3,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
                         <span>🏫 {cls.institute}</span>
                         {cls.subject&&<><span style={{color:G.textL}}>·</span><span>{cls.subject}</span></>}
                       </div>
@@ -565,8 +569,8 @@ export default function ClassTracker({user}){
                   {/* Selected date entries */}
                   <div style={{padding:"12px 16px 14px",borderTop:`1px solid ${G.border}`,background:G.bg}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:dateNotes.length>0?10:0}}>
-                      <span style={{fontSize:14,color:G.textM,fontWeight:600}}>
-                        {formatDateLabel(selectedDate)} · <span style={{color:dateNotes.length>0?G.green:G.textL}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span>
+                      <span style={{fontSize:15,color:G.textS,fontWeight:600}}>
+                        {formatDateLabel(selectedDate)} · <span style={{color:dateNotes.length>0?G.green:G.textM,fontWeight:700}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span>
                       </span>
                       {canAdd&&(
                         <button onClick={()=>{setActiveClass(cls);setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
@@ -577,8 +581,8 @@ export default function ClassTracker({user}){
                     </div>
 
                     {dateNotes.length===0?(
-                      canAdd&&<div style={{padding:"10px 0 2px",color:G.textL,fontSize:14,fontStyle:"italic"}}>
-                        No entries yet — tap "+ Add Entry" to log this class.
+                      canAdd&&<div style={{padding:"10px 0 2px",color:G.textM,fontSize:15}}>
+                        No entries yet — tap + Add Entry to log this class.
                       </div>
                     ):(
                       <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -592,10 +596,10 @@ export default function ClassTracker({user}){
                                   <div style={{flex:1,minWidth:0}}>
                                     <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:note.title?6:0}}>
                                       <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"2px 9px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
-                                      {note.timeStart&&<span style={{fontSize:12,color:G.textL,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"2px 9px",border:`1px solid ${G.border}`}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
+                                      {note.timeStart&&<span style={{fontSize:13,color:G.textM,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:500}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
                                     </div>
                                     {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display,lineHeight:1.3}}>{note.title}</div>}
-                                    {note.body&&<p style={{margin:"7px 0 0",fontSize:15,color:G.textS,lineHeight:1.65,whiteSpace:"pre-wrap"}}>{note.body}</p>}
+                                    {note.body&&<p style={{margin:"8px 0 0",fontSize:16,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
                                   </div>
                                   <div style={{display:"flex",gap:5,flexShrink:0}}>
                                     <button onClick={()=>{setActiveClass(cls);setEditNote({...note});setView("editNote");}}
