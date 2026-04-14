@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes } from "./firebase";
 import { TAG_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
@@ -323,6 +323,46 @@ function EditClassModal({cls,data,onSave,onClose,sortedByUsage,addInstituteName,
   );
 }
 
+// ── Leave Class Modal ─────────────────────────────────────────────────────────
+const LEAVE_REASONS = [
+  { id:"completed",  icon:"✅", label:"Completed",  desc:"Syllabus is done, this class has ended" },
+  { id:"reassigned", icon:"🔄", label:"Reassigned", desc:"Another teacher has taken over this class" },
+  { id:"merged",     icon:"🔀", label:"Merged",     desc:"This batch was combined with another batch" },
+  { id:"onhold",     icon:"⏸", label:"On Hold",    desc:"Class is paused for now, may continue later" },
+];
+function LeaveClassModal({cls,onConfirm,onClose}){
+  const [selected,setSelected]=useState(null);
+  return(
+    <Modal title="Why are you leaving this class?" subtitle={`"${cls.section} · ${cls.institute}" will be archived with this reason visible to your admin.`} onClose={onClose}>
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+        {LEAVE_REASONS.map(r=>(
+          <button key={r.id} onClick={()=>setSelected(r.id)} type="button"
+            style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:12,
+              border:`1.5px solid ${selected===r.id?G.green:"#E5E5E5"}`,
+              background:selected===r.id?G.greenL:G.surface,
+              cursor:"pointer",textAlign:"left",transition:"all 0.15s",width:"100%"}}>
+            <span style={{fontSize:20,lineHeight:1,flexShrink:0,marginTop:1}}>{r.icon}</span>
+            <div>
+              <div style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.sans,marginBottom:2}}>{r.label}</div>
+              <div style={{fontSize:12,color:G.textM,fontFamily:G.sans,lineHeight:1.4}}>{r.desc}</div>
+            </div>
+            {selected===r.id&&<span style={{marginLeft:"auto",color:G.green,fontSize:16,flexShrink:0}}>✓</span>}
+          </button>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
+        <button onClick={()=>selected&&onConfirm(selected,LEAVE_REASONS.find(r=>r.id===selected)?.label)} disabled={!selected}
+          style={{background:selected?G.red:"#D5D5D5",color:"#fff",border:"none",borderRadius:10,
+            padding:"9px 20px",fontSize:13,cursor:selected?"pointer":"not-allowed",
+            fontFamily:G.sans,fontWeight:600,transition:"background 0.15s"}}>
+          Archive Class
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Trash badge ───────────────────────────────────────────────────────────────
 function TrashBadge({count,onClick}){
   if(count===0)return null;
@@ -350,6 +390,7 @@ export default function ClassTracker({user}){
   const [search,setSearch]     = useState("");
   const [editingName,setEditingName]   = useState(false);
   const [editingClass,setEditingClass] = useState(null);
+  const [leaveModal,setLeaveModal]     = useState(null); // classId to leave
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
 
@@ -386,7 +427,7 @@ export default function ClassTracker({user}){
     setData(d=>{const inst=newClass.institute.trim(),sec=newClass.section.trim(),subj=newClass.subject.trim();return{...d,classes:[...d.classes,{id,institute:inst,section:sec,subject:subj,colorIdx:d.classes.length%COLORS.length,created:Date.now()}],notes:{...d.notes,[id]:{}},institutes:(d.institutes||[]).includes(inst)?d.institutes||[]:[...(d.institutes||[]),inst],sections:(d.sections||[]).includes(sec)?d.sections||[]:[...(d.sections||[]),sec],subjects:subj&&!(d.subjects||[]).includes(subj)?[...(d.subjects||[]),subj]:d.subjects||[]};});
     setNewClass({institute:"",section:"",subject:""});setView("home");
   };
-  const deleteClass=(id)=>{setData(d=>{const cls=d.classes.find(c=>c.id===id);if(!cls)return d;const tc={...cls,deletedAt:Date.now(),savedNotes:d.notes[id]||{}};return{...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id)),trash:{...d.trash,classes:[...(d.trash?.classes||[]),tc]}};});if(activeClass?.id===id){setActiveClass(null);setView("home");}};
+  const deleteClass=(id,leaveReason,leaveReasonLabel)=>{setData(d=>{const cls=d.classes.find(c=>c.id===id);if(!cls)return d;const tc={...cls,deletedAt:Date.now(),savedNotes:d.notes[id]||{},leaveReason:leaveReason||"",leaveReasonLabel:leaveReasonLabel||""};return{...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id)),trash:{...d.trash,classes:[...(d.trash?.classes||[]),tc]}};});if(activeClass?.id===id){setActiveClass(null);setView("home");}};
   const updateClass=(id,updates)=>{setData(d=>({...d,classes:d.classes.map(c=>c.id===id?{...c,...updates}:c)}));if(activeClass?.id===id)setActiveClass(ac=>({...ac,...updates}));setEditingClass(null);};
   const restoreClass=(tc)=>{setData(d=>{const{deletedAt,savedNotes,...cls}=tc;return{...d,classes:[...d.classes,cls],notes:{...d.notes,[cls.id]:savedNotes||{}},trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==cls.id)}};});};
   const permDeleteClass=(id)=>{deleteClassNotes(user.uid,id).catch(()=>{});setData(d=>({...d,trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==id)}}));};
@@ -421,12 +462,26 @@ export default function ClassTracker({user}){
   const dates=buildDateWindow();
   const selDateObj=dates.find(d=>d.key===selectedDate)||dates[7];
 
-  // ── HOME ────────────────────────────────────────────────────────────────
-  if(view==="home")return(
+  // Build a noteDates map across ALL classes for the date strip dots
+  const allNoteDates = useMemo(()=>{
+    const map={};
+    data.classes.forEach(cls=>{
+      const cn=data.notes[cls.id]||{};
+      Object.entries(cn).forEach(([dk,arr])=>{
+        if(arr.length>0) map[dk]=(map[dk]||0)+arr.length;
+      });
+    });
+    return map;
+  },[data]);
+
+  // ── SINGLE SCROLLABLE HOME ───────────────────────────────────────────────
+  if(view==="home"||view==="class") return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
       <SaveBadge/>
       {editingName&&<EditNameModal current={teacherName} onSave={n=>{setData(d=>({...d,profile:{name:n}}));setEditingName(false);}} onClose={()=>setEditingName(false)}/>}
       {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} addInstituteName={addInstituteName} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
+      {leaveModal&&(()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);}} onClose={()=>setLeaveModal(null)}/>:null;})()}
+
       <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
         right={<>
           <span className="desktop-only" style={{fontSize:12,color:G.textM,fontFamily:G.sans,fontWeight:500,whiteSpace:"nowrap"}}>{data.classes.length} {data.classes.length===1?"class":"classes"} · {totalNotes} entries</span>
@@ -440,77 +495,109 @@ export default function ClassTracker({user}){
         </>}
       />
 
-      <div className="mobile-pad" style={{maxWidth:1320,margin:"0 auto",padding:"32px 32px 72px"}}>
+      <div className="mobile-pad" style={{maxWidth:800,margin:"0 auto",padding:"28px 24px 80px"}}>
         {/* Greeting */}
-        <div style={{marginBottom:36}}>
-          <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:4,fontWeight:500}}>Good day,</p>
-          <h1 className="greeting-name" style={{fontSize:30,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.8,marginBottom:12}}>{teacherName} 👋</h1>
-          <span style={{display:"inline-flex",alignItems:"center",gap:7,background:G.greenL,borderRadius:20,padding:"5px 14px",fontSize:13,color:G.green,fontWeight:600}}>📅 Academic Session {currentSession()}</span>
+        <div style={{marginBottom:20}}>
+          <h1 className="greeting-name" style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,marginBottom:6}}>{teacherName} 👋</h1>
+          <span style={{display:"inline-flex",alignItems:"center",gap:7,background:G.greenL,borderRadius:20,padding:"4px 12px",fontSize:12,color:G.green,fontWeight:600}}>📅 Session {currentSession()}</span>
+        </div>
+
+        {/* Date strip — applies to all classes */}
+        <div style={{marginBottom:24}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontSize:13,color:G.green}}>📅</span>
+            <span style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
+          </div>
+          <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={allNoteDates}/>
         </div>
 
         {data.classes.length===0?(
-          <div style={{textAlign:"center",padding:"80px 20px"}}>
-            <div style={{fontSize:52,marginBottom:16}}>📚</div>
-            <h2 style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:8}}>No classes yet</h2>
-            <p style={{fontSize:14,color:G.textM,marginBottom:24}}>Add your first class to start tracking entries.</p>
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:48,marginBottom:14}}>📚</div>
+            <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:8}}>No classes yet</h2>
+            <p style={{fontSize:14,color:G.textM,marginBottom:20}}>Add your first class to start tracking entries.</p>
             <PrimaryBtn onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)} style={{padding:"12px 28px",fontSize:14}}>+ Add First Class</PrimaryBtn>
           </div>
         ):(
-          <div className="class-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
-            {data.classes.map((cls,idx)=>{
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            {data.classes.map((cls)=>{
               const color=COLORS[cls.colorIdx%COLORS.length];
-              const cn=data.notes[cls.id]||{};
-              const count=Object.values(cn).reduce((a,arr)=>a+arr.length,0);
-              const todayCount=(cn[todayKey()]||[]).length;
+              const dateNotes=getDateNotes(cls.id,selectedDate);
+              const totalCount=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+arr.length,0);
               return(
-                <div key={cls.id} className="card-in" style={{...card,overflow:"hidden",transition:"box-shadow 0.2s,transform 0.2s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.transform="translateY(-2px)";}}
-                  onMouseLeave={e=>{e.currentTarget.style.boxShadow=G.shadowSm;e.currentTarget.style.transform="none";}}>
-                  {/* Color accent */}
-                  <div style={{height:5,background:color.bg}}/>
-                  <div style={{padding:"18px 18px 16px"}}>
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{display:"flex",alignItems:"center",gap:13}}>
-                        <div style={{width:46,height:46,borderRadius:13,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:color.bg,fontFamily:G.mono,letterSpacing:-1}}>
-                          {(cls.section||"?").slice(0,2).toUpperCase()}
-                        </div>
-                        <div>
-                          <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1.1,letterSpacing:-0.3}}>{cls.section}</div>
-                          <div style={{fontSize:13,color:G.textM,marginTop:5,display:"flex",alignItems:"center",gap:5,fontWeight:400}}>
-                            <span>🏫</span>
-                            <span>{cls.institute}{cls.subject?<> <span style={{color:G.textL}}>·</span> {cls.subject}</>:null}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{display:"flex",gap:3}}>
-                        <button onClick={e=>{e.stopPropagation();setEditingClass(cls);}}
-                          style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textM,fontSize:12,padding:"5px 11px",borderRadius:8,transition:"all 0.15s",fontFamily:G.sans,fontWeight:500}}
-                          onMouseEnter={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.color=G.green;e.currentTarget.style.borderColor=G.green;}}
-                          onMouseLeave={e=>{e.currentTarget.style.background=G.bg;e.currentTarget.style.color=G.textM;e.currentTarget.style.borderColor=G.border;}}>✏ Edit</button>
-                        <button onClick={e=>{e.stopPropagation();if(window.confirm(`Delete "${cls.section} · ${cls.institute}"?\n\nAll ${count} entries will be moved to the Recycle Bin.`))deleteClass(cls.id);}}
-                          style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:12,padding:"5px 11px",borderRadius:8,transition:"all 0.15s",fontFamily:G.sans,fontWeight:500}}
-                          onMouseEnter={e=>{e.currentTarget.style.background="#FAD0D0";e.currentTarget.style.borderColor="#EAA0A0";}}
-                          onMouseLeave={e=>{e.currentTarget.style.background=G.redL;e.currentTarget.style.borderColor="#F5CACA";}}>🗑 Delete</button>
+                <div key={cls.id} style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
+                  {/* Class header */}
+                  <div style={{borderLeft:`4px solid ${color.bg}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,background:G.surface}}>
+                    <div style={{width:42,height:42,borderRadius:12,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:color.bg,fontFamily:G.mono,letterSpacing:-1}}>
+                      {(cls.section||"?").slice(0,2).toUpperCase()}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2}}>{cls.section}</div>
+                      <div style={{fontSize:12,color:G.textM,marginTop:2,display:"flex",alignItems:"center",gap:5}}>
+                        🏫 {cls.institute}{cls.subject?<> · <span>{cls.subject}</span></>:null}
                       </div>
                     </div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                      <span style={{background:color.light,color:color.bg,borderRadius:20,padding:"3px 10px",fontSize:11,fontFamily:G.mono,fontWeight:600}}>{totalCount} entries</span>
+                      <button onClick={e=>{e.stopPropagation();setEditingClass(cls);}}
+                        style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textM,fontSize:11,padding:"4px 9px",borderRadius:7,fontFamily:G.sans,fontWeight:500}}
+                        onMouseEnter={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.color=G.green;}}
+                        onMouseLeave={e=>{e.currentTarget.style.background=G.bg;e.currentTarget.style.color=G.textM;}}>✏</button>
+                      <button onClick={e=>{e.stopPropagation();setLeaveModal(cls.id);}}
+                        style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:11,padding:"4px 9px",borderRadius:7,fontFamily:G.sans,fontWeight:500}}>🗑</button>
+                    </div>
+                  </div>
 
-                    <div style={{display:"flex",gap:10,marginBottom:16}}>
-                      <div style={{flex:1,background:G.bg,borderRadius:10,padding:"11px 14px",border:`1px solid ${G.border}`}}>
-                        <div style={{fontSize:12,color:G.textM,fontFamily:G.sans,marginBottom:4,fontWeight:600}}>TOTAL ENTRIES</div>
-                        <div style={{fontSize:28,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{count}</div>
-                      </div>
-                      {todayCount>0&&<div style={{flex:1,background:G.greenL,borderRadius:10,padding:"11px 14px",border:`1px solid rgba(27,138,76,0.15)`}}>
-                        <div style={{fontSize:12,color:G.green,fontFamily:G.sans,marginBottom:4,fontWeight:600}}>TODAY</div>
-                        <div style={{fontSize:28,fontWeight:700,color:G.green,fontFamily:G.display,lineHeight:1}}>+{todayCount}</div>
-                      </div>}
+                  {/* Entries for selected date */}
+                  <div style={{padding:"12px 16px 14px",borderTop:`1px solid ${G.border}`,background:G.bg}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                      <span style={{fontSize:12,color:G.textM,fontFamily:G.sans,fontWeight:600}}>
+                        {formatDateLabel(selectedDate)} · {dateNotes.length} {dateNotes.length===1?"entry":"entries"}
+                      </span>
+                      {canAdd&&(
+                        <button onClick={()=>{setActiveClass(cls);setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
+                          style={{background:color.bg,color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden"}}>
+                          + Add Entry
+                        </button>
+                      )}
                     </div>
 
-                    <button onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setSearch("");setView("class");}} onPointerDown={e=>rpl(e,true)}
-                      style={{width:"100%",padding:"12px 0",background:G.navy,color:"#fff",border:"none",borderRadius:10,fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden",letterSpacing:0.1,transition:"background 0.15s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=G.forest}
-                      onMouseLeave={e=>e.currentTarget.style.background=G.navy}>
-                      Open Class →
-                    </button>
+                    {dateNotes.length===0?(
+                      <div style={{textAlign:"center",padding:"18px 10px",color:G.textL,fontSize:13,fontStyle:"italic"}}>
+                        {canAdd?"No entries yet — tap "+ Add Entry" to log this class.":"No entries for this date."}
+                      </div>
+                    ):(
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {dateNotes.map(note=>{
+                          const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
+                          return(
+                            <div key={note.id} style={{background:G.surface,borderRadius:10,border:`1px solid ${G.border}`,overflow:"hidden"}}>
+                              <div style={{height:2,background:tag.bg}}/>
+                              <div style={{padding:"10px 13px"}}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:note.title?5:0}}>
+                                      <span style={{background:tag.bg,color:tag.text,fontSize:10,borderRadius:10,padding:"2px 8px",fontFamily:G.mono}}>{tag.label}</span>
+                                      {note.timeStart&&<span style={{fontSize:10,color:G.textL,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"2px 8px",border:`1px solid ${G.border}`}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
+                                    </div>
+                                    {note.title&&<div style={{fontWeight:700,fontSize:14,color:G.text,fontFamily:G.display}}>{note.title}</div>}
+                                    {note.body&&<p style={{margin:"6px 0 0",fontSize:13,color:G.textS,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{note.body}</p>}
+                                  </div>
+                                  <div style={{display:"flex",gap:5,flexShrink:0}}>
+                                    <button onClick={()=>{setActiveClass(cls);setEditNote({...note});setView("editNote");}}
+                                      style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:7,padding:"3px 9px",fontSize:11,cursor:"pointer",color:G.textM,fontFamily:G.sans}}
+                                      onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;e.currentTarget.style.background=G.greenL;}}
+                                      onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textM;e.currentTarget.style.background=G.bg;}}>Edit</button>
+                                    <button onClick={()=>{setActiveClass(cls);deleteNote(note.id);}}
+                                      style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:7,padding:"3px 9px",fontSize:11,cursor:"pointer",color:G.red,fontFamily:G.sans}}>✕</button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -518,213 +605,17 @@ export default function ClassTracker({user}){
 
             {/* Ghost add card */}
             <div onClick={()=>setView("addClass")}
-              style={{...card,minHeight:180,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:10,padding:28,border:`2px dashed ${G.border}`,background:"transparent",boxShadow:"none",transition:"all 0.2s"}}
+              style={{minHeight:80,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:10,padding:20,border:`2px dashed ${G.border}`,borderRadius:16,background:"transparent",transition:"all 0.2s"}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.background=G.greenL;}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background="transparent";}}>
-              <div style={{width:44,height:44,borderRadius:"50%",background:G.bg,border:`2px dashed ${G.borderM}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:G.textL,transition:"all 0.2s"}}>+</div>
-              <div style={{fontSize:15,fontWeight:600,color:G.textM,fontFamily:G.display}}>Add New Class</div>
-              <div style={{fontSize:12,color:G.textL,textAlign:"center"}}>Manage another subject or section</div>
+              <div style={{fontSize:20,color:G.textL}}>+</div>
+              <div style={{fontSize:14,fontWeight:600,color:G.textM,fontFamily:G.display}}>Add New Class</div>
             </div>
           </div>
         )}
       </div>
     </div>
   );
-
-  // ── CLASS VIEW ───────────────────────────────────────────────────────────
-  if(view==="class"&&activeClass){
-    const color=COLORS[activeClass.colorIdx%COLORS.length];
-    const classNotes=getClassNotes(activeClass.id);
-    const dateNotes=getDateNotes(activeClass.id,selectedDate);
-    const filtered=dateNotes.filter(n=>!search||n.title.toLowerCase().includes(search.toLowerCase())||n.body.toLowerCase().includes(search.toLowerCase()));
-    const allDates=Object.keys(classNotes).filter(dk=>classNotes[dk]?.length>0).sort((a,b)=>b.localeCompare(a));
-    const totalEntries=Object.values(classNotes).reduce((s,arr)=>s+arr.length,0);
-    const noteDates = Object.fromEntries(
-      Object.entries(classNotes)
-        .filter(([,arr]) => arr.length > 0)
-        .map(([dk, arr]) => [dk, arr.length])
-    );
-
-    return(
-      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
-        <SaveBadge/>
-        {editingName&&<EditNameModal current={teacherName} onSave={n=>{setData(d=>({...d,profile:{name:n}}));setEditingName(false);}} onClose={()=>setEditingName(false)}/>}
-        {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} addInstituteName={addInstituteName} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
-        <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
-          right={<>
-            <GhostBtn onClick={()=>setView("home")}>← All Classes</GhostBtn>
-            <button onClick={()=>{if(window.confirm(`Delete "${activeClass.section}"?\n\nAll ${totalEntries} entries will be moved to the Recycle Bin.`))deleteClass(activeClass.id);}}
-              style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:10,padding:"7px 14px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500}}>Delete Class</button>
-          </>}
-        />
-
-        {/* Mobile class switcher dropdown */}
-        {data.classes.length>1&&(
-          <div className="mobile-only" style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"10px 16px",alignItems:"center",gap:8,display:"flex"}}>
-            <span style={{fontSize:12,color:G.textM,fontWeight:500,flexShrink:0}}>Class:</span>
-            <select
-              value={activeClass.id}
-              onChange={e=>{const cls=data.classes.find(c=>c.id===e.target.value);if(cls){setActiveClass(cls);setSelectedDate(todayKey());setSearch("");}}}
-              style={{flex:1,padding:"8px 12px",borderRadius:9,border:`1px solid ${G.border}`,fontSize:14,fontFamily:G.sans,background:G.surface,color:G.text,outline:"none",WebkitAppearance:"none"}}>
-              {data.classes.map(cls=><option key={cls.id} value={cls.id}>{cls.section} — {cls.institute}</option>)}
-            </select>
-          </div>
-        )}
-        {/* Class header */}
-        <div className="mobile-pad-sm" style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"20px 32px 16px"}}>
-          <div style={{maxWidth:1320,margin:"0 auto"}}>
-            <div className="class-header-inner" style={{display:"flex",alignItems:"center",gap:16,marginBottom:18}}>
-              <div style={{width:54,height:54,borderRadius:15,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:color.bg,fontFamily:G.mono,letterSpacing:-1}}>
-                {(activeClass.section||"?").slice(0,2).toUpperCase()}
-              </div>
-              <div className="entries-col" style={{flex:1,minWidth:0}}>
-                <h2 style={{fontSize:24,fontWeight:700,color:G.text,letterSpacing:-0.5,marginBottom:4}}>{activeClass.section}</h2>
-                <div style={{fontSize:14,color:G.textM,display:"flex",alignItems:"center",gap:6,marginTop:2,fontWeight:400}}>
-                  <span>🏫 {activeClass.institute}</span>
-                  {activeClass.subject&&<><span style={{color:G.textL}}>·</span><span>{activeClass.subject}</span></>}
-                  <button onClick={()=>setEditingClass(activeClass)} style={{background:"none",border:`1px solid ${G.border}`,cursor:"pointer",color:G.textL,fontSize:12,fontFamily:G.sans,padding:"2px 8px",borderRadius:6,marginLeft:4,transition:"all 0.12s",fontWeight:500}} onMouseEnter={e=>{e.currentTarget.style.color=G.green;e.currentTarget.style.borderColor=G.green;}} onMouseLeave={e=>{e.currentTarget.style.color=G.textL;e.currentTarget.style.borderColor=G.border;}}>✏ edit</button>
-                </div>
-              </div>
-              <div className="class-header-stats" style={{display:"flex",gap:10}}>
-                {[{n:totalEntries,l:"entries"},{n:allDates.length,l:"days"}].map(({n,l})=>(
-                  <div key={l} className="stat-box" style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 18px",textAlign:"center",boxShadow:G.shadowSm}}>
-                    <div style={{fontSize:24,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{n}</div>
-                    <div style={{fontSize:11,color:G.textM,fontFamily:G.sans,marginTop:4,fontWeight:600}}>{l.toUpperCase()}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mobile-pad" style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-              <span style={{fontSize:13,color:G.green}}>📅</span>
-              <span style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
-            </div>
-            <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
-          </div>
-        </div>
-
-        {/* 3-column body */}
-        <div className="class-view-body" style={{maxWidth:1320,margin:"0 auto",padding:"22px 32px 60px",display:"flex",gap:20,alignItems:"flex-start"}}>
-
-          {/* LEFT — switcher */}
-          <div className="class-switcher-sidebar" style={{width:210,flexShrink:0}}>
-            <p style={{fontSize:12,fontFamily:G.sans,color:G.textM,marginBottom:10,textTransform:"uppercase",fontWeight:600}}>My Classes</p>
-            <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              {data.classes.map(cls=>{
-                const c=COLORS[cls.colorIdx%COLORS.length];
-                const isActive=cls.id===activeClass.id;
-                return(
-                  <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setSearch("");}}
-                    style={{padding:"11px 13px",borderRadius:11,cursor:"pointer",transition:"all 0.15s",background:isActive?G.greenL:G.surface,border:`1px solid ${isActive?"rgba(27,138,76,0.2)":G.border}`,borderLeft:`3px solid ${isActive?G.green:G.border}`,boxShadow:isActive?G.shadowSm:"none"}}>
-                    <div style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?G.green:G.textS,fontFamily:isActive?G.display:G.sans,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                    <div style={{fontSize:12,color:isActive?G.green:G.textM,marginTop:3,fontFamily:G.sans,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:400}}>{cls.institute}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* MIDDLE — entries */}
-          <div style={{flex:1,minWidth:0}}>
-            <div className="add-entry-row" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div>
-                <h3 style={{fontSize:19,fontWeight:700,color:G.text,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</h3>
-                <p style={{fontSize:13,color:G.textM,marginTop:3,fontWeight:400}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</p>
-              </div>
-              {canAdd
-                ?<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
-                    style={{background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:600,display:"flex",alignItems:"center",gap:6,position:"relative",overflow:"hidden",boxShadow:G.shadowSm,transition:"background 0.15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=G.forest}
-                    onMouseLeave={e=>e.currentTarget.style.background=G.navy}>
-                    <span style={{fontSize:18,lineHeight:1}}>+</span> Add Entry
-                  </button>
-                :<div style={{fontSize:13,color:G.textM,fontFamily:G.sans,background:G.bg,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 12px"}}>Outside ±7 day window</div>}
-            </div>
-
-            {dateNotes.length>2&&<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search entries…" style={{...inp,marginBottom:14}}/>}
-
-            {filtered.length===0&&(
-              <div style={{...card,textAlign:"center",padding:"48px 20px"}}>
-                <div style={{width:48,height:48,borderRadius:14,background:G.greenL,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>✏️</div>
-                <p style={{fontSize:14,color:G.textM}}>{search?"No matching entries.":canAdd?'Tap "+ Add Entry" to log this class.':"No entries for this date."}</p>
-              </div>
-            )}
-
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {filtered.map(note=>{
-                const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
-                return(
-                  <div key={note.id} style={{...card,overflow:"hidden",transition:"box-shadow 0.2s,transform 0.15s"}}
-                    onMouseEnter={e=>{e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.transform="translateY(-1px)";}}
-                    onMouseLeave={e=>{e.currentTarget.style.boxShadow=G.shadowSm;e.currentTarget.style.transform="none";}}>
-                    <div style={{height:3,background:tag.bg}}/>
-                    <div style={{padding:"13px 16px"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:note.title?6:0}}>
-                            <span style={{background:tag.bg,color:tag.text,fontSize:10,borderRadius:12,padding:"2px 9px",fontFamily:G.mono,fontWeight:500}}>{tag.label}</span>
-                            {note.timeStart&&<span style={{fontSize:10,color:G.textL,fontFamily:G.mono,background:G.bg,borderRadius:12,padding:"2px 9px",border:`1px solid ${G.border}`}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
-                          </div>
-                          {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display,letterSpacing:-0.2}}>{note.title}</div>}
-                        </div>
-                        <div style={{display:"flex",gap:5,flexShrink:0}}>
-                          <button onClick={()=>{setEditNote({...note});setView("editNote");}}
-                            style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:7,padding:"4px 11px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans,fontWeight:500,transition:"all 0.12s"}}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;e.currentTarget.style.background=G.greenL;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textM;e.currentTarget.style.background=G.bg;}}>Edit</button>
-                          <button onClick={()=>deleteNote(note.id)}
-                            style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:7,padding:"4px 11px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500}}>✕</button>
-                        </div>
-                      </div>
-                      {note.body&&<p style={{margin:"9px 0 0",fontSize:14,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap",borderTop:`1px solid ${G.border}`,paddingTop:9}}>{note.body}</p>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* RIGHT — grouped timeline */}
-          <div className="timeline-sidebar" style={{width:215,flexShrink:0}}>
-            <p style={{fontSize:12,fontFamily:G.sans,color:G.textM,marginBottom:8,textTransform:"uppercase",fontWeight:700}}>Past Entries</p>
-            <span className="badge badge-session" style={{marginBottom:14,display:"inline-block"}}>Session {currentSession()}</span>
-            {allDates.length===0
-              ?<p style={{fontSize:12,color:G.textL,fontStyle:"italic",fontFamily:G.sans}}>No entries yet.</p>
-              :<div style={{display:"flex",flexDirection:"column",gap:0}}>
-                {groupDatesByPeriod(allDates).map(({label,dates:gDates})=>(
-                  <div key={label} style={{marginBottom:16}}>
-                    <div style={{fontSize:11,fontFamily:G.sans,color:G.textM,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${G.border}`,fontWeight:700}}>{label}</div>
-                    {gDates.map((dk,i)=>{
-                      const entries=classNotes[dk]||[];
-                      const isSel=dk===selectedDate;
-                      return(
-                        <div key={dk} onClick={()=>setSelectedDate(dk)}
-                          style={{cursor:"pointer",display:"flex",gap:10,paddingBottom:11,position:"relative",transition:"opacity 0.1s"}}
-                          onMouseEnter={e=>e.currentTarget.style.opacity="0.75"}
-                          onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-                          {i<gDates.length-1&&<div style={{position:"absolute",left:4,top:12,bottom:0,width:1,background:G.border}}/>}
-                          <div style={{width:9,height:9,borderRadius:"50%",flexShrink:0,marginTop:3,zIndex:1,transition:"all 0.15s",background:isSel?G.green:G.surface,border:`2px solid ${isSel?G.green:G.borderM}`,boxShadow:isSel?`0 0 0 3px rgba(27,138,76,0.15)`:"none"}}/>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:isSel?600:400,color:isSel?G.green:G.textM,fontFamily:G.sans}}>{formatDateLabel(dk)}</div>
-                            <div style={{marginTop:3,display:"flex",flexDirection:"column",gap:2}}>
-                              {entries.slice(0,2).map(n=>{const tag=TAG_STYLES[n.tag]||TAG_STYLES.note;return(
-                                <div key={n.id} style={{fontSize:10,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:4}}>
-                                  <span style={{width:5,height:5,borderRadius:"50%",background:tag.bg,flexShrink:0}}/>{n.title||n.body||"—"}
-                                </div>);})}
-                              {entries.length>2&&<div style={{fontSize:11,color:G.textL,fontFamily:G.sans}}>+{entries.length-2} more</div>}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // ── ADD CLASS ─────────────────────────────────────────────────────────────
   if(view==="addClass")return(

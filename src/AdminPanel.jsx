@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, Component } from "react";
 import {
   logout, getAllTeachers, getTeacherFullData,
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
+  removeTeacherFromSystem, removeInstituteFromIndex,
+  deleteEntryFromTeacherData, deleteClassFromTeacherData,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES } from "./shared.jsx";
 
@@ -32,6 +34,38 @@ function currentSession(){
   return m>=4?`${y}-${String(y+1).slice(2)}`:`${y-1}-${String(y).slice(2)}`;
 }
 function ordSuffix(n){const s=["th","st","nd","rd"];const v=n%100;return s[(v-20)%10]||s[v]||s[0];}
+const LEAVE_REASON_MAP = {
+  completed:  { icon:"✅", label:"Completed",  desc:"Syllabus is done, this class has ended" },
+  reassigned: { icon:"🔄", label:"Reassigned", desc:"Another teacher has taken over this class" },
+  merged:     { icon:"🔀", label:"Merged",     desc:"This batch was combined with another batch" },
+  onhold:     { icon:"⏸",  label:"On Hold",   desc:"Class is paused for now, may continue later" },
+};
+
+// ── Confirm Delete Modal ──────────────────────────────────────────────────────
+function ConfirmDeleteModal({ title, lines, confirmLabel, onConfirm, onClose, busy }) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
+      <div style={{background:G.surface,borderRadius:18,padding:"26px 24px",width:"100%",maxWidth:420,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+        <div style={{width:40,height:40,borderRadius:12,background:"#FEE2E2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,marginBottom:14}}>🗑</div>
+        <h3 style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:8}}>{title}</h3>
+        {lines.map((l,i)=>(
+          <p key={i} style={{fontSize:13,color:i===0?G.textM:G.textL,fontFamily:G.sans,lineHeight:1.55,marginBottom:i<lines.length-1?6:16}}>{l}</p>
+        ))}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={onClose} disabled={busy}
+            style={{background:"none",border:`1.5px solid ${G.border}`,borderRadius:9,padding:"8px 18px",fontSize:13,cursor:"pointer",color:G.textM,fontFamily:G.sans,fontWeight:500}}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={busy}
+            style={{background:busy?"#D5D5D5":"#DC2626",color:"#fff",border:"none",borderRadius:9,padding:"8px 20px",fontSize:13,cursor:busy?"not-allowed":"pointer",fontFamily:G.sans,fontWeight:600}}>
+            {busy?"Deleting…":confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function normaliseName(raw){
   if(!raw) return raw;
   const m=raw.match(/(\d+)/);
@@ -150,6 +184,8 @@ function AdminPanelInner({user}){
   const [period,      setPeriod]      = useState("today");
   const [mobileStep,  setMobileStep]  = useState(0);
   const [exportOpen,  setExportOpen]  = useState(false);
+  const [deleteModal, setDeleteModal] = useState(null); // {type,label,lines,onConfirm}
+  const [deleteBusy,  setDeleteBusy]  = useState(false);
 
   useEffect(()=>{
     (async()=>{
@@ -267,6 +303,27 @@ function AdminPanelInner({user}){
     }
   },[selP2,tab,selInst,fullData,instClasses]);
 
+  // ── Archived (left) classes for teacher tab ───────────────────────────────
+  const archivedP3Items=useMemo(()=>{
+    if(!selP2||tab!=="teacher") return [];
+    const d=fullData[selP2];
+    if(!d) return [];
+    return (d.trash?.classes||[])
+      .filter(tc=>(tc.institute||"").trim().toLowerCase()===(selInst||"").trim().toLowerCase())
+      .map(tc=>({
+        display:normaliseName(tc.section),
+        raw:tc.section,
+        subject:tc.subject,
+        institute:tc.institute||"",
+        classId:tc.id,
+        leaveReason:tc.leaveReason||"",
+        leaveReasonLabel:tc.leaveReasonLabel||"Archived",
+        deletedAt:tc.deletedAt||null,
+        entryCount:Object.values(tc.savedNotes||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0),
+      }))
+      .sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
+  },[selP2,tab,selInst,fullData]);
+
   // ── Entries for P4 ────────────────────────────────────────────────────────
   const p4Entries=useMemo(()=>{
     if(!selP3) return null;
@@ -295,10 +352,75 @@ function AdminPanelInner({user}){
     await promoteToAdmin(uid,user.uid);
     setRoles(r=>({...r,[uid]:"admin"}));
   };
-  const handleDemote=async(uid)=>{
-    if(!window.confirm("Remove admin access?")) return;
-    await demoteToTeacher(uid);
-    setRoles(r=>({...r,[uid]:"teacher"}));
+  const handleDemote=async(uid)=>{\n    if(!window.confirm("Remove admin access?")) return;\n    await demoteToTeacher(uid);\n    setRoles(r=>({...r,[uid]:"teacher"}));\n  };
+
+  // ── Delete handlers ───────────────────────────────────────────────────────
+  const confirmDelete = (modal) => setDeleteModal(modal);
+
+  const handleDeleteInstitute = (inst) => {
+    confirmDelete({
+      title: `Delete "${inst}"?`,
+      lines: [
+        "This removes the institute from all teacher records and the admin panel.",
+        "Teachers and their entries are NOT deleted — they just won't appear under this institute.",
+      ],
+      confirmLabel: "Delete Institute",
+      onConfirm: async () => {
+        setDeleteBusy(true);
+        await removeInstituteFromIndex(inst);
+        // Update local teacher index
+        setTeachers(ts => ts.map(t => ({
+          ...t,
+          institutes: (t.institutes||[]).filter(i => i.trim().toLowerCase() !== inst.trim().toLowerCase()),
+        })));
+        if (selInst === inst) { setSelInst(null); resetNav(); }
+        setDeleteBusy(false); setDeleteModal(null);
+      },
+    });
+  };
+
+  const handleDeleteClass = (teacherUid, classId, className, teacherName) => {
+    confirmDelete({
+      title: `Delete class "${className}"?`,
+      lines: [
+        `This permanently deletes the class and ALL its entries from ${teacherName}'s account.`,
+        "This cannot be undone. The teacher will lose all entries for this class.",
+      ],
+      confirmLabel: "Delete Class Forever",
+      onConfirm: async () => {
+        setDeleteBusy(true);
+        await deleteClassFromTeacherData(teacherUid, classId);
+        // Refresh this teacher's full data
+        const fresh = await getTeacherFullData(teacherUid);
+        if (fresh) setFullData(prev => ({ ...prev, [teacherUid]: fresh }));
+        if (selP3?.classId === classId) setSelP3(null);
+        setDeleteBusy(false); setDeleteModal(null);
+      },
+    });
+  };
+
+  const handleDeleteEntry = (teacherUid, classId, dateKey, entryId, entryTitle) => {
+    confirmDelete({
+      title: "Delete this entry?",
+      lines: [
+        `"${entryTitle||"(no title)"}" will be permanently deleted from ${dateKey}.`,
+        "This cannot be undone.",
+      ],
+      confirmLabel: "Delete Entry",
+      onConfirm: async () => {
+        setDeleteBusy(true);
+        await deleteEntryFromTeacherData(teacherUid, classId, dateKey, entryId);
+        // Update local fullData to reflect deletion instantly
+        setFullData(prev => {
+          const d = prev[teacherUid];
+          if (!d) return prev;
+          const cn = (d.notes||{})[classId] || {};
+          const updated = { ...cn, [dateKey]: (cn[dateKey]||[]).filter(e => e.id !== entryId) };
+          return { ...prev, [teacherUid]: { ...d, notes: { ...d.notes, [classId]: updated } } };
+        });
+        setDeleteBusy(false); setDeleteModal(null);
+      },
+    });
   };
 
   const resetNav=(newTab)=>{setSelP2(null);setSelP3(null);if(newTab)setTab(newTab);setMobileStep(s=>Math.min(s,1));};
@@ -553,6 +675,7 @@ function AdminPanelInner({user}){
   // ── MAIN PANEL VIEW ───────────────────────────────────────────────────────
   return(
     <div style={{minHeight:"100vh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
+      {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       <style>{`
         @media (max-width: 767px) {
           .admin-panels { flex-direction: column !important; }
@@ -633,15 +756,23 @@ function AdminPanelInner({user}){
                     return s+(d.classes||[]).filter(c=>c.institute===inst).length;
                   },0) || teachers.filter(t=>(t.institutes||[]).includes(inst)).length;
               return(
-                <div key={inst} onClick={()=>{onSelectInstitute(inst);setMobileStep(1);}}
-                  style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
-                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
-                  onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{fontSize:13,fontWeight:isSel?700:500,color:isSel?G.blue:G.textS}}>{inst}</div>
-                  <div style={{display:"flex",gap:5,marginTop:4}}>
-                    <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:9,fontFamily:G.mono}}>{clsCount} class{clsCount!==1?"es":""}</span>
-                    <span style={{fontSize:9,color:G.textL,fontFamily:G.mono}}>{tCount} teacher{tCount!==1?"s":""}</span>
+                <div key={inst} style={{position:"relative"}}
+                  onMouseEnter={e=>e.currentTarget.querySelector(".inst-del").style.opacity="1"}
+                  onMouseLeave={e=>e.currentTarget.querySelector(".inst-del").style.opacity="0"}>
+                  <div onClick={()=>{onSelectInstitute(inst);setMobileStep(1);}}
+                    style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent",paddingRight:28}}
+                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
+                    onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                    <div style={{fontSize:13,fontWeight:isSel?700:500,color:isSel?G.blue:G.textS}}>{inst}</div>
+                    <div style={{display:"flex",gap:5,marginTop:4}}>
+                      <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:9,fontFamily:G.mono}}>{clsCount} class{clsCount!==1?"es":""}</span>
+                      <span style={{fontSize:9,color:G.textL,fontFamily:G.mono}}>{tCount} teacher{tCount!==1?"s":""}</span>
+                    </div>
                   </div>
+                  <button className="inst-del" onClick={e=>{e.stopPropagation();handleDeleteInstitute(inst);}}
+                    style={{position:"absolute",top:"50%",right:6,transform:"translateY(-50%)",opacity:0,transition:"opacity 0.15s",background:G.redL,border:"none",borderRadius:6,width:20,height:20,cursor:"pointer",fontSize:10,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                    🗑
+                  </button>
                 </div>
               );
             })}
@@ -747,21 +878,65 @@ function AdminPanelInner({user}){
 
             {selP2&&tab==="teacher"&&p3Items.map(cls=>{
               const isSel=selP3?.classId===cls.classId;
+              const tName=fullData[selP2]?.profile?.name||"";
               return(
-                <div key={cls.classId} onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
-                  style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
-                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
-                  onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{fontSize:13,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
-                  <div style={{fontSize:10,color:G.textM,fontFamily:G.mono,marginTop:2}}>{cls.subject}</div>
-                  <div style={{marginTop:4}}>
-                    <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:9,fontFamily:G.mono}}>
-                      {cls.entryCount} entries
-                    </span>
+                <div key={cls.classId} style={{position:"relative"}}
+                  onMouseEnter={e=>e.currentTarget.querySelector(".cls-del")&&(e.currentTarget.querySelector(".cls-del").style.opacity="1")}
+                  onMouseLeave={e=>e.currentTarget.querySelector(".cls-del")&&(e.currentTarget.querySelector(".cls-del").style.opacity="0")}>
+                  <div onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
+                    style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent",paddingRight:26}}
+                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
+                    onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                    <div style={{fontSize:13,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
+                    <div style={{fontSize:10,color:G.textM,fontFamily:G.mono,marginTop:2}}>{cls.subject}</div>
+                    <div style={{marginTop:4}}>
+                      <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:9,fontFamily:G.mono}}>
+                        {cls.entryCount} entries
+                      </span>
+                    </div>
                   </div>
+                  <button className="cls-del" onClick={e=>{e.stopPropagation();handleDeleteClass(selP2,cls.classId,cls.display,tName);}}
+                    style={{position:"absolute",top:8,right:5,opacity:0,transition:"opacity 0.15s",background:G.redL,border:"none",borderRadius:6,width:20,height:20,cursor:"pointer",fontSize:10,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                    🗑
+                  </button>
                 </div>
               );
             })}
+
+            {/* Archived / left classes */}
+            {selP2&&tab==="teacher"&&archivedP3Items.length>0&&(()=>{
+              return(<>
+                <div style={{fontSize:8,letterSpacing:1.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"12px 6px 4px",borderTop:`1px solid ${G.border}`,marginTop:4}}>
+                  Left / Archived ({archivedP3Items.length})
+                </div>
+                {archivedP3Items.map(cls=>{
+                  const reason=LEAVE_REASON_MAP[cls.leaveReason]||null;
+                  const dateStr=cls.deletedAt?new Date(cls.deletedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"";
+                  return(
+                    <div key={cls.classId}
+                      style={{...siBase,background:"transparent",borderLeftColor:"transparent",opacity:0.65,cursor:"default"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:5}}>
+                        <div style={{fontSize:13,fontWeight:600,color:G.textM,textDecoration:"line-through"}}>{cls.display}</div>
+                        <span style={{fontSize:9,fontFamily:G.mono,color:G.textL}}>· {cls.entryCount} entries</span>
+                      </div>
+                      <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,marginTop:1}}>{cls.subject}</div>
+                      {reason&&(
+                        <div style={{marginTop:5,background:G.bg,borderRadius:7,padding:"5px 8px",border:`1px solid ${G.border}`}}>
+                          <div style={{fontSize:10,fontWeight:600,color:G.textM,fontFamily:G.sans}}>
+                            {reason.icon} {reason.label}
+                          </div>
+                          <div style={{fontSize:9,color:G.textL,fontFamily:G.sans,marginTop:1,lineHeight:1.4}}>{reason.desc}</div>
+                          {dateStr&&<div style={{fontSize:9,color:G.textL,fontFamily:G.mono,marginTop:2}}>Left on {dateStr}</div>}
+                        </div>
+                      )}
+                      {!reason&&dateStr&&(
+                        <div style={{fontSize:9,color:G.textL,fontFamily:G.mono,marginTop:3}}>Archived · {dateStr}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>);
+            })()}
 
             {selP2&&tab==="class"&&(()=>{
               const withEntries=p3Items.filter(t=>t.entryCount>0).sort((a,b)=>b.entryCount-a.entryCount);
@@ -917,7 +1092,7 @@ function AdminPanelInner({user}){
                   return(
                     <div key={note.id||i} style={{background:G.surface,borderRadius:11,border:`1px solid ${G.border}`,marginBottom:7,overflow:"hidden",boxShadow:G.shadowSm}}>
                       <div style={{height:3,background:tag.bg}}/>
-                      <div style={{padding:"10px 12px",display:"grid",gridTemplateColumns:"80px 1fr 90px",alignItems:"center",gap:10}}>
+                      <div style={{padding:"10px 12px",display:"grid",gridTemplateColumns:"80px 1fr 90px 28px",alignItems:"center",gap:10}}>
                         <div>
                           <div style={{fontFamily:G.display,fontSize:14,fontWeight:700,color:G.text,lineHeight:1}}>
                             {note.timeStart?fmt12(note.timeStart):"—"}
@@ -931,6 +1106,11 @@ function AdminPanelInner({user}){
                         <div style={{display:"inline-flex",alignItems:"center",gap:4,borderRadius:20,padding:"4px 11px",fontSize:10,fontWeight:600,fontFamily:G.mono,whiteSpace:"nowrap",background:tag.bg,color:tag.text,justifySelf:"end"}}>
                           {tag.label}
                         </div>
+                        <button onClick={()=>handleDeleteEntry(selP3.teacherUid,selP3.classId,dk,note.id,note.title)}
+                          style={{width:26,height:26,borderRadius:7,background:G.redL,border:"none",cursor:"pointer",fontSize:11,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          title="Delete entry">
+                          🗑
+                        </button>
                       </div>
                     </div>
                   );
