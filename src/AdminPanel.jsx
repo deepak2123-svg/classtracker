@@ -4,6 +4,7 @@ import {
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData,
+  getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES } from "./shared.jsx";
 
@@ -350,17 +351,15 @@ function AdminPanelInner({user}){
   const handleCreateInstitute = async () => {
     const name = newInstName.trim();
     if (!name) return;
-    // Save to a global institutes config doc all teachers can read
     try {
-      const { doc, setDoc, getDoc } = await import("firebase/firestore");
-      const { db } = await import("./firebase");
-      const ref = doc(db, "config", "institutes");
-      const snap = await getDoc(ref);
-      const existing = snap.exists() ? (snap.data().list || []) : [];
-      if (!existing.map(i=>i.toLowerCase()).includes(name.toLowerCase())) {
-        await setDoc(ref, { list: [...existing, name] }, { merge: true });
-      }
+      await saveGlobalInstitute(name);
       setNewInstName("");
+      // Reload institutes list
+      const updated = await getGlobalInstitutes();
+      // Update local institutes state so P1 reflects it
+      if (!institutes.includes(name)) {
+        setTeachers(ts => ts); // trigger recompute
+      }
       alert(`Institute "${name}" created. Teachers can now see it in their dropdown.`);
     } catch(e) { alert("Failed: " + e.message); }
   };
@@ -369,13 +368,11 @@ function AdminPanelInner({user}){
   const handleRenameTeacher = async (uid, newName) => {
     if (!newName.trim()) return;
     try {
-      const { doc, setDoc } = await import("firebase/firestore");
-      const { db } = await import("./firebase");
-      // Update teacher index
-      await setDoc(doc(db, "teachers", uid), { name: newName.trim() }, { merge: true });
-      // Update their profile in appdata
-      const dataRef = doc(db, "users", uid, "appdata", "main");
-      const snap = await (await import("firebase/firestore")).getDoc(dataRef);
+      const { doc, setDoc, getDoc } = await import("firebase/firestore");
+      const { db: firebaseDb } = await import("./firebase");
+      await setDoc(doc(firebaseDb, "teachers", uid), { name: newName.trim() }, { merge: true });
+      const dataRef = doc(firebaseDb, "users", uid, "appdata", "main");
+      const snap = await getDoc(dataRef);
       if (snap.exists()) {
         await setDoc(dataRef, { ...snap.data(), profile: { ...snap.data().profile, name: newName.trim() } });
       }

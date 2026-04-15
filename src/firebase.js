@@ -277,3 +277,29 @@ export async function deleteClassFromTeacherData(uid, classId) {
     try { await deleteClassNotes(uid, classId); } catch {}
   } catch (e) { console.error("deleteClassFromTeacherData", e); }
 }
+
+// ── Global institutes (admin-controlled) ──────────────────────────────────────
+// config/institutes = { list: ["KIS", "Genesis Karnal", ...] }
+
+export async function getGlobalInstitutes() {
+  try {
+    const snap = await getDoc(doc(db, "config", "institutes"));
+    if (snap.exists()) return snap.data().list || [];
+    return [];
+  } catch { return []; }
+}
+
+export async function saveGlobalInstitute(name) {
+  const existing = await getGlobalInstitutes();
+  const lower = existing.map(i => i.toLowerCase());
+  if (lower.includes(name.trim().toLowerCase())) return; // duplicate
+  await setDoc(doc(db, "config", "institutes"), {
+    list: [...existing, name.trim()]
+  }, { merge: true });
+}
+
+export async function deleteGlobalInstitute(name) {
+  const existing = await getGlobalInstitutes();
+  const filtered = existing.filter(i => i.toLowerCase() !== name.trim().toLowerCase());
+  await setDoc(doc(db, "config", "institutes"), { list: filtered });
+}

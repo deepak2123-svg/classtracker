@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, Component } from "react";
-import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db } from "./firebase";
+import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db, getGlobalInstitutes } from "./firebase";
 import { TAG_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
@@ -467,12 +467,8 @@ function ClassTrackerInner({user}){
 
   const [globalInstitutes, setGlobalInstitutes] = useState([]);
   useEffect(()=>{
-    // Load global institutes list created by admins
-    import("firebase/firestore").then(({doc: firestoreDoc, getDoc})=>{
-      getDoc(firestoreDoc(db,"config","institutes")).then(snap=>{
-        if(snap.exists()) setGlobalInstitutes(snap.data().list||[]);
-      }).catch(()=>{});
-    }).catch(()=>{});
+    // Load admin-created institutes list
+    getGlobalInstitutes().then(list => setGlobalInstitutes(list)).catch(()=>{});
   },[]);
 
   useEffect(()=>{
