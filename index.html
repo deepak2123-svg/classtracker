@@ -233,6 +233,20 @@
       /* ── Headings ── */
       h1, h2, h3 { font-family: 'Poppins', sans-serif; font-weight: 700; }
 
+      /* Split panel: on mobile left panel becomes horizontal class strip at top */
+      @media (max-width: 767px) {
+        .mobile-left-panel {
+          width: 100% !important;
+          border-right: none !important;
+          border-bottom: 1px solid var(--border) !important;
+          flex-direction: row !important;
+          max-height: 110px !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+        }
+        .mobile-left-panel > div { flex-shrink: 0 !important; }
+      }
+
       /* Hide scrollbar but keep scroll */
       .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
       .hide-scrollbar::-webkit-scrollbar { display: none; }
