@@ -998,8 +998,8 @@ function AdminPanelInner({user}){
                   </div>
                 );
               })}
-            </div>
             <p style={{fontSize:12,color:G.textL,textAlign:"center",marginTop:12,fontFamily:G.sans}}>Drag cards to reorder</p>
+            </div>
           }
         </div>
 
