@@ -260,7 +260,7 @@ function ProfileSetup({user,onSave}){
           <p style={{fontSize:16,color:"rgba(255,255,255,0.45)",lineHeight:1.7}}>Your name is stamped on every entry.<br/>Set it once — no one else can change it.</p>
         </div>
         <div style={{background:"rgba(255,255,255,0.07)",borderRadius:20,padding:"28px 26px",border:"1px solid rgba(255,255,255,0.12)",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
-          <label style={{...lbl,color:"rgba(255,255,255,0.35)"}}>Your full name</label>
+          <label style={{...lbl,color:"rgba(255,255,255,0.6)"}}>Your full name</label>
           <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&name.trim()&&onSave(name.trim())} placeholder="e.g. Ramsingh Yadav" autoFocus
             style={{...inp,background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",fontSize:17}}/>
           <button onClick={()=>name.trim()&&onSave(name.trim())} disabled={!name.trim()} onPointerDown={e=>rpl(e,true)}
@@ -566,8 +566,8 @@ export default function ClassTracker({user}){
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                      <div style={{fontSize:15,color:G.textM,marginTop:3,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                        <span>🏫 {cls.institute}</span>
+                      <div style={{fontSize:15,color:G.textS,marginTop:3,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:500}}>🏫 {cls.institute}</span>
                         {cls.subject&&<><span style={{color:G.textL}}>·</span><span>{cls.subject}</span></>}
                       </div>
                     </div>
@@ -579,11 +579,11 @@ export default function ClassTracker({user}){
                       </div>
                       {todayCount>0&&<div style={{background:G.greenL,borderRadius:8,padding:"3px 8px",textAlign:"center"}}>
                         <div style={{fontSize:15,fontWeight:700,color:G.green,lineHeight:1}}>+{todayCount}</div>
-                        <div style={{fontSize:10,color:G.green,fontFamily:G.sans}}>today</div>
+                        <div style={{fontSize:12,color:G.green,fontFamily:G.sans,fontWeight:600}}>today</div>
                       </div>}
                       <div style={{display:"flex",gap:4,marginLeft:4}}>
                         <button onClick={e=>{e.stopPropagation();setEditingClass(cls);}}
-                          style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textM,fontSize:14,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}
+                          style={{background:G.bg,border:`1px solid ${G.borderM}`,cursor:"pointer",color:G.textS,fontSize:14,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}
                           onMouseEnter={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.color=G.green;}}
                           onMouseLeave={e=>{e.currentTarget.style.background=G.bg;e.currentTarget.style.color=G.textM;}}>✏</button>
                         <button onClick={e=>{e.stopPropagation();setLeaveModal(cls.id);}}
@@ -595,7 +595,7 @@ export default function ClassTracker({user}){
                   {/* Selected date entries */}
                   <div style={{padding:"12px 16px 14px",borderTop:`1px solid ${G.border}`,background:G.bg}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:dateNotes.length>0?10:0}}>
-                      <span style={{fontSize:15,color:G.textS,fontWeight:600}}>
+                      <span style={{fontSize:15,color:G.text,fontWeight:600}}>
                         {formatDateLabel(selectedDate)} · <span style={{color:dateNotes.length>0?G.green:G.textM,fontWeight:700}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span>
                       </span>
                       {canAdd&&(
@@ -607,7 +607,7 @@ export default function ClassTracker({user}){
                     </div>
 
                     {dateNotes.length===0?(
-                      canAdd&&<div style={{padding:"10px 0 2px",color:G.textM,fontSize:15}}>
+                      canAdd&&<div style={{padding:"10px 0 2px",color:G.textM,fontSize:15,fontWeight:500}}>
                         No entries yet — tap + Add Entry to log this class.
                       </div>
                     ):(
@@ -625,7 +625,7 @@ export default function ClassTracker({user}){
                                       {note.timeStart&&<span style={{fontSize:13,color:G.textM,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:500}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
                                     </div>
                                     {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display,lineHeight:1.3}}>{note.title}</div>}
-                                    {note.body&&<p style={{margin:"8px 0 0",fontSize:16,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
+                                    {note.body&&<p style={{margin:"8px 0 0",fontSize:16,color:G.textS,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{note.body}</p>}
                                   </div>
                                   <div style={{display:"flex",gap:5,flexShrink:0}}>
                                     <button onClick={()=>{setActiveClass(cls);setEditNote({...note});setView("editNote");}}

@@ -1101,7 +1101,29 @@ function AdminPanelInner({user}){
         <span style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:7,padding:"6px 14px",fontSize:14,color:"rgba(255,255,255,0.6)",cursor:"pointer",fontFamily:G.sans}}>← Back</span>
       </div>
       {/* 4-panel body */}
-      <div className={`admin-panels admin-mobile-step-${mobileStep}`} style={{display:"flex",flex:1,overflow:"hidden"}}>
+      <div className={`admin-panels admin-mobile-step-${mobileStep}`} style={{display:"flex",flex:1,overflow:"hidden",userSelect:"none"}}
+        ref={el=>{
+          if(!el) return;
+          let isDown=false, startX=0, scrollLeft=0;
+          // Only enable drag-scroll on the panels container itself (not inside scrollable lists)
+          el.onmousedown = e=>{
+            // Only drag if clicking on a panel background, not buttons/text
+            if(e.target!==el) return;
+            isDown=true; startX=e.pageX-el.offsetLeft; scrollLeft=el.scrollLeft;
+            el.style.cursor="grabbing";
+          };
+          el.onmouseleave=()=>{isDown=false;el.style.cursor="default";};
+          el.onmouseup=()=>{isDown=false;el.style.cursor="default";};
+          el.onmousemove=e=>{
+            if(!isDown) return;
+            e.preventDefault();
+            el.scrollLeft=scrollLeft-(e.pageX-el.offsetLeft-startX)*1.2;
+          };
+          // Touch support
+          let touchStartX=0, touchScrollLeft=0;
+          el.ontouchstart=e=>{touchStartX=e.touches[0].pageX;touchScrollLeft=el.scrollLeft;};
+          el.ontouchmove=e=>{el.scrollLeft=touchScrollLeft-(e.touches[0].pageX-touchStartX);};
+        }}>
 
         {/* ── P1: Institutes ── */}
         <div className="admin-side-panel admin-p1" style={{...sidePanel,width:175,background:G.bg,borderRight:`1px solid ${G.border}`}}>
@@ -1129,7 +1151,7 @@ function AdminPanelInner({user}){
                     style={{...siBase,flex:1,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                     onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                     onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                    <div style={{fontSize:15,fontWeight:isSel?700:500,color:isSel?G.blue:G.textS}}>{inst}</div>
+                    <div style={{fontSize:16,fontWeight:isSel?700:600,color:isSel?G.blue:G.text}}>{inst}</div>
                     <div style={{display:"flex",gap:5,marginTop:4}}>
                       <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>{clsCount} class{clsCount!==1?"es":""}</span>
                       <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{tCount} teacher{tCount!==1?"s":""}</span>
@@ -1186,12 +1208,12 @@ function AdminPanelInner({user}){
                     {(name[0]||"?").toUpperCase()}
                   </div>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:14,fontWeight:600,color:isSel?G.blue:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
-                    <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:2}}>{totalEnt} entries</div>
+                    <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
+                    <div style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginTop:3,fontWeight:500}}>{totalEnt} entries</div>
                     {(()=>{
                       const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
                       if(!otherInsts.length) return null;
-                      return <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:2,fontStyle:"italic"}}>also at {otherInsts.join(", ")}</div>;
+                      return <div style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginTop:3,fontStyle:"italic"}}>also at {otherInsts.join(", ")}</div>;
                     })()}
                   </div>
                 </div>
@@ -1211,7 +1233,7 @@ function AdminPanelInner({user}){
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
                   <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
-                  <div style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginTop:3}}>{cls.subject}</div>
+                  <div style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginTop:3}}>{cls.subject}</div>
                   <div style={{marginTop:4}}>
                     <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
                       {cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}
@@ -1244,24 +1266,17 @@ function AdminPanelInner({user}){
               const isSel=selP3?.classId===cls.classId;
               const tName=fullData[selP2]?.profile?.name||"";
               return(
-                <div key={cls.classId} style={{display:"flex",alignItems:"flex-start",gap:4}}>
-                  <div onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
-                    style={{...siBase,flex:1,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
-                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
-                    onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                    <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
-                    <div style={{fontSize:12,color:G.textM,fontFamily:G.mono,marginTop:2}}>{cls.subject}</div>
-                    <div style={{marginTop:4}}>
-                      <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
-                        {cls.entryCount} entries
-                      </span>
-                    </div>
+                <div key={cls.classId} onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
+                  style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
+                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
+                  onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                  <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
+                  <div style={{fontSize:14,color:G.textM,marginTop:3}}>{cls.subject}</div>
+                  <div style={{marginTop:5}}>
+                    <span style={{background:isSel?G.navy:G.blueL,color:isSel?"#fff":G.blue,borderRadius:10,padding:"3px 9px",fontSize:12,fontFamily:G.mono,fontWeight:600}}>
+                      {cls.entryCount} {cls.entryCount===1?"entry":"entries"}
+                    </span>
                   </div>
-                  <button onClick={e=>{e.stopPropagation();handleDeleteClass(selP2,cls.classId,cls.display,tName);}}
-                    style={{flexShrink:0,marginTop:8,background:G.redL,border:"1px solid #F5CACA",borderRadius:7,width:26,height:26,cursor:"pointer",fontSize:14,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}
-                    title="Delete class">
-                    🗑
-                  </button>
                 </div>
               );
             })}
@@ -1337,7 +1352,7 @@ function AdminPanelInner({user}){
                         {(t.name[0]||"?").toUpperCase()}
                       </div>
                       <div style={{minWidth:0}}>
-                        <div style={{fontSize:14,fontWeight:500,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name}</div>
+                        <div style={{fontSize:14,fontWeight:500,color:G.textM,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name}</div>
                         <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:2,fontWeight:600}}>⚠ No Entry Uploaded</div>
                       </div>
                     </div>
