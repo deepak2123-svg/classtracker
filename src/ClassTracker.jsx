@@ -116,26 +116,21 @@ function GhostBtn({onClick,children,style={}}){
 }
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
-function TopNav({user,teacherName,onEditName,right}){
+function TopNav({user,teacherName,right}){
   return(
-    <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:100,backdropFilter:"blur(8px)"}}>
+    <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:100}}>
       <div style={{maxWidth:1320,margin:"0 auto",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px",gap:8}}>
-        {/* Logo — compact on mobile */}
         <div style={{display:"flex",alignItems:"center",gap:9,flexShrink:0}}>
-          <div style={{width:32,height:32,borderRadius:9,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,boxShadow:`0 2px 8px rgba(27,138,76,0.3)`}}>🎓</div>
-          <span style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.3,whiteSpace:"nowrap"}}>Class Tracker</span>
+          <div style={{width:32,height:32,borderRadius:9,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,boxShadow:`0 2px 8px rgba(27,138,76,0.3)`}}>🎓</div>
+          <span style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.3,whiteSpace:"nowrap"}}>Class Tracker</span>
         </div>
-        {/* Right actions — scrollable row on mobile */}
         <div style={{display:"flex",alignItems:"center",gap:7,overflow:"hidden",flexShrink:1,minWidth:0}}>
           {right}
-          <button onClick={onEditName} className="nav-teacher-name"
-            style={{background:G.surface,border:`1.5px solid ${G.border}`,borderRadius:9,padding:"5px 11px",fontSize:14,cursor:"pointer",color:G.textM,fontFamily:G.sans,display:"flex",alignItems:"center",gap:7,transition:"all 0.15s",flexShrink:0}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textM;}}>
+          <div style={{display:"flex",alignItems:"center",gap:7,background:G.bg,border:`1.5px solid ${G.border}`,borderRadius:9,padding:"5px 12px",flexShrink:0}}>
             <Avatar user={user} size={20}/>
-            <span style={{fontWeight:500,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{teacherName}</span>
-          </button>
-          <button onClick={logout} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,fontSize:14,color:G.textM,cursor:"pointer",fontFamily:G.sans,padding:"5px 11px",fontWeight:500,transition:"all 0.15s",flexShrink:0,whiteSpace:"nowrap"}}
+            <span style={{fontWeight:600,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:13,color:G.textS}}>{teacherName}</span>
+          </div>
+          <button onClick={logout} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,fontSize:13,color:G.textM,cursor:"pointer",fontFamily:G.sans,padding:"5px 11px",fontWeight:500,transition:"all 0.15s",flexShrink:0,whiteSpace:"nowrap"}}
             onMouseEnter={e=>{e.currentTarget.style.background=G.redL;e.currentTarget.style.color=G.red;e.currentTarget.style.borderColor="#F5CACA";}}
             onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textM;e.currentTarget.style.borderColor=G.border;}}>
             Sign Out
@@ -145,7 +140,6 @@ function TopNav({user,teacherName,onEditName,right}){
     </div>
   );
 }
-
 // ── Date Carousel ─────────────────────────────────────────────────────────────
 function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
   // noteDates: { "2026-04-09": 3, "2026-04-07": 1, ... }
@@ -392,11 +386,23 @@ export default function ClassTracker({user}){
   const [editNote,setEditNote] = useState(null);
   const [newClass,setNewClass] = useState({institute:"",section:"",subject:""});
   const [search,setSearch]     = useState("");
-  const [editingName,setEditingName]   = useState(false);
+  // Name editing removed — name set from Google/signup only
   const [editingClass,setEditingClass] = useState(null);
   const [leaveModal,setLeaveModal]     = useState(null); // classId to leave
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
+
+  const [globalInstitutes, setGlobalInstitutes] = useState([]);
+  useEffect(()=>{
+    // Load global institutes list created by admins
+    import("firebase/firestore").then(({doc,getDoc})=>
+      import("./firebase").then(({db})=>
+        getDoc(doc(db,"config","institutes")).then(snap=>{
+          if(snap.exists()) setGlobalInstitutes(snap.data().list||[]);
+        })
+      )
+    ).catch(()=>{});
+  },[]);
 
   useEffect(()=>{loadUserData(user.uid).then(d=>{if(d){const merged={...DEFAULT_DATA,...d,profile:d.profile||{name:""},trash:d.trash||{classes:[],notes:[]}};setData(merged);syncTeacherIndex(user.uid,merged).catch(()=>{});}setLoading(false);});},[user.uid]);
   useEffect(()=>{
@@ -409,7 +415,16 @@ export default function ClassTracker({user}){
   useEffect(()=>{if((view==="addNote"||view==="editNote")&&noteRef.current)noteRef.current.focus();},[view]);
 
   if(loading)return<Spinner text="Loading…"/>;
-  if(!data.profile?.name)return<ProfileSetup user={user} onSave={name=>setData(d=>({...d,profile:{name}}))} />;
+  // Auto-set name from Google account or auth display name
+  if(!data.profile?.name){
+    const autoName = user.displayName || "";
+    if(autoName.trim()){
+      // Auto-apply without showing setup screen
+      setData(d=>({...d,profile:{name:autoName.trim()}}));
+      return <Spinner text="Setting up…"/>;
+    }
+    return <ProfileSetup user={user} onSave={name=>setData(d=>({...d,profile:{name}}))} />;
+  }
 
   const teacherName=data.profile.name;
   const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
@@ -420,7 +435,19 @@ export default function ClassTracker({user}){
     </div>
   ):null;
 
-  const sortedByUsage=(opts,field)=>{const c={};(data.classes||[]).forEach(cl=>{if(cl[field])c[cl[field]]=(c[cl[field]]||0)+1;});return[...(opts||[])].sort((a,b)=>(c[b]||0)-(c[a]||0));};
+  const sortedByUsage=(opts,field)=>{
+    const c={};
+    (data.classes||[]).forEach(cl=>{if(cl[field])c[cl[field]]=(c[cl[field]]||0)+1;});
+    const base=[...(opts||[])].sort((a,b)=>(c[b]||0)-(c[a]||0));
+    if(field==="institute"){
+      // Merge global institutes — used ones first, then global ones not yet used
+      const used=base.filter(i=>c[i]);
+      const unused=base.filter(i=>!c[i]);
+      const globalNew=globalInstitutes.filter(g=>!base.map(b=>b.toLowerCase()).includes(g.toLowerCase()));
+      return [...used,...unused,...globalNew];
+    }
+    return base;
+  };
   const addSubjectName  =(s)=>setData(d=>({...d,subjects:[...(d.subjects||[]),s]}));
   const addInstituteName=(s)=>setData(d=>({...d,institutes:[...(d.institutes||[]),s]}));
   const addSectionName  =(s)=>setData(d=>({...d,sections:[...(d.sections||[]),s]}));
@@ -483,12 +510,11 @@ export default function ClassTracker({user}){
   if(view==="home"||view==="class") return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
       <SaveBadge/>
-      {editingName&&<EditNameModal current={teacherName} onSave={n=>{setData(d=>({...d,profile:{name:n}}));setEditingName(false);}} onClose={()=>setEditingName(false)}/>}
       {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} addInstituteName={addInstituteName} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal&&(()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);}} onClose={()=>setLeaveModal(null)}/>:null;})()}
 
       {/* ── NAV ── */}
-      <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
+      <TopNav user={user} teacherName={teacherName} 
         right={<>
           <span className="desktop-only" style={{fontSize:14,color:G.textM,fontWeight:500,whiteSpace:"nowrap"}}>{data.classes.length} {data.classes.length===1?"class":"classes"} · {totalNotes} entries</span>
           <TrashBadge count={trashCount} onClick={()=>setView("trash")}/>
@@ -639,7 +665,7 @@ export default function ClassTracker({user}){
   // ── ADD CLASS ─────────────────────────────────────────────────────────────
   if(view==="addClass")return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
-      <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
+      <TopNav user={user} teacherName={teacherName} 
         right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}
       />
       <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px 80px"}}>
@@ -669,7 +695,7 @@ export default function ClassTracker({user}){
     return(
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
         <SaveBadge/>
-        <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
+        <TopNav user={user} teacherName={teacherName} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>
@@ -767,7 +793,7 @@ export default function ClassTracker({user}){
 
     return(
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
-        <TopNav user={user} teacherName={teacherName} onEditName={()=>setEditingName(true)}
+        <TopNav user={user} teacherName={teacherName} 
           right={<>
             {activeClass&&<div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:color.bg}}/>

@@ -186,6 +186,10 @@ function AdminPanelInner({user}){
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | institutes
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
+  const [selTeacher,   setSelTeacher]   = useState(null); // uid of teacher in detail modal
+  const [newInstName,  setNewInstName]  = useState(""); // new institute input
+  const [renamingTeacher, setRenamingTeacher] = useState(null); // {uid, currentName}
+  const [renameVal,    setRenameVal]    = useState("");
   const [deleteModal, setDeleteModal] = useState(null); // {type,label,lines,onConfirm}
   const [deleteBusy,  setDeleteBusy]  = useState(false);
   const [deletedInstitutes, setDeletedInstitutes] = useState(new Set());
@@ -342,6 +346,62 @@ function AdminPanelInner({user}){
   },[selP3,fullData,period]);
 
   // ── Role actions ──────────────────────────────────────────────────────────
+  // Save a new global institute to Firestore config
+  const handleCreateInstitute = async () => {
+    const name = newInstName.trim();
+    if (!name) return;
+    // Save to a global institutes config doc all teachers can read
+    try {
+      const { doc, setDoc, getDoc } = await import("firebase/firestore");
+      const { db } = await import("./firebase");
+      const ref = doc(db, "config", "institutes");
+      const snap = await getDoc(ref);
+      const existing = snap.exists() ? (snap.data().list || []) : [];
+      if (!existing.map(i=>i.toLowerCase()).includes(name.toLowerCase())) {
+        await setDoc(ref, { list: [...existing, name] }, { merge: true });
+      }
+      setNewInstName("");
+      alert(`Institute "${name}" created. Teachers can now see it in their dropdown.`);
+    } catch(e) { alert("Failed: " + e.message); }
+  };
+
+  // Rename a teacher (admin only)
+  const handleRenameTeacher = async (uid, newName) => {
+    if (!newName.trim()) return;
+    try {
+      const { doc, setDoc } = await import("firebase/firestore");
+      const { db } = await import("./firebase");
+      // Update teacher index
+      await setDoc(doc(db, "teachers", uid), { name: newName.trim() }, { merge: true });
+      // Update their profile in appdata
+      const dataRef = doc(db, "users", uid, "appdata", "main");
+      const snap = await (await import("firebase/firestore")).getDoc(dataRef);
+      if (snap.exists()) {
+        await setDoc(dataRef, { ...snap.data(), profile: { ...snap.data().profile, name: newName.trim() } });
+      }
+      setTeachers(ts => ts.map(t => t.uid === uid ? { ...t, name: newName.trim() } : t));
+      setFullData(fd => {
+        if (!fd[uid]) return fd;
+        return { ...fd, [uid]: { ...fd[uid], profile: { ...fd[uid].profile, name: newName.trim() } } };
+      });
+      setRenamingTeacher(null);
+    } catch(e) { alert("Failed: " + e.message); }
+  };
+
+  // Remove teacher from a specific class
+  const handleRemoveFromClass = async (uid, classId, className) => {
+    if (!window.confirm(`Remove teacher from "${className}"? This deletes all entries for this class.`)) return;
+    try {
+      await deleteClassFromTeacherData(uid, classId);
+      setFullData(fd => {
+        if (!fd[uid]) return fd;
+        const d = { ...fd[uid] };
+        d.classes = (d.classes || []).filter(c => c.id !== classId);
+        return { ...fd, [uid]: d };
+      });
+    } catch(e) { alert("Failed: " + e.message); }
+  };
+
   const handleGenerateInvite=async()=>{
     setInviteLoading(true); setInviteLink(null);
     try {
@@ -721,7 +781,7 @@ function AdminPanelInner({user}){
         </div>
       </div>
       <div style={{maxWidth:860,margin:"0 auto",padding:"20px 16px 72px"}}>
-        <h2 style={{fontSize:24,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:16}}>Manage Access</h2>
+        <h2 style={{fontSize:24,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:16}}>Control Centre</h2>
 
         {/* Tab switcher */}
         <div style={{display:"flex",background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:4,marginBottom:22,gap:4}}>
@@ -736,26 +796,69 @@ function AdminPanelInner({user}){
 
         {/* ── INSTITUTES TAB ── */}
         {manageTab==="institutes"&&<>
-        {/* ── Institute Management ── */}
+
+        {/* Create Institute */}
+        <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:20}}>
+          <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Create Institute</div>
+          <div style={{fontSize:14,color:G.textM,marginBottom:14}}>Only admins can create institutes. Teachers will see the full list when adding a class.</div>
+          <div style={{display:"flex",gap:10}}>
+            <input
+              value={newInstName}
+              onChange={e=>setNewInstName(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&handleCreateInstitute()}
+              placeholder="e.g. Kendriya Vidyalaya, GIS, Montfort"
+              style={{flex:1,padding:"11px 14px",borderRadius:10,border:`1.5px solid ${G.border}`,fontSize:16,fontFamily:G.sans,outline:"none",color:G.text}}
+              onFocus={e=>e.target.style.borderColor=G.blue}
+              onBlur={e=>e.target.style.borderColor=G.border}
+            />
+            <button onClick={handleCreateInstitute} disabled={!newInstName.trim()}
+              style={{background:newInstName.trim()?G.navy:G.bg,color:newInstName.trim()?"#fff":G.textL,border:`1px solid ${G.border}`,borderRadius:10,padding:"11px 20px",fontSize:15,cursor:newInstName.trim()?"pointer":"not-allowed",fontFamily:G.sans,fontWeight:600,flexShrink:0}}>
+              + Create
+            </button>
+          </div>
+        </div>
+
+        {/* Institute list */}
         <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:24}}>
-          <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Manage Institutes</div>
-          <div style={{fontSize:14,color:G.textM,marginBottom:14}}>Delete an institute to remove it from the list. Teachers and their data are not affected.</div>
+          <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>All Institutes</div>
+          <div style={{fontSize:14,color:G.textM,marginBottom:14}}>Delete removes from the list only. Teacher data is not affected.</div>
           {institutes.length===0
-            ?<div style={{fontSize:15,color:G.textL,fontStyle:"italic"}}>No institutes yet.</div>
-            :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No institutes yet. Create one above.</div>
+            :<div style={{display:"flex",flexDirection:"column",gap:10}}>
               {institutes.map(inst=>{
-                const tCount=teachers.filter(t=>{const d=fullData[t.uid];if(d)return(d.classes||[]).some(c=>(c.institute||"").trim()===inst.trim());return(t.institutes||[]).some(i=>i.trim()===inst.trim());}).length;
-                const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())).length;
+                const instTeacherList=teachers.filter(t=>{const d=fullData[t.uid];if(d)return(d.classes||[]).some(c=>(c.institute||"").trim()===inst.trim());return(t.institutes||[]).some(i=>i.trim()===inst.trim());});
+                const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||instTeacherList.length;
                 return(
-                  <div key={inst} style={{background:G.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-                    <div>
-                      <div style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{inst}</div>
-                      <div style={{fontSize:14,color:G.textM,marginTop:3,fontFamily:G.sans,fontWeight:500}}>{clsCount} class{clsCount!==1?"es":""} · {tCount} teacher{tCount!==1?"s":""}</div>
+                  <div key={inst} style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`}}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:instTeacherList.length>0?12:0}}>
+                      <div>
+                        <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{inst}</div>
+                        <div style={{fontSize:14,color:G.textM,marginTop:3}}>{clsCount} class{clsCount!==1?"es":""} · {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}</div>
+                      </div>
+                      <button onClick={()=>handleDeleteInstitute(inst)}
+                        style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,flexShrink:0,whiteSpace:"nowrap"}}>
+                        Delete
+                      </button>
                     </div>
-                    <button onClick={()=>handleDeleteInstitute(inst)}
-                      style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"7px 14px",fontSize:14,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,flexShrink:0,whiteSpace:"nowrap"}}>
-                      Delete Institute
-                    </button>
+                    {/* Teacher chips for this institute */}
+                    {instTeacherList.length>0&&(
+                      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                        {instTeacherList.map(t=>{
+                          const name=(fullData[t.uid]?.profile?.name||t.name||"?");
+                          const isAdmin=roles[t.uid]==="admin";
+                          return(
+                            <div key={t.uid} style={{display:"flex",alignItems:"center",gap:7,background:G.surface,border:`1px solid ${G.borderM}`,borderRadius:20,padding:"5px 12px 5px 7px",cursor:"pointer",transition:"all 0.15s"}}
+                              onClick={()=>{ensureFullData(t.uid);setSelTeacher(t.uid);setManageTab("teachers");}}>
+                              <div style={{width:24,height:24,borderRadius:"50%",background:isAdmin?G.amberL:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:isAdmin?G.amber:G.blue,fontFamily:G.mono,flexShrink:0}}>
+                                {(name[0]||"?").toUpperCase()}
+                              </div>
+                              <span style={{fontSize:13,fontWeight:600,color:G.textS}}>{name}</span>
+                              {isAdmin&&<span style={{fontSize:11,color:G.amber}}>👑</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -767,69 +870,166 @@ function AdminPanelInner({user}){
 
         {/* ── TEACHERS TAB ── */}
         {manageTab==="teachers"&&<>
-        <p style={{fontSize:15,color:G.textM,marginBottom:20}}>Promote teachers to admin, or generate an invite link to give someone direct admin access.</p>
 
-        {/* Invite link generator */}
-        <div style={{background:G.blueL||"#DBEAFE",border:"1px solid #BFDBFE",borderRadius:13,padding:"14px 16px",marginBottom:20}}>
+        {/* Invite link */}
+        <div style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:13,padding:"14px 16px",marginBottom:20}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
             <div>
-              <div style={{fontSize:16,fontWeight:600,color:G.navy||"#1A2F5A",fontFamily:G.display}}>Generate Invite Link</div>
-              <div style={{fontSize:14,color:"#3B82F6",marginTop:3}}>Single-use · expires in 7 days · anyone with the link becomes admin</div>
+              <div style={{fontSize:16,fontWeight:700,color:G.navy,fontFamily:G.display}}>Generate Admin Invite Link</div>
+              <div style={{fontSize:14,color:"#1D4ED8",marginTop:3}}>Single-use · expires in 7 days</div>
             </div>
             <button onClick={handleGenerateInvite} disabled={inviteLoading}
-              style={{...pill(G.navy||"#1A2F5A","#fff","transparent"),padding:"8px 18px",fontSize:15,flexShrink:0}}>
+              style={{...pill(G.navy,"#fff","transparent"),padding:"8px 18px",fontSize:15,flexShrink:0}}>
               {inviteLoading?"Generating…":"🔗 Generate Link"}
             </button>
           </div>
           {inviteLink&&(
             <div style={{marginTop:14}}>
-              <div style={{background:"#fff",border:"1px solid #BFDBFE",borderRadius:9,padding:"10px 14px",fontSize:14,fontFamily:G.mono,color:"#1A2F5A",wordBreak:"break-all",marginBottom:10}}>
-                {inviteLink}
-              </div>
+              <div style={{background:"#fff",border:"1px solid #BFDBFE",borderRadius:9,padding:"10px 14px",fontSize:14,fontFamily:G.mono,color:"#1A2F5A",wordBreak:"break-all",marginBottom:10}}>{inviteLink}</div>
               <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>alert("Link copied!"))}
-                  style={{...pill("#1D4ED8","#fff","transparent"),fontSize:14,padding:"6px 16px"}}>
-                  Copy Link
-                </button>
-                <button onClick={()=>setInviteLink(null)}
-                  style={{...pill("none",G.textM,G.border),fontSize:14,padding:"6px 16px"}}>
-                  Dismiss
-                </button>
+                <button onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>alert("Link copied!"))} style={{...pill("#1D4ED8","#fff","transparent"),fontSize:14,padding:"6px 16px"}}>Copy Link</button>
+                <button onClick={()=>setInviteLink(null)} style={{...pill("none",G.textM,G.border),fontSize:14,padding:"6px 16px"}}>Dismiss</button>
               </div>
-              <div style={{fontSize:13,color:"#3B82F6",marginTop:10}}>
-                ⚠ Share this link privately. It grants full admin access and can only be used once.
-              </div>
+              <div style={{fontSize:13,color:"#1D4ED8",marginTop:10}}>⚠ Share privately. Grants full admin access, single-use.</div>
             </div>
           )}
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {teachers.map(t=>{
-            const d=fullData[t.uid]||{};
-            const name=d.profile?.name||t.name||"Unknown";
-            const isAdmin=roles[t.uid]==="admin";
-            const isMe=t.uid===user.uid;
+
+        {/* Teachers grouped by institute */}
+        {(()=>{
+          // Build groups: institute → teachers
+          const allInsts = [...new Set([
+            ...institutes,
+            ...teachers.flatMap(t=>(t.institutes||[]))
+          ])].sort();
+          const noInst = teachers.filter(t=>!(t.institutes||[]).length);
+
+          const TeacherCard = ({t, highlight}) => {
+            const d = fullData[t.uid]||{};
+            const name = d.profile?.name||t.name||"Unknown";
+            const isAdmin = roles[t.uid]==="admin";
+            const isMe = t.uid===user.uid;
+            const isSel = selTeacher===t.uid;
             return(
-              <div key={t.uid} style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 18px",display:"flex",alignItems:"center",gap:14,boxShadow:G.shadowSm}}>
-                <div style={{width:40,height:40,borderRadius:10,background:isAdmin?G.amberL:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:isAdmin?G.amber:G.blue,fontFamily:G.mono,flexShrink:0}}>
-                  {(name[0]||"?").toUpperCase()}
+              <div style={{background:G.surface,borderRadius:12,border:`2px solid ${isSel?G.blue:G.border}`,overflow:"hidden",boxShadow:isSel?`0 0 0 3px ${G.blueL}`:G.shadowSm,transition:"all 0.15s",marginBottom:0}}>
+                {/* Card header — clickable */}
+                <div onClick={()=>{ensureFullData(t.uid);setSelTeacher(isSel?null:t.uid);}}
+                  style={{padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:42,height:42,borderRadius:11,background:isAdmin?G.amberL:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:isAdmin?G.amber:G.blue,fontFamily:G.mono,flexShrink:0}}>
+                    {(name[0]||"?").toUpperCase()}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      {name}
+                      {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
+                    </div>
+                    <div style={{fontSize:13,color:G.textM,marginTop:3}}>
+                      {(t.institutes||[]).join(" · ")||"No institute yet"}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
+                    <span style={{background:isAdmin?G.amberL:G.blueL,color:isAdmin?G.amber:G.blue,fontSize:12,fontWeight:700,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
+                      {isAdmin?"👑 Admin":"👤 Teacher"}
+                    </span>
+                    <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>{(d.classes||[]).length} classes · tap to manage</span>
+                  </div>
                 </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{name}{isMe&&<span style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginLeft:6}}>(you)</span>}</div>
-                  <div style={{fontSize:14,color:G.textM,marginTop:2}}>{(t.institutes||[]).join(" · ")||"No institute yet"}</div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                  <span style={{...pill(isAdmin?G.amberL:G.blueL,isAdmin?G.amber:G.blue,"transparent"),cursor:"default",fontSize:13}}>
-                    {isAdmin?"👑 Admin":"👤 Teacher"}
-                  </span>
-                  {!isMe&&(isAdmin
-                    ?<button onClick={()=>handleDemote(t.uid)} style={{...pill(G.redL,G.red,"#F5CACA")}}>Remove admin</button>
-                    :<button onClick={()=>handlePromote(t.uid)} style={{...pill(G.blueL,G.blue,G.borderM)}}>Make admin</button>
-                  )}
-                </div>
+
+                {/* Expanded actions panel */}
+                {isSel&&(
+                  <div style={{borderTop:`1px solid ${G.border}`,background:G.bg,padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
+
+                    {/* Classes list */}
+                    {(d.classes||[]).length>0&&(
+                      <div>
+                        <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Classes</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          {(d.classes||[]).map(cls=>(
+                            <div key={cls.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:G.surface,borderRadius:8,padding:"9px 12px",border:`1px solid ${G.border}`,gap:8}}>
+                              <div>
+                                <div style={{fontSize:14,fontWeight:600,color:G.text}}>{normaliseName(cls.section)}</div>
+                                <div style={{fontSize:12,color:G.textM}}>{cls.institute} · {cls.subject}</div>
+                              </div>
+                              <button onClick={()=>handleRemoveFromClass(t.uid,cls.id,normaliseName(cls.section))}
+                                style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:7,padding:"5px 11px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,flexShrink:0}}>
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:4}}>
+                      {/* Rename */}
+                      {renamingTeacher?.uid===t.uid?(
+                        <div style={{display:"flex",gap:6,flex:1,minWidth:200}}>
+                          <input value={renameVal} onChange={e=>setRenameVal(e.target.value)}
+                            onKeyDown={e=>e.key==="Enter"&&handleRenameTeacher(t.uid,renameVal)}
+                            placeholder="New name…" autoFocus
+                            style={{flex:1,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${G.blue}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
+                          <button onClick={()=>handleRenameTeacher(t.uid,renameVal)} style={{...pill(G.navy,"#fff","transparent"),fontSize:13,padding:"7px 14px"}}>Save</button>
+                          <button onClick={()=>setRenamingTeacher(null)} style={{...pill("none",G.textM,G.border),fontSize:13,padding:"7px 10px"}}>✕</button>
+                        </div>
+                      ):(
+                        <button onClick={()=>{setRenamingTeacher({uid:t.uid,currentName:name});setRenameVal(name);}}
+                          style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>✏ Rename</button>
+                      )}
+
+                      {/* Role actions */}
+                      {!isMe&&(isAdmin
+                        ?<button onClick={()=>handleDemote(t.uid)} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>Remove Admin</button>
+                        :<button onClick={()=>handlePromote(t.uid)} style={{...pill(G.blueL,G.blue,G.borderM),fontSize:13}}>Make Admin</button>
+                      )}
+
+                      {/* View in main panel */}
+                      <button onClick={()=>{setView("main");setSelP2(t.uid);setTab("teacher");setMobileStep(2);}}
+                        style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>📋 View Entries</button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
-          })}
-        </div>
+          };
+
+          return(
+            <div style={{display:"flex",flexDirection:"column",gap:20}}>
+              {allInsts.map(inst=>{
+                const instT=teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim()));
+                if(!instT.length) return null;
+                return(
+                  <div key={inst}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                      <div style={{flex:1,height:1,background:G.border}}/>
+                      <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,textTransform:"uppercase",letterSpacing:0.5,background:G.surface,padding:"4px 12px",borderRadius:20,border:`1px solid ${G.border}`}}>
+                        🏫 {inst}
+                      </div>
+                      <div style={{flex:1,height:1,background:G.border}}/>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {instT.map(t=><TeacherCard key={t.uid} t={t}/>)}
+                    </div>
+                  </div>
+                );
+              })}
+              {noInst.length>0&&(
+                <div>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                    <div style={{flex:1,height:1,background:G.border}}/>
+                    <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,textTransform:"uppercase",letterSpacing:0.5,background:G.surface,padding:"4px 12px",borderRadius:20,border:`1px solid ${G.border}`}}>
+                      No Institute Assigned
+                    </div>
+                    <div style={{flex:1,height:1,background:G.border}}/>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {noInst.map(t=><TeacherCard key={t.uid} t={t}/>)}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
         </>}
       </div>
     </div>
@@ -874,7 +1074,7 @@ function AdminPanelInner({user}){
         style={{...pill("rgba(255,255,255,0.08)","rgba(255,255,255,0.55)","rgba(255,255,255,0.1)"),fontSize:13,position:"relative"}}>
         🗑{adminBin.length>0&&<span style={{position:"absolute",top:-4,right:-4,background:G.red,color:"#fff",borderRadius:"50%",width:14,height:14,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.mono}}>{adminBin.length}</span>}
       </button>
-      <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.12)","rgba(255,255,255,0.85)","rgba(255,255,255,0.2)"),fontSize:14,fontWeight:500}}>Manage Access</button>
+      <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.12)","rgba(255,255,255,0.85)","rgba(255,255,255,0.2)"),fontSize:14,fontWeight:500}}>Control Centre</button>
           <button onClick={logout} style={{...pill("none","rgba(255,255,255,0.65)","rgba(255,255,255,0.2)"),fontSize:14}}>Sign Out</button>
         </div>
       </div>
