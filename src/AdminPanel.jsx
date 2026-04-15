@@ -197,12 +197,13 @@ function AdminPanelInner({user}){
   const [deleteModal, setDeleteModal] = useState(null); // {type,label,lines,onConfirm}
   const [deleteBusy,  setDeleteBusy]  = useState(false);
   const [deletedInstitutes, setDeletedInstitutes] = useState(new Set());
+  const [globalInstList, setGlobalInstList] = useState([]); // from config/institutes
 
   useEffect(()=>{
     (async()=>{
-      // Load only the index (fast, lightweight) — NOT full teacher data
-      const [t,r]=await Promise.all([getAllTeachers(),getAllRoles()]);
-      setTeachers(t); setRoles(r); setLoading(false);
+      // Load index + roles + global institutes list in parallel
+      const [t,r,gInst]=await Promise.all([getAllTeachers(),getAllRoles(),getGlobalInstitutes()]);
+      setTeachers(t); setRoles(r); setGlobalInstList(gInst); setLoading(false);
     })();
   },[]);
 
@@ -218,18 +219,20 @@ function AdminPanelInner({user}){
   // ── Derived: institutes ───────────────────────────────────────────────────
   const institutes=useMemo(()=>{
     const set=new Set();
-    // Primary: teacher index (loaded immediately on mount)
+    // Primary: admin-created global list from config/institutes (accurate, mobile-safe)
+    globalInstList.forEach(i=>{ if(i) set.add(i.trim()); });
+    // Supplement: teacher index catches institutes not yet in admin list (legacy data)
     teachers.forEach(t=>{
       (t.institutes||[]).forEach(i=>{ if(i) set.add(i.trim()); });
     });
-    // Supplement: fullData catches institutes added after last index sync
+    // Supplement: fullData for any institute added after last index sync
     Object.values(fullData).forEach(d=>{
       (d.classes||[]).forEach(c=>{ if(c.institute) set.add(c.institute.trim()); });
     });
-    // Remove locally deleted institutes so they vanish immediately without reload
+    // Remove locally deleted institutes
     deletedInstitutes.forEach(i=>set.delete(i));
     return Array.from(set).sort();
-  },[teachers,fullData,deletedInstitutes]);
+  },[globalInstList,teachers,fullData,deletedInstitutes]);
 
   const totalEntries=useMemo(()=>{
     let t=0;
@@ -360,6 +363,7 @@ function AdminPanelInner({user}){
       const { doc, setDoc } = await import("firebase/firestore");
       const { db: fdb } = await import("./firebase");
       await setDoc(doc(fdb, "config", "institutes"), { list: updated });
+      setGlobalInstList(updated);
       // Also update deletedInstitutes set if it was there
       setDeletedInstitutes(s => {
         if (!s.has(oldName)) return s;
@@ -376,12 +380,9 @@ function AdminPanelInner({user}){
     try {
       await saveGlobalInstitute(name);
       setNewInstName("");
-      // Reload institutes list
+      // Reload global institutes list so P1 updates immediately
       const updated = await getGlobalInstitutes();
-      // Update local institutes state so P1 reflects it
-      if (!institutes.includes(name)) {
-        setTeachers(ts => ts); // trigger recompute
-      }
+      setGlobalInstList(updated);
       alert(`Institute "${name}" created. Teachers can now see it in their dropdown.`);
     } catch(e) { alert("Failed: " + e.message); }
   };
