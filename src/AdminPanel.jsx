@@ -178,7 +178,7 @@ function AdminPanelInner({user}){
   const [inviteLoading,setInviteLoading]=useState(false);
   // navigation state
   const [selInst,     setSelInst]     = useState(null);
-  const [tab,         setTab]         = useState("teacher"); // teacher | class
+  const [tab,         setTab]         = useState("class"); // class | teacher
   const [selP2,       setSelP2]       = useState(null); // { type, key } teacher uid OR class raw name
   const [selP3,       setSelP3]       = useState(null); // { teacherUid, classRaw }
   const [period,      setPeriod]      = useState("today");
@@ -1185,11 +1185,43 @@ function AdminPanelInner({user}){
         {loadingUids.size>0&&<div style={{marginLeft:"auto",fontSize:12,color:"rgba(255,255,255,0.5)",fontFamily:G.mono}}>syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…</div>}
       </div>
 
-      {/* Mobile back button */}
-      <div className="admin-mobile-back" style={{background:G.navyS,borderBottom:`1px solid rgba(255,255,255,0.06)`,padding:"8px 16px",flexShrink:0}}
-        onClick={()=>setMobileStep(s=>Math.max(0,s-1))}>
-        <span style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:7,padding:"6px 14px",fontSize:14,color:"rgba(255,255,255,0.6)",cursor:"pointer",fontFamily:G.sans}}>← Back</span>
-      </div>
+      {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
+      {mobileStep>0&&(
+        <div className="admin-mobile-back" style={{background:G.navyS,borderBottom:`1px solid rgba(255,255,255,0.08)`,padding:"8px 14px",flexShrink:0,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          {/* Breadcrumb trail — tap any crumb to jump there */}
+          <span onClick={()=>{setMobileStep(0);setSelInst(null);resetNav();}}
+            style={{fontSize:13,color:"rgba(255,255,255,0.5)",cursor:"pointer",fontFamily:G.sans,padding:"3px 0"}}>
+            Institutes
+          </span>
+          {mobileStep>=1&&selInst&&<>
+            <span style={{color:"rgba(255,255,255,0.3)",fontSize:12}}>›</span>
+            <span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);}}
+              style={{fontSize:13,color:mobileStep===1?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontFamily:G.sans,fontWeight:mobileStep===1?700:400,padding:"3px 0"}}>
+              {selInst}
+            </span>
+          </>}
+          {mobileStep>=2&&selP2&&<>
+            <span style={{color:"rgba(255,255,255,0.3)",fontSize:12}}>›</span>
+            <span onClick={()=>{setMobileStep(2);setSelP3(null);}}
+              style={{fontSize:13,color:mobileStep===2?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontFamily:G.sans,fontWeight:mobileStep===2?700:400,padding:"3px 0"}}>
+              {tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}
+            </span>
+          </>}
+          {mobileStep>=3&&selP3&&<>
+            <span style={{color:"rgba(255,255,255,0.3)",fontSize:12}}>›</span>
+            <span style={{fontSize:13,color:"#fff",fontFamily:G.sans,fontWeight:700,padding:"3px 0"}}>
+              {selP3.className}
+            </span>
+          </>}
+          {/* Back button */}
+          <div style={{marginLeft:"auto"}}>
+            <span onClick={()=>setMobileStep(s=>Math.max(0,s-1))}
+              style={{background:"rgba(255,255,255,0.1)",borderRadius:7,padding:"5px 12px",fontSize:13,color:"rgba(255,255,255,0.7)",cursor:"pointer",fontFamily:G.sans}}>
+              ← Back
+            </span>
+          </div>
+        </div>
+      )}
       {/* 4-panel body */}
       <div className={`admin-panels admin-mobile-step-${mobileStep}`} style={{display:"flex",flex:1,overflow:"hidden",userSelect:"none"}}
         ref={el=>{
@@ -1261,16 +1293,16 @@ function AdminPanelInner({user}){
             <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text,marginBottom:10}}>{selInst||"—"}</div>
             {/* Toggle */}
             <div style={{display:"flex",gap:0,background:G.bg,borderRadius:8,padding:3,border:`1px solid ${G.border}`}}>
-              {["teacher","class"].map(t=>(
+              {["class","teacher"].map(t=>(
                 <button key={t} onClick={()=>{resetNav(t);}}
                   style={{flex:1,padding:"6px 0",borderRadius:6,border:"none",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,textAlign:"center",transition:"all 0.15s",background:tab===t?G.navy:"none",color:tab===t?"#fff":G.textM}}>
-                  By {t.charAt(0).toUpperCase()+t.slice(1)}
+                  t==="class"?"By Class":"By Teacher"
                 </button>
               ))}
             </div>
           </div>
           <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
-            {tab==="teacher"?"Teachers":"Classes ↓ (12th first)"}
+            {tab==="class"?"Classes ↓ (12th first)":"Teachers"}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
             {!selInst&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>Select an institute</div>}
@@ -1344,7 +1376,7 @@ function AdminPanelInner({user}){
               {!selP2?"—":tab==="teacher"?(fullData[selP2]?.profile?.name||"Teacher"):normaliseName(selP2)}
             </div>
             <div style={{fontSize:12,color:G.textM,fontFamily:G.mono,marginTop:2}}>
-              {tab==="teacher"?"Their classes at "+selInst:"Teachers in this class"}
+              {tab==="class"?"Teachers in this class":"Their classes at "+selInst}
             </div>
           </div>
           <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
