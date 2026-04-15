@@ -203,7 +203,25 @@ function AdminPanelInner({user}){
     (async()=>{
       // Load index + roles + global institutes list in parallel
       const [t,r,gInst]=await Promise.all([getAllTeachers(),getAllRoles(),getGlobalInstitutes()]);
-      setTeachers(t); setRoles(r); setGlobalInstList(gInst); setLoading(false);
+      setTeachers(t); setRoles(r);
+
+      if(gInst.length>0){
+        // Config doc exists and has institutes — use it
+        setGlobalInstList(gInst);
+      } else {
+        // Config doc empty or missing — seed from teacher index (all known institutes)
+        const fromIndex=[...new Set(t.flatMap(teacher=>(teacher.institutes||[]).map(i=>i.trim()).filter(Boolean)))].sort();
+        setGlobalInstList(fromIndex);
+        // Save to config so next load is fast and authoritative
+        if(fromIndex.length>0){
+          try{
+            const{doc:d,setDoc:s}=await import("firebase/firestore");
+            const{db:fdb}=await import("./firebase");
+            await s(d(fdb,"config","institutes"),{list:fromIndex});
+          }catch(e){console.warn("Could not seed institutes config",e);}
+        }
+      }
+      setLoading(false);
     })();
   },[]);
 
