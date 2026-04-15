@@ -999,7 +999,7 @@ function AdminPanelInner({user}){
                 );
               })}
             </div>
-            <p style={{fontSize:12,color:G.textL,textAlign:"center",marginTop:12,fontFamily:G.sans}}>↕ Drag institutes to reorder</p>
+            <p style={{fontSize:12,color:G.textL,textAlign:"center",marginTop:12,fontFamily:G.sans}}>Drag cards to reorder</p>
           }
         </div>
 
