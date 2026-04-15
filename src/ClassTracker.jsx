@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes } from "./firebase";
+import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db } from "./firebase";
 import { TAG_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
@@ -395,16 +395,25 @@ export default function ClassTracker({user}){
   const [globalInstitutes, setGlobalInstitutes] = useState([]);
   useEffect(()=>{
     // Load global institutes list created by admins
-    import("firebase/firestore").then(({doc,getDoc})=>
-      import("./firebase").then(({db})=>
-        getDoc(doc(db,"config","institutes")).then(snap=>{
-          if(snap.exists()) setGlobalInstitutes(snap.data().list||[]);
-        })
-      )
-    ).catch(()=>{});
+    import("firebase/firestore").then(({doc: firestoreDoc, getDoc})=>{
+      getDoc(firestoreDoc(db,"config","institutes")).then(snap=>{
+        if(snap.exists()) setGlobalInstitutes(snap.data().list||[]);
+      }).catch(()=>{});
+    }).catch(()=>{});
   },[]);
 
-  useEffect(()=>{loadUserData(user.uid).then(d=>{if(d){const merged={...DEFAULT_DATA,...d,profile:d.profile||{name:""},trash:d.trash||{classes:[],notes:[]}};setData(merged);syncTeacherIndex(user.uid,merged).catch(()=>{});}setLoading(false);});},[user.uid]);
+  useEffect(()=>{
+    loadUserData(user.uid).then(d=>{
+      const base = d ? {...DEFAULT_DATA,...d,profile:d.profile||{name:""},trash:d.trash||{classes:[],notes:[]}} : DEFAULT_DATA;
+      // Auto-apply Google display name if profile name not set
+      if(!base.profile?.name && user.displayName) {
+        base.profile = { name: user.displayName.trim() };
+      }
+      setData(base);
+      if(base.profile?.name) syncTeacherIndex(user.uid,base).catch(()=>{});
+      setLoading(false);
+    });
+  },[user.uid]);
   useEffect(()=>{
     if(loading)return;
     setSaving(true);setSaveErr(false);
@@ -415,16 +424,7 @@ export default function ClassTracker({user}){
   useEffect(()=>{if((view==="addNote"||view==="editNote")&&noteRef.current)noteRef.current.focus();},[view]);
 
   if(loading)return<Spinner text="Loading…"/>;
-  // Auto-set name from Google account or auth display name
-  if(!data.profile?.name){
-    const autoName = user.displayName || "";
-    if(autoName.trim()){
-      // Auto-apply without showing setup screen
-      setData(d=>({...d,profile:{name:autoName.trim()}}));
-      return <Spinner text="Setting up…"/>;
-    }
-    return <ProfileSetup user={user} onSave={name=>setData(d=>({...d,profile:{name}}))} />;
-  }
+  if(!data.profile?.name)return<ProfileSetup user={user} onSave={name=>setData(d=>({...d,profile:{name}}))} />;
 
   const teacherName=data.profile.name;
   const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
