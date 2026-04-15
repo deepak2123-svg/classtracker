@@ -1139,20 +1139,24 @@ function AdminPanelInner({user}){
 
   // ── MAIN PANEL VIEW ───────────────────────────────────────────────────────
   return(
-    <div style={{minHeight:"100vh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
+    <div style={{minHeight:"100vh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}} className="admin-root">
       {binView&&<AdminBinModal/>}
       {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       <style>{`
         @media (max-width: 767px) {
-          .admin-panels { flex-direction: column !important; }
-          .admin-side-panel { width: 100% !important; border-right: none !important; border-bottom: 1px solid rgba(255,255,255,0.1) !important; }
+          /* On mobile: full-screen step navigation */
+          .admin-root { height: auto !important; min-height: 100vh !important; overflow: auto !important; }
+          .admin-panels { flex-direction: column !important; overflow: visible !important; height: auto !important; }
+          .admin-side-panel { width: 100% !important; border-right: none !important; border-bottom: 1px solid #E2E8F0 !important; overflow: visible !important; height: auto !important; min-height: 0 !important; }
+          .admin-side-panel > div[style*="overflowY"] { overflow: visible !important; height: auto !important; max-height: none !important; }
+          .admin-p4 { overflow: visible !important; height: auto !important; }
+          .admin-p4 > div { overflow: visible !important; height: auto !important; }
           .admin-mobile-step-0 .admin-p2, .admin-mobile-step-0 .admin-p3, .admin-mobile-step-0 .admin-p4 { display: none !important; }
           .admin-mobile-step-1 .admin-p1 { display: none !important; }
           .admin-mobile-step-1 .admin-p3, .admin-mobile-step-1 .admin-p4 { display: none !important; }
           .admin-mobile-step-2 .admin-p1, .admin-mobile-step-2 .admin-p2 { display: none !important; }
           .admin-mobile-step-2 .admin-p4 { display: none !important; }
           .admin-mobile-step-3 .admin-p1, .admin-mobile-step-3 .admin-p2, .admin-mobile-step-3 .admin-p3 { display: none !important; }
-          .admin-mobile-back { display: flex !important; }
           .admin-stats { flex-wrap: wrap; gap: 10px 18px; padding: 8px 16px !important; }
         }
         @media (min-width: 768px) {
