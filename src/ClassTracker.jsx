@@ -270,6 +270,57 @@ function CreatableDropdown({value,onChange,options,onAddOption,placeholder,addPl
   );
 }
 
+
+// ── Read-only Dropdown (for admin-controlled lists) ──────────────────────────
+function ReadOnlyDropdown({value, onChange, options, placeholder, emptyMsg}){
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  useEffect(()=>{
+    const h=e=>{ if(wrapRef.current&&!wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown",h);
+    return ()=>document.removeEventListener("mousedown",h);
+  },[]);
+  return(
+    <div ref={wrapRef} style={{position:"relative",marginBottom:10}}>
+      <button type="button" onClick={()=>setOpen(o=>!o)}
+        style={{...inp,marginBottom:0,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",color:value?G.text:G.textL}}>
+        <span style={{fontWeight:value?500:400}}>{value||placeholder}</span>
+        <span style={{color:G.textL,fontSize:11,fontFamily:G.mono,transform:open?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
+      </button>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,zIndex:400,background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,boxShadow:G.shadowLg,overflow:"hidden"}}>
+          {options.length===0
+            ?<div style={{padding:"16px",color:G.textM,fontSize:14,textAlign:"center"}}>
+                <div style={{fontSize:20,marginBottom:6}}>🏫</div>
+                <div style={{fontWeight:600,color:G.text,marginBottom:4}}>No institutes available</div>
+                <div style={{color:G.textL,fontSize:13}}>{emptyMsg||"Ask your admin to create institutes first."}</div>
+              </div>
+            :<div style={{maxHeight:220,overflowY:"auto"}}>
+              {options.map(opt=>{
+                const sel=opt===value;
+                return(
+                  <div key={opt} onClick={()=>{onChange(opt);setOpen(false);}}
+                    style={{padding:"12px 16px",cursor:"pointer",fontSize:15,color:sel?G.green:G.text,fontWeight:sel?600:400,background:sel?G.greenL:"transparent",display:"flex",alignItems:"center",gap:12,transition:"background 0.1s"}}
+                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=G.bg;}}
+                    onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                    <span style={{width:16,color:G.green,fontSize:14,fontFamily:G.mono}}>{sel?"✓":""}</span>
+                    {opt}
+                  </div>
+                );
+              })}
+            </div>
+          }
+          <div style={{borderTop:`1px solid ${G.border}`,padding:"8px 14px",fontSize:12,color:G.textM,display:"flex",alignItems:"center",gap:6}}>
+            <span>🔒</span>
+            <span>Institutes are managed by your admin</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ── Profile Setup ─────────────────────────────────────────────────────────────
 function ProfileSetup({user,onSave}){
   const [name,setName]=useState(user.displayName||"");
@@ -323,14 +374,14 @@ function EditNameModal({current,onSave,onClose}){
   );
 }
 
-function EditClassModal({cls,data,onSave,onClose,sortedByUsage,addInstituteName,addSectionName,addSubjectName}){
+function EditClassModal({cls,data,onSave,onClose,sortedByUsage,globalInstitutes,addSectionName,addSubjectName}){
   const [section,setSection]=useState(cls.section||"");
   const [institute,setInstitute]=useState(cls.institute||"");
   const [subject,setSubject]=useState(cls.subject||"");
   return(
     <Modal title="Edit class" subtitle="Update the details for this class" onClose={onClose}>
       <label style={lbl}>Institute</label>
-      <CreatableDropdown value={institute} onChange={setInstitute} options={sortedByUsage(data.institutes||[],"institute")} onAddOption={addInstituteName} placeholder="e.g. KIS, Genesis Karnal" addPlaceholder="Type institute name…"/>
+      <ReadOnlyDropdown value={institute} onChange={setInstitute} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select institute"/>
       <label style={{...lbl,marginTop:8}}>Class / Section</label>
       <CreatableDropdown value={section} onChange={setSection} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
       <label style={{...lbl,marginTop:8}}>Subject</label>
@@ -476,12 +527,8 @@ function ClassTrackerInner({user}){
     (data.classes||[]).forEach(cl=>{if(cl[field])c[cl[field]]=(c[cl[field]]||0)+1;});
     const base=[...(opts||[])].sort((a,b)=>(c[b]||0)-(c[a]||0));
     if(field==="institute"){
-      // Merge global institutes — used ones first, then global ones not yet used
-      const used=base.filter(i=>c[i]);
-      const unused=base.filter(i=>!c[i]);
-      const baseLC=base.filter(Boolean).map(b=>typeof b==="string"?b.toLowerCase():"");
-      const globalNew=globalInstitutes.filter(g=>g&&!baseLC.includes(g.toLowerCase()));
-      return [...used,...unused,...globalNew];
+      // Return globalInstitutes if available (admin-controlled), fallback to local
+      if(globalInstitutes.length>0) return globalInstitutes;
     }
     return base;
   };
@@ -536,7 +583,7 @@ function ClassTrackerInner({user}){
   if(view==="home"||view==="class") return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
       <SaveBadge/>
-      {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} addInstituteName={addInstituteName} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
+      {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal&&(()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);}} onClose={()=>setLeaveModal(null)}/>:null;})()}
 
       {/* ── NAV ── */}
@@ -711,7 +758,7 @@ function ClassTrackerInner({user}){
             <span>👤</span><span>Logged in as: <strong>{teacherName}</strong></span>
           </div>
           <label style={lbl}>Institute</label>
-          <CreatableDropdown value={newClass.institute} onChange={s=>setNewClass(c=>({...c,institute:s}))} options={sortedByUsage(data.institutes||[],"institute")} onAddOption={addInstituteName} placeholder="e.g. Genesis Karnal, KIS, GIS" addPlaceholder="Type institute name…"/>
+          <ReadOnlyDropdown value={newClass.institute} onChange={s=>setNewClass(c=>({...c,institute:s}))} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select your institute"/>
           <label style={{...lbl,marginTop:10}}>Class / Section</label>
           <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
           <label style={{...lbl,marginTop:10}}>Subject</label>
