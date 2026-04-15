@@ -924,23 +924,16 @@ function AdminPanelInner({user}){
                         </button>
                       </div>
                     </div>
-                    {/* Teacher chips for this institute */}
+                    {/* Teacher count tag — no names to avoid confusion */}
                     {instTeacherList.length>0&&(
-                      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                        {instTeacherList.map(t=>{
-                          const name=(fullData[t.uid]?.profile?.name||t.name||"?");
-                          const isAdmin=roles[t.uid]==="admin";
-                          return(
-                            <div key={t.uid} style={{display:"flex",alignItems:"center",gap:7,background:G.surface,border:`1px solid ${G.borderM}`,borderRadius:20,padding:"5px 12px 5px 7px",cursor:"pointer",transition:"all 0.15s"}}
-                              onClick={()=>{ensureFullData(t.uid);setSelTeacher(t.uid);setManageTab("teachers");}}>
-                              <div style={{width:24,height:24,borderRadius:"50%",background:isAdmin?G.amberL:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:isAdmin?G.amber:G.blue,fontFamily:G.mono,flexShrink:0}}>
-                                {(name[0]||"?").toUpperCase()}
-                              </div>
-                              <span style={{fontSize:13,fontWeight:600,color:G.textS}}>{name}</span>
-                              {isAdmin&&<span style={{fontSize:11,color:G.amber}}>👑</span>}
-                            </div>
-                          );
-                        })}
+                      <div style={{display:"flex",gap:8,marginTop:4}}>
+                        <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 12px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>
+                          {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}
+                        </span>
+                        <button onClick={()=>setManageTab("teachers")}
+                          style={{background:"none",border:"none",fontSize:12,color:G.textM,cursor:"pointer",fontFamily:G.sans,textDecoration:"underline",padding:0}}>
+                          View in Teachers →
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1296,7 +1289,7 @@ function AdminPanelInner({user}){
               {["class","teacher"].map(t=>(
                 <button key={t} onClick={()=>{resetNav(t);}}
                   style={{flex:1,padding:"6px 0",borderRadius:6,border:"none",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,textAlign:"center",transition:"all 0.15s",background:tab===t?G.navy:"none",color:tab===t?"#fff":G.textM}}>
-                  t==="class"?"By Class":"By Teacher"
+                  {t==="class"?"By Class":"By Teacher"}
                 </button>
               ))}
             </div>

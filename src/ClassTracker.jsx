@@ -160,7 +160,7 @@ function TopNav({user,teacherName,right}){
             <Avatar user={user} size={20}/>
             <span style={{fontWeight:600,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:13,color:G.textS}}>{teacherName}</span>
           </div>
-          <button onClick={logout} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,fontSize:13,color:G.textM,cursor:"pointer",fontFamily:G.sans,padding:"5px 11px",fontWeight:500,transition:"all 0.15s",flexShrink:0,whiteSpace:"nowrap"}}
+          <button onClick={()=>{if(window.confirm("Sign out of Class Tracker?"))logout();}} style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,fontSize:13,color:G.textM,cursor:"pointer",fontFamily:G.sans,padding:"5px 11px",fontWeight:500,transition:"all 0.15s",flexShrink:0,whiteSpace:"nowrap"}}
             onMouseEnter={e=>{e.currentTarget.style.background=G.redL;e.currentTarget.style.color=G.red;e.currentTarget.style.borderColor="#F5CACA";}}
             onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=G.textM;e.currentTarget.style.borderColor=G.border;}}>
             Sign Out
@@ -469,6 +469,7 @@ function ClassTrackerInner({user}){
   const [search,setSearch]     = useState("");
   // Name editing removed — name set from Google/signup only
   const [editingClass,setEditingClass] = useState(null);
+  const [selectedClassId, setSelectedClassId] = useState(null); // for horizontal tab layout
   const [leaveModal,setLeaveModal]     = useState(null); // classId to leave
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
@@ -584,29 +585,41 @@ function ClassTrackerInner({user}){
   // Build a noteDates map across ALL classes for the date strip dots
   // ── SINGLE SCROLLABLE HOME ───────────────────────────────────────────────
   // ── ONE-PAGE HOME VIEW ──────────────────────────────────────────────────
-  if(view==="home"||view==="class") return(
-    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+  if(view==="home"||view==="class") {
+    const activeClasses = [...data.classes.filter(cls=>!cls.left)]
+      .sort((a,b)=>(b.created||0)-(a.created||0)); // newest first
+
+    // Group by institute
+    const instOrder = [...new Set(activeClasses.map(c=>c.institute||""))];
+    const grouped = instOrder.map(inst=>({
+      inst,
+      classes: activeClasses.filter(c=>(c.institute||"")===inst)
+    })).filter(g=>g.classes.length>0);
+
+    // Selected class — default to first
+    const selCls = activeClasses.find(c=>c.id===selectedClassId) || activeClasses[0] || null;
+
+    return(
+    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
       <SaveBadge/>
       {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal&&(()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);}} onClose={()=>setLeaveModal(null)}/>:null;})()}
 
       {/* ── NAV ── */}
-      <TopNav user={user} teacherName={teacherName} 
+      <TopNav user={user} teacherName={teacherName}
         right={<>
-          <span className="desktop-only" style={{fontSize:14,color:G.textM,fontWeight:500,whiteSpace:"nowrap"}}>{data.classes.length} {data.classes.length===1?"class":"classes"} · {totalNotes} entries</span>
+          <span className="desktop-only" style={{fontSize:13,color:G.textM,fontWeight:500,whiteSpace:"nowrap"}}>{activeClasses.length} {activeClasses.length===1?"class":"classes"} · {totalNotes} total</span>
           <TrashBadge count={trashCount} onClick={()=>setView("trash")}/>
           <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)}
             style={{background:G.green,color:"#fff",border:"none",borderRadius:9,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,display:"flex",alignItems:"center",gap:4,boxShadow:`0 2px 10px rgba(27,138,76,0.3)`,whiteSpace:"nowrap",flexShrink:0}}>
-            <span>+</span>
-            <span className="desktop-only">Add Class</span>
+            <span>+</span><span className="desktop-only"> Add Class</span>
           </button>
         </>}
       />
 
-      {/* ── STICKY DATE HEADER ── */}
+      {/* ── STICKY HEADER: greeting + date strip ── */}
       <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"10px 16px 10px",position:"sticky",top:56,zIndex:90}}>
         <div style={{maxWidth:800,margin:"0 auto"}}>
-          {/* Greeting row + session */}
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
             <h1 className="greeting-name" style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.4,flex:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
               {teacherName} 👋
@@ -615,7 +628,6 @@ function ClassTrackerInner({user}){
               {currentSession()}
             </span>
           </div>
-          {/* Month label + compact strip */}
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
             <span style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,whiteSpace:"nowrap",flexShrink:0}}>
               {selDateObj.monthFull} {selDateObj.year}
@@ -626,126 +638,161 @@ function ClassTrackerInner({user}){
         </div>
       </div>
 
-      {/* ── CLASSES ── */}
-      <div className="mobile-pad" style={{maxWidth:800,margin:"0 auto",padding:"18px 16px 80px"}}>
-        {data.classes.length===0?(
-          <div style={{textAlign:"center",padding:"60px 20px"}}>
-            <div style={{fontSize:52,marginBottom:16}}>📚</div>
-            <h2 style={{fontSize:22,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:8}}>No classes yet</h2>
-            <p style={{fontSize:16,color:G.textM,marginBottom:24}}>Add your first class to start tracking entries.</p>
-            <PrimaryBtn onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)} style={{padding:"13px 32px",fontSize:16}}>+ Add First Class</PrimaryBtn>
-          </div>
-        ):(
-          <div style={{display:"flex",flexDirection:"column",gap:14}}>
-            {data.classes.filter(cls=>!cls.left).map((cls)=>{
-              const color=instColor(cls.institute);
-              const dateNotes=getDateNotes(cls.id,selectedDate);
-              const totalCount=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
-              const todayCount=(data.notes[cls.id]||{})[todayKey()]?.length||0;
+      {data.classes.length===0?(
+        <div style={{textAlign:"center",padding:"60px 20px"}}>
+          <div style={{fontSize:52,marginBottom:16}}>📚</div>
+          <h2 style={{fontSize:22,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:8}}>No classes yet</h2>
+          <p style={{fontSize:16,color:G.textM,marginBottom:24}}>Add your first class to start tracking entries.</p>
+          <PrimaryBtn onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)} style={{padding:"13px 32px",fontSize:16}}>+ Add First Class</PrimaryBtn>
+        </div>
+      ):(
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",maxWidth:900,width:"100%",margin:"0 auto",padding:"0 0 80px"}}>
+
+          {/* ── HORIZONTAL CLASS TABS grouped by institute ── */}
+          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,overflowX:"auto",flexShrink:0,WebkitOverflowScrolling:"touch"}}
+            className="hide-scrollbar">
+            {grouped.map(({inst,classes:gCls})=>{
+              const ic=instColor(inst);
               return(
-                <div key={cls.id} className="card-in" style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
-
-                  {/* Class header bar */}
-                  <div style={{borderLeft:`5px solid ${color.bg}`,padding:"13px 16px",display:"flex",alignItems:"center",gap:12}}>
-                    <div style={{width:44,height:44,borderRadius:12,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,color:color.bg,fontFamily:G.mono,letterSpacing:-1}}>
-                      {(cls.section||"?").slice(0,2).toUpperCase()}
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                      <div style={{fontSize:15,color:G.textS,marginTop:3,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                        <span style={{fontWeight:500}}>🏫 {cls.institute}</span>
-                        {cls.subject&&<><span style={{color:G.textL}}>·</span><span>{cls.subject}</span></>}
-                      </div>
-                    </div>
-                    {/* Stats + actions */}
-                    <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                      <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{totalCount}</div>
-                        <div style={{fontSize:11,color:G.textL,fontFamily:G.sans,fontWeight:500}}>entries</div>
-                      </div>
-                      {todayCount>0&&<div style={{background:G.greenL,borderRadius:8,padding:"3px 8px",textAlign:"center"}}>
-                        <div style={{fontSize:15,fontWeight:700,color:G.green,lineHeight:1}}>+{todayCount}</div>
-                        <div style={{fontSize:12,color:G.green,fontFamily:G.sans,fontWeight:600}}>today</div>
-                      </div>}
-                      <div style={{display:"flex",gap:4,marginLeft:4}}>
-                        <button onClick={e=>{e.stopPropagation();setEditingClass(cls);}}
-                          style={{background:G.bg,border:`1px solid ${G.borderM}`,cursor:"pointer",color:G.textS,fontSize:14,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}
-                          onMouseEnter={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.color=G.green;}}
-                          onMouseLeave={e=>{e.currentTarget.style.background=G.bg;e.currentTarget.style.color=G.textM;}}>✏</button>
-                        <button onClick={e=>{e.stopPropagation();setLeaveModal(cls.id);}}
-                          style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:14,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}>🗑</button>
-                      </div>
-                    </div>
+                <div key={inst} style={{padding:"0 16px"}}>
+                  {/* Institute label */}
+                  <div style={{fontSize:11,fontWeight:700,color:G.textL,letterSpacing:0.5,textTransform:"uppercase",fontFamily:G.sans,paddingTop:10,paddingBottom:4,display:"flex",alignItems:"center",gap:6}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:ic.bg,flexShrink:0}}/>
+                    {inst||"No institute"}
                   </div>
-
-                  {/* Selected date entries */}
-                  <div style={{padding:"12px 16px 14px",borderTop:`1px solid ${G.border}`,background:G.bg}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:dateNotes.length>0?10:0}}>
-                      <span style={{fontSize:15,color:G.text,fontWeight:600}}>
-                        {formatDateLabel(selectedDate)} · <span style={{color:dateNotes.length>0?G.green:G.textM,fontWeight:700}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span>
-                      </span>
-                      {canAdd&&(
-                        <button onClick={()=>{setActiveClass(cls);setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
-                          style={{background:color.bg,color:"#fff",border:"none",borderRadius:9,padding:"7px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden",display:"flex",alignItems:"center",gap:5}}>
-                          <span style={{fontSize:17,lineHeight:1}}>+</span> Add Entry
-                        </button>
-                      )}
-                    </div>
-
-                    {dateNotes.length===0?(
-                      canAdd&&<div style={{padding:"10px 0 2px",color:G.textM,fontSize:15,fontWeight:500}}>
-                        No entries yet — tap + Add Entry to log this class.
-                      </div>
-                    ):(
-                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                        {dateNotes.map(note=>{
-                          const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
-                          return(
-                            <div key={note.id} style={{background:G.surface,borderRadius:11,border:`1px solid ${G.border}`,overflow:"hidden"}}>
-                              <div style={{height:3,background:tag.bg}}/>
-                              <div style={{padding:"11px 14px"}}>
-                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                                  <div style={{flex:1,minWidth:0}}>
-                                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:note.title?6:0}}>
-                                      <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"2px 9px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
-                                      {note.timeStart&&<span style={{fontSize:13,color:G.textM,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:500}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
-                                    </div>
-                                    {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display,lineHeight:1.3}}>{note.title}</div>}
-                                    {note.body&&<p style={{margin:"8px 0 0",fontSize:16,color:G.textS,lineHeight:1.75,whiteSpace:"pre-wrap"}}>{note.body}</p>}
-                                  </div>
-                                  <div style={{display:"flex",gap:5,flexShrink:0}}>
-                                    <button onClick={()=>{setActiveClass(cls);setEditNote({...note});setView("editNote");}}
-                                      style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:7,padding:"5px 11px",fontSize:13,cursor:"pointer",color:G.textM,fontFamily:G.sans,fontWeight:500}}
-                                      onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;e.currentTarget.style.background=G.greenL;}}
-                                      onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textM;e.currentTarget.style.background=G.bg;}}>Edit</button>
-                                    <button onClick={()=>{setActiveClass(cls);deleteNote(note.id);}}
-                                      style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:7,padding:"5px 10px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans}}>✕</button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                  {/* Class pills */}
+                  <div style={{display:"flex",gap:6,paddingBottom:10}}>
+                    {gCls.map(cls=>{
+                      const color=instColor(cls.institute);
+                      const isSel=selCls?.id===cls.id;
+                      const todayN=(Array.isArray((data.notes[cls.id]||{})[todayKey()])?(data.notes[cls.id]||{})[todayKey()]:[]).length;
+                      return(
+                        <div key={cls.id} onClick={()=>setSelectedClassId(cls.id)}
+                          style={{flexShrink:0,padding:"7px 14px",borderRadius:20,cursor:"pointer",transition:"all 0.15s",
+                            background:isSel?color.bg:G.bg,
+                            border:`2px solid ${isSel?color.bg:G.border}`,
+                            display:"flex",alignItems:"center",gap:7}}>
+                          <span style={{fontSize:14,fontWeight:700,color:isSel?"#fff":G.text,fontFamily:G.display,whiteSpace:"nowrap"}}>
+                            {cls.section}
+                          </span>
+                          {todayN>0&&(
+                            <span style={{background:isSel?"rgba(255,255,255,0.25)":color.light,color:isSel?"#fff":color.bg,borderRadius:20,padding:"1px 7px",fontSize:11,fontFamily:G.mono,fontWeight:700}}>
+                              +{todayN}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
             })}
-
-            {/* Add class ghost card */}
-            <div onClick={()=>setView("addClass")}
-              style={{minHeight:70,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:10,padding:20,border:`2px dashed ${G.border}`,borderRadius:16,background:"transparent",transition:"all 0.2s"}}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.background=G.greenL;}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background="transparent";}}>
-              <div style={{fontSize:22,color:G.textL}}>+</div>
-              <div style={{fontSize:16,fontWeight:600,color:G.textM,fontFamily:G.display}}>Add New Class</div>
+            {/* Add new class pill */}
+            <div style={{padding:"0 16px 10px",paddingTop:grouped.length>0?0:10,display:"flex"}}>
+              <div onClick={()=>setView("addClass")}
+                style={{flexShrink:0,padding:"7px 14px",borderRadius:20,cursor:"pointer",background:"transparent",border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",gap:6,color:G.textL,fontSize:13,transition:"all 0.15s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textL;}}>
+                <span style={{fontSize:16}}>+</span> New Class
+              </div>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* ── SELECTED CLASS ENTRIES ── */}
+          {selCls&&(()=>{
+            const color=instColor(selCls.institute);
+            const dateNotes=getDateNotes(selCls.id,selectedDate);
+            const totalCount=Object.values(data.notes[selCls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+            return(
+              <div style={{flex:1,overflowY:"auto",padding:"16px 16px 40px"}}>
+                {/* Class header */}
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,padding:"14px 16px",background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,borderLeft:`5px solid ${color.bg}`,boxShadow:G.shadowSm}}>
+                  <div style={{width:48,height:48,borderRadius:13,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:color.bg,fontFamily:G.mono,letterSpacing:-1}}>
+                    {(selCls.section||"?").slice(0,2).toUpperCase()}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:19,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{selCls.section}</div>
+                    <div style={{fontSize:14,color:G.textM,marginTop:2}}>
+                      🏫 {selCls.institute}{selCls.subject?` · ${selCls.subject}`:""}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
+                    <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1}}>{totalCount}</div>
+                    <div style={{fontSize:11,color:G.textL,fontWeight:600}}>total entries</div>
+                  </div>
+                  <div style={{display:"flex",gap:4,flexShrink:0}}>
+                    <button onClick={e=>{e.stopPropagation();setEditingClass(selCls);}}
+                      style={{background:G.bg,border:`1px solid ${G.borderM}`,cursor:"pointer",color:G.textS,fontSize:14,width:34,height:34,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center"}}
+                      onMouseEnter={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.color=G.green;}}
+                      onMouseLeave={e=>{e.currentTarget.style.background=G.bg;e.currentTarget.style.color=G.textS;}}>✏</button>
+                    <button onClick={e=>{e.stopPropagation();setLeaveModal(selCls.id);}}
+                      style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:14,width:34,height:34,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center"}}>🗑</button>
+                  </div>
+                </div>
+
+                {/* Date entries header + add button */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <span style={{fontSize:16,color:G.text,fontWeight:700}}>
+                    {formatDateLabel(selectedDate)}
+                    <span style={{color:dateNotes.length>0?G.green:G.textM,marginLeft:8,fontWeight:700}}>
+                      {dateNotes.length} {dateNotes.length===1?"entry":"entries"}
+                    </span>
+                  </span>
+                  {canAdd&&(
+                    <button onClick={()=>{setActiveClass(selCls);setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
+                      style={{background:color.bg,color:"#fff",border:"none",borderRadius:10,padding:"9px 18px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,boxShadow:`0 2px 10px ${color.bg}55`,display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{fontSize:18,lineHeight:1}}>+</span> Add Entry
+                    </button>
+                  )}
+                </div>
+
+                {/* Entries */}
+                {dateNotes.length===0?(
+                  <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"32px 20px",textAlign:"center"}}>
+                    <div style={{fontSize:32,marginBottom:8}}>✏️</div>
+                    <div style={{fontSize:15,color:G.textM,fontWeight:500}}>
+                      {canAdd?"No entries yet — tap + Add Entry above":"No entries for this date"}
+                    </div>
+                  </div>
+                ):(
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {dateNotes.map(note=>{
+                      const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
+                      return(
+                        <div key={note.id} style={{background:G.surface,borderRadius:13,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
+                          <div style={{height:3,background:tag.bg}}/>
+                          <div style={{padding:"12px 15px"}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:note.title?6:0}}>
+                                  <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"2px 9px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
+                                  {note.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
+                                </div>
+                                {note.title&&<div style={{fontWeight:700,fontSize:17,color:G.text,fontFamily:G.display,lineHeight:1.3}}>{note.title}</div>}
+                                {note.body&&<p style={{margin:"8px 0 0",fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
+                              </div>
+                              <div style={{display:"flex",gap:5,flexShrink:0}}>
+                                <button onClick={()=>{setActiveClass(selCls);setEditNote({...note});setView("editNote");}}
+                                  style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:8,padding:"5px 11px",fontSize:13,cursor:"pointer",color:G.textM,fontFamily:G.sans,fontWeight:500}}
+                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;e.currentTarget.style.background=G.greenL;}}
+                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textM;e.currentTarget.style.background=G.bg;}}>Edit</button>
+                                <button onClick={()=>{setActiveClass(selCls);deleteNote(note.id);}}
+                                  style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"5px 10px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans}}>✕</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </div>
-  );
+  );}
 
 
   // ── ADD CLASS ─────────────────────────────────────────────────────────────
