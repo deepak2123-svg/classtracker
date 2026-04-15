@@ -179,65 +179,79 @@ function TopNav({user,teacherName,right}){
   );
 }
 
-// ── Date Carousel ─────────────────────────────────────────────────────────────
-function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
-  // noteDates: { "2026-04-09": 3, "2026-04-07": 1, ... }
-  const dates = buildDateWindow();
-  const trackRef = useRef(null);
+// ── Minimal Date Picker (Option C) ───────────────────────────────────────────
+function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
+  const [showPicker, setShowPicker] = useState(false);
+  const today = todayKey();
 
-  // Scroll selected cell to centre on mount / change
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const idx = dates.findIndex(d => d.key === selectedDate);
-    if (idx < 0) return;
-    // Each cell is ~82px wide + 2px gap
-    const cellW = 82;
-    const target = idx * cellW - track.clientWidth / 2 + cellW / 2;
-    track.scrollTo({ left: target, behavior: 'smooth' });
-  }, [selectedDate]);
+  // Parse selectedDate
+  const [y, m, d] = selectedDate.split("-").map(Number);
+  const dateObj = new Date(y, m - 1, d);
+  const dayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dateObj.getDay()];
+  const monthName = ["January","February","March","April","May","June","July","August","September","October","November","December"][m-1];
+  const isToday = selectedDate === today;
+  const isYesterday = selectedDate === (()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})();
+  const entryCount = noteDates[selectedDate] || 0;
 
-  // Drag-to-scroll
-  const drag = useRef({ down: false, startX: 0, scrollLeft: 0 });
-  const onMouseDown = e => {
-    drag.current = { down: true, startX: e.pageX - trackRef.current.offsetLeft, scrollLeft: trackRef.current.scrollLeft };
-  };
-  const onMouseMove = e => {
-    if (!drag.current.down) return;
-    e.preventDefault();
-    trackRef.current.scrollLeft = drag.current.scrollLeft - (e.pageX - trackRef.current.offsetLeft - drag.current.startX) * 1.1;
-  };
-  const onMouseUp = () => { drag.current.down = false; };
+  function moveDay(delta) {
+    const cur = new Date(y, m - 1, d);
+    cur.setDate(cur.getDate() + delta);
+    const nk = cur.toISOString().slice(0, 10);
+    if (isDateAllowed(nk)) onSelectDate(nk);
+  }
+
+  const canGoBack  = isDateAllowed((()=>{const x=new Date(y,m-1,d);x.setDate(x.getDate()-1);return x.toISOString().slice(0,10);})());
+  const canGoFwd   = isDateAllowed((()=>{const x=new Date(y,m-1,d);x.setDate(x.getDate()+1);return x.toISOString().slice(0,10);})());
 
   return (
-    <div className="strip-wrap">
-      <div ref={trackRef} className="strip-track"
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}>
-        {dates.map(d => {
-          const isSel   = d.key === selectedDate;
-          const isToday = d.key === todayKey();
-          const allowed = isDateAllowed(d.key);
-          const count   = noteDates[d.key] || 0;
+    <div style={{userSelect:"none"}}>
+      {/* Main date nav */}
+      <div style={{display:"flex",alignItems:"center",gap:8,background:G.bg,borderRadius:14,padding:"10px 12px",border:`1px solid ${G.border}`}}>
+        <button onClick={()=>moveDay(-1)} disabled={!canGoBack}
+          style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,width:36,height:36,cursor:canGoBack?"pointer":"not-allowed",fontSize:18,color:canGoBack?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoBack?1:0.35}}>
+          ‹
+        </button>
 
-          let cls = "dc";
-          if (isSel)    cls += " dc-sel";
-          if (d.isSun)  cls += " dc-sun";
-          if (!allowed) cls += " dc-dim";
-
-          return (
-            <div key={d.key} className={cls} onClick={() => allowed && onSelectDate(d.key)}>
-              <div className="dc-day">{d.dayName}</div>
-              <div className="dc-num">{d.num}</div>
-              {isToday && isSel && <div className="dc-today">Today</div>}
-              <div className="dc-area">
-                {count > 0
-                  ? <div className="dc-badge">{count}</div>
-                  : <div className="dc-empty" />}
-              </div>
+        <div style={{flex:1,textAlign:"center",cursor:"pointer"}} onClick={()=>setShowPicker(s=>!s)}>
+          <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,marginBottom:1}}>
+            {isToday?"TODAY":isYesterday?"YESTERDAY":dayName.toUpperCase()}
+          </div>
+          <div style={{fontSize:22,fontWeight:800,color:isToday?G.green:G.text,fontFamily:G.display,lineHeight:1,letterSpacing:-0.5}}>
+            {d} {monthName.slice(0,3)} {y}
+          </div>
+          {entryCount>0&&(
+            <div style={{fontSize:11,color:G.green,fontWeight:700,marginTop:2,fontFamily:G.sans}}>
+              {entryCount} {entryCount===1?"entry":"entries"} ✓
             </div>
+          )}
+        </div>
+
+        <button onClick={()=>moveDay(1)} disabled={!canGoFwd}
+          style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,width:36,height:36,cursor:canGoFwd?"pointer":"not-allowed",fontSize:18,color:canGoFwd?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoFwd?1:0.35}}>
+          ›
+        </button>
+      </div>
+
+      {/* Quick jump pills */}
+      <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+        {[
+          {label:"Today",    key:today},
+          {label:"Yesterday",key:(()=>{const x=new Date();x.setDate(x.getDate()-1);return x.toISOString().slice(0,10);})()},
+          {label:"2 days ago",key:(()=>{const x=new Date();x.setDate(x.getDate()-2);return x.toISOString().slice(0,10);})()},
+        ].map(({label,key})=>{
+          const isSel=selectedDate===key;
+          const hasE=(noteDates[key]||0)>0;
+          return(
+            <button key={key} onClick={()=>onSelectDate(key)}
+              style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:13,fontWeight:isSel?700:500,transition:"all 0.15s",
+                background:isSel?G.forest:G.surface,
+                color:isSel?"#fff":G.textM,
+                boxShadow:isSel?"0 2px 8px rgba(21,43,34,0.2)":"none",
+                border:isSel?"none":`1px solid ${G.border}`,
+                display:"flex",alignItems:"center",gap:5}}>
+              {label}
+              {hasE&&<span style={{width:6,height:6,borderRadius:"50%",background:isSel?"#34D077":G.green,flexShrink:0}}/>}
+            </button>
           );
         })}
       </div>
@@ -752,7 +766,7 @@ function ClassTrackerInner({user}){
               <span style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans}}>{selDateObj.monthFull} {selDateObj.year}</span>
               <div style={{flex:1,height:1,background:G.border}}/>
             </div>
-            <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
+            <DatePicker selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
           </div>
         </div>
 
@@ -962,7 +976,7 @@ function ClassTrackerInner({user}){
                 <span style={{fontSize:15,color:G.green}}>📅</span>
                 <span style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
               </div>
-              <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={{}}/>
+              <DatePicker selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={{}}/>
             </div>
           </div>
         )}

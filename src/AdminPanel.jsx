@@ -191,8 +191,9 @@ function AdminPanelInner({user}){
   const [binView,      setBinView]      = useState(false);
   const [selTeacher,   setSelTeacher]   = useState(null); // uid of teacher in detail modal
   const [newInstName,  setNewInstName]  = useState(""); // new institute input
-  const [renamingInst,  setRenamingInst]  = useState(null); // inst name being renamed
+  const [renamingInst,  setRenamingInst]  = useState(null);
   const [renameInstVal, setRenameInstVal] = useState("");
+  const [dragInst,      setDragInst]      = useState(null); // dragging institute name
   const [renamingTeacher, setRenamingTeacher] = useState(null); // {uid, currentName}
   const [renameVal,    setRenameVal]    = useState("");
   const [deleteModal, setDeleteModal] = useState(null); // {type,label,lines,onConfirm}
@@ -380,6 +381,17 @@ function AdminPanelInner({user}){
 
   // ── Role actions ──────────────────────────────────────────────────────────
   // Save a new global institute to Firestore config
+  // Save reordered institute list
+  const saveInstOrder = async (newList) => {
+    try {
+      await saveGlobalInstitute("__noop__"); // ensure doc exists
+      const {doc: d, setDoc: s} = await import("firebase/firestore");
+      const {db: fdb} = await import("./firebase");
+      await s(d(fdb, "config", "institutes"), {list: newList});
+      setGlobalInstList(newList);
+    } catch(e) { console.warn("reorder failed", e); }
+  };
+
   const handleRenameInstitute = async (oldName, newName) => {
     if (!newName.trim() || newName.trim() === oldName) { setRenamingInst(null); return; }
     try {
@@ -506,15 +518,22 @@ function AdminPanelInner({user}){
       confirmLabel: "Delete Institute",
       onConfirm: async () => {
         setDeleteBusy(true);
-        await removeInstituteFromIndex(inst);
-        // Remove from local derived state immediately
-        setDeletedInstitutes(s => new Set([...s, inst.trim()]));
-        // Update local teacher index
-        setTeachers(ts => ts.map(t => ({
-          ...t,
-          institutes: (t.institutes||[]).filter(i => i.trim().toLowerCase() !== inst.trim().toLowerCase()),
-        })));
-        if (selInst === inst) { setSelInst(null); resetNav(); }
+        try {
+          // 1. Remove from config/institutes (the authoritative global list)
+          await deleteGlobalInstitute(inst);
+          // 2. Remove from every teacher's index entry
+          await removeInstituteFromIndex(inst);
+          // 3. Update local state immediately so UI reflects change
+          setGlobalInstList(prev => prev.filter(i => i.trim().toLowerCase() !== inst.trim().toLowerCase()));
+          setDeletedInstitutes(s => new Set([...s, inst.trim()]));
+          setTeachers(ts => ts.map(t => ({
+            ...t,
+            institutes: (t.institutes||[]).filter(i => i.trim().toLowerCase() !== inst.trim().toLowerCase()),
+          })));
+          if (selInst === inst) { setSelInst(null); resetNav(); }
+          // 4. Save to admin recycle bin
+          setAdminBin(b=>[...b,{type:"institute",name:inst,deletedAt:Date.now(),deletedBy:user.uid}]);
+        } catch(e) { alert("Failed to delete: " + e.message); }
         setDeleteBusy(false); setDeleteModal(null);
       },
     });
@@ -924,7 +943,20 @@ function AdminPanelInner({user}){
                 const instTeacherList=teachers.filter(t=>{const d=fullData[t.uid];if(d)return(d.classes||[]).some(c=>(c.institute||"").trim()===inst.trim());return(t.institutes||[]).some(i=>i.trim()===inst.trim());});
                 const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||instTeacherList.length;
                 return(
-                  <div key={inst} style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`}}>
+                  <div key={inst}
+                    draggable
+                    onDragStart={()=>setDragInst(instIdx)}
+                    onDragOver={e=>{e.preventDefault();}}
+                    onDrop={()=>{
+                      if(dragInst===null||dragInst===instIdx)return;
+                      const reordered=[...institutes];
+                      const [moved]=reordered.splice(dragInst,1);
+                      reordered.splice(instIdx,0,moved);
+                      saveInstOrder(reordered);
+                      setDragInst(null);
+                    }}
+                    onDragEnd={()=>setDragInst(null)}
+                    style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${dragInst===instIdx?G.blue:G.border}`,cursor:"grab",transition:"border-color 0.15s",opacity:dragInst===instIdx?0.5:1}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:instTeacherList.length>0?12:0}}>
                       <div style={{flex:1,minWidth:0}}>
                         {renamingInst===inst?(
@@ -967,6 +999,7 @@ function AdminPanelInner({user}){
                 );
               })}
             </div>
+            <p style={{fontSize:12,color:G.textL,textAlign:"center",marginTop:12,fontFamily:G.sans}}>↕ Drag institutes to reorder</p>
           }
         </div>
 
