@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, Component } from "react";
 import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db } from "./firebase";
 import { TAG_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
@@ -35,6 +35,28 @@ const COLORS = [
 ];
 
 const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:{name:""},trash:{classes:[],notes:[]}};
+
+// ── Error Boundary ────────────────────────────────────────────────────────────
+class CTErrorBoundary extends Component {
+  constructor(props){ super(props); this.state={error:null}; }
+  static getDerivedStateFromError(e){ return {error:e}; }
+  render(){
+    if(this.state.error) return(
+      <div style={{minHeight:"100vh",background:"#F5F7F5",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",padding:24}}>
+        <div style={{textAlign:"center",maxWidth:360}}>
+          <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
+          <h2 style={{fontFamily:"'Poppins',sans-serif",marginBottom:8,color:"#111827"}}>Something went wrong</h2>
+          <p style={{color:"#4B5563",fontSize:14,marginBottom:16,lineHeight:1.6}}>{this.state.error?.message}</p>
+          <button onClick={()=>window.location.reload()} style={{background:"#1B8A4C",color:"#fff",border:"none",borderRadius:9,padding:"10px 24px",fontSize:14,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontWeight:600}}>
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
 
 // ── Academic session ──────────────────────────────────────────────────────────
 function getAcademicSession(dk){const[y,m]=dk.split("-").map(Number);return m>=4?`${y}-${String(y+1).slice(2)}`:`${y-1}-${String(y).slice(2)}`;}
@@ -374,7 +396,7 @@ function TrashBadge({count,onClick}){
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function ClassTracker({user}){
+function ClassTrackerInner({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
   const [loading,setLoading]   = useState(true);
   const [saving,setSaving]     = useState(false);
@@ -443,7 +465,8 @@ export default function ClassTracker({user}){
       // Merge global institutes — used ones first, then global ones not yet used
       const used=base.filter(i=>c[i]);
       const unused=base.filter(i=>!c[i]);
-      const globalNew=globalInstitutes.filter(g=>!base.map(b=>b.toLowerCase()).includes(g.toLowerCase()));
+      const baseLC=base.filter(Boolean).map(b=>typeof b==="string"?b.toLowerCase():"");
+      const globalNew=globalInstitutes.filter(g=>g&&!baseLC.includes(g.toLowerCase()));
       return [...used,...unused,...globalNew];
     }
     return base;
@@ -464,7 +487,7 @@ export default function ClassTracker({user}){
   const permDeleteClass=(id)=>{deleteClassNotes(user.uid,id).catch(()=>{});setData(d=>({...d,trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==id)}}));};
 
   const getClassNotes=(cid)=>data.notes[cid]||{};
-  const getDateNotes=(cid,dk)=>(data.notes[cid]||{})[dk]||[];
+  const getDateNotes=(cid,dk)=>{ const arr=(data.notes[cid]||{})[dk]; return Array.isArray(arr)?arr:[]; };
   const getAllNoteDates=(cid)=>new Set(Object.keys(data.notes[cid]||{}).filter(dk=>(data.notes[cid][dk]||[]).length>0));
 
   const addNote=()=>{
@@ -488,7 +511,7 @@ export default function ClassTracker({user}){
   const restoreNote=(tn)=>{setData(d=>{const{classId,dateKey,deletedAt,className,institute,...note}=tn;const cn=d.notes[classId]||{};const dn=cn[dateKey]||[];return{...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:[note,...dn]}},trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==note.id)}};});};
   const permDeleteNote=(id)=>setData(d=>({...d,trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==id)}}));
 
-  const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>a+arr.length,0);},0);
+  const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>s+(Array.isArray(arr)?arr.length:0),0);},0);
   const canAdd=isDateAllowed(selectedDate);
   const dates=buildDateWindow();
   const selDateObj=dates.find(d=>d.key===selectedDate)||dates[7];
@@ -496,12 +519,14 @@ export default function ClassTracker({user}){
   // Build a noteDates map across ALL classes for the date strip dots
   const allNoteDates = useMemo(()=>{
     const map={};
-    data.classes.forEach(cls=>{
-      const cn=data.notes[cls.id]||{};
-      Object.entries(cn).forEach(([dk,arr])=>{
-        if(arr.length>0) map[dk]=(map[dk]||0)+arr.length;
+    try {
+      data.classes.forEach(cls=>{
+        const cn=data.notes[cls.id]||{};
+        Object.entries(cn).forEach(([dk,arr])=>{
+          if(Array.isArray(arr)&&arr.length>0) map[dk]=(map[dk]||0)+arr.length;
+        });
       });
-    });
+    } catch(e){}
     return map;
   },[data]);
 
@@ -562,7 +587,7 @@ export default function ClassTracker({user}){
             {data.classes.filter(cls=>!cls.left).map((cls)=>{
               const color=COLORS[cls.colorIdx%COLORS.length];
               const dateNotes=getDateNotes(cls.id,selectedDate);
-              const totalCount=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+arr.length,0);
+              const totalCount=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
               const todayCount=(data.notes[cls.id]||{})[todayKey()]?.length||0;
               return(
                 <div key={cls.id} className="card-in" style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
@@ -725,7 +750,7 @@ export default function ClassTracker({user}){
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {tClasses.map(tc=>{
                   const color=COLORS[tc.colorIdx%COLORS.length];
-                  const ec=Object.values(tc.savedNotes||{}).reduce((s,arr)=>s+arr.length,0);
+                  const ec=Object.values(tc.savedNotes||{}).reduce((s,arr)=>s+(Array.isArray(arr)?arr.length:0),0);
                   const dl=daysLeft(tc.deletedAt);
                   return(
                     <div key={tc.id} className="trash-row" style={{...card,padding:"16px 20px",display:"flex",alignItems:"center",gap:16}}>
@@ -883,4 +908,8 @@ export default function ClassTracker({user}){
     );
   }
   return null;
+}
+
+export default function ClassTracker(props){
+  return <CTErrorBoundary><ClassTrackerInner {...props}/></CTErrorBoundary>;
 }
