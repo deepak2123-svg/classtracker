@@ -545,8 +545,9 @@ function ClassTrackerInner({user}){
           <span className="desktop-only" style={{fontSize:14,color:G.textM,fontWeight:500,whiteSpace:"nowrap"}}>{data.classes.length} {data.classes.length===1?"class":"classes"} · {totalNotes} entries</span>
           <TrashBadge count={trashCount} onClick={()=>setView("trash")}/>
           <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)}
-            style={{background:G.green,color:"#fff",border:"none",borderRadius:9,padding:"7px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,display:"flex",alignItems:"center",gap:5,boxShadow:`0 2px 10px rgba(27,138,76,0.3)`,whiteSpace:"nowrap",flexShrink:0}}>
-            + Add Class
+            style={{background:G.green,color:"#fff",border:"none",borderRadius:9,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,display:"flex",alignItems:"center",gap:4,boxShadow:`0 2px 10px rgba(27,138,76,0.3)`,whiteSpace:"nowrap",flexShrink:0}}>
+            <span>+</span>
+            <span className="desktop-only">Add Class</span>
           </button>
         </>}
       />

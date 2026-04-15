@@ -388,6 +388,30 @@ function AdminPanelInner({user}){
     } catch(e) { alert("Failed: " + e.message); }
   };
 
+  // Fully remove a teacher from the system
+  const handleRemoveTeacher = async (uid, name) => {
+    confirmDelete({
+      title: `Remove "${name}" from system?`,
+      lines: [
+        "This will remove them from the teachers list and revoke their access.",
+        "Their class entries in Firestore are NOT deleted — only their account access is removed.",
+        "They will need an invite link to rejoin.",
+      ],
+      confirmLabel: "Remove Teacher",
+      onConfirm: async () => {
+        setDeleteBusy(true);
+        try {
+          await removeTeacherFromSystem(uid);
+          setTeachers(ts => ts.filter(t => t.uid !== uid));
+          setRoles(r => { const n={...r}; delete n[uid]; return n; });
+          setFullData(fd => { const n={...fd}; delete n[uid]; return n; });
+          setSelTeacher(null);
+        } catch(e) { alert("Failed: " + e.message); }
+        setDeleteBusy(false); setDeleteModal(null);
+      }
+    });
+  };
+
   // Remove teacher from a specific class
   const handleRemoveFromClass = async (uid, classId, className) => {
     if (!window.confirm(`Remove teacher from "${className}"? This deletes all entries for this class.`)) return;
@@ -768,6 +792,7 @@ function AdminPanelInner({user}){
   if(view==="manage") return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
       {binView&&<AdminBinModal/>}
+      {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       {/* nav */}
       <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
@@ -986,6 +1011,12 @@ function AdminPanelInner({user}){
                       {/* View in main panel */}
                       <button onClick={()=>{setView("main");setSelP2(t.uid);setTab("teacher");setMobileStep(2);}}
                         style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>📋 View Entries</button>
+
+                      {/* Remove teacher from system */}
+                      {!isMe&&(
+                        <button onClick={()=>handleRemoveTeacher(t.uid,name)}
+                          style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>🚫 Remove Teacher</button>
+                      )}
                     </div>
                   </div>
                 )}
