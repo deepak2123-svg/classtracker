@@ -185,6 +185,7 @@ function AdminPanelInner({user}){
   const [mobileStep,  setMobileStep]  = useState(0);
   const [exportOpen,   setExportOpen]   = useState(false);
   const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
+  const [isMobile,     setIsMobile]     = useState(false);
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | institutes
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
@@ -198,6 +199,13 @@ function AdminPanelInner({user}){
   const [deleteBusy,  setDeleteBusy]  = useState(false);
   const [deletedInstitutes, setDeletedInstitutes] = useState(new Set());
   const [globalInstList, setGlobalInstList] = useState([]); // from config/institutes
+
+  useEffect(()=>{
+    const check=()=>setIsMobile(window.innerWidth<768);
+    check();
+    window.addEventListener("resize",check);
+    return ()=>window.removeEventListener("resize",check);
+  },[]);
 
   useEffect(()=>{
     (async()=>{
@@ -1138,31 +1146,215 @@ function AdminPanelInner({user}){
   );
 
   // ── MAIN PANEL VIEW ───────────────────────────────────────────────────────
+  // ── MOBILE: renders each step as a standalone full-page view ────────────────
+  // This avoids all flex-height issues that cause list clipping
+  if(isMobile) {
+    const MobileNav = ()=>(
+      <div style={{background:G.navy,minHeight:60,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.08)",gap:8,position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:32,height:32,background:G.blueV,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🎓</div>
+          <div>
+            <div style={{fontFamily:G.display,fontSize:16,fontWeight:700,color:"#fff",lineHeight:1.1}}>ClassLog</div>
+            <div style={{fontSize:9,letterSpacing:2,color:"rgba(255,255,255,0.4)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={()=>setBinView(true)} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),position:"relative",padding:"6px 10px"}}>
+            🗑{adminBin.length>0&&<span style={{position:"absolute",top:-3,right:-3,background:G.red,color:"#fff",borderRadius:"50%",width:13,height:13,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center"}}>{adminBin.length}</span>}
+          </button>
+          <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),padding:"6px 10px",fontSize:12}}>⚙</button>
+          <button onClick={logout} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),padding:"6px 10px",fontSize:12}}>✕</button>
+        </div>
+      </div>
+    );
+
+    const MobileBreadcrumb = ()=>(
+      mobileStep>0&&(
+        <div style={{background:G.navyS,padding:"8px 14px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:13,fontFamily:G.sans}}>
+          <span onClick={()=>{setMobileStep(0);setSelInst(null);resetNav();}} style={{color:"rgba(255,255,255,0.5)",cursor:"pointer"}}>Institutes</span>
+          {mobileStep>=1&&selInst&&<><span style={{color:"rgba(255,255,255,0.3)"}}>›</span><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);}} style={{color:mobileStep===1?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontWeight:mobileStep===1?700:400}}>{selInst}</span></>}
+          {mobileStep>=2&&selP2&&<><span style={{color:"rgba(255,255,255,0.3)"}}>›</span><span onClick={()=>{setMobileStep(2);setSelP3(null);}} style={{color:mobileStep===2?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontWeight:mobileStep===2?700:400}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}</span></>}
+          {mobileStep>=3&&selP3&&<><span style={{color:"rgba(255,255,255,0.3)"}}>›</span><span style={{color:"#fff",fontWeight:700}}>{selP3.className}</span></>}
+          <span onClick={()=>setMobileStep(s=>Math.max(0,s-1))} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",borderRadius:7,padding:"4px 10px",color:"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:12}}>← Back</span>
+        </div>
+      )
+    );
+
+    const MobileStats = ()=>(
+      <div style={{background:G.navyS,padding:"10px 16px",display:"flex",gap:16,flexWrap:"wrap",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+        {[{n:institutes.length,l:"institutes"},{n:teachers.length,l:"teachers"},{n:totalClasses,l:"classes"},{n:totalEntries,l:"entries"}].map(({n,l})=>(
+          <span key={l}><span style={{fontSize:18,fontWeight:800,color:G.blueV,fontFamily:G.display}}>{n}</span>{" "}<span style={{fontSize:13,color:"rgba(255,255,255,0.6)",fontFamily:G.sans}}>{l}</span></span>
+        ))}
+      </div>
+    );
+
+    // ── STEP 0: Institute list ────────────────────────────────────────────────
+    if(mobileStep===0) return(
+      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+        {binView&&<AdminBinModal/>}
+        {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        <MobileNav/>
+        <MobileStats/>
+        <div style={{padding:"12px 14px 40px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:G.textL,letterSpacing:1.5,fontFamily:G.sans,textTransform:"uppercase",marginBottom:12}}>Institutes</div>
+          {institutes.map(inst=>{
+            const tCount=teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())||(fullData[t.uid]?.classes||[]).some(c=>(c.institute||"").trim()===inst.trim())).length;
+            const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())).length;
+            return(
+              <div key={inst} onClick={()=>{onSelectInstitute(inst);setMobileStep(1);}}
+                style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:"16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:G.shadowSm,cursor:"pointer",transition:"all 0.15s"}}
+                onTouchStart={e=>e.currentTarget.style.background=G.blueL}
+                onTouchEnd={e=>e.currentTarget.style.background=G.surface}>
+                <div>
+                  <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{inst}</div>
+                  <div style={{display:"flex",gap:8,marginTop:6}}>
+                    <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 10px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>{clsCount} class{clsCount!==1?"es":""}</span>
+                    <span style={{fontSize:13,color:G.textM,fontFamily:G.sans,alignSelf:"center"}}>{tCount} teacher{tCount!==1?"s":""}</span>
+                  </div>
+                </div>
+                <span style={{fontSize:20,color:G.textL}}>›</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+
+    // ── STEP 1: Teachers or Classes for selected institute ────────────────────
+    if(mobileStep===1) return(
+      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+        {binView&&<AdminBinModal/>}
+        {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        <MobileNav/><MobileBreadcrumb/>
+        <div style={{padding:"12px 14px 40px"}}>
+          <h2 style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:14}}>{selInst}</h2>
+          <div style={{display:"flex",background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:3,marginBottom:16,gap:3}}>
+            {["class","teacher"].map(t=>(
+              <button key={t} onClick={()=>resetNav(t)}
+                style={{flex:1,padding:"9px 0",borderRadius:8,border:"none",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:G.sans,background:tab===t?G.navy:"none",color:tab===t?"#fff":G.textM}}>
+                {t==="class"?"By Class":"By Teacher"}
+              </button>
+            ))}
+          </div>
+          {tab==="class"&&instClasses.map(cls=>(
+            <div key={cls.raw} onClick={()=>{setSelP2(cls.raw);setSelP3(null);setMobileStep(2);instClasses.find(c=>c.raw===cls.raw)?.teachers?.forEach(t=>ensureFullData(t.uid));}}
+              style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:G.text}}>{cls.display}</div>
+                <div style={{fontSize:14,color:G.textM,marginTop:2}}>{cls.subject}</div>
+                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:5,display:"inline-block"}}>{cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}</span>
+              </div>
+              <span style={{fontSize:20,color:G.textL}}>›</span>
+            </div>
+          ))}
+          {tab==="teacher"&&instTeachers.map(t=>{
+            const d=fullData[t.uid]||{};
+            const name=d.profile?.name||t.name||"?";
+            const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
+            return(
+              <div key={t.uid} onClick={()=>{setSelP2(t.uid);setSelP3(null);setMobileStep(2);ensureFullData(t.uid);}}
+                style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+                <div>
+                  <div style={{fontSize:16,fontWeight:700,color:G.text}}>{name}</div>
+                  {otherInsts.length>0&&<div style={{fontSize:13,color:G.textM,marginTop:2,fontStyle:"italic"}}>also at {otherInsts.join(", ")}</div>}
+                </div>
+                <span style={{fontSize:20,color:G.textL}}>›</span>
+              </div>
+            );
+          })}
+          {instTeachers.length===0&&tab==="teacher"&&loadingUids.size>0&&(
+            <div style={{textAlign:"center",padding:"40px 0",color:G.textM}}>Loading teachers…</div>
+          )}
+        </div>
+      </div>
+    );
+
+    // ── STEP 2: Classes for teacher / Teachers for class ─────────────────────
+    if(mobileStep===2) return(
+      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+        {binView&&<AdminBinModal/>}
+        {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        <MobileNav/><MobileBreadcrumb/>
+        <div style={{padding:"12px 14px 40px"}}>
+          <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}</h2>
+          <div style={{fontSize:14,color:G.textM,marginBottom:16}}>{selInst}</div>
+          {p3Items.map(cls=>(
+            <div key={cls.classId||cls.uid} onClick={()=>{
+              if(tab==="teacher") setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute||selInst});
+              else { const clsObj=instClasses.find(c=>c.raw===selP2); setSelP3({teacherUid:cls.uid,classId:cls.classId,teacherName:cls.name,className:normaliseName(selP2),subject:clsObj?.subject}); ensureFullData(cls.uid); }
+              setMobileStep(3);
+            }}
+              style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:G.text}}>{tab==="teacher"?cls.display:cls.name}</div>
+                <div style={{fontSize:14,color:G.textM,marginTop:2}}>{tab==="teacher"?cls.subject:""}</div>
+                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:5,display:"inline-block"}}>{cls.entryCount} {cls.entryCount===1?"entry":"entries"}</span>
+              </div>
+              <span style={{fontSize:20,color:G.textL}}>›</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+
+    // ── STEP 3: Entries ───────────────────────────────────────────────────────
+    if(mobileStep===3&&selP3) {
+      const days=period==="today"?1:period==="week"?7:period==="month"?30:null;
+      const classNotes=(fullData[selP3.teacherUid]?.notes||{})[selP3.classId]||{};
+      const entries=groupByDate(getEntriesInRange(classNotes,days));
+      return(
+        <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+          {binView&&<AdminBinModal/>}
+          {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+          <MobileNav/><MobileBreadcrumb/>
+          <div style={{padding:"12px 14px 40px"}}>
+            <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>{selP3.teacherName} — {selP3.className}</h2>
+            <div style={{fontSize:14,color:G.textM,marginBottom:16}}>{selP3.institute||selInst} · {selP3.subject}</div>
+            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
+              {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
+                <button key={k} onClick={()=>setPeriod(k)} style={{padding:"7px 14px",borderRadius:16,fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,background:period===k?G.navy:"none",color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`}}>{l}</button>
+              ))}
+            </div>
+            {entries.length===0?(
+              <div style={{textAlign:"center",padding:"48px 20px",color:G.textM,fontSize:15}}>No entries for this period.</div>
+            ):entries.map(([dk,dayEntries])=>(
+              <div key={dk} style={{marginBottom:20}}>
+                <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${G.border}`}}>{formatDateLabel(dk)}</div>
+                {dayEntries.map((note,i)=>{
+                  const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
+                  return(
+                    <div key={note.id||i} style={{background:G.surface,borderRadius:11,border:`1px solid ${G.border}`,marginBottom:8,overflow:"hidden"}}>
+                      <div style={{height:3,background:tag.bg}}/>
+                      <div style={{padding:"11px 14px"}}>
+                        <div style={{display:"flex",gap:6,marginBottom:note.title?6:0,flexWrap:"wrap"}}>
+                          <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"2px 9px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
+                          {note.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
+                        </div>
+                        {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display}}>{note.title}</div>}
+                        {note.body&&<p style={{margin:"6px 0 0",fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
+                        <button onClick={()=>handleDeleteEntry(selP3.teacherUid,selP3.classId,dk,note.id,note.title)}
+                          style={{marginTop:10,background:G.redL,border:"1px solid #F5CACA",borderRadius:7,padding:"5px 12px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans}}>Delete Entry</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // ── DESKTOP: original 4-panel layout ─────────────────────────────────────
   return(
-    <div style={{minHeight:"100vh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}} className="admin-root">
+    <div style={{minHeight:"100vh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
       {binView&&<AdminBinModal/>}
       {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       <style>{`
-        @media (max-width: 767px) {
-          /* On mobile: full-screen step navigation */
-          .admin-root { height: auto !important; min-height: 100vh !important; overflow: auto !important; }
-          .admin-panels { flex-direction: column !important; overflow: visible !important; height: auto !important; }
-          .admin-side-panel { width: 100% !important; border-right: none !important; border-bottom: 1px solid #E2E8F0 !important; overflow: visible !important; height: auto !important; min-height: 0 !important; }
-          .admin-side-panel > div[style*="overflowY"] { overflow: visible !important; height: auto !important; max-height: none !important; }
-          .admin-p4 { overflow: visible !important; height: auto !important; }
-          .admin-p4 > div { overflow: visible !important; height: auto !important; }
-          .admin-mobile-step-0 .admin-p2, .admin-mobile-step-0 .admin-p3, .admin-mobile-step-0 .admin-p4 { display: none !important; }
-          .admin-mobile-step-1 .admin-p1 { display: none !important; }
-          .admin-mobile-step-1 .admin-p3, .admin-mobile-step-1 .admin-p4 { display: none !important; }
-          .admin-mobile-step-2 .admin-p1, .admin-mobile-step-2 .admin-p2 { display: none !important; }
-          .admin-mobile-step-2 .admin-p4 { display: none !important; }
-          .admin-mobile-step-3 .admin-p1, .admin-mobile-step-3 .admin-p2, .admin-mobile-step-3 .admin-p3 { display: none !important; }
-          .admin-stats { flex-wrap: wrap; gap: 10px 18px; padding: 8px 16px !important; }
-        }
-        @media (min-width: 768px) {
-          .admin-mobile-back { display: none !important; }
-        }
+        @media (min-width: 768px) { .admin-mobile-back { display: none !important; } }
         .admin-mobile-back { display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
       {/* Nav */}
