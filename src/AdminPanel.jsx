@@ -184,11 +184,14 @@ function AdminPanelInner({user}){
   const [period,      setPeriod]      = useState("today");
   const [mobileStep,  setMobileStep]  = useState(0);
   const [exportOpen,   setExportOpen]   = useState(false);
+  const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | institutes
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
   const [selTeacher,   setSelTeacher]   = useState(null); // uid of teacher in detail modal
   const [newInstName,  setNewInstName]  = useState(""); // new institute input
+  const [renamingInst,  setRenamingInst]  = useState(null); // inst name being renamed
+  const [renameInstVal, setRenameInstVal] = useState("");
   const [renamingTeacher, setRenamingTeacher] = useState(null); // {uid, currentName}
   const [renameVal,    setRenameVal]    = useState("");
   const [deleteModal, setDeleteModal] = useState(null); // {type,label,lines,onConfirm}
@@ -348,6 +351,25 @@ function AdminPanelInner({user}){
 
   // ── Role actions ──────────────────────────────────────────────────────────
   // Save a new global institute to Firestore config
+  const handleRenameInstitute = async (oldName, newName) => {
+    if (!newName.trim() || newName.trim() === oldName) { setRenamingInst(null); return; }
+    try {
+      // Get current list, replace old with new
+      const current = await getGlobalInstitutes();
+      const updated = current.map(i => i === oldName ? newName.trim() : i);
+      const { doc, setDoc } = await import("firebase/firestore");
+      const { db: fdb } = await import("./firebase");
+      await setDoc(doc(fdb, "config", "institutes"), { list: updated });
+      // Also update deletedInstitutes set if it was there
+      setDeletedInstitutes(s => {
+        if (!s.has(oldName)) return s;
+        const n = new Set(s); n.delete(oldName); n.add(newName.trim()); return n;
+      });
+      setRenamingInst(null);
+      alert(`Renamed to "${newName.trim()}"`);
+    } catch(e) { alert("Failed: " + e.message); }
+  };
+
   const handleCreateInstitute = async () => {
     const name = newInstName.trim();
     if (!name) return;
@@ -672,6 +694,30 @@ function AdminPanelInner({user}){
   })();
 
 
+  // Draggable panel resize handle
+  const PanelDivider = ({onDrag}) => {
+    const ref = React.useRef(null);
+    const drag = React.useRef(false);
+    const startX = React.useRef(0);
+    return(
+      <div ref={ref}
+        style={{width:6,flexShrink:0,cursor:"col-resize",background:"transparent",position:"relative",zIndex:10,transition:"background 0.15s"}}
+        onMouseEnter={e=>e.currentTarget.style.background=G.blueL}
+        onMouseLeave={e=>{if(!drag.current)e.currentTarget.style.background="transparent";}}
+        onMouseDown={e=>{
+          drag.current=true; startX.current=e.clientX;
+          e.preventDefault();
+          const move = ev=>{if(drag.current)onDrag(ev.clientX-startX.current);startX.current=ev.clientX;};
+          const up   = ()=>{drag.current=false;document.removeEventListener("mousemove",move);document.removeEventListener("mouseup",up);ref.current&&(ref.current.style.background="transparent");};
+          document.addEventListener("mousemove",move);
+          document.addEventListener("mouseup",up);
+        }}>
+        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:2,height:40,borderRadius:2,background:G.borderM,opacity:0.6}}/>
+      </div>
+    );
+  };
+
+
   if(loading) return(
     <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.sans}}>
       <div style={{textAlign:"center"}}>
@@ -853,14 +899,30 @@ function AdminPanelInner({user}){
                 return(
                   <div key={inst} style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:instTeacherList.length>0?12:0}}>
-                      <div>
-                        <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{inst}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        {renamingInst===inst?(
+                          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                            <input value={renameInstVal} onChange={e=>setRenameInstVal(e.target.value)}
+                              onKeyDown={e=>{if(e.key==="Enter")handleRenameInstitute(inst,renameInstVal);if(e.key==="Escape")setRenamingInst(null);}}
+                              autoFocus style={{flex:1,minWidth:120,padding:"7px 11px",borderRadius:8,border:`1.5px solid ${G.blue}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
+                            <button onClick={()=>handleRenameInstitute(inst,renameInstVal)} style={{...pill(G.navy,"#fff","transparent"),fontSize:13,padding:"6px 14px"}}>Save</button>
+                            <button onClick={()=>setRenamingInst(null)} style={{...pill("none",G.textM,G.border),fontSize:13,padding:"6px 10px"}}>✕</button>
+                          </div>
+                        ):(
+                          <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{inst}</div>
+                        )}
                         <div style={{fontSize:14,color:G.textM,marginTop:3}}>{clsCount} class{clsCount!==1?"es":""} · {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}</div>
                       </div>
-                      <button onClick={()=>handleDeleteInstitute(inst)}
-                        style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,flexShrink:0,whiteSpace:"nowrap"}}>
-                        Delete
-                      </button>
+                      <div style={{display:"flex",gap:6,flexShrink:0}}>
+                        <button onClick={()=>{setRenamingInst(inst);setRenameInstVal(inst);}}
+                          style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",color:G.textS,fontFamily:G.sans,fontWeight:500}}>
+                          ✏ Rename
+                        </button>
+                        <button onClick={()=>handleDeleteInstitute(inst)}
+                          style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,whiteSpace:"nowrap"}}>
+                          Delete
+                        </button>
+                      </div>
                     </div>
                     {/* Teacher chips for this institute */}
                     {instTeacherList.length>0&&(
@@ -1154,7 +1216,7 @@ function AdminPanelInner({user}){
         }}>
 
         {/* ── P1: Institutes ── */}
-        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:175,background:G.bg,borderRight:`1px solid ${G.border}`}}>
+        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:G.bg,borderRight:`1px solid ${G.border}`}}>
           <div style={panelLabel}>Institutes</div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
             {institutes.length===0&&(
@@ -1191,9 +1253,10 @@ function AdminPanelInner({user}){
             })}
           </div>
         </div>
+        <PanelDivider onDrag={dx=>setPanelW(w=>({...w,p1:Math.max(120,Math.min(280,w.p1+dx))}))}/>
 
         {/* ── P2: Toggle + Teacher or Class list ── */}
-        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:205,background:G.surface,borderRight:`1px solid ${G.border}`}}>
+        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:G.surface,borderRight:`1px solid ${G.border}`}}>
           <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
             <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text,marginBottom:10}}>{selInst||"—"}</div>
             {/* Toggle */}
@@ -1272,9 +1335,10 @@ function AdminPanelInner({user}){
             })}
           </div>
         </div>
+        <PanelDivider onDrag={dx=>setPanelW(w=>({...w,p2:Math.max(150,Math.min(320,w.p2+dx))}))}/>
 
         {/* ── P3: Sub-list ── */}
-        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:200,background:G.bg,borderRight:`1px solid ${G.border}`}}>
+        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:G.bg,borderRight:`1px solid ${G.border}`}}>
           <div style={{padding:"12px 12px 8px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
             <div style={{fontFamily:G.display,fontSize:15,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
               {!selP2?"—":tab==="teacher"?(fullData[selP2]?.profile?.name||"Teacher"):normaliseName(selP2)}
@@ -1390,6 +1454,7 @@ function AdminPanelInner({user}){
             })()}
           </div>
         </div>
+        <PanelDivider onDrag={dx=>setPanelW(w=>({...w,p3:Math.max(140,Math.min(300,w.p3+dx))}))}/>
 
         {/* ── P4: Entries ── */}
         <div className="admin-p4" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:G.bg,minWidth:0}}>

@@ -34,6 +34,14 @@ const COLORS = [
   {bg:"#2050C8",light:"#E6EDFA",text:"#102070"},
 ];
 
+// Stable colour per institute name (same institute always same colour)
+function instColor(name) {
+  if (!name) return COLORS[0];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xFFFFFF;
+  return COLORS[Math.abs(h) % COLORS.length];
+}
+
 const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:{name:""},trash:{classes:[],notes:[]}};
 
 // ── Error Boundary ────────────────────────────────────────────────────────────
@@ -630,7 +638,7 @@ function ClassTrackerInner({user}){
         ):(
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             {data.classes.filter(cls=>!cls.left).map((cls)=>{
-              const color=COLORS[cls.colorIdx%COLORS.length];
+              const color=instColor(cls.institute);
               const dateNotes=getDateNotes(cls.id,selectedDate);
               const totalCount=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
               const todayCount=(data.notes[cls.id]||{})[todayKey()]?.length||0;
@@ -794,7 +802,7 @@ function ClassTrackerInner({user}){
               <p style={{fontSize:14,fontFamily:G.sans,color:G.textM,textTransform:"uppercase",marginBottom:14,fontWeight:600}}>Deleted Classes ({tClasses.length})</p>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {tClasses.map(tc=>{
-                  const color=COLORS[tc.colorIdx%COLORS.length];
+                  const color=instColor(tc.institute);
                   const ec=Object.values(tc.savedNotes||{}).reduce((s,arr)=>s+(Array.isArray(arr)?arr.length:0),0);
                   const dl=daysLeft(tc.deletedAt);
                   return(
@@ -867,7 +875,7 @@ function ClassTrackerInner({user}){
     const form=isEdit?editNote:newNote;
     const setForm=isEdit?setEditNote:setNewNote;
     const save=isEdit?saveEdit:addNote;
-    const color=activeClass?COLORS[activeClass.colorIdx%COLORS.length]:COLORS[0];
+    const color=activeClass?instColor(activeClass.institute):COLORS[0];
 
     return(
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
