@@ -526,15 +526,23 @@ export default function ClassTracker({user}){
       />
 
       {/* ── STICKY DATE HEADER ── */}
-      <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"14px 16px 12px",position:"sticky",top:56,zIndex:90}}>
+      <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"10px 16px 10px",position:"sticky",top:56,zIndex:90}}>
         <div style={{maxWidth:800,margin:"0 auto"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <h1 className="greeting-name" style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,flex:1}}>{teacherName} 👋</h1>
-            <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.greenL,borderRadius:20,padding:"4px 12px",fontSize:14,color:G.green,fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>📅 {currentSession()}</span>
+          {/* Greeting row + session */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <h1 className="greeting-name" style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.4,flex:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+              {teacherName} 👋
+            </h1>
+            <span style={{display:"inline-flex",alignItems:"center",gap:4,background:G.greenL,borderRadius:20,padding:"4px 11px",fontSize:13,color:G.green,fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>
+              {currentSession()}
+            </span>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-            <span style={{fontSize:16,fontWeight:600,color:G.textM,fontFamily:G.sans}}>{selDateObj.dayName},</span>
-            <span style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display}}>{selDateObj.num} {selDateObj.monthFull} {selDateObj.year}</span>
+          {/* Month label + compact strip */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,whiteSpace:"nowrap",flexShrink:0}}>
+              {selDateObj.monthFull} {selDateObj.year}
+            </span>
+            <div style={{flex:1,height:1,background:G.border}}/>
           </div>
           <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={allNoteDates}/>
         </div>
