@@ -118,93 +118,106 @@
       .card-in:nth-child(5) { animation-delay: 240ms; }
 
       /* ── Date Carousel ── */
+      /* ── Compact horizontal date strip ── */
       .strip-wrap {
-        background: #fff;
-        border-radius: 16px;
-        border: 1px solid var(--border);
-        box-shadow: var(--shadow-sm);
-        overflow: hidden;
         position: relative;
+        overflow: hidden;
       }
       .strip-wrap::before,
       .strip-wrap::after {
         content: '';
         position: absolute; top: 0; bottom: 0;
-        width: 60px; z-index: 2; pointer-events: none;
+        width: 32px; z-index: 2; pointer-events: none;
       }
-      .strip-wrap::before { left: 0;  background: linear-gradient(to right, rgba(255,255,255,1) 30%, transparent); }
-      .strip-wrap::after  { right: 0; background: linear-gradient(to left,  rgba(255,255,255,1) 30%, transparent); }
+      .strip-wrap::before { left: 0;  background: linear-gradient(to right, var(--surface,#fff) 40%, transparent); }
+      .strip-wrap::after  { right: 0; background: linear-gradient(to left,  var(--surface,#fff) 40%, transparent); }
       .strip-track {
-        display: flex; gap: 2px;
-        overflow-x: auto; padding: 10px 60px;
+        display: flex; gap: 6px;
+        overflow-x: auto; padding: 2px 32px 4px;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none; -ms-overflow-style: none;
         cursor: grab;
       }
       .strip-track:active { cursor: grabbing; }
-      @media (max-width: 767px) {
-        /* Full-page forms no side padding collapse */
-        .form-page { padding: 16px 16px 60px !important; }
-        .strip-track { padding: 8px 20px; }
-        .dc { width: 66px !important; }
-        .dc-num { font-size: 22px !important; }
-        .dc-day { font-size: 10px !important; }
-      }
       .strip-track::-webkit-scrollbar { display: none; }
+
+      /* Each date cell — compact pill */
       .dc {
-        flex-shrink: 0; width: 80px;
+        flex-shrink: 0;
         display: flex; flex-direction: column;
-        align-items: center; padding: 12px 6px 11px;
+        align-items: center; gap: 3px;
+        padding: 8px 10px 7px;
         border-radius: 12px; cursor: pointer;
         transition: background 0.15s, transform 0.12s;
         user-select: none; -webkit-user-select: none;
+        min-width: 52px;
       }
       .dc:hover:not(.dc-sel) { background: var(--green-l); }
-      .dc:active { transform: scale(0.96); }
+      .dc:active { transform: scale(0.95); }
       .dc.dc-sel {
         background: var(--forest);
-        box-shadow: 0 4px 18px rgba(21,43,34,0.28);
+        box-shadow: 0 3px 12px rgba(21,43,34,0.25);
       }
       .dc.dc-sun:not(.dc-sel) .dc-day { color: var(--red); }
       .dc.dc-sun:not(.dc-sel) .dc-num { color: var(--red); }
-      .dc.dc-dim { opacity: 0.3; pointer-events: none; }
+      .dc.dc-dim { opacity: 0.28; pointer-events: none; }
+
+      /* Day label — MON TUE etc */
       .dc-day {
-        font-size: 11px; font-weight: 600;
-        color: var(--text-m); letter-spacing: 0.3px;
-        margin-bottom: 7px; text-transform: uppercase;
+        font-size: 10px; font-weight: 700;
+        color: var(--text-m);
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        font-family: 'Inter', sans-serif;
+        line-height: 1;
       }
-      .dc-sel .dc-day { color: rgba(255,255,255,0.5); }
+      .dc-sel .dc-day { color: rgba(255,255,255,0.55); }
+
+      /* Date number */
       .dc-num {
-        font-size: 28px; font-weight: 800;
-        font-family: 'Syne', sans-serif;
+        font-size: 20px; font-weight: 800;
+        font-family: 'Poppins', sans-serif;
         color: var(--text); line-height: 1;
       }
       .dc-sel .dc-num { color: #fff; }
+
+      /* "TODAY" label under selected */
       .dc-today {
-        font-size: 9px; font-weight: 700;
+        font-size: 8px; font-weight: 700;
         letter-spacing: 1px; text-transform: uppercase;
-        color: rgba(255,255,255,0.55); margin-top: 5px;
+        color: rgba(255,255,255,0.5);
+        font-family: 'Inter', sans-serif;
       }
+
+      /* Entry indicator area */
       .dc-area {
-        height: 20px;
+        height: 14px;
         display: flex; align-items: center; justify-content: center;
-        margin-top: 6px;
       }
       .dc-empty {
-        width: 7px; height: 7px; border-radius: 50%;
+        width: 5px; height: 5px; border-radius: 50%;
         border: 1.5px solid var(--border-m);
         background: transparent;
       }
-      .dc-sel .dc-empty { border-color: rgba(255,255,255,0.3); }
+      .dc-sel .dc-empty { border-color: rgba(255,255,255,0.25); }
       .dc-badge {
-        min-width: 18px; height: 18px; border-radius: 20px;
+        min-width: 16px; height: 16px; border-radius: 16px;
         background: var(--green); color: #fff;
-        font-size: 10px; font-weight: 700;
+        font-size: 9px; font-weight: 700;
         font-family: 'Inter', sans-serif;
         display: flex; align-items: center; justify-content: center;
-        padding: 0 5px; letter-spacing: -0.3px;
+        padding: 0 4px;
       }
       .dc-sel .dc-badge { background: #34D077; color: var(--forest); }
+
+      /* Mobile — even more compact */
+      @media (max-width: 767px) {
+        .form-page { padding: 16px 16px 60px !important; }
+        .dc { min-width: 46px !important; padding: 7px 8px 6px !important; }
+        .dc-num { font-size: 18px !important; }
+        .dc-day { font-size: 9px !important; }
+        .strip-track { padding: 2px 16px 4px !important; gap: 4px !important; }
+      }
 
       /* ── Badges ── */
       .badge {
