@@ -445,7 +445,21 @@ function ClassTrackerInner({user}){
   },[data]);
   useEffect(()=>{if((view==="addNote"||view==="editNote")&&noteRef.current)noteRef.current.focus();},[view]);
 
-  if(loading)return<Spinner text="Loading…"/>;
+  // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
+  const allNoteDates = useMemo(()=>{
+    const map={};
+    try {
+      data.classes.forEach(cls=>{
+        const cn=data.notes[cls.id]||{};
+        Object.entries(cn).forEach(([dk,arr])=>{
+          if(Array.isArray(arr)&&arr.length>0) map[dk]=(map[dk]||0)+arr.length;
+        });
+      });
+    } catch(e){}
+    return map;
+  },[data]);
+
+    if(loading)return<Spinner text="Loading…"/>;
   if(!data.profile?.name)return<ProfileSetup user={user} onSave={name=>setData(d=>({...d,profile:{name}}))} />;
 
   const teacherName=data.profile.name;
@@ -517,19 +531,6 @@ function ClassTrackerInner({user}){
   const selDateObj=dates.find(d=>d.key===selectedDate)||dates[7];
 
   // Build a noteDates map across ALL classes for the date strip dots
-  const allNoteDates = useMemo(()=>{
-    const map={};
-    try {
-      data.classes.forEach(cls=>{
-        const cn=data.notes[cls.id]||{};
-        Object.entries(cn).forEach(([dk,arr])=>{
-          if(Array.isArray(arr)&&arr.length>0) map[dk]=(map[dk]||0)+arr.length;
-        });
-      });
-    } catch(e){}
-    return map;
-  },[data]);
-
   // ── SINGLE SCROLLABLE HOME ───────────────────────────────────────────────
   // ── ONE-PAGE HOME VIEW ──────────────────────────────────────────────────
   if(view==="home"||view==="class") return(
