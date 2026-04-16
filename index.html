@@ -233,19 +233,24 @@
       /* ── Headings ── */
       h1, h2, h3 { font-family: 'Poppins', sans-serif; font-weight: 700; }
 
-      /* Split panel: on mobile left panel becomes horizontal class strip at top */
+      /* Split panel: on mobile left panel = compact top strip */
       @media (max-width: 767px) {
         .mobile-left-panel {
           width: 100% !important;
           border-right: none !important;
           border-bottom: 1px solid var(--border) !important;
-          flex-direction: row !important;
-          max-height: 110px !important;
-          overflow-x: auto !important;
-          overflow-y: hidden !important;
+          overflow: hidden !important;
+          /* Remove flex row — handled inside component */
         }
-        .mobile-left-panel > div { flex-shrink: 0 !important; }
       }
+
+      /* iOS Safari viewport fix */
+      :root { --app-height: 100vh; }
+      @supports (height: 100dvh) { :root { --app-height: 100dvh; } }
+
+      /* Safe area insets for notch devices */
+      .nav-safe { padding-top: env(safe-area-inset-top, 0px); }
+      .bottom-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
       /* Hide scrollbar but keep scroll */
       .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
@@ -256,14 +261,22 @@
       ══════════════════════════════════════════════════ */
 
       /* Utility classes */
-      .mobile-only   { display: none !important; }
-      .desktop-only  { display: flex  !important; }
+      .mobile-only   { display: none   !important; }
+      .mobile-inline { display: none   !important; }
+      .desktop-only  { display: flex   !important; }
       .tablet-hidden { display: flex  !important; }
+
+      /* ── iOS input zoom prevention ── */
+      @media (max-width: 767px) {
+        input, select, textarea { font-size: 16px !important; }
+        input[type="time"] { font-size: 16px !important; }
+      }
 
       /* ── Phone ────────────────────────────────────────── */
       @media (max-width: 767px) {
-        .mobile-only   { display: flex  !important; }
-        .desktop-only  { display: none  !important; }
+        .mobile-only   { display: flex   !important; }
+        .mobile-inline { display: inline !important; }
+        .desktop-only  { display: none   !important; }
         .tablet-hidden { display: none  !important; }
 
         /* Spacing */
