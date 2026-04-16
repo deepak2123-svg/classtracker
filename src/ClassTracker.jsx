@@ -66,9 +66,33 @@ class CTErrorBoundary extends Component {
 }
 
 
+// ── Sign Out Modal ─────────────────────────────────────────────────────────────
+function SignOutModal({onConfirm,onClose}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
+      <div style={{background:"#fff",borderRadius:20,padding:"28px 24px",width:"100%",maxWidth:360,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",textAlign:"center"}}>
+        <div style={{width:56,height:56,borderRadius:16,background:"#FEE2E2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 16px"}}>⏻</div>
+        <h3 style={{fontSize:20,fontWeight:700,color:"#111827",fontFamily:"'Poppins',sans-serif",marginBottom:8}}>Sign out?</h3>
+        <p style={{fontSize:15,color:"#6B7280",marginBottom:24,lineHeight:1.5}}>You'll need to sign back in to access your classes and entries.</p>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onClose}
+            style={{flex:1,padding:"12px",borderRadius:11,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#374151",fontFamily:"'Inter',sans-serif"}}>
+            Cancel
+          </button>
+          <button onClick={onConfirm}
+            style={{flex:1,padding:"12px",borderRadius:11,border:"none",background:"#DC2626",fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:"'Inter',sans-serif"}}>
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Academic session ──────────────────────────────────────────────────────────
 function getAcademicSession(dk){const[y,m]=dk.split("-").map(Number);return m>=4?`${y}-${String(y+1).slice(2)}`:`${y-1}-${String(y).slice(2)}`;}
-function currentSession(){const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;return m>=4?`${y}-${String(y+1).slice(2)}`:`${y-1}-${String(y).slice(2)}`;}
+function currentSession(){const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;const sy=m>=4?y:y-1;return `${sy}-${String(sy+1).slice(2)}`;}
 function groupDatesByPeriod(dates){
   const now=new Date(),tk=todayKey();
   const weekStart=new Date(now);weekStart.setDate(now.getDate()-now.getDay());
@@ -168,10 +192,10 @@ function TopNav({user,teacherName,right}){
             </span>
           </div>
           {/* Sign out */}
-          <button onClick={()=>{if(window.confirm("Sign out?"))logout();}}
-            style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:13,fontFamily:G.sans,fontWeight:500,whiteSpace:"nowrap"}}>
+          <button onClick={()=>setSignOutPrompt(true)}
+            style={{background:"rgba(220,38,38,0.18)",border:"1px solid rgba(220,38,38,0.3)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"#FCA5A5",fontSize:13,fontFamily:G.sans,fontWeight:600,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5}}>
+            <span style={{fontSize:15}}>⏻</span>
             <span className="desktop-only">Sign Out</span>
-            <span className="mobile-inline" style={{fontSize:16}}>⎋</span>
           </button>
         </div>
       </div>
@@ -497,7 +521,8 @@ function ClassTrackerInner({user}){
   // Name editing removed — name set from Google/signup only
   const [editingClass,setEditingClass] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState(null);
-  const [instFilter,      setInstFilter]      = useState("all"); // institute filter on home
+  const [instFilter,      setInstFilter]      = useState("all");
+  const [signOutPrompt,  setSignOutPrompt]  = useState(false);
   const [leaveModal,setLeaveModal]     = useState(null); // classId to leave
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
@@ -589,12 +614,12 @@ function ClassTrackerInner({user}){
     if(!newNote.title.trim()&&!newNote.body.trim())return;
     const note={id:Date.now().toString(),...newNote,teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
-    setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("classDetail");
+    setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("home");
   };
   const saveEdit=()=>{
     if(!editNote.timeStart){alert("Please enter the class start time.");return;}
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};});
-    setEditNote(null);setView("classDetail");
+    setEditNote(null);setView("home");
   };
   const deleteNote=(noteId)=>setData(d=>{
     const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];
@@ -630,6 +655,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100vh",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <SaveBadge/>
+        {signOutPrompt&&<SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
         {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
         {leaveModal&&(()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);}} onClose={()=>setLeaveModal(null)}/>:null;})()}
 
@@ -936,6 +962,7 @@ function ClassTrackerInner({user}){
   // ── ADD / EDIT NOTE ───────────────────────────────────────────────────────
   if(view==="addNote"||view==="editNote"){
     const isEdit=view==="editNote";
+    if(signOutPrompt) return <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>;
     const form=isEdit?editNote:newNote;
     const setForm=isEdit?setEditNote:setNewNote;
     const save=isEdit?saveEdit:addNote;
@@ -950,7 +977,7 @@ function ClassTrackerInner({user}){
               <span style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{activeClass.section}</span>
               <span style={{fontSize:14,color:G.textM}}>· {activeClass.institute}</span>
             </div>}
-            <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
+            <GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Classes</GhostBtn>
           </>}
         />
         {!isEdit&&(
@@ -965,11 +992,19 @@ function ClassTrackerInner({user}){
           </div>
         )}
         <div className="mobile-pad" style={{maxWidth:660,margin:"0 auto",padding:"32px 24px 72px"}}>
-          <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:5,textTransform:"uppercase",fontWeight:600}}>{isEdit?"Editing Entry":"New Entry For"}</p>
-          <h2 style={{marginBottom:22,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>{isEdit?form.title||"Entry":formatDateLabel(selectedDate)}</h2>
-          <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
-            <span>👤</span><span>Logged as: <strong>{teacherName}</strong></span>
-          </div>
+          {/* Class identity banner */}
+          {activeClass&&(()=>{const ac=activeClass;const ic=instColor(ac.institute);return(
+            <div style={{background:ic.light,border:`2px solid ${ic.bg}`,borderRadius:14,padding:"12px 16px",marginBottom:18,display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:44,height:44,borderRadius:11,background:ic.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:"#fff",fontFamily:G.mono,flexShrink:0}}>
+                {(ac.section||"?").slice(0,2).toUpperCase()}
+              </div>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:ic.bg,fontFamily:G.display,lineHeight:1.1}}>{ac.section}</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:2}}>🏫 {ac.institute}{ac.subject?` · ${ac.subject}`:""}</div>
+              </div>
+            </div>
+          );})()}
+          <p style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginBottom:4,textTransform:"uppercase",fontWeight:600,letterSpacing:0.3}}>{isEdit?"Editing Entry":"New Entry —"} {formatDateLabel(selectedDate)}</p>
           <div className="form-card" style={{...card,padding:"24px"}}>
             <div style={{marginBottom:18}}>
               <label style={lbl}>Type</label>
