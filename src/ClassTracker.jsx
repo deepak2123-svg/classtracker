@@ -516,7 +516,8 @@ function ClassTrackerInner({user}){
   // Name editing removed — name set from Google/signup only
   const [editingClass,setEditingClass] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState(null);
-  const [instFilter,      setInstFilter]      = useState("all"); // institute filter on home
+  const [instFilter,      setInstFilter]      = useState("all");
+  const [signOutPrompt,   setSignOutPrompt]   = useState(false);
   const [leaveModal,setLeaveModal]     = useState(null); // classId to leave
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
