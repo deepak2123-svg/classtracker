@@ -11,9 +11,7 @@ export const COLORS = [
 
 export const TAG_STYLES = {
   note:      { bg:"#E8EDFF", text:"#3730A3", label:"📝 Note" },
-  todo:      { bg:"#FEF3C7", text:"#92400E", label:"✅ To-Do" },
   important: { bg:"#FEE2E2", text:"#991B1B", label:"🔥 Important" },
-  resource:  { bg:"#D1FAE5", text:"#065F46", label:"🔗 Resource" },
 };
 
 export const DAYS   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];

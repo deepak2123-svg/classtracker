@@ -879,7 +879,7 @@ function AdminPanelInner({user}){
 
   // ── MANAGE ACCESS VIEW ────────────────────────────────────────────────────
   if(view==="manage") return(
-    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans,overflowX:"hidden"}}>
       {binView&&<AdminBinModal/>}
       {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       {/* nav */}
@@ -920,7 +920,7 @@ function AdminPanelInner({user}){
               value={newInstName}
               onChange={e=>setNewInstName(e.target.value)}
               onKeyDown={e=>e.key==="Enter"&&handleCreateInstitute()}
-              placeholder="e.g. Kendriya Vidyalaya, GIS, Montfort"
+              placeholder="e.g. Kendriya Vidyalaya, KIS, GIS"
               style={{flex:1,padding:"11px 14px",borderRadius:10,border:`1.5px solid ${G.border}`,fontSize:16,fontFamily:G.sans,outline:"none",color:G.text}}
               onFocus={e=>e.target.style.borderColor=G.blue}
               onBlur={e=>e.target.style.borderColor=G.border}
@@ -939,24 +939,12 @@ function AdminPanelInner({user}){
           {institutes.length===0
             ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No institutes yet. Create one above.</div>
             :<div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {institutes.map(inst=>{
+              {institutes.map((inst,instIdx)=>{
                 const instTeacherList=teachers.filter(t=>{const d=fullData[t.uid];if(d)return(d.classes||[]).some(c=>(c.institute||"").trim()===inst.trim());return(t.institutes||[]).some(i=>i.trim()===inst.trim());});
                 const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||instTeacherList.length;
                 return(
                   <div key={inst}
-                    draggable
-                    onDragStart={()=>setDragInst(instIdx)}
-                    onDragOver={e=>{e.preventDefault();}}
-                    onDrop={()=>{
-                      if(dragInst===null||dragInst===instIdx)return;
-                      const reordered=[...institutes];
-                      const [moved]=reordered.splice(dragInst,1);
-                      reordered.splice(instIdx,0,moved);
-                      saveInstOrder(reordered);
-                      setDragInst(null);
-                    }}
-                    onDragEnd={()=>setDragInst(null)}
-                    style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${dragInst===instIdx?G.blue:G.border}`,cursor:"grab",transition:"border-color 0.15s",opacity:dragInst===instIdx?0.5:1}}>
+                    style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:instTeacherList.length>0?12:0}}>
                       <div style={{flex:1,minWidth:0}}>
                         {renamingInst===inst?(
@@ -972,13 +960,23 @@ function AdminPanelInner({user}){
                         )}
                         <div style={{fontSize:14,color:G.textM,marginTop:3}}>{clsCount} class{clsCount!==1?"es":""} · {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}</div>
                       </div>
-                      <div style={{display:"flex",gap:6,flexShrink:0}}>
+                      <div style={{display:"flex",gap:6,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                        {instIdx>0&&(
+                          <button onClick={()=>{
+                            const reordered=[...institutes];
+                            const [moved]=reordered.splice(instIdx,1);
+                            reordered.unshift(moved);
+                            saveInstOrder(reordered);
+                          }} style={{background:G.blueL,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"6px 10px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,whiteSpace:"nowrap"}}>
+                            ↑ Top
+                          </button>
+                        )}
                         <button onClick={()=>{setRenamingInst(inst);setRenameInstVal(inst);}}
                           style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",color:G.textS,fontFamily:G.sans,fontWeight:500}}>
-                          ✏ Rename
+                          Rename
                         </button>
                         <button onClick={()=>handleDeleteInstitute(inst)}
-                          style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,whiteSpace:"nowrap"}}>
+                          style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500}}>
                           Delete
                         </button>
                       </div>
@@ -998,7 +996,6 @@ function AdminPanelInner({user}){
                   </div>
                 );
               })}
-            <p style={{fontSize:12,color:G.textL,textAlign:"center",marginTop:12,fontFamily:G.sans}}>Drag cards to reorder</p>
             </div>
           }
         </div>
