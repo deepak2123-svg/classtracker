@@ -653,7 +653,7 @@ function ClassTrackerInner({user}){
     const noteDates=Object.fromEntries(Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
 
     return(
-      <div style={{height:"100vh",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{height:"var(--app-height,100vh)",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <SaveBadge/>
         {signOutPrompt&&<SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
         {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
@@ -682,19 +682,44 @@ function ClassTrackerInner({user}){
         ):(
           <div style={{flex:1,display:"flex",overflow:"hidden"}}>
 
-            {/* ── LEFT PANEL: Class list ── */}
-            <div style={{width:260,flexShrink:0,display:"flex",flexDirection:"column",borderRight:`1px solid ${G.border}`,background:G.surface,overflow:"hidden"}}
-              className="mobile-left-panel">
+            {/* ── LEFT PANEL: Desktop sidebar / Mobile top strip ── */}
+            <div className="mobile-left-panel"
+              style={{width:260,flexShrink:0,display:"flex",flexDirection:"column",borderRight:`1px solid ${G.border}`,background:G.surface,overflow:"hidden"}}>
 
-              {/* Greeting */}
-              <div style={{padding:"14px 14px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-                <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3,marginBottom:4}}>{teacherName} 👋</div>
+              {/* Greeting — desktop only */}
+              <div className="desktop-only" style={{padding:"14px 14px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0,flexDirection:"column",alignItems:"flex-start",gap:4}}>
+                <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{teacherName} 👋</div>
                 <span style={{background:G.greenL,borderRadius:20,padding:"3px 10px",fontSize:12,color:G.green,fontWeight:700}}>{currentSession()}</span>
               </div>
 
-              {/* Institute filter */}
+              {/* Mobile: horizontal pill strip */}
+              <div className="mobile-only" style={{padding:"8px 12px",overflowX:"auto",display:"flex",gap:6,alignItems:"center",WebkitOverflowScrolling:"touch",flexWrap:"nowrap"}} >
+                <style>{`.mobile-only{scrollbar-width:none}.mobile-only::-webkit-scrollbar{display:none}`}</style>
+                {filtered.map(cls=>{
+                  const ic=instColor(cls.institute);
+                  const isSel=selCls?.id===cls.id;
+                  const todayN=Array.isArray((data.notes[cls.id]||{})[todayKey()])?(data.notes[cls.id]||{})[todayKey()].length:0;
+                  return(
+                    <button key={cls.id} onClick={()=>setSelectedClassId(cls.id)}
+                      style={{flexShrink:0,padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",
+                        background:isSel?ic.bg:G.bg,
+                        color:isSel?"#fff":G.textS,
+                        fontFamily:G.display,fontSize:13,fontWeight:isSel?700:600,
+                        display:"flex",alignItems:"center",gap:6,minHeight:36,WebkitTapHighlightColor:"transparent"}}>
+                      {cls.section}
+                      {todayN>0&&<span style={{background:isSel?"rgba(255,255,255,0.25)":ic.light,color:isSel?"#fff":ic.bg,borderRadius:20,padding:"1px 6px",fontSize:10,fontWeight:700}}>+{todayN}</span>}
+                    </button>
+                  );
+                })}
+                <button onClick={()=>setView("addClass")}
+                  style={{flexShrink:0,padding:"7px 12px",borderRadius:20,border:`2px dashed ${G.border}`,background:"transparent",color:G.textL,fontSize:13,fontWeight:600,cursor:"pointer",minHeight:36,WebkitTapHighlightColor:"transparent"}}>
+                  + New
+                </button>
+              </div>
+
+              {/* Desktop: institute filter + full class list */}
               {institutes.length>1&&(
-                <div style={{padding:"8px 10px",borderBottom:`1px solid ${G.border}`,display:"flex",gap:5,overflowX:"auto",flexShrink:0}} className="hide-scrollbar">
+                <div className="desktop-only" style={{padding:"8px 10px",borderBottom:`1px solid ${G.border}`,display:"flex",gap:5,overflowX:"auto",flexShrink:0}}>
                   {["all",...institutes].map(inst=>{
                     const isSel=instFilter===inst;
                     const ic=inst==="all"?null:instColor(inst);
@@ -710,8 +735,7 @@ function ClassTrackerInner({user}){
                 </div>
               )}
 
-              {/* Class list */}
-              <div style={{flex:1,overflowY:"auto",padding:"8px 8px 20px"}}>
+              <div className="desktop-only" style={{flex:1,overflowY:"auto",padding:"8px 8px 20px",flexDirection:"column"}}>
                 {filtered.map(cls=>{
                   const ic=instColor(cls.institute);
                   const isSel=selCls?.id===cls.id;
@@ -739,7 +763,6 @@ function ClassTrackerInner({user}){
                     </div>
                   );
                 })}
-                {/* Add class */}
                 <div onClick={()=>setView("addClass")}
                   style={{borderRadius:12,padding:"10px 12px",marginTop:4,cursor:"pointer",border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",gap:8,transition:"all 0.15s"}}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.background=G.greenL;}}
@@ -1039,7 +1062,7 @@ function ClassTrackerInner({user}){
                           const [h,m]=(form.timeStart||"00:00").split(":").map(Number);
                           const end=new Date(2000,0,1,h,m+mins);
                           const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
-                          setForm({...form,_dur:mins,timeEnd:`${eh}:${em}`});
+                          setForm({...form,_dur:mins,_suggestedEnd:`${eh}:${em}`,timeEnd:form.timeEnd||`${eh}:${em}`});
                         }}
                           style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:13,fontWeight:isSel?700:500,
                             background:isSel?G.forest:"rgba(0,0,0,0.07)",color:isSel?"#fff":G.textM,transition:"all 0.15s"}}>
@@ -1050,17 +1073,26 @@ function ClassTrackerInner({user}){
                   </div>
                 </div>
               )}
-              {/* Step 3: End time (auto-set but editable) */}
+              {/* Step 3: End time — suggested but fully editable by user */}
               {form.timeStart&&(
-                <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6}}>
-                  <span style={{fontSize:13,color:G.textM,fontWeight:600,flexShrink:0}}>Ends:</span>
-                  <input type="time" value={form.timeEnd||""}
-                    onChange={e=>setForm({...form,timeEnd:e.target.value})}
-                    style={{...inp,marginBottom:0,flex:1,fontSize:16}}/>
-                  {form.timeStart&&form.timeEnd&&(
-                    <span style={{fontSize:12,color:G.green,fontWeight:600,fontFamily:G.mono,flexShrink:0}}>
-                      {(()=>{const[sh,sm]=(form.timeStart).split(":").map(Number);const[eh,em]=(form.timeEnd).split(":").map(Number);const d=(eh*60+em)-(sh*60+sm);return d>0?d<60?d+"m":Math.floor(d/60)+"h"+(d%60?d%60+"m":""):"";})()}
-                    </span>
+                <div style={{marginTop:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:13,color:G.textM,fontWeight:600,flexShrink:0}}>Ends:</span>
+                    <input type="time" value={form.timeEnd||""}
+                      onChange={e=>setForm({...form,timeEnd:e.target.value,_suggestedEnd:null})}
+                      style={{...inp,marginBottom:0,flex:1,fontSize:16,
+                        borderColor:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.green:G.border,
+                        background:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.greenL:"#fff"}}/>
+                    {form.timeStart&&form.timeEnd&&(
+                      <span style={{fontSize:13,color:G.green,fontWeight:700,fontFamily:G.mono,flexShrink:0,background:G.greenL,borderRadius:8,padding:"4px 8px"}}>
+                        {(()=>{const[sh,sm]=(form.timeStart).split(":").map(Number);const[eh,em]=(form.timeEnd).split(":").map(Number);const d=(eh*60+em)-(sh*60+sm);return d>0?d<60?d+"m":Math.floor(d/60)+"h"+(d%60?d%60+"m":""):"";})()}
+                      </span>
+                    )}
+                  </div>
+                  {form._suggestedEnd&&form.timeEnd===form._suggestedEnd&&(
+                    <div style={{fontSize:12,color:G.green,marginTop:4,fontFamily:G.sans}}>
+                      ✓ Suggested — tap the time above to edit if different
+                    </div>
                   )}
                 </div>
               )}
