@@ -516,6 +516,7 @@ function ClassTrackerInner({user}){
   const [leaveModal,setLeaveModal]     = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
   const [instFilter,setInstFilter]       = useState("all");
+  const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
 
@@ -545,6 +546,11 @@ function ClassTrackerInner({user}){
     return()=>clearTimeout(saveTimer.current);
   },[data]);
   useEffect(()=>{if((view==="addNote"||view==="editNote")&&noteRef.current)noteRef.current.focus();},[view]);
+  useEffect(()=>{
+    const onResize=()=>setIsMobile(window.innerWidth<768);
+    window.addEventListener("resize",onResize);
+    return ()=>window.removeEventListener("resize",onResize);
+  },[]);
 
   // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
   const allNoteDates = useMemo(()=>{
@@ -865,8 +871,6 @@ function ClassTrackerInner({user}){
       </div>
     );
 
-    // Detect mobile vs tablet/desktop
-    const isMobile = typeof window!=="undefined" && window.innerWidth < 768;
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
