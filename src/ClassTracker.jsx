@@ -165,7 +165,7 @@ function GhostBtn({onClick,children,style={}}){
 }
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
-function TopNav({user,teacherName,right,onLogoClick}){
+function TopNav({user,teacherName,right,onLogoClick,onSignOut}){
   const shortName=(teacherName||"").split(" ")[0];
   return(
     <div style={{background:G.forest,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06)"}}>
@@ -190,11 +190,10 @@ function TopNav({user,teacherName,right,onLogoClick}){
             </span>
           </div>
           {/* Sign out */}
-          <button onClick={()=>setSignOutPrompt(true)}
+          <button onClick={onSignOut}
             style={{background:"rgba(220,38,38,0.22)",border:"1px solid rgba(220,38,38,0.4)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"#FCA5A5",fontSize:13,fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:38,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
-            <span style={{fontSize:15}}>↪</span>
+            <span style={{fontSize:15}}>&#8594;&#10006;</span>
             <span className="desktop-only" style={{display:"inline"}}>Sign Out</span>
-            <span className="mobile-inline" style={{fontSize:16}}>⎋</span>
           </button>
         </div>
       </div>
@@ -231,10 +230,9 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
       {/* Main date nav */}
       <div style={{display:"flex",alignItems:"center",gap:8,background:G.bg,borderRadius:14,padding:"10px 12px",border:`1px solid ${G.border}`}}>
         <button
-          onPointerUp={e=>{e.preventDefault();if(canGoBack)moveDay(-1);}}
-          onClick={e=>{e.preventDefault();if(canGoBack)moveDay(-1);}}
-          style={{background:canGoBack?G.surface:"transparent",border:`1px solid ${canGoBack?G.border:"transparent"}`,borderRadius:9,width:44,height:44,cursor:canGoBack?"pointer":"default",fontSize:22,color:canGoBack?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoBack?1:0.25,WebkitTapHighlightColor:"transparent",fontWeight:300}}>
-          ‹
+          onPointerUp={e=>{e.stopPropagation();if(canGoBack)moveDay(-1);}}
+          style={{background:canGoBack?G.surface:"rgba(0,0,0,0.04)",border:`1px solid ${canGoBack?G.borderM:"transparent"}`,borderRadius:10,width:48,height:48,cursor:canGoBack?"pointer":"default",fontSize:24,color:canGoBack?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoBack?1:0.2,WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>
+          &#8249;
         </button>
 
         <div style={{flex:1,textAlign:"center",cursor:"pointer"}} onClick={()=>setShowPicker(s=>!s)}>
@@ -252,10 +250,9 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
         </div>
 
         <button
-          onPointerUp={e=>{e.preventDefault();if(canGoFwd)moveDay(1);}}
-          onClick={e=>{e.preventDefault();if(canGoFwd)moveDay(1);}}
-          style={{background:canGoFwd?G.surface:"transparent",border:`1px solid ${canGoFwd?G.border:"transparent"}`,borderRadius:9,width:44,height:44,cursor:canGoFwd?"pointer":"default",fontSize:22,color:canGoFwd?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoFwd?1:0.25,WebkitTapHighlightColor:"transparent",fontWeight:300}}>
-          ›
+          onPointerUp={e=>{e.stopPropagation();if(canGoFwd)moveDay(1);}}
+          style={{background:canGoFwd?G.surface:"rgba(0,0,0,0.04)",border:`1px solid ${canGoFwd?G.borderM:"transparent"}`,borderRadius:10,width:48,height:48,cursor:canGoFwd?"pointer":"default",fontSize:24,color:canGoFwd?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoFwd?1:0.2,WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>
+          &#8250;
         </button>
       </div>
 
@@ -862,9 +859,17 @@ function ClassTrackerInner({user}){
                             {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display}}>{note.title}</div>}
                             {note.body&&<p style={{margin:"6px 0 0",fontSize:14,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
                           </div>
-                          <div style={{display:"flex",gap:4,flexShrink:0}}>
-                            <button onClick={()=>{setEditNote({...note});setView("editNote");}} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:8,padding:"5px 10px",fontSize:13,cursor:"pointer",color:G.textM}}>Edit</button>
-                            <button onClick={()=>deleteNote(note.id)} style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"5px 10px",fontSize:13,cursor:"pointer",color:G.red}}>✕</button>
+                          <div style={{display:"flex",gap:6,flexShrink:0}}>
+                            <button onClick={()=>{setEditNote({...note});setView("editNote");}}
+                              style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:36,WebkitTapHighlightColor:"transparent"}}
+                              onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;e.currentTarget.style.background=G.greenL;}}
+                              onMouseLeave={e=>{e.currentTarget.style.borderColor=G.borderM;e.currentTarget.style.color=G.textS;e.currentTarget.style.background=G.bg;}}>
+                              Edit
+                            </button>
+                            <button onClick={()=>deleteNote(note.id)}
+                              style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"7px 12px",fontSize:13,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:36,WebkitTapHighlightColor:"transparent"}}>
+                              ✕
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -881,7 +886,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} right={NavRight}/>
+        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} right={NavRight}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
       </div>
     );
@@ -900,7 +905,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")}
+        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
         {/* Class header */}
@@ -952,9 +957,9 @@ function ClassTrackerInner({user}){
                         </div>
                         <div style={{display:"flex",gap:6,flexShrink:0}}>
                           <button onClick={()=>{setEditNote({...note});setView("editNote");}}
-                            style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:9,padding:"6px 12px",fontSize:14,cursor:"pointer",color:G.textM,minHeight:38,WebkitTapHighlightColor:"transparent"}}>Edit</button>
+                            style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"8px 16px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>Edit</button>
                           <button onClick={()=>deleteNote(note.id)}
-                            style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"6px 12px",fontSize:14,cursor:"pointer",color:G.red,minHeight:38,WebkitTapHighlightColor:"transparent"}}>✕</button>
+                            style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"8px 14px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>✕</button>
                         </div>
                       </div>
                     </div>
@@ -970,9 +975,8 @@ function ClassTrackerInner({user}){
 
   if(view==="addClass")return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
-      <TopNav user={user} teacherName={teacherName} 
-        right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}
-      />
+      <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+        right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
       <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px 80px"}}>
         <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:6,textTransform:"uppercase",fontWeight:600}}>New Class</p>
         <h2 style={{marginBottom:28,fontSize:30,letterSpacing:-0.5,fontFamily:G.display}}>Add a class</h2>
@@ -1015,7 +1019,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
         <SaveBadge/>
-        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
+        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>
@@ -1113,7 +1117,7 @@ function ClassTrackerInner({user}){
 
     return(
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
-        <TopNav user={user} teacherName={teacherName} 
+        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<>
             {activeClass&&<div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:color.bg}}/>
@@ -1153,30 +1157,73 @@ function ClassTrackerInner({user}){
               </div>
             </div>
             <div style={{marginBottom:16}}>
-              <label style={lbl}>Class Time <span style={{color:G.red,marginLeft:3}}>*</span></label>
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <input
-                  type="time"
-                  value={form.timeStart||""}
-                  onChange={e=>{
-                    setForm({...form,timeStart:e.target.value});
-                    // Auto-focus end time after start is picked (mobile clock dismisses and jumps)
-                    if(e.target.value) setTimeout(()=>{ const el=document.getElementById("timeEnd"); if(el) el.focus(); },150);
-                  }}
-                  style={{...inp,marginBottom:0,flex:1}}
-                  placeholder="Start"
-                />
-                <span style={{color:G.textL,fontSize:16,flexShrink:0}}>→</span>
-                <input
-                  id="timeEnd"
-                  type="time"
-                  value={form.timeEnd||""}
-                  onChange={e=>setForm({...form,timeEnd:e.target.value})}
-                  style={{...inp,marginBottom:0,flex:1}}
-                  placeholder="End"
-                />
-              </div>
-              {!form.timeStart&&<div style={{fontSize:13,color:G.red,marginTop:5,fontFamily:G.sans}}>Start time is required to save this entry.</div>}
+              <label style={lbl}>Start Time <span style={{color:G.red,marginLeft:3}}>*</span></label>
+              <input type="time" value={form.timeStart||""}
+                onChange={e=>{
+                  const s=e.target.value;
+                  const dur=form._dur||(activeClass?.duration)||60;
+                  if(s){
+                    const [h,m]=s.split(":").map(Number);
+                    const end=new Date(2000,0,1,h,m+dur);
+                    const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
+                    setForm({...form,timeStart:s,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
+                  } else {
+                    setForm({...form,timeStart:"",timeEnd:"",_suggestedEnd:null});
+                  }
+                }}
+                style={{...inp,fontSize:16}}/>
+
+              {/* Duration suggestion pills — shown after start time entered */}
+              {form.timeStart&&(
+                <div style={{marginBottom:12}}>
+                  <label style={{...lbl,marginBottom:8}}>Duration</label>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {[45,60,75,90,105,120].map(mins=>{
+                      const isSel=(form._dur||(activeClass?.duration)||60)===mins;
+                      const label=mins<60?`${mins}m`:mins===60?"1 hr":`${Math.floor(mins/60)}h${mins%60?" "+mins%60+"m":""}`;
+                      return(
+                        <button key={mins} type="button"
+                          onClick={()=>{
+                            const [h,m]=(form.timeStart||"00:00").split(":").map(Number);
+                            const end=new Date(2000,0,1,h,m+mins);
+                            const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
+                            setForm({...form,_dur:mins,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
+                          }}
+                          style={{padding:"9px 16px",borderRadius:20,border:`2px solid ${isSel?G.forest:G.border}`,cursor:"pointer",fontFamily:G.sans,fontSize:14,fontWeight:isSel?700:500,minHeight:42,WebkitTapHighlightColor:"transparent",
+                            background:isSel?G.forest:"transparent",color:isSel?"#fff":G.textM,transition:"all 0.15s"}}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* End time — auto-calculated, still editable */}
+              {form.timeStart&&(
+                <div>
+                  <label style={{...lbl,marginBottom:6}}>
+                    End Time
+                    {form._suggestedEnd&&form.timeEnd===form._suggestedEnd&&
+                      <span style={{color:G.green,fontWeight:500,textTransform:"none",fontSize:12,marginLeft:8}}>suggested — edit if different</span>}
+                  </label>
+                  <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                    <input type="time" value={form.timeEnd||""}
+                      onChange={e=>setForm({...form,timeEnd:e.target.value,_suggestedEnd:null})}
+                      style={{...inp,marginBottom:0,flex:1,fontSize:16,
+                        borderColor:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.green:G.border,
+                        background:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.greenL:G.surface}}/>
+                    {form.timeStart&&form.timeEnd&&(()=>{
+                      const[sh,sm]=form.timeStart.split(":").map(Number);
+                      const[eh,em]=form.timeEnd.split(":").map(Number);
+                      const d=(eh*60+em)-(sh*60+sm);
+                      if(d<=0) return null;
+                      return <span style={{fontSize:14,color:G.green,fontWeight:700,fontFamily:G.mono,flexShrink:0,background:G.greenL,borderRadius:8,padding:"6px 10px"}}>{d<60?d+"m":Math.floor(d/60)+"h"+(d%60?d%60+"m":"")}</span>;
+                    })()}
+                  </div>
+                </div>
+              )}
+              {!form.timeStart&&<div style={{fontSize:13,color:G.red,marginTop:4}}>Start time is required.</div>}
             </div>
             <div style={{marginBottom:14}}>
               <label style={lbl}>Title</label>
