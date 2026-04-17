@@ -234,20 +234,21 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
 
   const ArrowBtn = ({side, enabled, onMove}) => {
     const btnRef = useRef(null);
+    const wasTouched = useRef(false);
     return(
       <button ref={btnRef} disabled={!enabled}
-        onTouchEnd={e=>{
-          // Touch: prevent the synthetic click from also firing
-          e.preventDefault();
-          if(enabled) onMove();
-          if(btnRef.current){btnRef.current.style.transform="scale(1)";}
-        }}
         onTouchStart={e=>{
+          wasTouched.current = true;
           if(enabled&&btnRef.current) btnRef.current.style.transform="scale(0.88)";
         }}
-        onClick={e=>{
-          // Only fires on real mouse click (desktop/trackpad), not after touch
-          if(e.detail===0) return; // synthetic click from touch — skip
+        onTouchEnd={e=>{
+          e.preventDefault(); // stops the browser generating a click event after touch
+          if(btnRef.current) btnRef.current.style.transform="scale(1)";
+          if(enabled) onMove();
+          setTimeout(()=>{ wasTouched.current=false; }, 500);
+        }}
+        onClick={()=>{
+          if(wasTouched.current) return; // touch already handled it
           if(enabled) onMove();
         }}
         style={{
