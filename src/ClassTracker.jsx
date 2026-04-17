@@ -202,70 +202,152 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut}){
 }
 
 // ── Minimal Date Picker (Option C) ───────────────────────────────────────────
-// ── Date Carousel — ±7 days, scrollable, no arrow double-fire issues ──────────
+// ── Week-in-Month Calendar ────────────────────────────────────────────────────
 function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
-  const dates = buildDateWindow();
-  const trackRef = useRef(null);
+  const [viewYear,  setViewYear]  = useState(() => Number(selectedDate.split('-')[0]));
+  const [viewMonth, setViewMonth] = useState(() => Number(selectedDate.split('-')[1]) - 1);
 
-  // Scroll selected date to centre on mount/change
+  // Keep view in sync if selectedDate changes from outside (quick pills etc.)
   useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const idx = dates.findIndex(d => d.key === selectedDate);
-    if (idx < 0) return;
-    const cellW = 64;
-    track.scrollTo({ left: idx * cellW - track.clientWidth / 2 + cellW / 2, behavior: 'smooth' });
+    const y = Number(selectedDate.split('-')[0]);
+    const m = Number(selectedDate.split('-')[1]) - 1;
+    setViewYear(y); setViewMonth(m);
   }, [selectedDate]);
 
-  return (
-    <div style={{position:"relative",overflow:"hidden"}}>
-      {/* Fade edges */}
-      <div style={{position:"absolute",left:0,top:0,bottom:0,width:32,background:`linear-gradient(to right,${G.surface},transparent)`,zIndex:2,pointerEvents:"none"}}/>
-      <div style={{position:"absolute",right:0,top:0,bottom:0,width:32,background:`linear-gradient(to left,${G.surface},transparent)`,zIndex:2,pointerEvents:"none"}}/>
+  const DAYS   = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-      <div ref={trackRef}
-        style={{display:"flex",gap:4,overflowX:"auto",padding:"4px 32px 6px",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none"}}
-        className="hide-scrollbar">
-        {dates.map(d => {
-          const isSel   = d.key === selectedDate;
-          const isToday = d.key === todayKey();
-          const count   = noteDates[d.key] || 0;
-          const isSun   = d.isSun;
-          return (
-            <div key={d.key} onClick={() => onSelectDate(d.key)}
-              style={{
-                flexShrink:0, width:56,
-                display:"flex", flexDirection:"column", alignItems:"center",
-                padding:"8px 4px 7px", borderRadius:14, cursor:"pointer",
-                WebkitTapHighlightColor:"transparent", touchAction:"manipulation",
-                userSelect:"none", WebkitUserSelect:"none",
-                transition:"background 0.15s, transform 0.1s",
-                background: isSel ? G.forest : "transparent",
-                transform: isSel ? "scale(1.05)" : "scale(1)",
-                boxShadow: isSel ? "0 4px 14px rgba(21,43,34,0.25)" : "none",
-              }}>
-              {/* Day name */}
-              <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",
-                color: isSel ? "rgba(255,255,255,0.6)" : isSun ? G.red : G.textL,
-                fontFamily:G.sans, marginBottom:5, lineHeight:1}}>
-                {d.dayName}
-              </div>
-              {/* Date number */}
-              <div style={{fontSize:20,fontWeight:800,lineHeight:1,
-                fontFamily:G.display,
-                color: isSel ? "#fff" : isSun ? G.red : G.text}}>
-                {d.num}
-              </div>
-              {/* Entry indicator */}
-              <div style={{height:14,display:"flex",alignItems:"center",justifyContent:"center",marginTop:4}}>
-                {count > 0
-                  ? <div style={{minWidth:16,height:16,borderRadius:20,background:isSel?"#34D077":G.green,color:isSel?G.forest:"#fff",fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{count}</div>
-                  : <div style={{width:5,height:5,borderRadius:"50%",border:`1.5px solid ${isSel?"rgba(255,255,255,0.3)":G.borderM}`,background:"transparent"}}/>
-                }
-              </div>
-            </div>
-          );
-        })}
+  const todayStr = todayKey();
+  const pad = n => String(n).padStart(2,'0');
+  const toKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+  // Week range containing selectedDate
+  const selDateObj  = new Date(Number(selectedDate.split('-')[0]), Number(selectedDate.split('-')[1])-1, Number(selectedDate.split('-')[2]));
+  const weekSunday  = new Date(selDateObj); weekSunday.setDate(selDateObj.getDate() - selDateObj.getDay());
+  const weekSaturday= new Date(weekSunday); weekSaturday.setDate(weekSunday.getDate() + 6);
+
+  function changeMonth(delta) {
+    let m = viewMonth + delta, y = viewYear;
+    if (m > 11) { m = 0; y++; }
+    if (m < 0)  { m = 11; y--; }
+    setViewMonth(m); setViewYear(y);
+  }
+
+  // Build grid cells
+  const firstDay     = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth  = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const prevMonthDays= new Date(viewYear, viewMonth, 0).getDate();
+  const totalCells   = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+
+  const cells = [];
+  for (let i = 0; i < totalCells; i++) {
+    let date, otherMonth = false;
+    if (i < firstDay) {
+      date = new Date(viewYear, viewMonth - 1, prevMonthDays - firstDay + i + 1);
+      otherMonth = true;
+    } else if (i >= firstDay + daysInMonth) {
+      date = new Date(viewYear, viewMonth + 1, i - firstDay - daysInMonth + 1);
+      otherMonth = true;
+    } else {
+      date = new Date(viewYear, viewMonth, i - firstDay + 1);
+    }
+    const key      = toKey(date);
+    const inWeek   = !otherMonth && date >= weekSunday && date <= weekSaturday;
+    const isSel    = key === selectedDate;
+    const isToday  = key === todayStr;
+    const hasEntry = (noteDates[key] || 0) > 0;
+    const isSun    = date.getDay() === 0;
+    // Stripe shape
+    let stripe = '';
+    if (inWeek) {
+      const s = date.getDay() === 0 || date.getDate() === 1;
+      const e = date.getDay() === 6 || date.getDate() === daysInMonth;
+      stripe = s && e ? 'only' : s ? 'start' : e ? 'end' : 'mid';
+    }
+    cells.push({ date, key, otherMonth, inWeek, isSel, isToday, hasEntry, isSun, stripe });
+  }
+
+  const stripeStyle = (stripe) => {
+    const base = { position:'absolute', top:3, bottom:3, background:'rgba(27,138,76,0.09)', zIndex:0, pointerEvents:'none' };
+    if (stripe==='only')  return {...base, left:4, right:4, borderRadius:10};
+    if (stripe==='start') return {...base, left:4, right:0, borderRadius:'10px 0 0 10px'};
+    if (stripe==='end')   return {...base, left:0, right:4, borderRadius:'0 10px 10px 0'};
+    return {...base, left:0, right:0};
+  };
+
+  return (
+    <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,overflow:'hidden'}}>
+      {/* Month nav */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px 6px'}}>
+        <button onClick={()=>changeMonth(-1)}
+          style={{background:'none',border:`1px solid ${G.border}`,borderRadius:8,width:30,height:30,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,color:G.textM,WebkitTapHighlightColor:'transparent'}}>
+          ‹
+        </button>
+        <span style={{fontFamily:G.display,fontSize:14,fontWeight:700,color:G.text}}>
+          {MONTHS[viewMonth]} {viewYear}
+        </span>
+        <button onClick={()=>changeMonth(1)}
+          style={{background:'none',border:`1px solid ${G.border}`,borderRadius:8,width:30,height:30,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,color:G.textM,WebkitTapHighlightColor:'transparent'}}>
+          ›
+        </button>
+      </div>
+
+      {/* Day labels */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',padding:'0 6px',marginBottom:2}}>
+        {DAYS.map(d => (
+          <div key={d} style={{textAlign:'center',fontSize:10,fontWeight:700,color:d==='Su'?G.red:G.textL,textTransform:'uppercase',padding:'3px 0',letterSpacing:0.4,fontFamily:G.sans}}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',padding:'0 6px 10px',gap:2}}>
+        {cells.map(({date,key,otherMonth,inWeek,isSel,isToday,hasEntry,isSun,stripe},i) => (
+          <div key={i}
+            onClick={() => { if (!otherMonth) onSelectDate(key); }}
+            style={{
+              position:'relative', aspectRatio:'1',
+              display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+              borderRadius:10, cursor:otherMonth?'default':'pointer',
+              opacity:otherMonth?0.2:1,
+              WebkitTapHighlightColor:'transparent',
+              touchAction:'manipulation', userSelect:'none',
+              background: isSel||isToday ? G.forest : 'transparent',
+              boxShadow: isSel||isToday ? '0 3px 10px rgba(21,43,34,0.25)' : 'none',
+              transition:'transform 0.1s',
+            }}
+            onPointerDown={e=>{if(!otherMonth)e.currentTarget.style.transform='scale(0.88)';}}
+            onPointerUp={e=>{e.currentTarget.style.transform='scale(1)';}}
+            onPointerCancel={e=>{e.currentTarget.style.transform='scale(1)';}}>
+
+            {/* Week stripe — behind the date number */}
+            {inWeek && !isSel && !isToday && stripe && (
+              <div style={stripeStyle(stripe)}/>
+            )}
+
+            {/* Date number */}
+            <span style={{
+              position:'relative', zIndex:1,
+              fontSize:13,
+              fontWeight: isSel||isToday ? 800 : inWeek ? 700 : 400,
+              color: isSel||isToday ? '#fff' : isSun ? G.red : inWeek ? G.text : G.textL,
+              fontFamily: G.display, lineHeight:1,
+            }}>
+              {date.getDate()}
+            </span>
+
+            {/* Entry dot */}
+            {hasEntry && (
+              <div style={{
+                position:'absolute', bottom:3, left:'50%', transform:'translateX(-50%)',
+                width:4, height:4, borderRadius:'50%',
+                background: isSel||isToday ? '#34D077' : G.green,
+                zIndex:1,
+              }}/>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
