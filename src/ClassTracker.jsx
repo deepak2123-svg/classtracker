@@ -165,14 +165,17 @@ function GhostBtn({onClick,children,style={}}){
 }
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
-function TopNav({user,teacherName,right}){
+function TopNav({user,teacherName,right,onLogoClick}){
   const shortName=(teacherName||"").split(" ")[0];
   return(
     <div style={{background:G.forest,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06)"}}>
       <div style={{height:54,display:"flex",alignItems:"center",padding:"0 14px",gap:10}}>
-        {/* Logo */}
-        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-          <div style={{width:30,height:30,borderRadius:9,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>🎓</div>
+        {/* Logo — tappable, goes to home */}
+        <div onClick={onLogoClick} style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
+          onPointerDown={e=>{e.currentTarget.style.opacity="0.7";}}
+          onPointerUp={e=>{e.currentTarget.style.opacity="1";}}
+          onPointerCancel={e=>{e.currentTarget.style.opacity="1";}}>
+          <div style={{width:32,height:32,borderRadius:9,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🎓</div>
           <span className="desktop-only" style={{fontSize:15,fontWeight:700,color:"#fff",fontFamily:G.display,whiteSpace:"nowrap"}}>Class Tracker</span>
         </div>
         {/* Right side */}
@@ -187,9 +190,10 @@ function TopNav({user,teacherName,right}){
             </span>
           </div>
           {/* Sign out */}
-          <button onClick={()=>{if(window.confirm("Sign out?"))logout();}}
-            style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:13,fontFamily:G.sans,fontWeight:500,whiteSpace:"nowrap"}}>
-            <span className="desktop-only">Sign Out</span>
+          <button onClick={()=>setSignOutPrompt(true)}
+            style={{background:"rgba(220,38,38,0.22)",border:"1px solid rgba(220,38,38,0.4)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"#FCA5A5",fontSize:13,fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:38,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+            <span style={{fontSize:15}}>↪</span>
+            <span className="desktop-only" style={{display:"inline"}}>Sign Out</span>
             <span className="mobile-inline" style={{fontSize:16}}>⎋</span>
           </button>
         </div>
@@ -223,11 +227,13 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
   const canGoFwd   = isDateAllowed((()=>{const x=new Date(y,m-1,d);x.setDate(x.getDate()+1);return x.toISOString().slice(0,10);})());
 
   return (
-    <div style={{userSelect:"none"}}>
+    <div>
       {/* Main date nav */}
       <div style={{display:"flex",alignItems:"center",gap:8,background:G.bg,borderRadius:14,padding:"10px 12px",border:`1px solid ${G.border}`}}>
-        <button onClick={()=>moveDay(-1)} disabled={!canGoBack}
-          style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,width:36,height:36,cursor:canGoBack?"pointer":"not-allowed",fontSize:18,color:canGoBack?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoBack?1:0.35}}>
+        <button
+          onPointerUp={e=>{e.preventDefault();if(canGoBack)moveDay(-1);}}
+          onClick={e=>{e.preventDefault();if(canGoBack)moveDay(-1);}}
+          style={{background:canGoBack?G.surface:"transparent",border:`1px solid ${canGoBack?G.border:"transparent"}`,borderRadius:9,width:44,height:44,cursor:canGoBack?"pointer":"default",fontSize:22,color:canGoBack?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoBack?1:0.25,WebkitTapHighlightColor:"transparent",fontWeight:300}}>
           ‹
         </button>
 
@@ -245,8 +251,10 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
           )}
         </div>
 
-        <button onClick={()=>moveDay(1)} disabled={!canGoFwd}
-          style={{background:"none",border:`1px solid ${G.border}`,borderRadius:9,width:36,height:36,cursor:canGoFwd?"pointer":"not-allowed",fontSize:18,color:canGoFwd?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoFwd?1:0.35}}>
+        <button
+          onPointerUp={e=>{e.preventDefault();if(canGoFwd)moveDay(1);}}
+          onClick={e=>{e.preventDefault();if(canGoFwd)moveDay(1);}}
+          style={{background:canGoFwd?G.surface:"transparent",border:`1px solid ${canGoFwd?G.border:"transparent"}`,borderRadius:9,width:44,height:44,cursor:canGoFwd?"pointer":"default",fontSize:22,color:canGoFwd?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoFwd?1:0.25,WebkitTapHighlightColor:"transparent",fontWeight:300}}>
           ›
         </button>
       </div>
@@ -832,7 +840,7 @@ function ClassTrackerInner({user}){
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <span style={{fontSize:15,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:selDateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {selDateNotes.length} {selDateNotes.length===1?"entry":"entries"}</span></span>
-                {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>+ Add Entry</button>}
+                {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",_dur:activeClass?.duration||60});setView("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>+ Add Entry</button>}
               </div>
               {selDateNotes.length===0?(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"40px 20px",textAlign:"center"}}>
@@ -873,7 +881,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} right={NavRight}/>
+        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} right={NavRight}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
       </div>
     );
@@ -892,7 +900,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName}
+        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
         {/* Class header */}
@@ -914,7 +922,7 @@ function ClassTrackerInner({user}){
         <div style={{flex:1,overflowY:"auto",padding:"16px 16px 100px",WebkitOverflowScrolling:"touch"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
             <span style={{fontSize:16,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:dateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span></span>
-            {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
+            {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",_dur:activeClass?.duration||60});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
               style={{background:color.bg,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:46,WebkitTapHighlightColor:"transparent",boxShadow:`0 2px 12px ${color.bg}55`}}>
               + Add Entry
             </button>}
@@ -978,7 +986,22 @@ function ClassTrackerInner({user}){
           <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
           <label style={{...lbl,marginTop:10}}>Subject</label>
           <CreatableDropdown value={newClass.subject} onChange={s=>setNewClass(c=>({...c,subject:s}))} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics, Geography" addPlaceholder="Type subject…"/>
-          <PrimaryBtn onClick={addClass} disabled={!newClass.institute.trim()||!newClass.section.trim()} onPointerDown={e=>rpl(e,true)} style={{marginTop:12,width:"100%",padding:"13px",fontSize:16}}>Add Class</PrimaryBtn>
+          <label style={{...lbl,marginTop:14}}>Default Class Duration</label>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+            {[45,60,75,90,105,120].map(mins=>{
+              const isSel=(newClass.duration||60)===mins;
+              const label=mins<60?`${mins}m`:mins===60?"1 hr":`${Math.floor(mins/60)}h${mins%60?" "+mins%60+"m":""}`;
+              return(
+                <button key={mins} type="button" onClick={()=>setNewClass(c=>({...c,duration:mins}))}
+                  style={{padding:"8px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:14,fontWeight:isSel?700:500,minHeight:40,WebkitTapHighlightColor:"transparent",
+                    background:isSel?G.forest:"rgba(0,0,0,0.07)",color:isSel?"#fff":G.textM,transition:"all 0.15s"}}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <p style={{fontSize:12,color:G.textL,marginBottom:14,fontFamily:G.sans}}>Suggests end time automatically when logging entries for this class.</p>
+          <PrimaryBtn onClick={addClass} disabled={!newClass.institute.trim()||!newClass.section.trim()} onPointerDown={e=>rpl(e,true)} style={{marginTop:4,width:"100%",padding:"13px",fontSize:16}}>Add Class</PrimaryBtn>
         </div>
       </div>
     </div>
@@ -992,7 +1015,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
         <SaveBadge/>
-        <TopNav user={user} teacherName={teacherName} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
+        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>
