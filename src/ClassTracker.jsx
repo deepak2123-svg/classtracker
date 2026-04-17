@@ -169,32 +169,47 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut}){
   const shortName=(teacherName||"").split(" ")[0];
   return(
     <div style={{background:G.forest,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06)"}}>
-      <div style={{height:54,display:"flex",alignItems:"center",padding:"0 14px",gap:10}}>
-        {/* Logo — tappable, goes to home */}
-        <div onClick={onLogoClick} style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
-          onPointerDown={e=>{e.currentTarget.style.opacity="0.7";}}
+      {/* All items same height:42, same borderRadius:10, vertically centred */}
+      <div style={{height:58,display:"flex",alignItems:"center",padding:"0 12px",gap:8}}>
+
+        {/* Logo pill */}
+        <div onClick={onLogoClick}
+          style={{width:42,height:42,borderRadius:10,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
+          onPointerDown={e=>{e.currentTarget.style.opacity="0.75";}}
           onPointerUp={e=>{e.currentTarget.style.opacity="1";}}
           onPointerCancel={e=>{e.currentTarget.style.opacity="1";}}>
-          <div style={{width:32,height:32,borderRadius:9,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🎓</div>
-          <span className="desktop-only" style={{fontSize:15,fontWeight:700,color:"#fff",fontFamily:G.display,whiteSpace:"nowrap"}}>Class Tracker</span>
+          🎓
         </div>
-        {/* Right side */}
-        <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto"}}>
+
+        {/* Spacer */}
+        <div style={{flex:1}}/>
+
+        {/* Right group — all same height */}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+
+          {/* Extra right items (Back button etc.) */}
           {right}
-          {/* Teacher name */}
-          <div style={{display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.1)",borderRadius:20,padding:"5px 10px",flexShrink:0}}>
-            <Avatar user={user} size={20}/>
-            <span style={{fontWeight:600,fontSize:13,color:"rgba(255,255,255,0.9)",whiteSpace:"nowrap"}}>
+
+          {/* Teacher name pill */}
+          <div style={{height:42,display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.1)",borderRadius:10,padding:"0 12px",flexShrink:0}}>
+            <Avatar user={user} size={22}/>
+            <span style={{fontWeight:600,fontSize:13,color:"rgba(255,255,255,0.92)",whiteSpace:"nowrap",fontFamily:G.sans}}>
               <span className="desktop-only">{teacherName}</span>
               <span className="mobile-inline">{shortName}</span>
             </span>
           </div>
-          {/* Sign out */}
+
+          {/* Sign out pill — same size, clean icon */}
           <button onClick={onSignOut}
-            style={{background:"rgba(220,38,38,0.22)",border:"1px solid rgba(220,38,38,0.4)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"#FCA5A5",fontSize:13,fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:38,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
-            <span style={{fontSize:15}}>&#8594;&#10006;</span>
-            <span className="desktop-only" style={{display:"inline"}}>Sign Out</span>
+            style={{height:42,width:42,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(220,38,38,0.2)",border:"1.5px solid rgba(220,38,38,0.45)",borderRadius:10,cursor:"pointer",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
+            {/* Clean power/exit icon using SVG — renders on all platforms */}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
           </button>
+
         </div>
       </div>
     </div>
