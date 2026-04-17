@@ -203,60 +203,98 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut}){
 
 // ── Minimal Date Picker (Option C) ───────────────────────────────────────────
 function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
-  const [showPicker, setShowPicker] = useState(false);
+  const lastMove = useRef(0);
+  const [dir, setDir] = useState(0);   // -1 = sliding left, 1 = sliding right
+  const [animKey, setAnimKey] = useState(0);
   const today = todayKey();
 
-  // Parse selectedDate
   const [y, m, d] = selectedDate.split("-").map(Number);
   const dateObj = new Date(y, m - 1, d);
   const dayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dateObj.getDay()];
   const monthName = ["January","February","March","April","May","June","July","August","September","October","November","December"][m-1];
   const isToday = selectedDate === today;
-  const isYesterday = selectedDate === (()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})();
+  const isYesterday = selectedDate === (()=>{const x=new Date();x.setDate(x.getDate()-1);return x.toISOString().slice(0,10);})();
   const entryCount = noteDates[selectedDate] || 0;
 
+  const canGoBack = isDateAllowed((()=>{const x=new Date(y,m-1,d);x.setDate(x.getDate()-1);return x.toISOString().slice(0,10);})());
+  const canGoFwd  = isDateAllowed((()=>{const x=new Date(y,m-1,d);x.setDate(x.getDate()+1);return x.toISOString().slice(0,10);})());
+
   function moveDay(delta) {
+    const now = Date.now();
+    if (now - lastMove.current < 350) return;
+    lastMove.current = now;
     const cur = new Date(y, m - 1, d);
     cur.setDate(cur.getDate() + delta);
     const nk = cur.toISOString().slice(0, 10);
-    if (isDateAllowed(nk)) onSelectDate(nk);
+    if (!isDateAllowed(nk)) return;
+    setDir(delta);
+    setAnimKey(k => k + 1);
+    onSelectDate(nk);
   }
 
-  const canGoBack  = isDateAllowed((()=>{const x=new Date(y,m-1,d);x.setDate(x.getDate()-1);return x.toISOString().slice(0,10);})());
-  const canGoFwd   = isDateAllowed((()=>{const x=new Date(y,m-1,d);x.setDate(x.getDate()+1);return x.toISOString().slice(0,10);})());
+  const ArrowBtn = ({side, enabled, onClick}) => (
+    <button onClick={onClick} disabled={!enabled}
+      style={{
+        background:enabled?G.surface:"transparent",
+        border:`1.5px solid ${enabled?G.borderM:"transparent"}`,
+        borderRadius:12,width:48,height:48,
+        cursor:enabled?"pointer":"default",
+        fontSize:26,color:enabled?G.text:G.textL,
+        display:"flex",alignItems:"center",justifyContent:"center",
+        flexShrink:0,opacity:enabled?1:0.15,
+        WebkitTapHighlightColor:"transparent",
+        touchAction:"manipulation",
+        transition:"background 0.1s,transform 0.1s",
+        fontWeight:300,
+        userSelect:"none",
+      }}
+      onPointerDown={e=>{if(enabled)e.currentTarget.style.transform="scale(0.88)";}}
+      onPointerUp={e=>{e.currentTarget.style.transform="scale(1)";}}
+      onPointerCancel={e=>{e.currentTarget.style.transform="scale(1)";}}>
+      {side==="back"?"‹":"›"}
+    </button>
+  );
 
-  return (
+  return(
     <div>
-      {/* Main date nav */}
-      <div style={{display:"flex",alignItems:"center",gap:8,background:G.bg,borderRadius:14,padding:"10px 12px",border:`1px solid ${G.border}`}}>
-        <button
-          onPointerUp={e=>{e.stopPropagation();if(canGoBack)moveDay(-1);}}
-          style={{background:canGoBack?G.surface:"rgba(0,0,0,0.04)",border:`1px solid ${canGoBack?G.borderM:"transparent"}`,borderRadius:10,width:48,height:48,cursor:canGoBack?"pointer":"default",fontSize:24,color:canGoBack?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoBack?1:0.2,WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>
-          &#8249;
-        </button>
+      <style>{`
+        @keyframes slideInFromRight {
+          from { opacity:0; transform:translateX(28px); }
+          to   { opacity:1; transform:translateX(0); }
+        }
+        @keyframes slideInFromLeft {
+          from { opacity:0; transform:translateX(-28px); }
+          to   { opacity:1; transform:translateX(0); }
+        }
+        .dp-date { animation-duration:0.22s; animation-timing-function:cubic-bezier(0.22,1,0.36,1); animation-fill-mode:both; }
+        .dp-slide-right { animation-name:slideInFromRight; }
+        .dp-slide-left  { animation-name:slideInFromLeft; }
+      `}</style>
 
-        <div style={{flex:1,textAlign:"center",cursor:"pointer"}} onClick={()=>setShowPicker(s=>!s)}>
-          <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,marginBottom:1}}>
-            {isToday?"TODAY":isYesterday?"YESTERDAY":dayName.toUpperCase()}
+      {/* Main row */}
+      <div style={{display:"flex",alignItems:"center",gap:8,background:G.bg,borderRadius:16,padding:"10px 10px",border:`1px solid ${G.border}`,overflow:"hidden"}}>
+        <ArrowBtn side="back" enabled={canGoBack} onClick={()=>moveDay(-1)}/>
+
+        <div key={animKey}
+          className={`dp-date${dir===1?" dp-slide-right":dir===-1?" dp-slide-left":""}`}
+          style={{flex:1,textAlign:"center",userSelect:"none"}}>
+          <div style={{fontSize:12,fontWeight:700,color:isToday?G.green:G.textL,letterSpacing:1,textTransform:"uppercase",fontFamily:G.sans,marginBottom:2}}>
+            {isToday?"Today":isYesterday?"Yesterday":dayName}
           </div>
-          <div style={{fontSize:22,fontWeight:800,color:isToday?G.green:G.text,fontFamily:G.display,lineHeight:1,letterSpacing:-0.5}}>
+          <div style={{fontSize:24,fontWeight:800,color:isToday?G.green:G.text,fontFamily:G.display,lineHeight:1.1,letterSpacing:-0.5}}>
             {d} {monthName.slice(0,3)} {y}
           </div>
           {entryCount>0&&(
-            <div style={{fontSize:11,color:G.green,fontWeight:700,marginTop:2,fontFamily:G.sans}}>
+            <div style={{fontSize:11,color:G.green,fontWeight:700,marginTop:3}}>
               {entryCount} {entryCount===1?"entry":"entries"} ✓
             </div>
           )}
         </div>
 
-        <button
-          onPointerUp={e=>{e.stopPropagation();if(canGoFwd)moveDay(1);}}
-          style={{background:canGoFwd?G.surface:"rgba(0,0,0,0.04)",border:`1px solid ${canGoFwd?G.borderM:"transparent"}`,borderRadius:10,width:48,height:48,cursor:canGoFwd?"pointer":"default",fontSize:24,color:canGoFwd?G.text:G.textL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:canGoFwd?1:0.2,WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>
-          &#8250;
-        </button>
+        <ArrowBtn side="fwd" enabled={canGoFwd} onClick={()=>moveDay(1)}/>
       </div>
 
-      {/* Quick jump pills */}
+      {/* Quick pills */}
       <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
         {[
           {label:"Today",    key:today},
@@ -266,13 +304,12 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
           const isSel=selectedDate===key;
           const hasE=(noteDates[key]||0)>0;
           return(
-            <button key={key} onClick={()=>onSelectDate(key)}
-              style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:13,fontWeight:isSel?700:500,transition:"all 0.15s",
-                background:isSel?G.forest:G.surface,
-                color:isSel?"#fff":G.textM,
-                boxShadow:isSel?"0 2px 8px rgba(21,43,34,0.2)":"none",
-                border:isSel?"none":`1px solid ${G.border}`,
-                display:"flex",alignItems:"center",gap:5}}>
+            <button key={key} onClick={()=>{setDir(0);setAnimKey(k=>k+1);onSelectDate(key);}}
+              style={{padding:"7px 16px",borderRadius:20,border:`1.5px solid ${isSel?G.forest:G.border}`,cursor:"pointer",fontFamily:G.sans,fontSize:13,fontWeight:isSel?700:500,
+                background:isSel?G.forest:G.surface,color:isSel?"#fff":G.textM,
+                display:"flex",alignItems:"center",gap:6,minHeight:36,
+                WebkitTapHighlightColor:"transparent",touchAction:"manipulation",
+                transition:"all 0.15s"}}>
               {label}
               {hasE&&<span style={{width:6,height:6,borderRadius:"50%",background:isSel?"#34D077":G.green,flexShrink:0}}/>}
             </button>
