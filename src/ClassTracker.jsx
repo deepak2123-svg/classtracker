@@ -233,22 +233,17 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
   }
 
   const ArrowBtn = ({side, enabled, onMove}) => {
-    const btnRef = useRef(null);
-    const wasTouched = useRef(false);
+    const lastTouchTime = useRef(0);
     return(
-      <button ref={btnRef} disabled={!enabled}
-        onTouchStart={e=>{
-          wasTouched.current = true;
-          if(enabled&&btnRef.current) btnRef.current.style.transform="scale(0.88)";
-        }}
-        onTouchEnd={e=>{
-          e.preventDefault(); // stops the browser generating a click event after touch
-          if(btnRef.current) btnRef.current.style.transform="scale(1)";
+      <button disabled={!enabled}
+        onTouchEnd={()=>{
+          // Record touch time — onClick will check this and skip if recent
+          lastTouchTime.current = Date.now();
           if(enabled) onMove();
-          setTimeout(()=>{ wasTouched.current=false; }, 500);
         }}
         onClick={()=>{
-          if(wasTouched.current) return; // touch already handled it
+          // Skip if a touch just fired within 600ms (prevents double-move on tablets)
+          if(Date.now() - lastTouchTime.current < 600) return;
           if(enabled) onMove();
         }}
         style={{
@@ -263,6 +258,7 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
           touchAction:"manipulation",
           transition:"transform 0.1s",
           fontWeight:300,userSelect:"none",
+          WebkitUserSelect:"none",
         }}>
         {side==="back"?"‹":"›"}
       </button>
@@ -759,12 +755,8 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:11,color:G.textL,fontWeight:600}}>entries</div>
               {todayN>0&&<div style={{background:G.greenL,color:G.green,borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700,marginTop:3}}>+{todayN} today</div>}
             </div>
-            <div style={{display:"flex",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>setEditingClass(cls)}
-                style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:13,width:34,height:34,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>✏</button>
-              <button onClick={()=>setLeaveModal(cls.id)}
-                style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:13,width:34,height:34,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>🗑</button>
-            </div>
+            {/* Arrow hint — tap to open */}
+            <div style={{color:G.textL,fontSize:20,flexShrink:0,paddingLeft:4}}>›</div>
           </div>
         </div>
       );
