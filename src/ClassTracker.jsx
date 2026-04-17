@@ -232,28 +232,41 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
     onSelectDate(nk);
   }
 
-  const ArrowBtn = ({side, enabled, onClick}) => (
-    <button onClick={onClick} disabled={!enabled}
-      style={{
-        background:enabled?G.surface:"transparent",
-        border:`1.5px solid ${enabled?G.borderM:"transparent"}`,
-        borderRadius:12,width:48,height:48,
-        cursor:enabled?"pointer":"default",
-        fontSize:26,color:enabled?G.text:G.textL,
-        display:"flex",alignItems:"center",justifyContent:"center",
-        flexShrink:0,opacity:enabled?1:0.15,
-        WebkitTapHighlightColor:"transparent",
-        touchAction:"manipulation",
-        transition:"background 0.1s,transform 0.1s",
-        fontWeight:300,
-        userSelect:"none",
-      }}
-      onPointerDown={e=>{if(enabled)e.currentTarget.style.transform="scale(0.88)";}}
-      onPointerUp={e=>{e.currentTarget.style.transform="scale(1)";}}
-      onPointerCancel={e=>{e.currentTarget.style.transform="scale(1)";}}>
-      {side==="back"?"‹":"›"}
-    </button>
-  );
+  const ArrowBtn = ({side, enabled, onMove}) => {
+    const btnRef = useRef(null);
+    return(
+      <button ref={btnRef} disabled={!enabled}
+        onTouchEnd={e=>{
+          // Touch: prevent the synthetic click from also firing
+          e.preventDefault();
+          if(enabled) onMove();
+          if(btnRef.current){btnRef.current.style.transform="scale(1)";}
+        }}
+        onTouchStart={e=>{
+          if(enabled&&btnRef.current) btnRef.current.style.transform="scale(0.88)";
+        }}
+        onClick={e=>{
+          // Only fires on real mouse click (desktop/trackpad), not after touch
+          if(e.detail===0) return; // synthetic click from touch — skip
+          if(enabled) onMove();
+        }}
+        style={{
+          background:enabled?G.surface:"transparent",
+          border:`1.5px solid ${enabled?G.borderM:"transparent"}`,
+          borderRadius:12,width:52,height:52,
+          cursor:enabled?"pointer":"default",
+          fontSize:26,color:enabled?G.text:G.textL,
+          display:"flex",alignItems:"center",justifyContent:"center",
+          flexShrink:0,opacity:enabled?1:0.15,
+          WebkitTapHighlightColor:"transparent",
+          touchAction:"manipulation",
+          transition:"transform 0.1s",
+          fontWeight:300,userSelect:"none",
+        }}>
+        {side==="back"?"‹":"›"}
+      </button>
+    );
+  };
 
   return(
     <div>
@@ -273,7 +286,7 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
 
       {/* Main row */}
       <div style={{display:"flex",alignItems:"center",gap:8,background:G.bg,borderRadius:16,padding:"10px 10px",border:`1px solid ${G.border}`,overflow:"hidden"}}>
-        <ArrowBtn side="back" enabled={canGoBack} onClick={()=>moveDay(-1)}/>
+        <ArrowBtn side="back" enabled={canGoBack} onMove={()=>moveDay(-1)}/>
 
         <div key={animKey}
           className={`dp-date${dir===1?" dp-slide-right":dir===-1?" dp-slide-left":""}`}
@@ -291,7 +304,7 @@ function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
           )}
         </div>
 
-        <ArrowBtn side="fwd" enabled={canGoFwd} onClick={()=>moveDay(1)}/>
+        <ArrowBtn side="fwd" enabled={canGoFwd} onMove={()=>moveDay(1)}/>
       </div>
 
       {/* Quick pills */}
