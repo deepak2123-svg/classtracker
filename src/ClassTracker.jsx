@@ -370,6 +370,47 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
 
 
 // ── Read-only Dropdown (for admin-controlled lists) ──────────────────────────
+function CreatableDropdown({value,onChange,options,onAddOption,placeholder,addPlaceholder}){
+  const [open,setOpen]=useState(false);const [adding,setAdding]=useState(false);const [newVal,setNewVal]=useState("");
+  const inputRef=useRef(null);const wrapRef=useRef(null);
+  useEffect(()=>{if(adding&&inputRef.current)inputRef.current.focus();},[adding]);
+  useEffect(()=>{const h=e=>{if(wrapRef.current&&!wrapRef.current.contains(e.target)){setOpen(false);setAdding(false);setNewVal("");}};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[]);
+  const confirmAdd=()=>{const t=newVal.trim();if(!t)return;if(!options.includes(t))onAddOption(t);onChange(t);setNewVal("");setAdding(false);setOpen(false);};
+  return(
+    <div ref={wrapRef} style={{position:"relative",marginBottom:10}}>
+      <button type="button" onClick={()=>{setOpen(o=>!o);setAdding(false);setNewVal("");}}
+        style={{...inp,marginBottom:0,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",color:value?G.text:G.textL}}>
+        <span style={{fontWeight:value?400:300}}>{value||placeholder}</span>
+        <span style={{color:G.textL,fontSize:11,fontFamily:G.mono,display:"inline-block",transform:open?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
+      </button>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,zIndex:400,background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,boxShadow:G.shadowLg,overflow:"hidden"}}>
+          <div style={{maxHeight:210,overflowY:"auto"}}>
+            {options.length===0&&<div style={{padding:"14px 16px",color:G.textL,fontSize:15,fontStyle:"italic"}}>No saved options yet</div>}
+            {options.map(opt=>{const sel=opt===value;return(
+              <div key={opt} onClick={()=>{onChange(opt);setOpen(false);}}
+                style={{padding:"11px 16px",cursor:"pointer",fontSize:15,color:sel?G.green:G.text,fontWeight:sel?600:400,background:sel?G.greenL:"transparent",display:"flex",alignItems:"center",gap:12,transition:"background 0.1s"}}
+                onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=G.bg;}}
+                onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                <span style={{width:16,color:G.green,fontSize:14,fontFamily:G.mono}}>{sel?"✓":""}</span>{opt}
+              </div>);})}
+          </div>
+          <div style={{borderTop:`1px solid ${G.border}`}}>
+            {!adding
+              ?<div onClick={()=>setAdding(true)} style={{padding:"11px 16px",cursor:"pointer",fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:6,transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=G.greenL} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>＋ Add new option</div>
+              :<div style={{padding:"8px 10px",display:"flex",gap:6,alignItems:"center"}}>
+                <input ref={inputRef} value={newVal} onChange={e=>setNewVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmAdd();if(e.key==="Escape"){setAdding(false);setNewVal("");}}} placeholder={addPlaceholder} style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1.5px solid ${G.green}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
+                <button onClick={confirmAdd} style={{background:G.green,color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:600}}>Add</button>
+                <button onClick={()=>{setAdding(false);setNewVal("");}} style={{background:G.bg,color:G.textM,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 10px",fontSize:14,cursor:"pointer"}}>✕</button>
+              </div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function ReadOnlyDropdown({value, onChange, options, placeholder, emptyMsg}){
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
