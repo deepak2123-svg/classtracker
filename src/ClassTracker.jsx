@@ -202,172 +202,71 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut}){
 }
 
 // ── Minimal Date Picker (Option C) ───────────────────────────────────────────
-function DatePicker({ selectedDate, onSelectDate, noteDates = {} }) {
-  const lastMove = useRef(0);
-  const [dir, setDir] = useState(0);   // -1 = sliding left, 1 = sliding right
-  const [animKey, setAnimKey] = useState(0);
-  const today = todayKey();
+// ── Date Carousel — ±7 days, scrollable, no arrow double-fire issues ──────────
+function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
+  const dates = buildDateWindow();
+  const trackRef = useRef(null);
 
-  const [y, m, d] = selectedDate.split("-").map(Number);
-  const dateObj = new Date(y, m - 1, d);
-  const dayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dateObj.getDay()];
-  const monthName = ["January","February","March","April","May","June","July","August","September","October","November","December"][m-1];
-  const isToday = selectedDate === today;
-  const isYesterday = selectedDate === (()=>{const x=new Date();x.setDate(x.getDate()-1);return x.toISOString().slice(0,10);})();
-  const entryCount = noteDates[selectedDate] || 0;
+  // Scroll selected date to centre on mount/change
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const idx = dates.findIndex(d => d.key === selectedDate);
+    if (idx < 0) return;
+    const cellW = 64;
+    track.scrollTo({ left: idx * cellW - track.clientWidth / 2 + cellW / 2, behavior: 'smooth' });
+  }, [selectedDate]);
 
-  const canGoBack = isDateAllowed((()=>{const x=new Date(y,m-1,d);x.setDate(x.getDate()-1);return x.toISOString().slice(0,10);})());
-  const canGoFwd  = isDateAllowed((()=>{const x=new Date(y,m-1,d);x.setDate(x.getDate()+1);return x.toISOString().slice(0,10);})());
+  return (
+    <div style={{position:"relative",overflow:"hidden"}}>
+      {/* Fade edges */}
+      <div style={{position:"absolute",left:0,top:0,bottom:0,width:32,background:`linear-gradient(to right,${G.surface},transparent)`,zIndex:2,pointerEvents:"none"}}/>
+      <div style={{position:"absolute",right:0,top:0,bottom:0,width:32,background:`linear-gradient(to left,${G.surface},transparent)`,zIndex:2,pointerEvents:"none"}}/>
 
-  function moveDay(delta) {
-    const now = Date.now();
-    if (now - lastMove.current < 350) return;
-    lastMove.current = now;
-    const cur = new Date(y, m - 1, d);
-    cur.setDate(cur.getDate() + delta);
-    const nk = cur.toISOString().slice(0, 10);
-    if (!isDateAllowed(nk)) return;
-    setDir(delta);
-    setAnimKey(k => k + 1);
-    onSelectDate(nk);
-  }
-
-  const ArrowBtn = ({side, enabled, onMove}) => {
-    const lastTouchTime = useRef(0);
-    return(
-      <button disabled={!enabled}
-        onTouchEnd={()=>{
-          // Record touch time — onClick will check this and skip if recent
-          lastTouchTime.current = Date.now();
-          if(enabled) onMove();
-        }}
-        onClick={()=>{
-          // Skip if a touch just fired within 600ms (prevents double-move on tablets)
-          if(Date.now() - lastTouchTime.current < 600) return;
-          if(enabled) onMove();
-        }}
-        style={{
-          background:enabled?G.surface:"transparent",
-          border:`1.5px solid ${enabled?G.borderM:"transparent"}`,
-          borderRadius:12,width:52,height:52,
-          cursor:enabled?"pointer":"default",
-          fontSize:26,color:enabled?G.text:G.textL,
-          display:"flex",alignItems:"center",justifyContent:"center",
-          flexShrink:0,opacity:enabled?1:0.15,
-          WebkitTapHighlightColor:"transparent",
-          touchAction:"manipulation",
-          transition:"transform 0.1s",
-          fontWeight:300,userSelect:"none",
-          WebkitUserSelect:"none",
-        }}>
-        {side==="back"?"‹":"›"}
-      </button>
-    );
-  };
-
-  return(
-    <div>
-      <style>{`
-        @keyframes slideInFromRight {
-          from { opacity:0; transform:translateX(28px); }
-          to   { opacity:1; transform:translateX(0); }
-        }
-        @keyframes slideInFromLeft {
-          from { opacity:0; transform:translateX(-28px); }
-          to   { opacity:1; transform:translateX(0); }
-        }
-        .dp-date { animation-duration:0.22s; animation-timing-function:cubic-bezier(0.22,1,0.36,1); animation-fill-mode:both; }
-        .dp-slide-right { animation-name:slideInFromRight; }
-        .dp-slide-left  { animation-name:slideInFromLeft; }
-      `}</style>
-
-      {/* Main row */}
-      <div style={{display:"flex",alignItems:"center",gap:8,background:G.bg,borderRadius:16,padding:"10px 10px",border:`1px solid ${G.border}`,overflow:"hidden"}}>
-        <ArrowBtn side="back" enabled={canGoBack} onMove={()=>moveDay(-1)}/>
-
-        <div key={animKey}
-          className={`dp-date${dir===1?" dp-slide-right":dir===-1?" dp-slide-left":""}`}
-          style={{flex:1,textAlign:"center",userSelect:"none"}}>
-          <div style={{fontSize:12,fontWeight:700,color:isToday?G.green:G.textL,letterSpacing:1,textTransform:"uppercase",fontFamily:G.sans,marginBottom:2}}>
-            {isToday?"Today":isYesterday?"Yesterday":dayName}
-          </div>
-          <div style={{fontSize:24,fontWeight:800,color:isToday?G.green:G.text,fontFamily:G.display,lineHeight:1.1,letterSpacing:-0.5}}>
-            {d} {monthName.slice(0,3)} {y}
-          </div>
-          {entryCount>0&&(
-            <div style={{fontSize:11,color:G.green,fontWeight:700,marginTop:3}}>
-              {entryCount} {entryCount===1?"entry":"entries"} ✓
+      <div ref={trackRef}
+        style={{display:"flex",gap:4,overflowX:"auto",padding:"4px 32px 6px",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none"}}
+        className="hide-scrollbar">
+        {dates.map(d => {
+          const isSel   = d.key === selectedDate;
+          const isToday = d.key === todayKey();
+          const count   = noteDates[d.key] || 0;
+          const isSun   = d.isSun;
+          return (
+            <div key={d.key} onClick={() => onSelectDate(d.key)}
+              style={{
+                flexShrink:0, width:56,
+                display:"flex", flexDirection:"column", alignItems:"center",
+                padding:"8px 4px 7px", borderRadius:14, cursor:"pointer",
+                WebkitTapHighlightColor:"transparent", touchAction:"manipulation",
+                userSelect:"none", WebkitUserSelect:"none",
+                transition:"background 0.15s, transform 0.1s",
+                background: isSel ? G.forest : "transparent",
+                transform: isSel ? "scale(1.05)" : "scale(1)",
+                boxShadow: isSel ? "0 4px 14px rgba(21,43,34,0.25)" : "none",
+              }}>
+              {/* Day name */}
+              <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",
+                color: isSel ? "rgba(255,255,255,0.6)" : isSun ? G.red : G.textL,
+                fontFamily:G.sans, marginBottom:5, lineHeight:1}}>
+                {d.dayName}
+              </div>
+              {/* Date number */}
+              <div style={{fontSize:20,fontWeight:800,lineHeight:1,
+                fontFamily:G.display,
+                color: isSel ? "#fff" : isSun ? G.red : G.text}}>
+                {d.num}
+              </div>
+              {/* Entry indicator */}
+              <div style={{height:14,display:"flex",alignItems:"center",justifyContent:"center",marginTop:4}}>
+                {count > 0
+                  ? <div style={{minWidth:16,height:16,borderRadius:20,background:isSel?"#34D077":G.green,color:isSel?G.forest:"#fff",fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{count}</div>
+                  : <div style={{width:5,height:5,borderRadius:"50%",border:`1.5px solid ${isSel?"rgba(255,255,255,0.3)":G.borderM}`,background:"transparent"}}/>
+                }
+              </div>
             </div>
-          )}
-        </div>
-
-        <ArrowBtn side="fwd" enabled={canGoFwd} onMove={()=>moveDay(1)}/>
-      </div>
-
-      {/* Quick pills */}
-      <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
-        {[
-          {label:"Today",    key:today},
-          {label:"Yesterday",key:(()=>{const x=new Date();x.setDate(x.getDate()-1);return x.toISOString().slice(0,10);})()},
-          {label:"2 days ago",key:(()=>{const x=new Date();x.setDate(x.getDate()-2);return x.toISOString().slice(0,10);})()},
-        ].map(({label,key})=>{
-          const isSel=selectedDate===key;
-          const hasE=(noteDates[key]||0)>0;
-          return(
-            <button key={key} onClick={()=>{setDir(0);setAnimKey(k=>k+1);onSelectDate(key);}}
-              style={{padding:"7px 16px",borderRadius:20,border:`1.5px solid ${isSel?G.forest:G.border}`,cursor:"pointer",fontFamily:G.sans,fontSize:13,fontWeight:isSel?700:500,
-                background:isSel?G.forest:G.surface,color:isSel?"#fff":G.textM,
-                display:"flex",alignItems:"center",gap:6,minHeight:36,
-                WebkitTapHighlightColor:"transparent",touchAction:"manipulation",
-                transition:"all 0.15s"}}>
-              {label}
-              {hasE&&<span style={{width:6,height:6,borderRadius:"50%",background:isSel?"#34D077":G.green,flexShrink:0}}/>}
-            </button>
           );
         })}
       </div>
-    </div>
-  );
-}
-
-
-// ── Creatable Dropdown ────────────────────────────────────────────────────────
-function CreatableDropdown({value,onChange,options,onAddOption,placeholder,addPlaceholder}){
-  const [open,setOpen]=useState(false);const [adding,setAdding]=useState(false);const [newVal,setNewVal]=useState("");
-  const inputRef=useRef(null);const wrapRef=useRef(null);
-  useEffect(()=>{if(adding&&inputRef.current)inputRef.current.focus();},[adding]);
-  useEffect(()=>{const h=e=>{if(wrapRef.current&&!wrapRef.current.contains(e.target)){setOpen(false);setAdding(false);setNewVal("");}};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[]);
-  const confirmAdd=()=>{const t=newVal.trim();if(!t)return;if(!options.includes(t))onAddOption(t);onChange(t);setNewVal("");setAdding(false);setOpen(false);};
-  return(
-    <div ref={wrapRef} style={{position:"relative",marginBottom:10}}>
-      <button type="button" onClick={()=>{setOpen(o=>!o);setAdding(false);setNewVal("");}}
-        style={{...inp,marginBottom:0,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",color:value?G.text:G.textL}}>
-        <span style={{fontWeight:value?400:300}}>{value||placeholder}</span>
-        <span style={{color:G.textL,fontSize:11,fontFamily:G.mono,display:"inline-block",transform:open?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</span>
-      </button>
-      {open&&(
-        <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,zIndex:400,background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,boxShadow:G.shadowLg,overflow:"hidden"}}>
-          <div style={{maxHeight:210,overflowY:"auto"}}>
-            {options.length===0&&<div style={{padding:"14px 16px",color:G.textL,fontSize:15,fontStyle:"italic"}}>No saved options yet</div>}
-            {options.map(opt=>{const sel=opt===value;return(
-              <div key={opt} onClick={()=>{onChange(opt);setOpen(false);}}
-                style={{padding:"11px 16px",cursor:"pointer",fontSize:15,color:sel?G.green:G.text,fontWeight:sel?600:400,background:sel?G.greenL:"transparent",display:"flex",alignItems:"center",gap:12,transition:"background 0.1s"}}
-                onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=G.bg;}}
-                onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                <span style={{width:16,color:G.green,fontSize:14,fontFamily:G.mono}}>{sel?"✓":""}</span>{opt}
-              </div>);})}
-          </div>
-          <div style={{borderTop:`1px solid ${G.border}`}}>
-            {!adding
-              ?<div onClick={()=>setAdding(true)} style={{padding:"11px 16px",cursor:"pointer",fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:6,transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=G.greenL} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>＋ Add new option</div>
-              :<div style={{padding:"8px 10px",display:"flex",gap:6,alignItems:"center"}}>
-                <input ref={inputRef} value={newVal} onChange={e=>setNewVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmAdd();if(e.key==="Escape"){setAdding(false);setNewVal("");}}} placeholder={addPlaceholder} style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1.5px solid ${G.green}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
-                <button onClick={confirmAdd} style={{background:G.green,color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:600}}>Add</button>
-                <button onClick={()=>{setAdding(false);setNewVal("");}} style={{background:G.bg,color:G.textM,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 10px",fontSize:14,cursor:"pointer"}}>✕</button>
-              </div>}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -875,7 +774,7 @@ function ClassTrackerInner({user}){
                 <button onClick={()=>setEditingClass(selCls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✏</button>
                 <button onClick={()=>setLeaveModal(selCls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🗑</button>
               </div>
-              <DatePicker selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/>
+              <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -964,7 +863,7 @@ function ClassTrackerInner({user}){
             <button onClick={()=>setEditingClass(cls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:14,width:36,height:36,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>✏</button>
             <button onClick={()=>setLeaveModal(cls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:14,width:36,height:36,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>🗑</button>
           </div>
-          <DatePicker selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
+          <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
         </div>
         {/* Entries */}
         <div style={{flex:1,overflowY:"auto",padding:"16px 16px 100px",WebkitOverflowScrolling:"touch"}}>
@@ -1177,7 +1076,7 @@ function ClassTrackerInner({user}){
                 <span style={{fontSize:15,color:G.green}}>📅</span>
                 <span style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
               </div>
-              <DatePicker selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={{}}/>
+              <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={{}}/>
             </div>
           </div>
         )}
