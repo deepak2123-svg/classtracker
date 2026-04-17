@@ -66,23 +66,19 @@ class CTErrorBoundary extends Component {
 }
 
 
-// ── Sign Out Modal ─────────────────────────────────────────────────────────────
+// ── Sign Out Modal ────────────────────────────────────────────────────────────
 function SignOutModal({onConfirm,onClose}){
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
-      <div style={{background:"#fff",borderRadius:20,padding:"28px 24px",width:"100%",maxWidth:360,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",textAlign:"center"}}>
-        <div style={{width:56,height:56,borderRadius:16,background:"#FEE2E2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 16px"}}>⏻</div>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+      <div style={{background:"#fff",borderRadius:22,padding:"28px 24px",width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+        <div style={{width:56,height:56,borderRadius:16,background:"#FEE2E2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </div>
         <h3 style={{fontSize:20,fontWeight:700,color:"#111827",fontFamily:"'Poppins',sans-serif",marginBottom:8}}>Sign out?</h3>
-        <p style={{fontSize:15,color:"#6B7280",marginBottom:24,lineHeight:1.5}}>You'll need to sign back in to access your classes and entries.</p>
+        <p style={{fontSize:14,color:"#6B7280",marginBottom:24,lineHeight:1.6}}>You will need to sign back in to access your classes.</p>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={onClose}
-            style={{flex:1,padding:"12px",borderRadius:11,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#374151",fontFamily:"'Inter',sans-serif"}}>
-            Cancel
-          </button>
-          <button onClick={onConfirm}
-            style={{flex:1,padding:"12px",borderRadius:11,border:"none",background:"#DC2626",fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:"'Inter',sans-serif"}}>
-            Sign Out
-          </button>
+          <button onClick={onClose} style={{flex:1,padding:"13px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#374151",minHeight:48,fontFamily:"'Inter',sans-serif"}}>Cancel</button>
+          <button onClick={onConfirm} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"#DC2626",fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",minHeight:48,fontFamily:"'Inter',sans-serif"}}>Sign Out</button>
         </div>
       </div>
     </div>
@@ -191,10 +187,10 @@ function TopNav({user,teacherName,right}){
             </span>
           </div>
           {/* Sign out */}
-          <button onClick={()=>setSignOutPrompt(true)}
-            style={{background:"rgba(220,38,38,0.18)",border:"1px solid rgba(220,38,38,0.3)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"#FCA5A5",fontSize:13,fontFamily:G.sans,fontWeight:600,display:"flex",alignItems:"center",gap:5,minHeight:36}}>
-            <span style={{fontSize:15,lineHeight:1}}>&#9211;</span>
-            <span className="desktop-only" style={{display:"inline"}}>Sign Out</span>
+          <button onClick={()=>{if(window.confirm("Sign out?"))logout();}}
+            style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:13,fontFamily:G.sans,fontWeight:500,whiteSpace:"nowrap"}}>
+            <span className="desktop-only">Sign Out</span>
+            <span className="mobile-inline" style={{fontSize:16}}>⎋</span>
           </button>
         </div>
       </div>
@@ -516,9 +512,10 @@ function ClassTrackerInner({user}){
   // Name editing removed — name set from Google/signup only
   const [editingClass,setEditingClass] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState(null);
-  const [instFilter,      setInstFilter]      = useState("all");
-  const [signOutPrompt,   setSignOutPrompt]   = useState(false);
-  const [leaveModal,setLeaveModal]     = useState(null); // classId to leave
+  const [instFilter,      setInstFilter]      = useState("all"); // institute filter on home
+  const [leaveModal,setLeaveModal]     = useState(null);
+  const [signOutPrompt,setSignOutPrompt] = useState(false);
+  const [instFilter,setInstFilter]       = useState("all");
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
 
@@ -609,12 +606,12 @@ function ClassTrackerInner({user}){
     if(!newNote.title.trim()&&!newNote.body.trim())return;
     const note={id:Date.now().toString(),...newNote,teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
-    setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("home");
+    setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("classDetail");
   };
   const saveEdit=()=>{
     if(!editNote.timeStart){alert("Please enter the class start time.");return;}
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};});
-    setEditNote(null);setView("home");
+    setEditNote(null);setView("classDetail");
   };
   const deleteNote=(noteId)=>setData(d=>{
     const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];
@@ -633,92 +630,320 @@ function ClassTrackerInner({user}){
   // Build a noteDates map across ALL classes for the date strip dots
   // ── SINGLE SCROLLABLE HOME ───────────────────────────────────────────────
   // ── HOME VIEW — class list with institute filter ────────────────────────────
-  if(view==="home") {
+  // ══════════════════════════════════════════════════════════════════════
+  // SHARED MODALS — used in both pages
+  // ══════════════════════════════════════════════════════════════════════
+  const sharedModals = (
+    <>
+      <SaveBadge/>
+      {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
+      {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
+      {leaveModal && (()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);setActiveClass(null);setView("home");}} onClose={()=>setLeaveModal(null)}/>:null;})()}
+    </>
+  );
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PAGE 1 — HOME: class list
+  // Mobile:  full-screen scrollable list, tap → go to class page
+  // Tablet+: left sidebar + right entries panel (split view)
+  // ══════════════════════════════════════════════════════════════════════
+  if(view==="home"){
     const activeClasses=[...data.classes.filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
     const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
     const filtered=instFilter==="all"?activeClasses:activeClasses.filter(c=>c.institute===instFilter);
-    const selCls=activeClasses.find(c=>c.id===selectedClassId)||activeClasses[0]||null;
-    const color=selCls?instColor(selCls.institute):instColor("");
-    const classNotes=selCls?getClassNotes(selCls.id):{};
-    const dateNotes=selCls?getDateNotes(selCls.id,selectedDate):[];
-    const totalCount=Object.values(classNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
-    const noteDates=Object.fromEntries(Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
 
-    // Pill strip — shown on both mobile and desktop
-    const ClassPills=()=>(
-      <div style={{display:"flex",gap:6,overflowX:"auto",WebkitOverflowScrolling:"touch",padding:"8px 12px",background:G.surface,borderBottom:`1px solid ${G.border}`,flexShrink:0,alignItems:"center"}} className="hide-scrollbar">
-        {activeClasses.map(cls=>{
-          const ic=instColor(cls.institute);
-          const isSel=selCls?.id===cls.id;
-          const todayN=Array.isArray((data.notes[cls.id]||{})[todayKey()])?(data.notes[cls.id]||{})[todayKey()].length:0;
+    // For tablet/desktop split view
+    const selCls=activeClasses.find(c=>c.id===activeClass?.id)||activeClasses[0]||null;
+    const selColor=selCls?instColor(selCls.institute):instColor("");
+    const selNotes=selCls?getClassNotes(selCls.id):{};
+    const selDateNotes=selCls?getDateNotes(selCls.id,selectedDate):[];
+    const selTotal=Object.values(selNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+    const selNoteDates=Object.fromEntries(Object.entries(selNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
+
+    // Nav buttons — same on all screen sizes
+    const NavRight = <>
+      {trashCount>0&&<button onClick={()=>setView("trash")}
+        style={{background:G.redL,border:"none",borderRadius:8,padding:"7px 11px",cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>
+        🗑 {trashCount}
+      </button>}
+      <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)}
+        style={{background:G.green,color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",boxShadow:"0 2px 8px rgba(27,138,76,0.3)"}}>
+        + <span style={{display:"none"}} className="desktop-show"> New Class</span>
+      </button>
+    </>;
+
+    // Shared class card — click goes to class detail page (mobile) or selects (desktop)
+    const ClassCard = ({cls, onClick}) => {
+      const ic=instColor(cls.institute);
+      const total=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+      const todayArr=(data.notes[cls.id]||{})[todayKey()];
+      const todayN=Array.isArray(todayArr)?todayArr.length:0;
+      return(
+        <div onClick={onClick}
+          style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"transform 0.1s,box-shadow 0.1s"}}
+          onPointerDown={e=>{e.currentTarget.style.transform="scale(0.98)";e.currentTarget.style.boxShadow="none";}}
+          onPointerUp={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}
+          onPointerCancel={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}>
+          <div style={{height:4,background:ic.bg}}/>
+          <div style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:46,height:46,borderRadius:12,background:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:ic.bg,fontFamily:G.mono}}>
+              {(cls.section||"?").slice(0,2).toUpperCase()}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,marginBottom:3}}>{cls.section}</div>
+              <div style={{fontSize:14,color:G.textM}}>🏫 {cls.institute}{cls.subject?" · "+cls.subject:""}</div>
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{total}</div>
+              <div style={{fontSize:11,color:G.textL,fontWeight:600}}>entries</div>
+              {todayN>0&&<div style={{background:G.greenL,color:G.green,borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700,marginTop:3}}>+{todayN} today</div>}
+            </div>
+            <div style={{display:"flex",gap:4,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+              <button onClick={()=>setEditingClass(cls)}
+                style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:13,width:34,height:34,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>✏</button>
+              <button onClick={()=>setLeaveModal(cls.id)}
+                style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:13,width:34,height:34,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent"}}>🗑</button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Institute filter pills
+    const InstFilter = () => institutes.length>1?(
+      <div style={{display:"flex",gap:7,overflowX:"auto",WebkitOverflowScrolling:"touch",padding:"0 0 2px"}} className="hide-scrollbar">
+        {["all",...institutes].map(inst=>{
+          const isSel=instFilter===inst;
+          const ic=inst==="all"?null:instColor(inst);
           return(
-            <button key={cls.id} onClick={()=>setSelectedClassId(cls.id)}
-              style={{flexShrink:0,padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",background:isSel?ic.bg:G.bg,color:isSel?"#fff":G.textS,fontFamily:G.display,fontSize:13,fontWeight:isSel?700:600,display:"flex",alignItems:"center",gap:6,minHeight:36,WebkitTapHighlightColor:"transparent",transition:"all 0.15s"}}>
-              {cls.section}
-              {todayN>0&&<span style={{background:isSel?"rgba(255,255,255,0.25)":ic.light,color:isSel?"#fff":ic.bg,borderRadius:20,padding:"1px 6px",fontSize:10,fontWeight:700}}> +{todayN}</span>}
+            <button key={inst} onClick={()=>setInstFilter(inst)}
+              style={{flexShrink:0,padding:"7px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:13,fontWeight:isSel?700:500,minHeight:36,WebkitTapHighlightColor:"transparent",transition:"all 0.15s",
+                background:isSel?(inst==="all"?G.forest:ic.bg):"rgba(0,0,0,0.07)",
+                color:isSel?"#fff":G.textM}}>
+              {inst==="all"?"All Classes":inst}
             </button>
           );
         })}
-        <button onClick={()=>setView("addClass")} style={{flexShrink:0,padding:"7px 12px",borderRadius:20,border:`2px dashed ${G.border}`,background:"transparent",color:G.textL,fontSize:13,fontWeight:600,cursor:"pointer",minHeight:36,WebkitTapHighlightColor:"transparent"}}>
-          + New
-        </button>
+      </div>
+    ):null;
+
+    // ── MOBILE VIEW: full-page class list ────────────────────────────────────
+    const MobileHome = () => (
+      <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+        {/* Greeting */}
+        <div style={{padding:"18px 16px 12px"}}>
+          <h1 style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,marginBottom:6}}>{teacherName} 👋</h1>
+          <span style={{background:G.greenL,borderRadius:20,padding:"4px 12px",fontSize:13,color:G.green,fontWeight:700}}>📅 {currentSession()}</span>
+        </div>
+        {/* Filter */}
+        {institutes.length>1&&<div style={{padding:"0 16px 14px"}}><InstFilter/></div>}
+        {/* Class list */}
+        <div style={{flex:1,overflowY:"auto",padding:"0 14px 100px",WebkitOverflowScrolling:"touch"}}>
+          {activeClasses.length===0?(
+            <div style={{textAlign:"center",padding:"60px 20px"}}>
+              <div style={{fontSize:52,marginBottom:16}}>📚</div>
+              <h2 style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:8}}>No classes yet</h2>
+              <p style={{fontSize:15,color:G.textM,marginBottom:24}}>Add your first class to start tracking.</p>
+              <PrimaryBtn onClick={()=>setView("addClass")} style={{padding:"13px 32px",fontSize:16}}>+ Add First Class</PrimaryBtn>
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {filtered.map(cls=>(
+                <ClassCard key={cls.id} cls={cls} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}}/>
+              ))}
+              <div onClick={()=>setView("addClass")}
+                style={{borderRadius:16,border:`2px dashed ${G.border}`,padding:"20px",display:"flex",alignItems:"center",justifyContent:"center",gap:10,cursor:"pointer",background:"transparent",WebkitTapHighlightColor:"transparent"}}
+                onPointerDown={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.borderColor=G.green;}}
+                onPointerUp={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=G.border;}}
+                onPointerCancel={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=G.border;}}>
+                <span style={{fontSize:22,color:G.textL}}>+</span>
+                <span style={{fontSize:15,fontWeight:600,color:G.textM,fontFamily:G.display}}>Add New Class</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
 
-    // Class content (right panel)
-    const ClassContent=()=>!selCls?(
-      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:G.textL,fontSize:15,padding:40}}>No classes yet</div>
-    ):(
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0,minHeight:0}}>
-        <div style={{padding:"12px 16px",borderBottom:`1px solid ${G.border}`,flexShrink:0,background:G.surface}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-            <div style={{width:40,height:40,borderRadius:10,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:color.bg,fontFamily:G.mono,borderLeft:`4px solid ${color.bg}`}}>
-              {(selCls.section||"?").slice(0,2).toUpperCase()}
+    // ── TABLET / DESKTOP VIEW: sidebar + detail panel ────────────────────────
+    const SplitView = () => (
+      <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+        {/* Left sidebar */}
+        <div style={{width:280,flexShrink:0,display:"flex",flexDirection:"column",borderRight:`1px solid ${G.border}`,background:G.surface,overflow:"hidden"}}>
+          <div style={{padding:"16px 14px 12px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
+            <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:5}}>{teacherName} 👋</div>
+            <span style={{background:G.greenL,borderRadius:20,padding:"3px 10px",fontSize:12,color:G.green,fontWeight:700}}>{currentSession()}</span>
+          </div>
+          {institutes.length>1&&<div style={{padding:"8px 10px",borderBottom:`1px solid ${G.border}`,display:"flex",gap:5,overflowX:"auto",flexShrink:0}} className="hide-scrollbar">
+            {["all",...institutes].map(inst=>{const isSel=instFilter===inst;const ic=inst==="all"?null:instColor(inst);return(
+              <button key={inst} onClick={()=>setInstFilter(inst)} style={{flexShrink:0,padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:12,fontWeight:isSel?700:500,background:isSel?(inst==="all"?G.forest:ic.bg):"rgba(0,0,0,0.05)",color:isSel?"#fff":G.textM}}>{inst==="all"?"All":inst}</button>
+            );})}
+          </div>}
+          <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
+            {filtered.map(cls=>{
+              const ic=instColor(cls.institute);
+              const isSel=selCls?.id===cls.id;
+              const total=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+              const todayN=Array.isArray((data.notes[cls.id]||{})[todayKey()])?(data.notes[cls.id]||{})[todayKey()].length:0;
+              return(
+                <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
+                  style={{borderRadius:12,padding:"10px 12px",marginBottom:4,cursor:"pointer",background:isSel?ic.light:"transparent",borderLeft:`4px solid ${isSel?ic.bg:"transparent"}`,transition:"all 0.12s"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:36,height:36,borderRadius:9,background:isSel?ic.bg:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:isSel?"#fff":ic.bg,fontFamily:G.mono}}>{(cls.section||"?").slice(0,2).toUpperCase()}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:isSel?ic.bg:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
+                      <div style={{fontSize:12,color:G.textL,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.subject||cls.institute}</div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:isSel?ic.bg:G.textM}}>{total}</div>
+                      {todayN>0&&<div style={{fontSize:10,color:G.green,fontWeight:700}}>+{todayN}</div>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div onClick={()=>setView("addClass")} style={{borderRadius:12,padding:"10px 12px",marginTop:4,cursor:"pointer",border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",gap:8,transition:"all 0.15s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.background=G.greenL;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background="transparent";}}>
+              <span style={{fontSize:18,color:G.textL}}>+</span><span style={{fontSize:13,color:G.textM,fontWeight:600}}>Add New Class</span>
+            </div>
+          </div>
+        </div>
+        {/* Right detail panel */}
+        {!selCls?(
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:G.textL,fontSize:15}}>Select a class from the left</div>
+        ):(
+          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
+            <div style={{padding:"14px 18px",borderBottom:`1px solid ${G.border}`,background:G.surface,flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                <div style={{width:40,height:40,borderRadius:10,background:selColor.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:selColor.bg,fontFamily:G.mono,borderLeft:`4px solid ${selColor.bg}`}}>{(selCls.section||"?").slice(0,2).toUpperCase()}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{selCls.section}</div>
+                  <div style={{fontSize:13,color:G.textM}}>🏫 {selCls.institute}{selCls.subject?" · "+selCls.subject:""} · {selTotal} total entries</div>
+                </div>
+                <button onClick={()=>setEditingClass(selCls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✏</button>
+                <button onClick={()=>setLeaveModal(selCls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🗑</button>
+              </div>
+              <DatePicker selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                <span style={{fontSize:15,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:selDateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {selDateNotes.length} {selDateNotes.length===1?"entry":"entries"}</span></span>
+                {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>+ Add Entry</button>}
+              </div>
+              {selDateNotes.length===0?(
+                <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"40px 20px",textAlign:"center"}}>
+                  <div style={{fontSize:32,marginBottom:8}}>✏️</div>
+                  <div style={{fontSize:15,color:G.textM}}>{canAdd?"No entries yet — click + Add Entry":"No entries for this date"}</div>
+                </div>
+              ):(
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {selDateNotes.map(note=>{const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;return(
+                    <div key={note.id} style={{background:G.surface,borderRadius:13,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
+                      <div style={{height:3,background:tag.bg}}/>
+                      <div style={{padding:"12px 14px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:note.title?6:0}}>
+                              <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"2px 9px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
+                              {note.timeStart&&<span style={{fontSize:12,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"2px 9px",border:`1px solid ${G.borderM}`,fontWeight:600}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
+                            </div>
+                            {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display}}>{note.title}</div>}
+                            {note.body&&<p style={{margin:"6px 0 0",fontSize:14,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
+                          </div>
+                          <div style={{display:"flex",gap:4,flexShrink:0}}>
+                            <button onClick={()=>{setEditNote({...note});setView("editNote");}} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:8,padding:"5px 10px",fontSize:13,cursor:"pointer",color:G.textM}}>Edit</button>
+                            <button onClick={()=>deleteNote(note.id)} style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"5px 10px",fontSize:13,cursor:"pointer",color:G.red}}>✕</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );})}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
+    // Detect mobile vs tablet/desktop
+    const isMobile = typeof window!=="undefined" && window.innerWidth < 768;
+    return(
+      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
+        {sharedModals}
+        <TopNav user={user} teacherName={teacherName} right={NavRight}/>
+        {isMobile ? <MobileHome/> : <SplitView/>}
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PAGE 2 — CLASS DETAIL (mobile only — tap class → here)
+  // ══════════════════════════════════════════════════════════════════════
+  if(view==="classDetail" && activeClass){
+    const cls=activeClass;
+    const color=instColor(cls.institute);
+    const classNotes=getClassNotes(cls.id);
+    const dateNotes=getDateNotes(cls.id,selectedDate);
+    const totalCount=Object.values(classNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+    const noteDates=Object.fromEntries(Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
+    return(
+      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
+        {sharedModals}
+        <TopNav user={user} teacherName={teacherName}
+          right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
+        />
+        {/* Class header */}
+        <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"14px 16px",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+            <div style={{width:46,height:46,borderRadius:12,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,color:color.bg,fontFamily:G.mono,borderLeft:`4px solid ${color.bg}`}}>
+              {(cls.section||"?").slice(0,2).toUpperCase()}
             </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selCls.section}</div>
-              <div style={{fontSize:13,color:G.textM}}>🏫 {selCls.institute}{selCls.subject?` · ${selCls.subject}`:""} · {totalCount} entries</div>
+              <div style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display}}>{cls.section}</div>
+              <div style={{fontSize:14,color:G.textM}}>🏫 {cls.institute}{cls.subject?" · "+cls.subject:""} · {totalCount} entries</div>
             </div>
-            <button onClick={()=>setEditingClass(selCls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:13,width:34,height:34,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>✏</button>
-            <button onClick={()=>setLeaveModal(selCls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:13,width:34,height:34,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>🗑</button>
+            <button onClick={()=>setEditingClass(cls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:14,width:36,height:36,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>✏</button>
+            <button onClick={()=>setLeaveModal(cls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:14,width:36,height:36,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>🗑</button>
           </div>
           <DatePicker selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"14px 16px 80px",WebkitOverflowScrolling:"touch"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-            <span style={{fontSize:15,fontWeight:700,color:G.text}}>
-              {formatDateLabel(selectedDate)}<span style={{color:dateNotes.length>0?G.green:G.textM,marginLeft:8,fontWeight:700}}>· {dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span>
-            </span>
-            {canAdd&&<button onClick={()=>{setActiveClass(selCls);setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
-              style={{background:color.bg,color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:44,WebkitTapHighlightColor:"transparent"}}>
+        {/* Entries */}
+        <div style={{flex:1,overflowY:"auto",padding:"16px 16px 100px",WebkitOverflowScrolling:"touch"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+            <span style={{fontSize:16,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:dateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span></span>
+            {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
+              style={{background:color.bg,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:46,WebkitTapHighlightColor:"transparent",boxShadow:`0 2px 12px ${color.bg}55`}}>
               + Add Entry
             </button>}
           </div>
           {dateNotes.length===0?(
-            <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"40px 20px",textAlign:"center"}}>
-              <div style={{fontSize:32,marginBottom:10}}>✏️</div>
-              <div style={{fontSize:15,color:G.textM}}>{canAdd?"No entries — tap + Add Entry":"No entries for this date"}</div>
+            <div style={{background:G.surface,borderRadius:16,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center"}}>
+              <div style={{fontSize:40,marginBottom:12}}>✏️</div>
+              <div style={{fontSize:16,color:G.textM,fontWeight:500}}>{canAdd?"No entries yet":"No entries for this date"}</div>
+              {canAdd&&<div style={{fontSize:14,color:G.textL,marginTop:6}}>Tap + Add Entry above to log this class</div>}
             </div>
           ):(
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {dateNotes.map(note=>{
                 const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
                 return(
-                  <div key={note.id} style={{background:G.surface,borderRadius:13,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
-                    <div style={{height:3,background:tag.bg}}/>
-                    <div style={{padding:"12px 14px"}}>
+                  <div key={note.id} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
+                    <div style={{height:4,background:tag.bg}}/>
+                    <div style={{padding:"13px 15px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:note.title?6:0}}>
-                            <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"2px 9px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
-                            {note.timeStart&&<span style={{fontSize:12,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"2px 9px",border:`1px solid ${G.borderM}`,fontWeight:600}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:note.title?8:0}}>
+                            <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
+                            {note.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
                           </div>
-                          {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display,lineHeight:1.3}}>{note.title}</div>}
-                          {note.body&&<p style={{margin:"6px 0 0",fontSize:14,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
+                          {note.title&&<div style={{fontWeight:700,fontSize:17,color:G.text,fontFamily:G.display,lineHeight:1.3,marginBottom:4}}>{note.title}</div>}
+                          {note.body&&<p style={{margin:0,fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
                         </div>
-                        <div style={{display:"flex",gap:4,flexShrink:0}}>
-                          <button onClick={()=>{setActiveClass(selCls);setEditNote({...note});setView("editNote");}} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:8,padding:"5px 10px",fontSize:13,cursor:"pointer",color:G.textM,minHeight:34,WebkitTapHighlightColor:"transparent"}}>Edit</button>
-                          <button onClick={()=>{setActiveClass(selCls);deleteNote(note.id);}} style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"5px 10px",fontSize:13,cursor:"pointer",color:G.red,minHeight:34,WebkitTapHighlightColor:"transparent"}}>✕</button>
+                        <div style={{display:"flex",gap:6,flexShrink:0}}>
+                          <button onClick={()=>{setEditNote({...note});setView("editNote");}}
+                            style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:9,padding:"6px 12px",fontSize:14,cursor:"pointer",color:G.textM,minHeight:38,WebkitTapHighlightColor:"transparent"}}>Edit</button>
+                          <button onClick={()=>deleteNote(note.id)}
+                            style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"6px 12px",fontSize:14,cursor:"pointer",color:G.red,minHeight:38,WebkitTapHighlightColor:"transparent"}}>✕</button>
                         </div>
                       </div>
                     </div>
@@ -730,84 +955,7 @@ function ClassTrackerInner({user}){
         </div>
       </div>
     );
-
-    const modals=<>
-      <SaveBadge/>
-      {signOutPrompt&&<SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
-      {editingClass&&<EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
-      {leaveModal&&(()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(r,l)=>{deleteClass(leaveModal,r,l);setLeaveModal(null);}} onClose={()=>setLeaveModal(null)}/>:null;})()}
-    </>;
-    const nav=<TopNav user={user} teacherName={teacherName} right={<>
-      {trashCount>0&&<button onClick={()=>setView("trash")} style={{background:G.redL,border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:4,minHeight:36}}>🗑 {trashCount}</button>}
-      <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)} style={{background:G.green,color:"#fff",border:"none",borderRadius:8,padding:"7px 13px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:4,minHeight:36}}>
-        + <span className="desktop-only" style={{display:"inline"}}>New Class</span>
-      </button>
-    </>}/>;
-
-    if(activeClasses.length===0) return(
-      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
-        {modals}{nav}
-        <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 20px",textAlign:"center"}}>
-          <div style={{fontSize:52,marginBottom:16}}>📚</div>
-          <h2 style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:8}}>No classes yet</h2>
-          <p style={{fontSize:15,color:G.textM,marginBottom:24}}>Add your first class to start logging.</p>
-          <PrimaryBtn onClick={()=>setView("addClass")} style={{padding:"13px 32px",fontSize:16}}>+ Add First Class</PrimaryBtn>
-        </div>
-      </div>
-    );
-
-    // MOBILE: pill strip + full content below
-    const isMobileView=typeof window!=="undefined"&&window.innerWidth<768;
-    if(isMobileView) return(
-      <div style={{height:"var(--app-height,100vh)",background:G.bg,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {modals}{nav}<ClassPills/><ClassContent/>
-      </div>
-    );
-
-    // DESKTOP: sidebar + content
-    return(
-      <div style={{height:"var(--app-height,100vh)",background:G.bg,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {modals}{nav}
-        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-          <div style={{width:260,flexShrink:0,display:"flex",flexDirection:"column",borderRight:`1px solid ${G.border}`,background:G.surface,overflow:"hidden"}}>
-            <div style={{padding:"14px 14px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-              <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:4}}>{teacherName} 👋</div>
-              <span style={{background:G.greenL,borderRadius:20,padding:"3px 10px",fontSize:12,color:G.green,fontWeight:700}}>{currentSession()}</span>
-            </div>
-            {institutes.length>1&&<div style={{padding:"8px 10px",borderBottom:`1px solid ${G.border}`,display:"flex",gap:5,overflowX:"auto",flexShrink:0}} className="hide-scrollbar">
-              {["all",...institutes].map(inst=>{const isSel=instFilter===inst;const ic=inst==="all"?null:instColor(inst);return(
-                <button key={inst} onClick={()=>setInstFilter(inst)} style={{flexShrink:0,padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:12,fontWeight:isSel?700:500,background:isSel?(inst==="all"?G.forest:ic.bg):"rgba(0,0,0,0.05)",color:isSel?"#fff":G.textM}}>{inst==="all"?"All":inst}</button>
-              );})}
-            </div>}
-            <div style={{flex:1,overflowY:"auto",padding:"8px 8px 20px"}}>
-              {filtered.map(cls=>{const ic=instColor(cls.institute);const isSel=selCls?.id===cls.id;const tCount=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);const todayN=Array.isArray((data.notes[cls.id]||{})[todayKey()])?(data.notes[cls.id]||{})[todayKey()].length:0;return(
-                <div key={cls.id} onClick={()=>setSelectedClassId(cls.id)} style={{borderRadius:12,padding:"10px 12px",marginBottom:4,cursor:"pointer",background:isSel?ic.light:"transparent",borderLeft:`4px solid ${isSel?ic.bg:"transparent"}`,transition:"all 0.15s"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:36,height:36,borderRadius:9,background:isSel?ic.bg:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:isSel?"#fff":ic.bg,fontFamily:G.mono}}>{(cls.section||"?").slice(0,2).toUpperCase()}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:700,color:isSel?ic.bg:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                      <div style={{fontSize:12,color:G.textL,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.subject||cls.institute}</div>
-                    </div>
-                    <div style={{textAlign:"right",flexShrink:0}}>
-                      <div style={{fontSize:14,fontWeight:700,color:isSel?ic.bg:G.textM}}>{tCount}</div>
-                      {todayN>0&&<div style={{fontSize:10,color:G.green,fontWeight:700}}>+{todayN}</div>}
-                    </div>
-                  </div>
-                </div>
-              );})}
-              <div onClick={()=>setView("addClass")} style={{borderRadius:12,padding:"10px 12px",marginTop:4,cursor:"pointer",border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",gap:8,transition:"all 0.15s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.background=G.greenL;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background="transparent";}}>
-                <span style={{fontSize:18,color:G.textL}}>+</span><span style={{fontSize:13,color:G.textM,fontWeight:600}}>Add New Class</span>
-              </div>
-            </div>
-          </div>
-          <ClassContent/>
-        </div>
-      </div>
-    );
   }
-
-  // Remove the old classDetail view since it's now merged into home
-  if(view==="classDetail") { return null; /* redirects below */ }
 
   if(view==="addClass")return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
@@ -961,18 +1109,11 @@ function ClassTrackerInner({user}){
           </div>
         )}
         <div className="mobile-pad" style={{maxWidth:660,margin:"0 auto",padding:"32px 24px 72px"}}>
-          {activeClass&&(()=>{const ac=activeClass;const ic=instColor(ac.institute);return(
-            <div style={{background:ic.light,border:`2px solid ${ic.bg}`,borderRadius:14,padding:"12px 16px",marginBottom:18,display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:44,height:44,borderRadius:11,background:ic.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:"#fff",fontFamily:G.mono,flexShrink:0}}>
-                {(ac.section||"?").slice(0,2).toUpperCase()}
-              </div>
-              <div>
-                <div style={{fontSize:18,fontWeight:800,color:ic.bg,fontFamily:G.display,lineHeight:1.1}}>{ac.section}</div>
-                <div style={{fontSize:13,color:G.textM,marginTop:2}}>🏫 {ac.institute}{ac.subject?` · ${ac.subject}`:""}</div>
-              </div>
-            </div>
-          );})()}
-          <p style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginBottom:4,textTransform:"uppercase",fontWeight:600,letterSpacing:0.3}}>{isEdit?"Editing Entry":"New Entry — "}{formatDateLabel(selectedDate)}</p>
+          <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:5,textTransform:"uppercase",fontWeight:600}}>{isEdit?"Editing Entry":"New Entry For"}</p>
+          <h2 style={{marginBottom:22,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>{isEdit?form.title||"Entry":formatDateLabel(selectedDate)}</h2>
+          <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
+            <span>👤</span><span>Logged as: <strong>{teacherName}</strong></span>
+          </div>
           <div className="form-card" style={{...card,padding:"24px"}}>
             <div style={{marginBottom:18}}>
               <label style={lbl}>Type</label>
@@ -987,46 +1128,29 @@ function ClassTrackerInner({user}){
             </div>
             <div style={{marginBottom:16}}>
               <label style={lbl}>Class Time <span style={{color:G.red,marginLeft:3}}>*</span></label>
-              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
-                <span style={{fontSize:13,color:G.textM,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>Start:</span>
-                <input type="time" value={form.timeStart||""}
-                  onChange={e=>{const s=e.target.value;const dur=form._dur||60;if(s){const[h,m]=s.split(":").map(Number);const end=new Date(2000,0,1,h,m+dur);const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");setForm({...form,timeStart:s,_suggestedEnd:`${eh}:${em}`,timeEnd:form.timeEnd||`${eh}:${em}`});}else setForm({...form,timeStart:""});}}
-                  style={{...inp,marginBottom:0,flex:1,fontSize:16}}/>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <input
+                  type="time"
+                  value={form.timeStart||""}
+                  onChange={e=>{
+                    setForm({...form,timeStart:e.target.value});
+                    // Auto-focus end time after start is picked (mobile clock dismisses and jumps)
+                    if(e.target.value) setTimeout(()=>{ const el=document.getElementById("timeEnd"); if(el) el.focus(); },150);
+                  }}
+                  style={{...inp,marginBottom:0,flex:1}}
+                  placeholder="Start"
+                />
+                <span style={{color:G.textL,fontSize:16,flexShrink:0}}>→</span>
+                <input
+                  id="timeEnd"
+                  type="time"
+                  value={form.timeEnd||""}
+                  onChange={e=>setForm({...form,timeEnd:e.target.value})}
+                  style={{...inp,marginBottom:0,flex:1}}
+                  placeholder="End"
+                />
               </div>
-              {form.timeStart&&(
-                <div style={{marginBottom:8}}>
-                  <div style={{fontSize:12,fontWeight:700,color:G.textM,marginBottom:6,textTransform:"uppercase",letterSpacing:0.3}}>Suggested Duration</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {[45,60,75,90,105,120].map(mins=>{
-                      const isSel=form._dur===mins;
-                      const label=mins<60?`${mins}m`:mins===60?"1 hr":`${Math.floor(mins/60)}h${mins%60>0?" "+mins%60+"m":""}`;
-                      return(
-                        <button key={mins} onClick={()=>{
-                          const[h,m]=(form.timeStart||"00:00").split(":").map(Number);
-                          const end=new Date(2000,0,1,h,m+mins);
-                          const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
-                          setForm({...form,_dur:mins,_suggestedEnd:`${eh}:${em}`,timeEnd:`${eh}:${em}`});
-                        }}
-                          style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:13,fontWeight:isSel?700:500,
-                            background:isSel?G.forest:"rgba(0,0,0,0.07)",color:isSel?"#fff":G.textM,transition:"all 0.15s",minHeight:38,WebkitTapHighlightColor:"transparent"}}>
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {form.timeStart&&(
-                <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6}}>
-                  <span style={{fontSize:13,color:G.textM,fontWeight:600,flexShrink:0}}>Ends:</span>
-                  <input type="time" value={form.timeEnd||""}
-                    onChange={e=>setForm({...form,timeEnd:e.target.value,_suggestedEnd:null})}
-                    style={{...inp,marginBottom:0,flex:1,fontSize:16,
-                      borderColor:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.green:G.border}}/>
-                  {form.timeStart&&form.timeEnd&&(()=>{const[sh,sm]=form.timeStart.split(":").map(Number);const[eh,em]=form.timeEnd.split(":").map(Number);const d=(eh*60+em)-(sh*60+sm);return d>0?<span style={{fontSize:13,color:G.green,fontWeight:700,fontFamily:G.mono,flexShrink:0,background:G.greenL,borderRadius:8,padding:"4px 8px"}}>{d<60?d+"m":Math.floor(d/60)+"h"+(d%60?d%60+"m":"")}</span>:null;})()}
-                </div>
-              )}
-              {!form.timeStart&&<div style={{fontSize:13,color:G.red,marginTop:5}}>Start time is required.</div>}
+              {!form.timeStart&&<div style={{fontSize:13,color:G.red,marginTop:5,fontFamily:G.sans}}>Start time is required to save this entry.</div>}
             </div>
             <div style={{marginBottom:14}}>
               <label style={lbl}>Title</label>
