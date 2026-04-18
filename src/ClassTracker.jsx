@@ -114,7 +114,7 @@ function groupDatesByPeriod(dates){
 // ── Date window ───────────────────────────────────────────────────────────────
 function buildDateWindow(){
   const now=new Date(),days=[];
-  for(let i=-7;i<=7;i++){
+  for(let i=-7;i<=0;i++){
     const d=new Date(now);d.setDate(d.getDate()+i);
     const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
     const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -221,6 +221,14 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut}){
 function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
   const [viewYear,  setViewYear]  = useState(() => Number(selectedDate.split('-')[0]));
   const [viewMonth, setViewMonth] = useState(() => Number(selectedDate.split('-')[1]) - 1);
+  const [toast,     setToast]     = useState(null);
+  const toastTimer = useRef(null);
+
+  function showToast(msg) {
+    setToast(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2500);
+  }
 
   // Keep view in sync if selectedDate changes from outside (quick pills etc.)
   useEffect(() => {
@@ -320,12 +328,17 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',padding:'0 6px 10px',gap:2}}>
         {cells.map(({date,key,otherMonth,inWeek,isSel,isToday,hasEntry,isSun,stripe},i) => (
           <div key={i}
-            onClick={() => { if (!otherMonth) onSelectDate(key); }}
+            onClick={() => {
+              if (otherMonth) return;
+              if (key > todayKey()) { showToast("You can't log future dates"); return; }
+              if (!isDateAllowed(key)) { showToast("Only the last 7 days can be edited"); return; }
+              onSelectDate(key);
+            }}
             style={{
               position:'relative', aspectRatio:'1',
               display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
               borderRadius:10, cursor:otherMonth?'default':'pointer',
-              opacity:otherMonth?0.2:1,
+              opacity:otherMonth?0.15:!isDateAllowed(key)&&key!==todayKey()?0.3:1,
               WebkitTapHighlightColor:'transparent',
               touchAction:'manipulation', userSelect:'none',
               background: isSel||isToday ? G.forest : 'transparent',
@@ -364,6 +377,12 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
           </div>
         ))}
       </div>
+      {/* Toast */}
+      {toast&&(
+        <div style={{position:"fixed",bottom:80,left:"50%",transform:"translateX(-50%)",background:"rgba(21,43,34,0.93)",color:"#fff",borderRadius:20,padding:"9px 20px",fontSize:13,fontWeight:600,fontFamily:"'Inter',sans-serif",whiteSpace:"nowrap",zIndex:9999,pointerEvents:"none",boxShadow:"0 4px 20px rgba(0,0,0,0.25)"}}>
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
@@ -1223,7 +1242,14 @@ function ClassTrackerInner({user}){
           <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
         </div>
         {/* Entries */}
-        <div style={{flex:1,overflowY:"auto",padding:"16px 16px 100px",WebkitOverflowScrolling:"touch"}}>
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+        {canAdd&&<div style={{padding:"12px 16px",background:G.surface,borderTop:`1px solid ${G.border}`,flexShrink:0,order:2}}>
+          <button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",_dur:activeClass?.duration||60});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
+            style={{width:"100%",background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:16,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6,minHeight:52,WebkitTapHighlightColor:"transparent",boxShadow:`0 4px 14px ${color.bg}55`}}>
+            + Add Entry
+          </button>
+        </div>}
+        <div style={{flex:1,overflowY:"auto",padding:"16px 16px 16px",WebkitOverflowScrolling:"touch",order:1}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
             <span style={{fontSize:16,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:dateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span></span>
             {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",_dur:activeClass?.duration||60});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
