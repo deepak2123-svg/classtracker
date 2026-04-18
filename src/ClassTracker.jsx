@@ -299,7 +299,7 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
   };
 
   return (
-    <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,overflow:'hidden'}}>
+    <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,overflow:'hidden',maxWidth:420}}>
       {/* Month nav */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px 6px'}}>
         <button onClick={()=>changeMonth(-1)}
@@ -335,7 +335,7 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
               onSelectDate(key);
             }}
             style={{
-              position:'relative', aspectRatio:'1',
+              position:'relative', height:42,
               display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
               borderRadius:10, cursor:(otherMonth||!isDateAllowed(key)||key>todayKey())?'default':'pointer',
               opacity:otherMonth?0.15:(!isDateAllowed(key)||key>todayKey())?0.25:1,
@@ -1183,7 +1183,7 @@ function ClassTrackerInner({user}){
                 <button onClick={()=>setEditingClass(selCls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✏</button>
                 <button onClick={()=>setLeaveModal(selCls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🗑</button>
               </div>
-              <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/>
+              <div style={{maxWidth:420}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/></div>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
