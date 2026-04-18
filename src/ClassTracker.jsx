@@ -811,36 +811,51 @@ ${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><
 }
 
 
-// ── Time suggestion: most frequent start+duration for this class on this day-of-week ──
+// ── Time suggestion: same day-of-week first, fall back to most recent if no DOW history ──
 function getSuggestedTime(notes, classId, dateKey) {
   const dayOfWeek = new Date(dateKey).getDay();
   const classNotes = notes[classId] || {};
-  const freq = {};
-  Object.entries(classNotes).forEach(([dk, entries]) => {
-    if (!Array.isArray(entries)) return;
-    if (new Date(dk).getDay() !== dayOfWeek) return;
-    entries.forEach(e => {
-      if (!e.timeStart) return;
-      let dur = 60;
-      if (e.timeEnd) {
-        const [sh, sm] = e.timeStart.split(':').map(Number);
-        const [eh, em] = e.timeEnd.split(':').map(Number);
-        const d = (eh * 60 + em) - (sh * 60 + sm);
-        if (d > 0) dur = d;
-      }
-      const k = e.timeStart + '|' + dur;
-      freq[k] = (freq[k] || 0) + 1;
+
+  function buildFreq(filterFn) {
+    const freq = {};
+    Object.entries(classNotes).forEach(([dk, entries]) => {
+      if (!Array.isArray(entries)) return;
+      if (!filterFn(dk)) return;
+      entries.forEach(e => {
+        if (!e.timeStart) return;
+        let dur = 60;
+        if (e.timeEnd) {
+          const [sh, sm] = e.timeStart.split(':').map(Number);
+          const [eh, em] = e.timeEnd.split(':').map(Number);
+          const d = (eh * 60 + em) - (sh * 60 + sm);
+          if (d > 0) dur = d;
+        }
+        const k = e.timeStart + '|' + dur;
+        freq[k] = (freq[k] || 0) + 1;
+      });
     });
-  });
-  if (!Object.keys(freq).length) return null;
-  const best = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
-  const [timeStart, durStr] = best.split('|');
-  const dur = parseInt(durStr);
-  const [h, m] = timeStart.split(':').map(Number);
-  const end = new Date(2000, 0, 1, h, m + dur);
-  const eh = String(end.getHours()).padStart(2, '0');
-  const em2 = String(end.getMinutes()).padStart(2, '0');
-  return { timeStart, timeEnd: eh + ':' + em2, _dur: dur, _suggested: true };
+    return freq;
+  }
+
+  function freqToSuggestion(freq) {
+    if (!Object.keys(freq).length) return null;
+    const best = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+    const [timeStart, durStr] = best.split('|');
+    const dur = parseInt(durStr);
+    const [h, m] = timeStart.split(':').map(Number);
+    const end = new Date(2000, 0, 1, h, m + dur);
+    const eh = String(end.getHours()).padStart(2, '0');
+    const em2 = String(end.getMinutes()).padStart(2, '0');
+    return { timeStart, timeEnd: eh + ':' + em2, _dur: dur, _suggested: true };
+  }
+
+  // 1st: try same day of week
+  const dowFreq = buildFreq(dk => new Date(dk).getDay() === dayOfWeek);
+  if (Object.keys(dowFreq).length) return freqToSuggestion(dowFreq);
+
+  // 2nd: fall back to all days (until a week's worth of data is built)
+  const allFreq = buildFreq(() => true);
+  return freqToSuggestion(allFreq);
 }
 
 
