@@ -1274,19 +1274,15 @@ function ClassTrackerInner({user}){
           </div>
           <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
         </div>
-        {/* Entries */}
-        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
-        {canAdd&&<div style={{padding:"12px 16px",background:G.surface,borderTop:`1px solid ${G.border}`,flexShrink:0,order:2}}>
-          <button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
-            style={{width:"100%",background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:16,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6,minHeight:52,WebkitTapHighlightColor:"transparent",boxShadow:`0 4px 14px ${color.bg}55`}}>
-            + Add Entry
-          </button>
-        </div>}
-        <div style={{flex:1,overflowY:"auto",padding:"16px 16px 16px",WebkitOverflowScrolling:"touch",order:1}}>
+        {/* Entries scroll area */}
+        <div style={{flex:1,overflowY:"auto",padding:"14px 16px 16px",WebkitOverflowScrolling:"touch"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
-            <span style={{fontSize:16,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:dateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span></span>
+            <div>
+              <div style={{fontSize:16,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}</div>
+              <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:600,marginTop:2}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
+            </div>
             {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
-              style={{background:color.bg,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:46,WebkitTapHighlightColor:"transparent",boxShadow:`0 2px 12px ${color.bg}55`}}>
+              style={{background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",boxShadow:`0 4px 14px ${color.bg}55`,flexShrink:0}}>
               + Add Entry
             </button>}
           </div>
@@ -1294,7 +1290,7 @@ function ClassTrackerInner({user}){
             <div style={{background:G.surface,borderRadius:16,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center"}}>
               <div style={{fontSize:40,marginBottom:12}}>✏️</div>
               <div style={{fontSize:16,color:G.textM,fontWeight:500}}>{canAdd?"No entries yet":"No entries for this date"}</div>
-              {canAdd&&<div style={{fontSize:14,color:G.textL,marginTop:6}}>Tap + Add Entry above to log this class</div>}
+              {canAdd&&<div style={{fontSize:14,color:G.textL,marginTop:6}}>Tap + Add Entry to log this class</div>}
             </div>
           ):(
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -1315,9 +1311,9 @@ function ClassTrackerInner({user}){
                         </div>
                         <div style={{display:"flex",gap:6,flexShrink:0}}>
                           <button onClick={()=>{setEditNote({...note});setView("editNote");}}
-                            style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"8px 16px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>Edit</button>
+                            style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"8px 16px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent"}}>Edit</button>
                           <button onClick={()=>deleteNote(note.id)}
-                            style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"8px 14px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>✕</button>
+                            style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"8px 14px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent"}}>✕</button>
                         </div>
                       </div>
                     </div>
@@ -1330,7 +1326,6 @@ function ClassTrackerInner({user}){
       </div>
     );
   }
-
   if(view==="addClass"){
     return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
