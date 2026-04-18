@@ -337,8 +337,8 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
             style={{
               position:'relative', aspectRatio:'1',
               display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
-              borderRadius:10, cursor:otherMonth?'default':'pointer',
-              opacity:otherMonth?0.15:!isDateAllowed(key)&&key!==todayKey()?0.3:1,
+              borderRadius:10, cursor:(otherMonth||!isDateAllowed(key)||key>todayKey())?'default':'pointer',
+              opacity:otherMonth?0.15:(!isDateAllowed(key)||key>todayKey())?0.25:1,
               WebkitTapHighlightColor:'transparent',
               touchAction:'manipulation', userSelect:'none',
               background: isSel||isToday ? G.forest : 'transparent',
@@ -816,6 +816,39 @@ ${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><
 }
 
 
+// ── Time suggestion: most frequent start+duration for this class on this day-of-week ──
+function getSuggestedTime(notes, classId, dateKey) {
+  const dayOfWeek = new Date(dateKey).getDay();
+  const classNotes = notes[classId] || {};
+  const freq = {};
+  Object.entries(classNotes).forEach(([dk, entries]) => {
+    if (!Array.isArray(entries)) return;
+    if (new Date(dk).getDay() !== dayOfWeek) return;
+    entries.forEach(e => {
+      if (!e.timeStart) return;
+      let dur = 60;
+      if (e.timeEnd) {
+        const [sh, sm] = e.timeStart.split(':').map(Number);
+        const [eh, em] = e.timeEnd.split(':').map(Number);
+        const d = (eh * 60 + em) - (sh * 60 + sm);
+        if (d > 0) dur = d;
+      }
+      const k = e.timeStart + '|' + dur;
+      freq[k] = (freq[k] || 0) + 1;
+    });
+  });
+  if (!Object.keys(freq).length) return null;
+  const best = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+  const [timeStart, durStr] = best.split('|');
+  const dur = parseInt(durStr);
+  const [h, m] = timeStart.split(':').map(Number);
+  const end = new Date(2000, 0, 1, h, m + dur);
+  const eh = String(end.getHours()).padStart(2, '0');
+  const em2 = String(end.getMinutes()).padStart(2, '0');
+  return { timeStart, timeEnd: eh + ':' + em2, _dur: dur, _suggested: true };
+}
+
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 function ClassTrackerInner({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
@@ -1155,7 +1188,7 @@ function ClassTrackerInner({user}){
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <span style={{fontSize:15,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:selDateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {selDateNotes.length} {selDateNotes.length===1?"entry":"entries"}</span></span>
-                {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",_dur:activeClass?.duration||60});setView("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>+ Add Entry</button>}
+                {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});setView("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>+ Add Entry</button>}
               </div>
               {selDateNotes.length===0?(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"40px 20px",textAlign:"center"}}>
@@ -1244,7 +1277,7 @@ function ClassTrackerInner({user}){
         {/* Entries */}
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
         {canAdd&&<div style={{padding:"12px 16px",background:G.surface,borderTop:`1px solid ${G.border}`,flexShrink:0,order:2}}>
-          <button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",_dur:activeClass?.duration||60});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
+          <button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
             style={{width:"100%",background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:16,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6,minHeight:52,WebkitTapHighlightColor:"transparent",boxShadow:`0 4px 14px ${color.bg}55`}}>
             + Add Entry
           </button>
@@ -1252,7 +1285,7 @@ function ClassTrackerInner({user}){
         <div style={{flex:1,overflowY:"auto",padding:"16px 16px 16px",WebkitOverflowScrolling:"touch",order:1}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
             <span style={{fontSize:16,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:dateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {dateNotes.length} {dateNotes.length===1?"entry":"entries"}</span></span>
-            {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",_dur:activeClass?.duration||60});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
+            {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
               style={{background:color.bg,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:46,WebkitTapHighlightColor:"transparent",boxShadow:`0 2px 12px ${color.bg}55`}}>
               + Add Entry
             </button>}
@@ -1482,8 +1515,23 @@ function ClassTrackerInner({user}){
               </div>
             </div>
             <div style={{marginBottom:16}}>
+              {form._suggested&&form.timeStart&&(
+                <div style={{background:G.greenL,border:"1px solid "+G.green,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                  <span style={{fontSize:18}}>&#128161;</span>
+                  <div style={{flex:1,minWidth:120}}>
+                    <div style={{fontSize:13,fontWeight:700,color:G.green}}>Suggested from your history</div>
+                    <div style={{fontSize:12,color:G.textM,marginTop:1}}>
+                      {form.timeStart} &#8211; {form.timeEnd} · same time as your usual {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(selectedDate).getDay()]} class
+                    </div>
+                  </div>
+                  <button onClick={()=>setForm(f=>({...f,_suggested:false,timeStart:"",timeEnd:"",_suggestedEnd:null}))}
+                    style={{background:"none",border:"1px solid "+G.borderM,borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans,flexShrink:0}}>
+                    Change
+                  </button>
+                </div>
+              )}
               <label style={lbl}>Start Time <span style={{color:G.red,marginLeft:3}}>*</span></label>
-              <input type="time" value={form.timeStart||""}
+              {!form._suggested&&<input type="time" value={form.timeStart||""}
                 onChange={e=>{
                   const s=e.target.value;
                   const dur=form._dur||(activeClass?.duration)||60;
@@ -1496,7 +1544,7 @@ function ClassTrackerInner({user}){
                     setForm({...form,timeStart:"",timeEnd:"",_suggestedEnd:null});
                   }
                 }}
-                style={{...inp,fontSize:16}}/>
+                style={{...inp,fontSize:16}}/>}
 
               {/* Duration suggestion pills — shown after start time entered */}
               {form.timeStart&&(
