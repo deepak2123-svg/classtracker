@@ -1387,8 +1387,6 @@ function ClassTrackerInner({user}){
   // STATS VIEW — teaching hours breakdown
   // ══════════════════════════════════════════════════════════════════════
   if(view==="stats"){
-    const [statPeriod,setStatPeriod] = React.useState("month");
-
     function pad2(n){return String(n).padStart(2,"0");}
     function toKey(d){return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;}
     function fmtMins(m){
