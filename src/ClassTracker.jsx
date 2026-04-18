@@ -585,6 +585,218 @@ function TrashBadge({count,onClick}){
   );
 }
 
+// ── Export Modal ──────────────────────────────────────────────────────────────
+function ExportModal({data, teacherName, onClose}){
+  const [period,  setPeriod]  = React.useState("month"); // day | week | month
+  const [format,  setFormat]  = React.useState("pdf");   // pdf | excel
+  const [selMonth,setSelMonth]= React.useState(()=>{const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`;});
+  const [selWeek, setSelWeek] = React.useState(()=>todayKey());
+  const [selDay,  setSelDay]  = React.useState(()=>todayKey());
+  const [busy,    setBusy]    = React.useState(false);
+
+  const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  // Collect entries within the selected range
+  function getEntries(){
+    const rows=[];
+    const now=new Date();
+
+    let from, to;
+    if(period==="day"){
+      from=new Date(selDay); to=new Date(selDay);
+    } else if(period==="week"){
+      const d=new Date(selWeek);
+      const day=d.getDay();
+      from=new Date(d); from.setDate(d.getDate()-day);
+      to=new Date(from); to.setDate(from.getDate()+6);
+    } else {
+      const [y,m]=selMonth.split("-").map(Number);
+      from=new Date(y,m-1,1); to=new Date(y,m,0);
+    }
+
+    const pad=n=>String(n).padStart(2,"0");
+    const toKey=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+    // Iterate each day in range
+    const cur=new Date(from);
+    while(cur<=to){
+      const dk=toKey(cur);
+      data.classes.filter(c=>!c.left).forEach(cls=>{
+        const dayNotes=(data.notes[cls.id]||{})[dk]||[];
+        dayNotes.forEach(note=>{
+          rows.push({
+            date:dk,
+            class:cls.section,
+            institute:cls.institute,
+            subject:cls.subject,
+            type:note.tag||"note",
+            time:note.timeStart?(note.timeEnd?`${note.timeStart} - ${note.timeEnd}`:note.timeStart):"",
+            title:note.title||"",
+            notes:note.body||"",
+          });
+        });
+      });
+      cur.setDate(cur.getDate()+1);
+    }
+    return rows.sort((a,b)=>a.date.localeCompare(b.date));
+  }
+
+  function periodLabel(){
+    if(period==="day") return selDay;
+    if(period==="week"){
+      const d=new Date(selWeek);
+      const day=d.getDay();
+      const sun=new Date(d); sun.setDate(d.getDate()-day);
+      const sat=new Date(sun); sat.setDate(sun.getDate()+6);
+      const f=x=>`${x.getDate()} ${MONTHS[x.getMonth()].slice(0,3)}`;
+      return `${f(sun)} – ${f(sat)} ${sat.getFullYear()}`;
+    }
+    const [y,m]=selMonth.split("-").map(Number);
+    return `${MONTHS[m-1]} ${y}`;
+  }
+
+  function exportPDF(){
+    const rows=getEntries();
+    const label=periodLabel();
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<style>
+  body{font-family:Arial,sans-serif;padding:24px;color:#111;font-size:12px}
+  h1{font-size:18px;margin-bottom:4px}
+  .sub{color:#666;margin-bottom:20px;font-size:12px}
+  table{width:100%;border-collapse:collapse}
+  th{background:#152B22;color:#fff;padding:8px 10px;text-align:left;font-size:11px}
+  td{padding:7px 10px;border-bottom:1px solid #e5e5e5;vertical-align:top}
+  tr:nth-child(even) td{background:#f9fafb}
+  .empty{text-align:center;padding:40px;color:#999}
+</style></head><body>
+<h1>ClassLog — ${teacherName}</h1>
+<div class="sub">${label} · Exported ${new Date().toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</div>
+${rows.length===0
+  ? '<div class="empty">No entries found for this period.</div>'
+  : `<table><thead><tr><th>Date</th><th>Class</th><th>Institute</th><th>Subject</th><th>Time</th><th>Title</th><th>Notes</th></tr></thead><tbody>
+${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><td>${r.subject}</td><td style="white-space:nowrap">${r.time}</td><td><strong>${r.title}</strong></td><td>${r.notes}</td></tr>`).join("")}
+</tbody></table>`}
+</body></html>`;
+
+    const w=window.open("","_blank");
+    w.document.write(html);
+    w.document.close();
+    setTimeout(()=>w.print(),400);
+  }
+
+  function exportExcel(){
+    const rows=getEntries();
+    const label=periodLabel();
+    // Build CSV (opens in Excel on all platforms)
+    const headers=["Date","Class","Institute","Subject","Time","Title","Notes"];
+    const escape=v=>(`"${String(v||"").replace(/"/g,'""')}"`);
+    const csv=[
+      `ClassLog Export — ${teacherName} — ${label}`,
+      "",
+      headers.join(","),
+      ...rows.map(r=>[r.date,r.class,r.institute,r.subject,r.time,r.title,r.notes].map(escape).join(","))
+    ].join("\r\n");
+
+    const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`ClassLog_${teacherName.replace(/ /g,"_")}_${label.replace(/ /g,"_").replace(/–/g,"-")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function doExport(){
+    setBusy(true);
+    setTimeout(()=>{
+      if(format==="pdf") exportPDF();
+      else exportExcel();
+      setBusy(false);
+      onClose();
+    },100);
+  }
+
+  const inp2={width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid #D9E4DC`,fontSize:15,fontFamily:"'Inter',sans-serif",outline:"none",background:"#F5F7F5",color:"#111827"};
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+      <div style={{background:"#fff",borderRadius:22,padding:"26px 22px",width:"100%",maxWidth:380,boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+          <div style={{width:46,height:46,borderRadius:13,background:"#E8F8EF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>📤</div>
+          <div>
+            <div style={{fontSize:18,fontWeight:700,color:"#111827",fontFamily:"'Poppins',sans-serif"}}>Export Entries</div>
+            <div style={{fontSize:13,color:"#6B7280"}}>PDF or Excel-friendly CSV</div>
+          </div>
+          <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9CA3AF",lineHeight:1}}>✕</button>
+        </div>
+
+        {/* Period selector */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Period</div>
+          <div style={{display:"flex",gap:6}}>
+            {[["day","Daily"],["week","Weekly"],["month","Monthly"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setPeriod(k)}
+                style={{flex:1,padding:"9px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:period===k?700:500,
+                  background:period===k?"#152B22":"rgba(0,0,0,0.06)",color:period===k?"#fff":"#374151",transition:"all 0.15s"}}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Date picker for period */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+            {period==="day"?"Date":period==="week"?"Any day in the week":"Month"}
+          </div>
+          {period==="month"&&(
+            <input type="month" value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={inp2}/>
+          )}
+          {period==="week"&&(
+            <input type="date" value={selWeek} onChange={e=>setSelWeek(e.target.value)} style={inp2}/>
+          )}
+          {period==="day"&&(
+            <input type="date" value={selDay} onChange={e=>setSelDay(e.target.value)} style={inp2}/>
+          )}
+        </div>
+
+        {/* Format selector */}
+        <div style={{marginBottom:22}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Format</div>
+          <div style={{display:"flex",gap:8}}>
+            {[["pdf","📄 PDF"],["excel","📊 Excel / CSV"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setFormat(k)}
+                style={{flex:1,padding:"12px 0",borderRadius:12,border:`2px solid ${format===k?"#1B8A4C":"#D9E4DC"}`,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:format===k?700:500,
+                  background:format===k?"#E8F8EF":"transparent",color:format===k?"#1B8A4C":"#374151",transition:"all 0.15s"}}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Preview summary */}
+        <div style={{background:"#F5F7F5",borderRadius:12,padding:"10px 14px",marginBottom:20,fontSize:13,color:"#374151"}}>
+          📅 <strong>{periodLabel()}</strong> · {format==="pdf"?"Opens print dialog":"Downloads .csv file"}
+        </div>
+
+        {/* Buttons */}
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onClose}
+            style={{flex:1,padding:"13px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#374151",fontFamily:"'Inter',sans-serif"}}>
+            Cancel
+          </button>
+          <button onClick={doExport} disabled={busy}
+            style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"#1B8A4C",fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:"'Inter',sans-serif",opacity:busy?0.7:1}}>
+            {busy?"Preparing…":"Export"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 function ClassTrackerInner({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
@@ -604,6 +816,7 @@ function ClassTrackerInner({user}){
   const [instFilter,      setInstFilter]      = useState("all"); // institute filter on home
   const [leaveModal,setLeaveModal]     = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
+  const [exportOpen,setExportOpen]       = useState(false);
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
@@ -731,6 +944,7 @@ function ClassTrackerInner({user}){
     <>
       <SaveBadge/>
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
+      {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
       {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal && (()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);setActiveClass(null);setView("home");}} onClose={()=>setLeaveModal(null)}/>:null;})()}
     </>
@@ -760,6 +974,11 @@ function ClassTrackerInner({user}){
         style={{background:G.redL,border:"none",borderRadius:8,padding:"7px 11px",cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>
         🗑 {trashCount}
       </button>}
+      <button onClick={()=>setExportOpen(true)}
+        style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span className="desktop-only" style={{display:"inline",fontSize:13,fontWeight:600}}>Export</span>
+      </button>
       <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)}
         style={{background:G.green,color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",boxShadow:"0 2px 8px rgba(27,138,76,0.3)"}}>
         + <span style={{display:"none"}} className="desktop-show"> New Class</span>
