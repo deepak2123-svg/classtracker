@@ -1331,7 +1331,7 @@ function ClassTrackerInner({user}){
     );
   }
 
-  if(view==="addClass")return(
+  if(view==="addClass"){return(
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
       <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
         right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
@@ -1367,7 +1367,7 @@ function ClassTrackerInner({user}){
         </div>
       </div>
     </div>
-  );
+  );}
 
   // ── TRASH ─────────────────────────────────────────────────────────────────
   if(view==="trash"){
