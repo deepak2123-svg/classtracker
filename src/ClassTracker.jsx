@@ -1036,6 +1036,11 @@ function ClassTrackerInner({user}){
         style={{background:G.redL,border:"none",borderRadius:8,padding:"7px 11px",cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>
         🗑 {trashCount}
       </button>}
+      <button onClick={()=>setView("stats")}
+        style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
+        <span className="desktop-only" style={{display:"inline",fontSize:13,fontWeight:600}}>Stats</span>
+      </button>
       <button onClick={()=>setExportOpen(true)}
         style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1377,6 +1382,179 @@ function ClassTrackerInner({user}){
   }
 
   // ── TRASH ─────────────────────────────────────────────────────────────────
+
+  // ══════════════════════════════════════════════════════════════════════
+  // STATS VIEW — teaching hours breakdown
+  // ══════════════════════════════════════════════════════════════════════
+  if(view==="stats"){
+    const [statPeriod,setStatPeriod] = React.useState("month");
+
+    function pad2(n){return String(n).padStart(2,"0");}
+    function toKey(d){return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;}
+    function fmtMins(m){
+      if(!m||m<=0)return"0m";
+      const h=Math.floor(m/60),min=m%60;
+      return min?`${h}h ${min}m`:`${h}h`;
+    }
+    function calcDurMins(tStart,tEnd){
+      if(!tStart||!tEnd)return 0;
+      const [sh,sm]=tStart.split(":").map(Number);
+      const [eh,em]=tEnd.split(":").map(Number);
+      const d=(eh*60+em)-(sh*60+sm);
+      return d>0?d:0;
+    }
+
+    // Date range for period
+    const now=new Date();
+    let rangeStart;
+    if(statPeriod==="week"){
+      rangeStart=new Date(now);
+      rangeStart.setDate(now.getDate()-now.getDay()); // Sunday of current week
+    } else if(statPeriod==="month"){
+      rangeStart=new Date(now.getFullYear(),now.getMonth(),1);
+    } else {
+      // session: April 1 of current academic year
+      const sesYear=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;
+      rangeStart=new Date(sesYear,3,1);
+    }
+    const rangeStartKey=toKey(rangeStart);
+    const todayK=todayKey();
+
+    // Compute stats per class
+    const DAYS_SHORT=["Su","Mo","Tu","We","Th","Fr","Sa"];
+    const dayMins=[0,0,0,0,0,0,0]; // Sun–Sat totals
+    let grandTotal=0, grandSessions=0, longestSession=0;
+
+    const classStats=data.classes.filter(c=>!c.left).map(cls=>{
+      const ic=instColor(cls.institute);
+      let mins=0,sessions=0;
+      Object.entries(data.notes[cls.id]||{}).forEach(([dk,entries])=>{
+        if(dk<rangeStartKey||dk>todayK)return;
+        if(!Array.isArray(entries))return;
+        entries.forEach(e=>{
+          const d=calcDurMins(e.timeStart,e.timeEnd);
+          if(d>0){
+            mins+=d; sessions++;
+            dayMins[new Date(dk).getDay()]+=d;
+            if(d>longestSession)longestSession=d;
+          }
+        });
+      });
+      return{cls,ic,mins,sessions};
+    }).filter(c=>c.mins>0).sort((a,b)=>b.mins-a.mins);
+
+    grandTotal=classStats.reduce((a,c)=>a+c.mins,0);
+    grandSessions=classStats.reduce((a,c)=>a+c.sessions,0);
+    const avgSession=grandSessions>0?Math.round(grandTotal/grandSessions):0;
+    const maxClassMins=classStats.length>0?classStats[0].mins:1;
+    const maxDayMins=Math.max(...dayMins,1);
+
+    const navBtnStyle={background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",fontFamily:G.sans};
+
+    return(
+      <div style={{minHeight:"100svh",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
+        {sharedModals}
+        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+          right={<button onClick={()=>setView("home")} style={navBtnStyle}>← Back</button>}/>
+
+        <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"16px 14px 48px",maxWidth:680,margin:"0 auto",width:"100%"}}>
+
+          {/* Period tabs */}
+          <div style={{display:"flex",background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:3,marginBottom:18,gap:2}}>
+            {[["week","This Week"],["month","This Month"],["session","Session"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setStatPeriod(k)}
+                style={{flex:1,padding:"8px 0",borderRadius:9,border:"none",cursor:"pointer",fontFamily:G.display,fontSize:13,fontWeight:600,transition:"all 0.15s",WebkitTapHighlightColor:"transparent",
+                  background:statPeriod===k?G.forest:"transparent",color:statPeriod===k?"#fff":G.textM}}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {grandTotal===0?(
+            <div style={{background:G.surface,borderRadius:16,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center"}}>
+              <div style={{fontSize:40,marginBottom:12}}>📊</div>
+              <div style={{fontSize:16,fontWeight:600,color:G.textM}}>No entries with time data yet</div>
+              <div style={{fontSize:14,color:G.textL,marginTop:6}}>Add class time when logging entries to see stats</div>
+            </div>
+          ):(
+            <>
+              {/* Hero */}
+              <div style={{background:G.forest,borderRadius:20,padding:"20px",marginBottom:14,display:"flex",alignItems:"center",gap:16}}>
+                <div style={{width:52,height:52,borderRadius:14,background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}}>⏱</div>
+                <div>
+                  <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Total Teaching Time</div>
+                  <div style={{fontSize:36,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1,letterSpacing:-1}}>{fmtMins(grandTotal)}</div>
+                  <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginTop:4}}>{classStats.length} {classStats.length===1?"class":"classes"} · {grandSessions} sessions</div>
+                </div>
+              </div>
+
+              {/* Mini stats */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:14}}>
+                  <div style={{fontSize:11,fontWeight:700,color:G.textL,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Sessions</div>
+                  <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{grandSessions}</div>
+                  <div style={{fontSize:12,color:G.textM,marginTop:3}}>in {statPeriod==="week"?"this week":statPeriod==="month"?"this month":"this session"}</div>
+                </div>
+                <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:14}}>
+                  <div style={{fontSize:11,fontWeight:700,color:G.textL,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Avg / Session</div>
+                  <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(avgSession)}</div>
+                  <div style={{fontSize:12,color:G.textM,marginTop:3}}>longest: {fmtMins(longestSession)}</div>
+                </div>
+              </div>
+
+              {/* Day of week chart */}
+              <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:14,marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Hours by Day</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:6,height:72,marginBottom:8}}>
+                  {dayMins.map((m,i)=>(
+                    <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
+                      <div title={fmtMins(m)} style={{width:"100%",borderRadius:"5px 5px 0 0",background:m>0?G.green:G.border,
+                        height:m>0?Math.max((m/maxDayMins)*68,4)+"px":"3px",transition:"height 0.5s cubic-bezier(0.22,1,0.36,1)",minHeight:3}}/>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  {DAYS_SHORT.map((d,i)=>(
+                    <div key={i} style={{flex:1,textAlign:"center",fontSize:10,fontWeight:600,color:i===0?G.red:G.textL,textTransform:"uppercase"}}>{d}</div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Per-class breakdown */}
+              <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>By Class</div>
+              {classStats.map(({cls,ic,mins,sessions})=>{
+                const pct=Math.round(mins/maxClassMins*100);
+                return(
+                  <div key={cls.id} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,marginBottom:8,padding:"13px 14px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                      <div style={{width:38,height:38,borderRadius:9,background:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:ic.bg,fontFamily:G.mono}}>
+                        {(cls.section||"?").slice(0,2).toUpperCase()}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
+                        <div style={{fontSize:12,color:G.textL}}>🏫 {cls.institute}{cls.subject?" · "+cls.subject:""}</div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(mins)}</div>
+                        <div style={{fontSize:11,color:G.textL,marginTop:2}}>{sessions} session{sessions!==1?"s":""}</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{flex:1,height:6,background:G.border,borderRadius:20,overflow:"hidden"}}>
+                        <div style={{height:"100%",borderRadius:20,background:ic.bg,width:pct+"%",transition:"width 0.6s cubic-bezier(0.22,1,0.36,1)"}}/>
+                      </div>
+                      <span style={{fontSize:11,fontWeight:700,color:ic.bg,fontFamily:G.mono,width:32,textAlign:"right"}}>{pct}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if(view==="trash"){
     const tClasses=(data.trash?.classes||[]).sort((a,b)=>b.deletedAt-a.deletedAt);
     const tNotes=(data.trash?.notes||[]).sort((a,b)=>b.deletedAt-a.deletedAt);
