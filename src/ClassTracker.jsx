@@ -1072,7 +1072,31 @@ function ClassTrackerInner({user}){
 
   const addNote=()=>{
     if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
-    if(!newNote.title.trim()&&!newNote.body.trim())return;
+    if(!newNote.title.trim()&&!newNote.body.trim()){showInlineToast("Please add a title or notes before saving.");return;}
+
+    // Duplicate check — same class, same date, overlapping or identical time
+    const existing=(data.notes?.[activeClass.id]||{})[selectedDate]||[];
+    if(newNote.timeStart){
+      const newStart=newNote.timeStart;
+      const clash=existing.find(e=>{
+        if(!e.timeStart)return false;
+        // Exact same start time = definite duplicate
+        if(e.timeStart===newStart)return true;
+        // Overlapping times check
+        if(newNote.timeEnd&&e.timeEnd){
+          const toMins=t=>{const[h,m]=t.split(":").map(Number);return h*60+m;};
+          const ns=toMins(newStart),ne=toMins(newNote.timeEnd);
+          const es=toMins(e.timeStart),ee=toMins(e.timeEnd);
+          return ns<ee&&ne>es; // overlap
+        }
+        return false;
+      });
+      if(clash){
+        showInlineToast(`Entry at ${clash.timeStart} already exists for this class on this date`);
+        return;
+      }
+    }
+
     const note={id:Date.now().toString(),...newNote,status:newNote.status||"",teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
     setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});setView("classDetail");
