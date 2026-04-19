@@ -30,7 +30,12 @@ export function fmt(t) {
   const [h,m] = t.split(":").map(Number);
   return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`;
 }
-export function formatPeriod(s,e) { return s?(e?`${fmt(s)} – ${fmt(e)}`:fmt(s)):""; }
+export function formatPeriod(s,e) {
+  try{
+    if(!s||typeof s!=="string")return "";
+    return e&&typeof e==="string"?`${fmt(s)} – ${fmt(e)}`:fmt(s);
+  }catch(err){return s||"";}
+}
 export function toDateKey(y,m,d){ return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
 export function todayKey(){ const n=new Date(); return toDateKey(n.getFullYear(),n.getMonth(),n.getDate()); }
 export function formatDateLabel(dk){

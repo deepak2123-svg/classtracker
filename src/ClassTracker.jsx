@@ -91,6 +91,34 @@ function ConfirmModal({message, confirmLabel="Delete", onConfirm, onClose}){
 }
 
 
+// ── Saving Guard Modal ────────────────────────────────────────────────────────
+function SavingGuardModal({onWait, onLeave}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+      <div style={{background:"#fff",borderRadius:22,padding:"26px 22px",width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.25)",textAlign:"center"}}>
+        <div style={{width:56,height:56,borderRadius:16,background:"#FEF3C7",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:28}}>
+          💾
+        </div>
+        <h3 style={{fontSize:18,fontWeight:700,color:"#111827",fontFamily:"'Poppins',sans-serif",marginBottom:8}}>Still saving…</h3>
+        <p style={{fontSize:14,color:"#6B7280",marginBottom:24,lineHeight:1.6,fontFamily:"'Inter',sans-serif"}}>
+          Your entry is being saved. Leaving now may lose your last change.
+        </p>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onWait}
+            style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"#152B22",fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:"'Inter',sans-serif",minHeight:48,WebkitTapHighlightColor:"transparent"}}>
+            Wait for save
+          </button>
+          <button onClick={onLeave}
+            style={{flex:1,padding:"13px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#6B7280",fontFamily:"'Inter',sans-serif",minHeight:48,WebkitTapHighlightColor:"transparent"}}>
+            Leave anyway
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Sign Out Modal ────────────────────────────────────────────────────────────
 function SignOutModal({onConfirm,onClose}){
   return(
@@ -847,13 +875,15 @@ function getSuggestedTime(notes, classId, dateKey) {
       if (!Array.isArray(entries)) return;
       if (!filterFn(dk)) return;
       entries.forEach(e => {
-        if (!e.timeStart) return;
+        if (!e.timeStart||typeof e.timeStart!=="string") return;
         let dur = 60;
-        if (e.timeEnd) {
-          const [sh, sm] = e.timeStart.split(':').map(Number);
-          const [eh, em] = e.timeEnd.split(':').map(Number);
-          const d = (eh * 60 + em) - (sh * 60 + sm);
-          if (d > 0) dur = d;
+        if (e.timeEnd&&typeof e.timeEnd==="string") {
+          try{
+            const [sh,sm]=e.timeStart.split(':').map(Number);
+            const [eh,em]=e.timeEnd.split(':').map(Number);
+            const d=(eh*60+em)-(sh*60+sm);
+            if(d>0&&d<480) dur=d;
+          }catch(err){}
         }
         const k = e.timeStart + '|' + dur;
         freq[k] = (freq[k] || 0) + 1;
@@ -908,7 +938,8 @@ function ClassTrackerInner({user}){
   const [isOffline,setIsOffline]         = useState(!navigator.onLine);
   const [inlineToast,setInlineToast]     = useState(null);
   const inlineToastTimer                 = useRef(null);
-  const [confirmModal,setConfirmModal]   = useState(null); // {message,onConfirm}
+  const [confirmModal,setConfirmModal]   = useState(null);
+  const [savingGuard,setSavingGuard]     = useState(null); // {onLeave} — shown mid-save
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
@@ -944,6 +975,15 @@ function ClassTrackerInner({user}){
     saveTimer.current=setTimeout(()=>{saveUserData(user.uid,data).then(()=>setSaving(false)).catch(()=>{setSaving(false);setSaveErr(true);});},1000);
     return()=>clearTimeout(saveTimer.current);
   },[data]);
+  // Safe navigation — shows in-app warning if save is in flight
+  function safeNav(destination, action){
+    if(saving){
+      setSavingGuard({onLeave: action || (()=>setView(destination))});
+    } else {
+      action ? action() : setView(destination);
+    }
+  }
+
   function showInlineToast(msg){
     setInlineToast(msg);
     clearTimeout(inlineToastTimer.current);
@@ -956,6 +996,8 @@ function ClassTrackerInner({user}){
     window.addEventListener("resize",onResize);
     return ()=>window.removeEventListener("resize",onResize);
   },[]);
+
+
 
   useEffect(()=>{
     const goOffline=()=>setIsOffline(true);
@@ -1074,6 +1116,7 @@ function ClassTrackerInner({user}){
           {inlineToast}
         </div>
       )}
+      {savingGuard && <SavingGuardModal onWait={()=>setSavingGuard(null)} onLeave={()=>{setSavingGuard(null);savingGuard.onLeave();}}/>}
       {confirmModal && <ConfirmModal message={confirmModal.message} confirmLabel={confirmModal.label||"Delete"} onConfirm={confirmModal.onConfirm} onClose={()=>setConfirmModal(null)}/>}
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
@@ -1273,7 +1316,7 @@ function ClassTrackerInner({user}){
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <span style={{fontSize:15,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:selDateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {selDateNotes.length} {selDateNotes.length===1?"entry":"entries"}</span></span>
-                {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});setView("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>+ Add Entry</button>}
+                {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});safeNav("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>+ Add Entry</button>}
               </div>
               {selDateNotes.length===0?(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"40px 20px",textAlign:"center"}}>
@@ -1366,7 +1409,7 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:16,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}</div>
               <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:600,marginTop:2}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
             </div>
-            {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});setView("addNote");}} onPointerDown={e=>rpl(e,true)}
+            {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});safeNav("addNote");}} onPointerDown={e=>rpl(e,true)}
               style={{background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",boxShadow:`0 4px 14px ${color.bg}55`,flexShrink:0}}>
               + Add Entry
             </button>}
@@ -1465,11 +1508,17 @@ function ClassTrackerInner({user}){
       return min?`${h}h ${min}m`:`${h}h`;
     }
     function calcDurMins(tStart,tEnd){
-      if(!tStart||!tEnd)return 0;
-      const [sh,sm]=tStart.split(":").map(Number);
-      const [eh,em]=tEnd.split(":").map(Number);
-      const d=(eh*60+em)-(sh*60+sm);
-      return d>0?d:0;
+      if(!tStart||!tEnd||typeof tStart!=="string"||typeof tEnd!=="string")return 0;
+      try{
+        const sp=tStart.split(":");
+        const ep=tEnd.split(":");
+        if(sp.length<2||ep.length<2)return 0;
+        const sh=Number(sp[0]),sm=Number(sp[1]);
+        const eh=Number(ep[0]),em=Number(ep[1]);
+        if(isNaN(sh)||isNaN(sm)||isNaN(eh)||isNaN(em))return 0;
+        const d=(eh*60+em)-(sh*60+sm);
+        return d>0&&d<480?d:0; // cap at 8hrs — guards corrupt data
+      }catch(e){return 0;}
     }
 
     // Date range for period
