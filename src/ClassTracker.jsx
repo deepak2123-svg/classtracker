@@ -635,7 +635,7 @@ function ExportModal({data, teacherName, onClose}){
     const cur=new Date(from);
     while(cur<=to){
       const dk=toKey(cur);
-      data.classes.filter(c=>!c.left).forEach(cls=>{
+      (data.classes||[]).filter(c=>!c.left).forEach(cls=>{
         const dayNotes=(data.notes[cls.id]||{})[dk]||[];
         dayNotes.forEach(note=>{
           rows.push({
@@ -880,6 +880,9 @@ function ClassTrackerInner({user}){
   const [signOutPrompt,setSignOutPrompt] = useState(false);
   const [exportOpen,setExportOpen]       = useState(false);
   const [statPeriod,setStatPeriod]       = useState("month");
+  const [isOffline,setIsOffline]         = useState(!navigator.onLine);
+  const [inlineToast,setInlineToast]     = useState(null);
+  const inlineToastTimer                 = useRef(null);
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
@@ -893,13 +896,19 @@ function ClassTrackerInner({user}){
   useEffect(()=>{
     loadUserData(user.uid).then(d=>{
       const base = d ? {...DEFAULT_DATA,...d,profile:d.profile||{name:""},trash:d.trash||{classes:[],notes:[]}} : DEFAULT_DATA;
-      // Auto-apply Google display name if profile name not set
       if(!base.profile?.name && user.displayName) {
         base.profile = { name: user.displayName.trim() };
       }
       setData(base);
       if(base.profile?.name) syncTeacherIndex(user.uid,base).catch(()=>{});
       setLoading(false);
+    }).catch(err=>{
+      console.error("Failed to load data:",err);
+      // If offline, use DEFAULT_DATA and let them work — save will retry
+      setData(prev=>prev.classes.length>0?prev:{...DEFAULT_DATA,
+        profile:{name:user.displayName||""}});
+      setLoading(false);
+      setSaveErr(true); // shows the save badge in error state
     });
   },[user.uid]);
   useEffect(()=>{
@@ -909,12 +918,33 @@ function ClassTrackerInner({user}){
     saveTimer.current=setTimeout(()=>{saveUserData(user.uid,data).then(()=>setSaving(false)).catch(()=>{setSaving(false);setSaveErr(true);});},1000);
     return()=>clearTimeout(saveTimer.current);
   },[data]);
+  function showInlineToast(msg){
+    setInlineToast(msg);
+    clearTimeout(inlineToastTimer.current);
+    inlineToastTimer.current=setTimeout(()=>setInlineToast(null),3000);
+  }
+
   useEffect(()=>{if((view==="addNote"||view==="editNote")&&noteRef.current)noteRef.current.focus();},[view]);
   useEffect(()=>{
     const onResize=()=>setIsMobile(window.innerWidth<768);
     window.addEventListener("resize",onResize);
     return ()=>window.removeEventListener("resize",onResize);
   },[]);
+
+  useEffect(()=>{
+    const goOffline=()=>setIsOffline(true);
+    const goOnline=()=>{
+      setIsOffline(false);
+      // Retry save when back online
+      if(saveErr) saveUserData(user.uid,data).catch(()=>setSaveErr(true));
+    };
+    window.addEventListener("offline",goOffline);
+    window.addEventListener("online",goOnline);
+    return()=>{
+      window.removeEventListener("offline",goOffline);
+      window.removeEventListener("online",goOnline);
+    };
+  },[saveErr,data,user.uid]);
 
   // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
   const allNoteDates = useMemo(()=>{
@@ -972,14 +1002,14 @@ function ClassTrackerInner({user}){
   const getAllNoteDates=(cid)=>new Set(Object.keys(data.notes[cid]||{}).filter(dk=>(data.notes[cid][dk]||[]).length>0));
 
   const addNote=()=>{
-    if(!newNote.timeStart){alert("Please enter the class start time.");return;}
+    if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     if(!newNote.title.trim()&&!newNote.body.trim())return;
     const note={id:Date.now().toString(),...newNote,teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
     setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("classDetail");
   };
   const saveEdit=()=>{
-    if(!editNote.timeStart){alert("Please enter the class start time.");return;}
+    if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};});
     setEditNote(null);setView("classDetail");
   };
@@ -1006,6 +1036,18 @@ function ClassTrackerInner({user}){
   const sharedModals = (
     <>
       <SaveBadge/>
+      {/* Offline banner */}
+      {isOffline&&(
+        <div style={{position:"fixed",top:58,left:0,right:0,zIndex:9998,background:"#B45309",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:600,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          <span>📡</span> No internet connection — changes will save when reconnected
+        </div>
+      )}
+      {/* In-app toast — replaces alert() */}
+      {inlineToast&&(
+        <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:"rgba(21,43,34,0.95)",color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:14,fontWeight:600,fontFamily:G.sans,whiteSpace:"nowrap",zIndex:9999,pointerEvents:"none",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
+          {inlineToast}
+        </div>
+      )}
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
       {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
@@ -1019,7 +1061,7 @@ function ClassTrackerInner({user}){
   // Tablet+: left sidebar + right entries panel (split view)
   // ══════════════════════════════════════════════════════════════════════
   if(view==="home"){
-    const activeClasses=[...data.classes.filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
+    const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
     const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
     const filtered=instFilter==="all"?activeClasses:activeClasses.filter(c=>c.institute===instFilter);
 
@@ -1598,7 +1640,7 @@ function ClassTrackerInner({user}){
                       <div className="trash-row-btns" style={{display:"flex",gap:8,flexShrink:0}}>
                         <button onClick={()=>restoreClass(tc)} onPointerDown={e=>rpl(e,false)}
                           style={{background:G.greenL,border:`1px solid rgba(27,138,76,0.2)`,color:G.green,borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden"}}>↩ Restore</button>
-                        <button onClick={()=>{if(window.confirm("Permanently delete? Cannot be undone."))permDeleteClass(tc.id);}}
+                        <button onClick={()=>{if(window.confirm("Permanently delete this class? Cannot be undone."))permDeleteClass(tc.id);}}
                           style={{background:G.redL,border:"1px solid #F5CACA",color:G.red,borderRadius:9,padding:"8px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans}}>Delete Forever</button>
                       </div>
                     </div>
