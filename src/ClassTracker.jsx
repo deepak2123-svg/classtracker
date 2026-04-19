@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, Component } from "react";
-import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db, getGlobalInstitutes } from "./firebase";
+import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db, getGlobalInstitutes, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
@@ -736,6 +736,7 @@ function ExportModal({data, teacherName, onClose}){
   td{padding:7px 10px;border-bottom:1px solid #e5e5e5;vertical-align:top}
   tr:nth-child(even) td{background:#f9fafb}
   .empty{text-align:center;padding:40px;color:#999}
+  @media print{body{padding:0}}
 </style></head><body>
 <h1>ClassLog — ${teacherName}</h1>
 <div class="sub">${label} · Exported ${new Date().toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</div>
@@ -744,12 +745,19 @@ ${rows.length===0
   : `<table><thead><tr><th>Date</th><th>Class</th><th>Institute</th><th>Subject</th><th>Time</th><th>Status</th><th>Title</th><th>Notes</th></tr></thead><tbody>
 ${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><td>${r.subject}</td><td style="white-space:nowrap">${r.time}</td><td>${r.status||""}</td><td><strong>${r.title}</strong></td><td>${r.notes}</td></tr>`).join("")}
 </tbody></table>`}
+<script>window.onload=()=>{window.print();}<\/script>
 </body></html>`;
 
-    const w=window.open("","_blank");
-    w.document.write(html);
-    w.document.close();
-    setTimeout(()=>w.print(),400);
+    // Use a Blob URL so browsers don't treat it as a popup
+    const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.target   = "_blank";
+    a.rel      = "noopener";
+    a.click();
+    // Revoke after a short delay to allow the tab to load the blob
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
   }
 
   function exportExcel(){
@@ -954,8 +962,10 @@ function ClassTrackerInner({user}){
   useEffect(()=>{
     loadUserData(user.uid).then(d=>{
       const base = d ? {...DEFAULT_DATA,...d,profile:d.profile||{name:""},trash:d.trash||{classes:[],notes:[]}} : DEFAULT_DATA;
-      if(!base.profile?.name && user.displayName) {
-        base.profile = { name: user.displayName.trim() };
+      // Purge trash items older than 30 days before they reach the UI
+      const purged = purgeExpiredTrash(base);
+      if(!purged.profile?.name && user.displayName) {
+        purged.profile = { name: user.displayName.trim() };
       }
 
       // Check localStorage for a pending save that may be newer than Firebase
@@ -963,29 +973,26 @@ function ClassTrackerInner({user}){
         const pending=localStorage.getItem("classlog_pending_"+user.uid);
         if(pending){
           const {data:localData,savedAt}=JSON.parse(pending);
-          // Use local data if it's newer (saved within last 24h and Firebase didn't have it)
           const ageHrs=(Date.now()-savedAt)/(1000*60*60);
           if(ageHrs<24 && localData){
-            setData({...base,...localData,profile:base.profile});
-            // Try to push the pending save to Firebase now
-            saveUserData(user.uid,{...base,...localData,profile:base.profile})
+            setData({...purged,...localData,profile:purged.profile});
+            saveUserData(user.uid,{...purged,...localData,profile:purged.profile})
               .then(()=>{
                 localStorage.removeItem("classlog_pending_"+user.uid);
                 setSaveErr(false);
               })
               .catch(()=>setSaveErr(true));
-            if(base.profile?.name) syncTeacherIndex(user.uid,base).catch(()=>{});
+            if(purged.profile?.name) syncTeacherIndex(user.uid,purged).catch(()=>{});
             setLoading(false);
             return;
           } else {
-            // Stale pending save — discard
             localStorage.removeItem("classlog_pending_"+user.uid);
           }
         }
       }catch(e){}
 
-      setData(base);
-      if(base.profile?.name) syncTeacherIndex(user.uid,base).catch(()=>{});
+      setData(purged);
+      if(purged.profile?.name) syncTeacherIndex(user.uid,purged).catch(()=>{});
       setLoading(false);
     }).catch(err=>{
       console.error("Failed to load data:",err);
@@ -1184,7 +1191,7 @@ function ClassTrackerInner({user}){
   const restoreNote=(tn)=>{setData(d=>{const{classId,dateKey,deletedAt,className,institute,...note}=tn;const cn=d.notes[classId]||{};const dn=cn[dateKey]||[];return{...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:[note,...dn]}},trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==note.id)}};});};
   const permDeleteNote=(id)=>setData(d=>({...d,trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==id)}}));
 
-  const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>s+(Array.isArray(arr)?arr.length:0),0);},0);
+  const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);},0);
   const canAdd=isDateAllowed(selectedDate);
   const dates=buildDateWindow();
   const selDateObj=dates.find(d=>d.key===selectedDate)||dates[7];

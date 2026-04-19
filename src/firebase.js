@@ -229,6 +229,19 @@ export async function removeTeacherFromSystem(uid) {
   try { await deleteDoc(doc(db, "roles", uid)); } catch {}
 }
 
+// ── Trash auto-purge ──────────────────────────────────────────────────────────
+// Removes trash items older than 30 days from the user's local data object.
+// Call this after loadUserData so stale items never reach the UI.
+// No Firestore write needed here — the next saveUserData call persists the cleanup.
+export function purgeExpiredTrash(data) {
+  if (!data) return data;
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - THIRTY_DAYS;
+  const trashedClasses = (data.trash?.classes || []).filter(tc => (tc.deletedAt || 0) > cutoff);
+  const trashedNotes   = (data.trash?.notes   || []).filter(tn => (tn.deletedAt || 0) > cutoff);
+  return { ...data, trash: { classes: trashedClasses, notes: trashedNotes } };
+}
+
 // ── Remove institute ──────────────────────────────────────────────────────────
 // Strips this institute from every teacher's index entry.
 // Teachers are NOT deleted — they may belong to other institutes.

@@ -1,6 +1,6 @@
 import { StrictMode, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { onAuth, getUserRole, promoteToAdmin, logout } from "./firebase";
+import { onAuth, getUserRole, logout } from "./firebase";
 import { Spinner } from "./shared.jsx";
 import Auth from "./Auth";
 import ClassTracker from "./ClassTracker";
@@ -22,14 +22,10 @@ function App() {
     setUser(u);
     if (u) {
       setRoleLoading(true);
-      if (IS_ADMIN_APP) {
-        // Anyone who signs in on the admin URL is automatically made admin
-        await promoteToAdmin(u.uid, "self-signup");
-        setRole("admin");
-      } else {
-        const r = await getUserRole(u.uid);
-        setRole(r);
-      }
+      // Always fetch the real role from Firestore — never auto-promote on the admin URL.
+      // Promotion only happens inside AdminAuth after a valid invite token is consumed.
+      const r = await getUserRole(u.uid);
+      setRole(r);
       setRoleLoading(false);
     } else {
       setRole(null);
@@ -43,10 +39,11 @@ function App() {
     // Not logged in → admin login screen
     if (!user) return <AdminAuth onVerified={setUser} />;
 
-    // Admin verified → panel (everyone on this URL is admin)
+    // Admin verified → panel
     if (role === "admin") return <AdminPanel user={user} />;
 
-    return <Spinner text="Verifying access…" />;
+    // Signed in but not admin — not yet promoted via invite
+    return <AccessDenied />;
   }
 
   // ── TEACHER APP (classtracker.vercel.app) ─────────────────────────────────
@@ -65,7 +62,7 @@ function AccessDenied() {
           Your account does not have admin privileges.<br/>Contact the super admin to request access.
         </p>
         <div style={{display:"flex",gap:10,justifyContent:"center"}}>
-          <a href="https://classtracker.vercel.app"
+          <a href="https://teacherct.vercel.app/"
             style={{background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,padding:"9px 18px",fontSize:13,textDecoration:"none"}}>
             ← Teacher app
           </a>

@@ -167,7 +167,7 @@ export default function AdminAuth({ onVerified }) {
         )}
       </div>
 
-      <a href="https://classtracker.vercel.app"
+      <a href="https://teacherct.vercel.app/"
         style={{marginTop:24,fontSize:14,color:"rgba(255,255,255,0.2)",fontFamily:G.mono,textDecoration:"none"}}
         onMouseEnter={e=>e.target.style.color="rgba(255,255,255,0.5)"}
         onMouseLeave={e=>e.target.style.color="rgba(255,255,255,0.2)"}>
