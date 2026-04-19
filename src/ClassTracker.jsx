@@ -879,6 +879,7 @@ function ClassTrackerInner({user}){
   const [leaveModal,setLeaveModal]     = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
   const [exportOpen,setExportOpen]       = useState(false);
+  const [statPeriod,setStatPeriod]       = useState("month");
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
