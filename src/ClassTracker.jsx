@@ -1317,7 +1317,7 @@ function ClassTrackerInner({user}){
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <span style={{fontSize:15,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:selDateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {selDateNotes.length} {selDateNotes.length===1?"entry":"entries"}</span></span>
-                {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});safeNav("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>+ Add Entry</button>}
+                {canAdd&&<button onClick={()=>{setActiveClass(selCls);setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,selCls.id,selectedDate)||{_dur:selCls?.duration||60})});safeNav("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>+ Add Entry</button>}
               </div>
               {selDateNotes.length===0?(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"40px 20px",textAlign:"center"}}>
@@ -1808,18 +1808,7 @@ function ClassTrackerInner({user}){
           </div>
           <div className="form-card" style={{...card,padding:"24px"}}>
             <div style={{marginBottom:18}}>
-              <label style={lbl}>Type</label>
-              <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                {Object.entries(TAG_STYLES).map(([key,val])=>(
-                  <button key={key} onClick={()=>setForm({...form,tag:key})}
-                    style={{background:form.tag===key?val.bg:G.surface,color:form.tag===key?val.text:G.textM,border:`1.5px solid ${form.tag===key?val.bg:G.border}`,borderRadius:20,padding:"8px 18px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:form.tag===key?600:500,transition:"all 0.15s"}}>
-                    {val.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={{marginBottom:18}}>
-              <label style={lbl}>Topic Status <span style={{color:G.textL,fontWeight:400,textTransform:"none",fontSize:12,marginLeft:4}}>(optional)</span></label>
+              <label style={lbl}>Topic Status</label>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                 {Object.entries(STATUS_STYLES).map(([key,val])=>(
                   <button key={key} onClick={()=>setForm({...form,status:form.status===key?"":key})}
