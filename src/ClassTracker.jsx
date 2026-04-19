@@ -349,7 +349,7 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
 
   return (
     <div style={{position:'relative'}}>
-      <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,overflow:'hidden',maxWidth:380}}>
+      <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,overflow:'hidden'}}>
         {/* Month nav — compact */}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px 4px'}}>
           <button onClick={()=>changeMonth(-1)}
@@ -1312,7 +1312,7 @@ function ClassTrackerInner({user}){
                 <button onClick={()=>setEditingClass(selCls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✏</button>
                 <button onClick={()=>setLeaveModal(selCls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🗑</button>
               </div>
-              <div style={{maxWidth:420}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/></div>
+              <div style={{maxWidth:420,margin:"0 auto"}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/></div>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -1401,7 +1401,7 @@ function ClassTrackerInner({user}){
             <button onClick={()=>setEditingClass(cls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:14,width:36,height:36,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>✏</button>
             <button onClick={()=>setLeaveModal(cls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:14,width:36,height:36,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>🗑</button>
           </div>
-          <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
+          <div style={{maxWidth:420}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/></div>
         </div>
         {/* Entries scroll area */}
         <div style={{flex:1,overflowY:"auto",padding:"14px 16px 16px",WebkitOverflowScrolling:"touch"}}>
@@ -1781,10 +1781,10 @@ function ClassTrackerInner({user}){
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
         <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<>
-            {activeClass&&<div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{width:8,height:8,borderRadius:"50%",background:color.bg}}/>
-              <span style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{activeClass.section}</span>
-              <span style={{fontSize:14,color:G.textM}}>· {activeClass.institute}</span>
+            {activeClass&&<div style={{display:"flex",alignItems:"center",gap:8,maxWidth:320,overflow:"hidden"}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:"#34D077",flexShrink:0}}/>
+              <span style={{fontSize:14,fontWeight:600,color:"rgba(255,255,255,0.95)",fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{activeClass.section}</span>
+              <span style={{fontSize:13,color:"rgba(255,255,255,0.5)",flexShrink:0,whiteSpace:"nowrap"}}>· {activeClass.institute}</span>
             </div>}
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
           </>}
