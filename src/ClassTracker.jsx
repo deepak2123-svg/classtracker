@@ -957,23 +957,77 @@ function ClassTrackerInner({user}){
       if(!base.profile?.name && user.displayName) {
         base.profile = { name: user.displayName.trim() };
       }
+
+      // Check localStorage for a pending save that may be newer than Firebase
+      try{
+        const pending=localStorage.getItem("classlog_pending_"+user.uid);
+        if(pending){
+          const {data:localData,savedAt}=JSON.parse(pending);
+          // Use local data if it's newer (saved within last 24h and Firebase didn't have it)
+          const ageHrs=(Date.now()-savedAt)/(1000*60*60);
+          if(ageHrs<24 && localData){
+            setData({...base,...localData,profile:base.profile});
+            // Try to push the pending save to Firebase now
+            saveUserData(user.uid,{...base,...localData,profile:base.profile})
+              .then(()=>{
+                localStorage.removeItem("classlog_pending_"+user.uid);
+                setSaveErr(false);
+              })
+              .catch(()=>setSaveErr(true));
+            if(base.profile?.name) syncTeacherIndex(user.uid,base).catch(()=>{});
+            setLoading(false);
+            return;
+          } else {
+            // Stale pending save — discard
+            localStorage.removeItem("classlog_pending_"+user.uid);
+          }
+        }
+      }catch(e){}
+
       setData(base);
       if(base.profile?.name) syncTeacherIndex(user.uid,base).catch(()=>{});
       setLoading(false);
     }).catch(err=>{
       console.error("Failed to load data:",err);
-      // If offline, use DEFAULT_DATA and let them work — save will retry
-      setData(prev=>prev.classes.length>0?prev:{...DEFAULT_DATA,
-        profile:{name:user.displayName||""}});
+      // Offline — try to restore from localStorage
+      try{
+        const pending=localStorage.getItem("classlog_pending_"+user.uid);
+        if(pending){
+          const {data:localData}=JSON.parse(pending);
+          if(localData){
+            setData({...DEFAULT_DATA,...localData,profile:{name:user.displayName||""}});
+            setLoading(false);
+            setSaveErr(true);
+            return;
+          }
+        }
+      }catch(e){}
+      setData({...DEFAULT_DATA,profile:{name:user.displayName||""}});
       setLoading(false);
-      setSaveErr(true); // shows the save badge in error state
+      setSaveErr(true);
     });
   },[user.uid]);
   useEffect(()=>{
     if(loading)return;
     setSaving(true);setSaveErr(false);
     clearTimeout(saveTimer.current);
-    saveTimer.current=setTimeout(()=>{saveUserData(user.uid,data).then(()=>setSaving(false)).catch(()=>{setSaving(false);setSaveErr(true);});},1000);
+    saveTimer.current=setTimeout(()=>{
+      saveUserData(user.uid,data)
+        .then(()=>{
+          setSaving(false);
+          setSaveErr(false);
+          // Clear any pending offline save since we saved successfully
+          try{localStorage.removeItem("classlog_pending_"+user.uid);}catch(e){}
+        })
+        .catch(()=>{
+          setSaving(false);
+          setSaveErr(true);
+          // Store to localStorage so data survives offline
+          try{
+            localStorage.setItem("classlog_pending_"+user.uid, JSON.stringify({data,savedAt:Date.now()}));
+          }catch(e){}
+        });
+    },1000);
     return()=>clearTimeout(saveTimer.current);
   },[data]);
   // Safe navigation — shows in-app warning if save is in flight
@@ -1004,8 +1058,17 @@ function ClassTrackerInner({user}){
     const goOffline=()=>setIsOffline(true);
     const goOnline=()=>{
       setIsOffline(false);
-      // Retry save when back online
-      if(saveErr) saveUserData(user.uid,data).catch(()=>setSaveErr(true));
+      if(saveErr){
+        setSaving(true);
+        saveUserData(user.uid,data)
+          .then(()=>{
+            setSaving(false);
+            setSaveErr(false);
+            try{localStorage.removeItem("classlog_pending_"+user.uid);}catch(e){}
+            showInlineToast("Back online — changes saved successfully");
+          })
+          .catch(()=>{setSaving(false);setSaveErr(true);});
+      }
     };
     window.addEventListener("offline",goOffline);
     window.addEventListener("online",goOnline);
@@ -1035,11 +1098,17 @@ function ClassTrackerInner({user}){
   const teacherName=data.profile.name;
   const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
 
-  const SaveBadge=()=>saving||saveErr?(
-    <div style={{position:"fixed",top:70,right:16,borderRadius:20,padding:"5px 14px",fontSize:13,fontFamily:G.mono,zIndex:999,background:saveErr?G.red:G.navy,color:"#fff",boxShadow:G.shadowMd,letterSpacing:0.3}}>
-      {saveErr?"⚠ save failed":"saving…"}
-    </div>
-  ):null;
+  const SaveBadge=()=>{
+    if(!saving&&!saveErr) return null;
+    const isOfflineSave=saveErr&&isOffline;
+    return(
+      <div style={{position:"fixed",top:70,right:16,borderRadius:20,padding:"5px 14px",fontSize:13,fontFamily:G.mono,zIndex:999,
+        background:isOfflineSave?"#B45309":saveErr?G.red:G.navy,
+        color:"#fff",boxShadow:G.shadowMd,letterSpacing:0.3,display:"flex",alignItems:"center",gap:6}}>
+        {isOfflineSave?"📱 saved locally":saveErr?"⚠ save failed":"saving…"}
+      </div>
+    );
+  };
 
   const sortedByUsage=(opts,field)=>{
     const c={};

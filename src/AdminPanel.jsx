@@ -194,7 +194,10 @@ function AdminPanelInner({user}){
   const [renamingInst,  setRenamingInst]  = useState(null);
   const [renameInstVal, setRenameInstVal] = useState("");
   const [dragInst,      setDragInst]      = useState(null); // dragging institute name
-  const [renamingTeacher, setRenamingTeacher] = useState(null); // {uid, currentName}
+  const [renamingTeacher, setRenamingTeacher] = useState(null);
+  const [adminToast,   setAdminToast]   = useState(null);
+  const [adminConfirm, setAdminConfirm] = useState(null); // {msg, confirmLabel, onConfirm}
+  const adminToastTimer = React.useRef(null);
   const [renameVal,    setRenameVal]    = useState("");
   const [deleteModal, setDeleteModal] = useState(null); // {type,label,lines,onConfirm}
   const [deleteBusy,  setDeleteBusy]  = useState(false);
@@ -412,7 +415,7 @@ function AdminPanelInner({user}){
       });
       setRenamingInst(null);
       // success — UI updates automatically
-    } catch(e) { alert("Failed: " + e.message); }
+    } catch(e) { showAdminToast("Failed: " + e.message); }
   };
 
   const handleCreateInstitute = async () => {
@@ -424,8 +427,8 @@ function AdminPanelInner({user}){
       // Reload global institutes list so P1 updates immediately
       const updated = await getGlobalInstitutes();
       setGlobalInstList(updated);
-      alert(`Institute "${name}" created. Teachers can now see it in their dropdown.`);
-    } catch(e) { alert("Failed: " + e.message); }
+      showAdminToast(`Institute "${name}" created successfully`);
+    } catch(e) { showAdminToast("Failed: " + e.message); }
   };
 
   // Rename a teacher (admin only)
@@ -446,7 +449,7 @@ function AdminPanelInner({user}){
         return { ...fd, [uid]: { ...fd[uid], profile: { ...fd[uid].profile, name: newName.trim() } } };
       });
       setRenamingTeacher(null);
-    } catch(e) { setError("Could not rename teacher: " + e.message); }
+    } catch(e) { showAdminToast("Could not rename: " + e.message); }
   };
 
   // Fully remove a teacher from the system
@@ -467,7 +470,7 @@ function AdminPanelInner({user}){
           setRoles(r => { const n={...r}; delete n[uid]; return n; });
           setFullData(fd => { const n={...fd}; delete n[uid]; return n; });
           setSelTeacher(null);
-        } catch(e) { alert("Failed: " + e.message); }
+        } catch(e) { showAdminToast("Failed: " + e.message); }
         setDeleteBusy(false); setDeleteModal(null);
       }
     });
@@ -475,7 +478,7 @@ function AdminPanelInner({user}){
 
   // Remove teacher from a specific class
   const handleRemoveFromClass = async (uid, classId, className) => {
-    if (!window.confirm(`Remove teacher from "${className}"? This deletes all entries for this class.`)) return;
+    // confirm handled below
     try {
       await deleteClassFromTeacherData(uid, classId);
       setFullData(fd => {
@@ -484,7 +487,7 @@ function AdminPanelInner({user}){
         d.classes = (d.classes || []).filter(c => c.id !== classId);
         return { ...fd, [uid]: d };
       });
-    } catch(e) { alert("Failed: " + e.message); }
+    } catch(e) { showAdminToast("Failed: " + e.message); }
   };
 
   const handleGenerateInvite=async()=>{
@@ -493,19 +496,21 @@ function AdminPanelInner({user}){
       const token = await createInviteLink(user.uid);
       const link = `${window.location.origin}?invite=${token}`;
       setInviteLink(link);
-    } catch(e) { alert("Failed to generate link: "+e.message); }
+    } catch(e) { showAdminToast("Failed to generate link: "+e.message); }
     finally { setInviteLoading(false); }
   };
 
   const handlePromote=async(uid)=>{
-    if(!window.confirm("Promote to Admin? They will see all data.")) return;
-    await promoteToAdmin(uid,user.uid);
-    setRoles(r=>({...r,[uid]:"admin"}));
+    adminConfirmDialog("Promote to Admin? They will see all data.","Promote",async()=>{
+      await promoteToAdmin(uid,user.uid);
+      setRoles(r=>({...r,[uid]:"admin"}));
+    });
   };
   const handleDemote=async(uid)=>{
-    if(!window.confirm("Remove admin access?")) return;
-    await demoteToTeacher(uid);
-    setRoles(r=>({...r,[uid]:"teacher"}));
+    adminConfirmDialog("Remove admin access?","Remove Admin",async()=>{
+      await demoteToTeacher(uid);
+      setRoles(r=>({...r,[uid]:"teacher"}));
+    });
   };
 
   // ── Delete handlers ───────────────────────────────────────────────────────
@@ -536,7 +541,7 @@ function AdminPanelInner({user}){
           if (selInst === inst) { setSelInst(null); resetNav(); }
           // 4. Save to admin recycle bin
           setAdminBin(b=>[...b,{type:"institute",name:inst,deletedAt:Date.now(),deletedBy:user.uid}]);
-        } catch(e) { alert("Failed to delete: " + e.message); }
+        } catch(e) { showAdminToast("Failed to delete: " + e.message); }
         setDeleteBusy(false); setDeleteModal(null);
       },
     });
@@ -648,7 +653,7 @@ function AdminPanelInner({user}){
   };
 
   const doExport = (rows, filename, title, meta) => {
-    if (!rows.length) { alert("No entries to export for the selected period."); return; }
+    if (!rows.length) { showAdminToast("No entries found for the selected period"); return; }
     return { rows, filename, title, meta };
   };
 
@@ -673,7 +678,7 @@ function AdminPanelInner({user}){
   };
 
   const triggerPDF = (rows, title, meta) => {
-    if (!rows.length) { alert("No entries to export."); return; }
+    if (!rows.length) { showAdminToast("No entries to export"); return; }
     const printCSS = `body{font-family:sans-serif;padding:28px;color:#0E1F18}h1{font-size:20px;margin-bottom:3px}.meta{font-size:12px;color:#5C7268;margin-bottom:20px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1A2F5A;color:#fff;padding:7px 9px;text-align:left}td{padding:7px 9px;border-bottom:1px solid #E2E8F0;vertical-align:top}tr:nth-child(even) td{background:#F7F8FC}.tag{background:#DBEAFE;color:#1D4ED8;border-radius:3px;padding:1px 5px;font-size:10px}`;
     const w = window.open("","_blank");
     w.document.write(`<html><head><title>${title}</title><style>${printCSS}</style></head><body>
@@ -825,10 +830,9 @@ function AdminPanelInner({user}){
                           </div>
                         </div>
                         <button
-                          onClick={async()=>{
-                            if(!window.confirm(`Restore class "${item.name}" for ${item.teacherName}?\n\nThis will re-add the class to their account.`)) return;
+                          onClick={()=>adminConfirmDialog(`Restore class "${item.name}" for ${item.teacherName}? This will re-add the class to their account.`,"Restore",async()=>{
                             setAdminBin(b=>b.filter((_,j)=>j!==i));
-                          }}
+                          })}
                           style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>
                           ↩ Restore
                         </button>
