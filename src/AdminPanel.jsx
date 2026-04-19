@@ -258,7 +258,10 @@ function AdminPanelInner({user}){
     });
     // Remove locally deleted institutes
     deletedInstitutes.forEach(i=>set.delete(i));
-    return Array.from(set).sort();
+    // Preserve admin-defined order from globalInstList, append any extras at end
+    const ordered = globalInstList.filter(i=>set.has(i));
+    const extras   = Array.from(set).filter(i=>!globalInstList.includes(i)).sort();
+    return [...ordered, ...extras];
   },[globalInstList,teachers,fullData,deletedInstitutes]);
 
   const totalEntries=useMemo(()=>{
