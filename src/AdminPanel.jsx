@@ -193,7 +193,9 @@ function AdminPanelInner({user}){
   const [newInstName,  setNewInstName]  = useState(""); // new institute input
   const [renamingInst,  setRenamingInst]  = useState(null);
   const [renameInstVal, setRenameInstVal] = useState("");
-  const [dragInst,      setDragInst]      = useState(null); // dragging institute name
+  const [dragInst,      setDragInst]      = useState(null);
+  const [dragOverInst,  setDragOverInst]  = useState(null);
+  const dragInstRef                        = React.useRef(null);
   const [renamingTeacher, setRenamingTeacher] = useState(null);
   const [adminToast,   setAdminToast]   = useState(null);
   const [adminConfirm, setAdminConfirm] = useState(null); // {msg, confirmLabel, onConfirm}
@@ -1234,16 +1236,91 @@ function AdminPanelInner({user}){
         <MobileStats/>
         <div style={{padding:"12px 14px 40px"}}>
           <div style={{fontSize:11,fontWeight:700,color:G.textL,letterSpacing:1.5,fontFamily:G.sans,textTransform:"uppercase",marginBottom:12}}>Institutes</div>
-          {institutes.map(inst=>{
+          {institutes.map((inst,idx)=>{
             const tCount=teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())||(fullData[t.uid]?.classes||[]).some(c=>(c.institute||"").trim()===inst.trim())).length;
             const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())).length;
+            const isDragging=dragInst===inst;
+            const isDragOver=dragOverInst===inst&&dragInst!==inst;
             return(
-              <div key={inst} onClick={()=>{onSelectInstitute(inst);setMobileStep(1);}}
-                style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:"16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:G.shadowSm,cursor:"pointer",transition:"all 0.15s"}}
-                onTouchStart={e=>e.currentTarget.style.background=G.blueL}
-                onTouchEnd={e=>e.currentTarget.style.background=G.surface}>
-                <div>
-                  <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{inst}</div>
+              <div key={inst}
+                draggable
+                onDragStart={e=>{setDragInst(inst);dragInstRef.current=inst;e.dataTransfer.effectAllowed="move";}}
+                onDragOver={e=>{e.preventDefault();if(dragInstRef.current!==inst)setDragOverInst(inst);}}
+                onDragLeave={()=>setDragOverInst(null)}
+                onDrop={e=>{
+                  e.preventDefault();
+                  if(!dragInstRef.current||dragInstRef.current===inst)return;
+                  const from=institutes.indexOf(dragInstRef.current);
+                  const to=institutes.indexOf(inst);
+                  if(from<0||to<0)return;
+                  const reordered=[...institutes];
+                  const [moved]=reordered.splice(from,1);
+                  reordered.splice(to,0,moved);
+                  saveInstOrder(reordered);
+                  setDragInst(null);setDragOverInst(null);dragInstRef.current=null;
+                }}
+                onDragEnd={()=>{setDragInst(null);setDragOverInst(null);dragInstRef.current=null;}}
+                onTouchStart={e=>{
+                  // Long press to drag on mobile
+                  dragInstRef.current=null;
+                  const timer=setTimeout(()=>{
+                    dragInstRef.current=inst;
+                    setDragInst(inst);
+                    e.currentTarget.style.boxShadow="0 8px 24px rgba(0,0,0,0.18)";
+                    e.currentTarget.style.transform="scale(1.02)";
+                  },400);
+                  e.currentTarget._longPressTimer=timer;
+                }}
+                onTouchMove={e=>{
+                  if(!dragInstRef.current)return;
+                  e.preventDefault();
+                  const touch=e.touches[0];
+                  const el=document.elementFromPoint(touch.clientX,touch.clientY);
+                  const card=el?.closest("[data-inst]");
+                  if(card&&card.dataset.inst!==dragInstRef.current) setDragOverInst(card.dataset.inst);
+                }}
+                onTouchEnd={e=>{
+                  clearTimeout(e.currentTarget._longPressTimer);
+                  if(dragInstRef.current&&dragOverInst&&dragOverInst!==dragInstRef.current){
+                    const from=institutes.indexOf(dragInstRef.current);
+                    const to=institutes.indexOf(dragOverInst);
+                    if(from>=0&&to>=0){
+                      const reordered=[...institutes];
+                      const [moved]=reordered.splice(from,1);
+                      reordered.splice(to,0,moved);
+                      saveInstOrder(reordered);
+                    }
+                  } else if(!dragInstRef.current){
+                    onSelectInstitute(inst);setMobileStep(1);
+                  }
+                  e.currentTarget.style.boxShadow="";
+                  e.currentTarget.style.transform="";
+                  setDragInst(null);setDragOverInst(null);dragInstRef.current=null;
+                }}
+                data-inst={inst}
+                style={{
+                  background:isDragOver?G.blueL:G.surface,
+                  borderRadius:14,
+                  border:isDragging?`2px dashed ${G.blue}`:`1px solid ${isDragOver?G.blue:G.border}`,
+                  padding:"16px",marginBottom:10,
+                  display:"flex",justifyContent:"space-between",alignItems:"center",
+                  boxShadow:isDragging?"0 8px 24px rgba(0,0,0,0.15)":G.shadowSm,
+                  cursor:"grab",transition:"all 0.15s",
+                  opacity:isDragging?0.5:1,
+                  transform:isDragging?"scale(1.01)":"scale(1)",
+                  WebkitUserSelect:"none",userSelect:"none",
+                  touchAction:dragInst?"none":"auto",
+                }}>
+                {/* Drag handle */}
+                <div style={{display:"flex",alignItems:"center",gap:2,flexShrink:0,marginRight:12,color:G.textL,cursor:"grab"}}>
+                  <svg width="14" height="20" viewBox="0 0 14 20" fill="currentColor">
+                    <circle cx="4" cy="4" r="2"/><circle cx="10" cy="4" r="2"/>
+                    <circle cx="4" cy="10" r="2"/><circle cx="10" cy="10" r="2"/>
+                    <circle cx="4" cy="16" r="2"/><circle cx="10" cy="16" r="2"/>
+                  </svg>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:17,fontWeight:700,color:isDragOver?G.blue:G.text,fontFamily:G.display}}>{inst}</div>
                   <div style={{display:"flex",gap:8,marginTop:6}}>
                     <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 10px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>{clsCount} class{clsCount!==1?"es":""}</span>
                     <span style={{fontSize:13,color:G.textM,fontFamily:G.sans,alignSelf:"center"}}>{tCount} teacher{tCount!==1?"s":""}</span>
