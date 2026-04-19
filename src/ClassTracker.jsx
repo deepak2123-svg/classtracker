@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, Component } from "react";
 import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db, getGlobalInstitutes } from "./firebase";
-import { TAG_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
+import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
 const G = {
@@ -698,6 +698,7 @@ function ExportModal({data, teacherName, onClose}){
             subject:cls.subject,
             type:note.tag||"note",
             time:note.timeStart?(note.timeEnd?`${note.timeStart} - ${note.timeEnd}`:note.timeStart):"",
+            status:note.status&&STATUS_STYLES[note.status]?STATUS_STYLES[note.status].label.replace(/[🔵🟡🟢🟠]/g,'').trim():"",
             title:note.title||"",
             notes:note.body||"",
           });
@@ -740,8 +741,8 @@ function ExportModal({data, teacherName, onClose}){
 <div class="sub">${label} · Exported ${new Date().toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</div>
 ${rows.length===0
   ? '<div class="empty">No entries found for this period.</div>'
-  : `<table><thead><tr><th>Date</th><th>Class</th><th>Institute</th><th>Subject</th><th>Time</th><th>Title</th><th>Notes</th></tr></thead><tbody>
-${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><td>${r.subject}</td><td style="white-space:nowrap">${r.time}</td><td><strong>${r.title}</strong></td><td>${r.notes}</td></tr>`).join("")}
+  : `<table><thead><tr><th>Date</th><th>Class</th><th>Institute</th><th>Subject</th><th>Time</th><th>Status</th><th>Title</th><th>Notes</th></tr></thead><tbody>
+${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><td>${r.subject}</td><td style="white-space:nowrap">${r.time}</td><td>${r.status||""}</td><td><strong>${r.title}</strong></td><td>${r.notes}</td></tr>`).join("")}
 </tbody></table>`}
 </body></html>`;
 
@@ -755,13 +756,13 @@ ${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><
     const rows=getEntries();
     const label=periodLabel();
     // Build CSV (opens in Excel on all platforms)
-    const headers=["Date","Class","Institute","Subject","Time","Title","Notes"];
+    const headers=["Date","Class","Institute","Subject","Time","Status","Title","Notes"];
     const escape=v=>(`"${String(v||"").replace(/"/g,'""')}"`);
     const csv=[
       `ClassLog Export — ${teacherName} — ${label}`,
       "",
       headers.join(","),
-      ...rows.map(r=>[r.date,r.class,r.institute,r.subject,r.time,r.title,r.notes].map(escape).join(","))
+      ...rows.map(r=>[r.date,r.class,r.institute,r.subject,r.time,r.status||"",r.title,r.notes].map(escape).join(","))
     ].join("\r\n");
 
     const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
@@ -923,7 +924,7 @@ function ClassTrackerInner({user}){
   const [view,setView]         = useState("home");
   const [activeClass,setActiveClass] = useState(null);
   const [selectedDate,setSelectedDate] = useState(todayKey());
-  const [newNote,setNewNote]   = useState({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});
+  const [newNote,setNewNote]   = useState({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});
   const [editNote,setEditNote] = useState(null);
   const [newClass,setNewClass] = useState({institute:"",section:"",subject:""});
   const [search,setSearch]     = useState("");
@@ -1072,9 +1073,9 @@ function ClassTrackerInner({user}){
   const addNote=()=>{
     if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     if(!newNote.title.trim()&&!newNote.body.trim())return;
-    const note={id:Date.now().toString(),...newNote,teacherName,created:Date.now()};
+    const note={id:Date.now().toString(),...newNote,status:newNote.status||"",teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
-    setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:""});setView("classDetail");
+    setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});setView("classDetail");
   };
   const saveEdit=()=>{
     if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
@@ -1433,6 +1434,7 @@ function ClassTrackerInner({user}){
                           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:note.title?8:0}}>
                             <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
                             {note.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
+                            {note.status&&STATUS_STYLES[note.status]&&<span style={{background:STATUS_STYLES[note.status].bg,color:STATUS_STYLES[note.status].text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.sans,fontWeight:600}}>{STATUS_STYLES[note.status].label}</span>}
                           </div>
                           {note.title&&<div style={{fontWeight:700,fontSize:17,color:G.text,fontFamily:G.display,lineHeight:1.3,marginBottom:4}}>{note.title}</div>}
                           {note.body&&<p style={{margin:0,fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
@@ -1815,6 +1817,22 @@ function ClassTrackerInner({user}){
                   </button>
                 ))}
               </div>
+            </div>
+            <div style={{marginBottom:18}}>
+              <label style={lbl}>Topic Status <span style={{color:G.textL,fontWeight:400,textTransform:"none",fontSize:12,marginLeft:4}}>(optional)</span></label>
+              <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                {Object.entries(STATUS_STYLES).map(([key,val])=>(
+                  <button key={key} onClick={()=>setForm({...form,status:form.status===key?"":key})}
+                    style={{background:form.status===key?val.bg:G.surface,color:form.status===key?val.text:G.textM,
+                      border:`1.5px solid ${form.status===key?val.dot:G.border}`,
+                      borderRadius:20,padding:"8px 18px",fontSize:14,cursor:"pointer",fontFamily:G.sans,
+                      fontWeight:form.status===key?700:500,transition:"all 0.15s",
+                      WebkitTapHighlightColor:"transparent"}}>
+                    {val.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{fontSize:12,color:G.textL,marginTop:5}}>Tap again to deselect</div>
             </div>
             <div style={{marginBottom:16}}>
               {form._suggested&&form.timeStart&&(

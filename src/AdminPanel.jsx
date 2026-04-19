@@ -6,7 +6,7 @@ import {
   deleteEntryFromTeacherData, deleteClassFromTeacherData,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute,
 } from "./firebase";
-import { Avatar, todayKey, formatPeriod, TAG_STYLES } from "./shared.jsx";
+import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES } from "./shared.jsx";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const G = {
@@ -1836,6 +1836,7 @@ function AdminPanelInner({user}){
                           {note.timeEnd&&<div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:3}}>→ {fmt12(note.timeEnd)}</div>}
                         </div>
                         <div>
+                          {note.status&&STATUS_STYLES[note.status]&&<span style={{background:STATUS_STYLES[note.status].bg,color:STATUS_STYLES[note.status].text,fontSize:11,borderRadius:8,padding:"2px 8px",fontFamily:"'Inter',sans-serif",fontWeight:600,display:"inline-block",marginBottom:4}}>{STATUS_STYLES[note.status].label}</span>}
                           {note.title&&<div style={{fontSize:15,fontWeight:600,color:G.text,fontFamily:G.display}}>{note.title}</div>}
                           {note.body&&<div style={{fontSize:13,color:G.textM,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{note.body}</div>}
                         </div>

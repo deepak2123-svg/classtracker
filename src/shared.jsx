@@ -9,6 +9,13 @@ export const COLORS = [
   { bg:"#F9A8D4", light:"#FDE8F5", text:"#7C1A50" },
 ];
 
+export const STATUS_STYLES = {
+  started:    { bg:"#DBEAFE", text:"#1D4ED8", label:"🔵 Started",     dot:"#3B82F6" },
+  inprogress: { bg:"#FEF3C7", text:"#B45309", label:"🟡 In Progress", dot:"#F59E0B" },
+  completed:  { bg:"#D1FAE5", text:"#065F46", label:"🟢 Completed",   dot:"#10B981" },
+  doubts:     { bg:"#FFEDD5", text:"#9A3412", label:"🟠 Doubts",      dot:"#F97316" },
+};
+
 export const TAG_STYLES = {
   note:      { bg:"#E8EDFF", text:"#3730A3", label:"📝 Note" },
   important: { bg:"#FEE2E2", text:"#991B1B", label:"🔥 Important" },
