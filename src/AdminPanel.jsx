@@ -1312,12 +1312,8 @@ function AdminPanelInner({user}){
                   touchAction:dragInst?"none":"auto",
                 }}>
                 {/* Drag handle */}
-                <div style={{display:"flex",alignItems:"center",gap:2,flexShrink:0,marginRight:12,color:G.textL,cursor:"grab"}}>
-                  <svg width="14" height="20" viewBox="0 0 14 20" fill="currentColor">
-                    <circle cx="4" cy="4" r="2"/><circle cx="10" cy="4" r="2"/>
-                    <circle cx="4" cy="10" r="2"/><circle cx="10" cy="10" r="2"/>
-                    <circle cx="4" cy="16" r="2"/><circle cx="10" cy="16" r="2"/>
-                  </svg>
+                <div style={{display:"flex",alignItems:"center",flexShrink:0,marginRight:10,color:G.borderM,cursor:"grab",fontSize:18,letterSpacing:1,lineHeight:1,userSelect:"none",WebkitUserSelect:"none"}}>
+                  &#9776;
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:17,fontWeight:700,color:isDragOver?G.blue:G.text,fontFamily:G.display}}>{inst}</div>
