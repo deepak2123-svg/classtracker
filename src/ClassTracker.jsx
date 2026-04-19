@@ -66,6 +66,31 @@ class CTErrorBoundary extends Component {
 }
 
 
+// ── Confirm Modal (replaces window.confirm everywhere) ───────────────────────
+function ConfirmModal({message, confirmLabel="Delete", onConfirm, onClose}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+      <div style={{background:"#fff",borderRadius:22,padding:"26px 22px",width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.25)",textAlign:"center"}}>
+        <div style={{width:54,height:54,borderRadius:16,background:"#FEE2E2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:26}}>
+          🗑
+        </div>
+        <p style={{fontSize:15,color:"#374151",marginBottom:24,lineHeight:1.6,fontFamily:"'Inter',sans-serif"}}>{message}</p>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onClose}
+            style={{flex:1,padding:"13px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#374151",fontFamily:"'Inter',sans-serif",minHeight:48,WebkitTapHighlightColor:"transparent"}}>
+            Cancel
+          </button>
+          <button onClick={()=>{onConfirm();onClose();}}
+            style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"#DC2626",fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:"'Inter',sans-serif",minHeight:48,WebkitTapHighlightColor:"transparent"}}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Sign Out Modal ────────────────────────────────────────────────────────────
 function SignOutModal({onConfirm,onClose}){
   return(
@@ -883,6 +908,7 @@ function ClassTrackerInner({user}){
   const [isOffline,setIsOffline]         = useState(!navigator.onLine);
   const [inlineToast,setInlineToast]     = useState(null);
   const inlineToastTimer                 = useRef(null);
+  const [confirmModal,setConfirmModal]   = useState(null); // {message,onConfirm}
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
@@ -1048,6 +1074,7 @@ function ClassTrackerInner({user}){
           {inlineToast}
         </div>
       )}
+      {confirmModal && <ConfirmModal message={confirmModal.message} confirmLabel={confirmModal.label||"Delete"} onConfirm={confirmModal.onConfirm} onClose={()=>setConfirmModal(null)}/>}
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
       {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
@@ -1098,7 +1125,7 @@ function ClassTrackerInner({user}){
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
     const ClassCard = ({cls, onClick}) => {
       const ic=instColor(cls.institute);
-      const total=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+      const total=Object.values(data.notes?.[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
       const todayArr=(data.notes[cls.id]||{})[todayKey()];
       const todayN=Array.isArray(todayArr)?todayArr.length:0;
       return(
@@ -1202,7 +1229,7 @@ function ClassTrackerInner({user}){
             {filtered.map(cls=>{
               const ic=instColor(cls.institute);
               const isSel=selCls?.id===cls.id;
-              const total=Object.values(data.notes[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+              const total=Object.values(data.notes?.[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
               const todayN=Array.isArray((data.notes[cls.id]||{})[todayKey()])?(data.notes[cls.id]||{})[todayKey()].length:0;
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
@@ -1255,7 +1282,7 @@ function ClassTrackerInner({user}){
                 </div>
               ):(
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {selDateNotes.map(note=>{const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;return(
+                  {selDateNotes.map(note=>{const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;return(
                     <div key={note.id} style={{background:G.surface,borderRadius:13,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
                       <div style={{height:3,background:tag.bg}}/>
                       <div style={{padding:"12px 14px"}}>
@@ -1309,7 +1336,7 @@ function ClassTrackerInner({user}){
     const color=instColor(cls.institute);
     const classNotes=getClassNotes(cls.id);
     const dateNotes=getDateNotes(cls.id,selectedDate);
-    const totalCount=Object.values(classNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+    const totalCount=Object.values(classNotes||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
     const noteDates=Object.fromEntries(Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
@@ -1353,7 +1380,7 @@ function ClassTrackerInner({user}){
           ):(
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {dateNotes.map(note=>{
-                const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
+                const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
                 return(
                   <div key={note.id} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
                     <div style={{height:4,background:tag.bg}}/>
@@ -1469,7 +1496,7 @@ function ClassTrackerInner({user}){
     const classStats=data.classes.filter(c=>!c.left).map(cls=>{
       const ic=instColor(cls.institute);
       let mins=0,sessions=0;
-      Object.entries(data.notes[cls.id]||{}).forEach(([dk,entries])=>{
+      Object.entries(data.notes?.[cls.id]||{}).forEach(([dk,entries])=>{
         if(dk<rangeStartKey||dk>todayK)return;
         if(!Array.isArray(entries))return;
         entries.forEach(e=>{
@@ -1597,8 +1624,8 @@ function ClassTrackerInner({user}){
   }
 
   if(view==="trash"){
-    const tClasses=(data.trash?.classes||[]).sort((a,b)=>b.deletedAt-a.deletedAt);
-    const tNotes=(data.trash?.notes||[]).sort((a,b)=>b.deletedAt-a.deletedAt);
+    const tClasses=(Array.isArray(data.trash?.classes)?data.trash.classes:[]).sort((a,b)=>b.deletedAt-a.deletedAt);
+    const tNotes=(Array.isArray(data.trash?.notes)?data.trash.notes:[]).sort((a,b)=>b.deletedAt-a.deletedAt);
     const daysLeft=ts=>Math.max(0,30-Math.floor((Date.now()-ts)/(1000*60*60*24)));
     return(
       <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
@@ -1640,7 +1667,7 @@ function ClassTrackerInner({user}){
                       <div className="trash-row-btns" style={{display:"flex",gap:8,flexShrink:0}}>
                         <button onClick={()=>restoreClass(tc)} onPointerDown={e=>rpl(e,false)}
                           style={{background:G.greenL,border:`1px solid rgba(27,138,76,0.2)`,color:G.green,borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden"}}>↩ Restore</button>
-                        <button onClick={()=>{if(window.confirm("Permanently delete this class? Cannot be undone."))permDeleteClass(tc.id);}}
+                        <button onClick={()=>setConfirmModal({message:`Permanently delete "${tc.section}"? This cannot be undone.`,label:"Delete Class",onConfirm:()=>permDeleteClass(tc.id)})}
                           style={{background:G.redL,border:"1px solid #F5CACA",color:G.red,borderRadius:9,padding:"8px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans}}>Delete Forever</button>
                       </div>
                     </div>
@@ -1676,7 +1703,7 @@ function ClassTrackerInner({user}){
                           {classExists
                             ?<button onClick={()=>restoreNote(tn)} style={{background:G.greenL,border:`1px solid rgba(27,138,76,0.2)`,color:G.green,borderRadius:9,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600}}>↩ Restore</button>
                             :<span style={{fontSize:14,color:G.textL,fontFamily:G.sans,padding:"7px 4px"}}>Class deleted</span>}
-                          <button onClick={()=>{if(window.confirm("Permanently delete this entry?"))permDeleteNote(tn.id);}}
+                          <button onClick={()=>setConfirmModal({message:"Permanently delete this entry? Cannot be undone.",label:"Delete Entry",onConfirm:()=>permDeleteNote(tn.id)})}
                             style={{background:G.redL,border:"1px solid #F5CACA",color:G.red,borderRadius:9,padding:"7px 12px",fontSize:14,cursor:"pointer",fontFamily:G.sans}}>✕</button>
                         </div>
                       </div>
