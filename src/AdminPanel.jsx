@@ -1311,9 +1311,14 @@ function AdminPanelInner({user}){
                   WebkitUserSelect:"none",userSelect:"none",
                   touchAction:dragInst?"none":"auto",
                 }}>
-                {/* Drag handle */}
-                <div style={{display:"flex",alignItems:"center",flexShrink:0,marginRight:10,color:G.borderM,cursor:"grab",fontSize:18,letterSpacing:1,lineHeight:1,userSelect:"none",WebkitUserSelect:"none"}}>
-                  &#9776;
+                {/* Drag handle — pure CSS dots, renders on all platforms */}
+                <div style={{display:"flex",flexDirection:"column",justifyContent:"space-between",width:14,height:20,flexShrink:0,marginRight:12,cursor:"grab",padding:"2px 0",userSelect:"none",WebkitUserSelect:"none"}}>
+                  {[0,1,2].map(r=>(
+                    <div key={r} style={{display:"flex",justifyContent:"space-between",width:14}}>
+                      <div style={{width:4,height:4,borderRadius:"50%",background:"#B8CEC2"}}/>
+                      <div style={{width:4,height:4,borderRadius:"50%",background:"#B8CEC2"}}/>
+                    </div>
+                  ))}
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:17,fontWeight:700,color:isDragOver?G.blue:G.text,fontFamily:G.display}}>{inst}</div>
