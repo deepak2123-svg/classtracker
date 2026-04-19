@@ -408,7 +408,7 @@ function AdminPanelInner({user}){
         const n = new Set(s); n.delete(oldName); n.add(newName.trim()); return n;
       });
       setRenamingInst(null);
-      alert(`Renamed to "${newName.trim()}"`);
+      // success — UI updates automatically
     } catch(e) { alert("Failed: " + e.message); }
   };
 
@@ -443,7 +443,7 @@ function AdminPanelInner({user}){
         return { ...fd, [uid]: { ...fd[uid], profile: { ...fd[uid].profile, name: newName.trim() } } };
       });
       setRenamingTeacher(null);
-    } catch(e) { alert("Failed: " + e.message); }
+    } catch(e) { setError("Could not rename teacher: " + e.message); }
   };
 
   // Fully remove a teacher from the system
