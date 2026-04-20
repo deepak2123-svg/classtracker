@@ -600,12 +600,15 @@ function AdminPanelInner({user}){
   // When institute is selected, pre-load its teachers in background
   const onSelectInstitute = (inst) => {
     setSelInst(inst); resetNav();
-    // Pre-fetch full data for teachers at this institute only
-    teachers.filter(t=>{
-      const d=fullData[t.uid];
-      if(d) return (d.classes||[]).some(c=>(c.institute||"").trim()===inst.trim());
-      return (t.institutes||[]).some(i=>i.trim()===inst.trim());
-    }).forEach(t=>ensureFullData(t.uid));
+    // Case-insensitive — institute names in the teacher index may differ in casing
+    const _norm = s => (s || "").trim().toLowerCase();
+    teachers
+      .filter(t => {
+        const d = fullData[t.uid];
+        if (d) return (d.classes || []).some(c => _norm(c.institute) === _norm(inst));
+        return (t.institutes || []).some(i => _norm(i) === _norm(inst));
+      })
+      .forEach(t => ensureFullData(t.uid));
   };
 
   // ── Export helpers ────────────────────────────────────────────────────────
