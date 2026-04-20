@@ -911,6 +911,24 @@ function fmtSlot(t) {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
+// Returns the slot the teacher uses most, skipping any already used today.
+// Falls back to the first available slot if no history yet.
+function getDefaultKisSlot(notes, classId, kisSlots, usedStartsToday) {
+  if (!kisSlots || !kisSlots.length) return null;
+  const available = kisSlots.filter(s => !usedStartsToday.has(s.start));
+  if (!available.length) return null;
+  const freq = {};
+  Object.values(notes[classId] || {}).forEach(entries => {
+    if (!Array.isArray(entries)) return;
+    entries.forEach(e => {
+      const slot = kisSlots.find(s => s.start === e.timeStart);
+      if (slot) freq[slot.start] = (freq[slot.start] || 0) + 1;
+    });
+  });
+  if (!Object.keys(freq).length) return available[0];
+  return [...available].sort((a, b) => (freq[b.start]||0) - (freq[a.start]||0))[0];
+}
+
 // ── Time suggestion: same day-of-week first, fall back to most recent if no DOW history ──
 function getSuggestedTime(notes, classId, dateKey) {
   const dayOfWeek = new Date(dateKey).getDay();
@@ -1455,7 +1473,16 @@ function ClassTrackerInner({user}){
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <span style={{fontSize:15,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:selDateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {selDateNotes.length} {selDateNotes.length===1?"entry":"entries"}</span></span>
-                {canAdd&&<button onClick={()=>{setActiveClass(selCls);setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,selCls.id,selectedDate)||{_dur:selCls?.duration||60})});safeNav("addNote");}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>+ Add Entry</button>}
+                {canAdd&&<button onClick={()=>{
+  setActiveClass(selCls);
+  const _ks=getKisSlots(selCls);
+  const _used=new Set(((data.notes?.[selCls.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
+  const _def=_ks?getDefaultKisSlot(data.notes,selCls.id,_ks,_used):null;
+  setNewNote(_def&&!_used.has(_def.start)
+    ?{title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
+    :{title:"",body:"",tag:"note",status:"",...(_ks?{}:(getSuggestedTime(data.notes,selCls.id,selectedDate)||{_dur:selCls?.duration||60}))});
+  safeNav("addNote");
+}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>+ Add Entry</button>}
               </div>
               {selDateNotes.length===0?(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"40px 20px",textAlign:"center"}}>
@@ -1548,7 +1575,15 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:16,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}</div>
               <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:600,marginTop:2}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
             </div>
-            {canAdd&&<button onClick={()=>{setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",...(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60})});safeNav("addNote");}} onPointerDown={e=>rpl(e,true)}
+            {canAdd&&<button onClick={()=>{
+  const _ks=getKisSlots(activeClass);
+  const _used=new Set(((data.notes?.[activeClass.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
+  const _def=_ks?getDefaultKisSlot(data.notes,activeClass.id,_ks,_used):null;
+  setNewNote(_def&&!_used.has(_def.start)
+    ?{title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
+    :{title:"",body:"",tag:"note",status:"",...(_ks?{}:(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60}))});
+  safeNav("addNote");
+}} onPointerDown={e=>rpl(e,true)}
               style={{background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",boxShadow:`0 4px 14px ${color.bg}55`,flexShrink:0}}>
               + Add Entry
             </button>}
@@ -1963,143 +1998,229 @@ function ClassTrackerInner({user}){
             </div>
             <div style={{marginBottom:16}}>
 
-              {/* ── KIS Timetable Slot Picker ─────────────────────────────── */}
+              {/* ══════════════════════════════════════════════════════
+                   TIME ENTRY — two modes:
+                   A) KIS class   → slot pills + optional manual expand
+                   B) Other class → history suggestion + manual input
+                ══════════════════════════════════════════════════════ */}
               {(()=>{
                 const kisSlots=getKisSlots(activeClass);
-                if(!kisSlots) return null;
-                const dayEntries=(data.notes?.[activeClass?.id]||{})[selectedDate]||[];
-                const usedStarts=new Set(
-                  dayEntries.filter(e=>!isEdit||e.id!==form.id).map(e=>e.timeStart).filter(Boolean)
-                );
-                return(
-                  <div style={{marginBottom:16}}>
-                    <label style={lbl}>Timetable slots</label>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                      {kisSlots.map(slot=>{
-                        const isUsed=usedStarts.has(slot.start);
-                        const isSel=form.timeStart===slot.start;
-                        return(
-                          <button key={slot.start} type="button" disabled={isUsed}
-                            onClick={()=>{
-                              if(isUsed) return;
-                              setForm({...form,timeStart:slot.start,timeEnd:slot.end,_dur:slot.durMins,_kisSlot:true,_suggested:false,_suggestedEnd:slot.end});
-                            }}
-                            style={{padding:"9px 14px",borderRadius:20,fontSize:13,fontFamily:G.mono,fontWeight:700,
-                              border:`2px solid ${isSel?G.forest:G.border}`,
-                              background:isSel?G.forest:isUsed?"#F3F4F6":G.surface,
-                              color:isSel?"#fff":isUsed?G.textL:G.text,
-                              cursor:isUsed?"not-allowed":"pointer",opacity:isUsed?0.5:1,
-                              textDecoration:isUsed?"line-through":"none",
-                              WebkitTapHighlightColor:"transparent",transition:"all 0.15s",minHeight:42}}>
-                            {fmtSlot(slot.start)}–{fmtSlot(slot.end)}
-                            {isUsed&&<span style={{fontSize:10,marginLeft:5,fontWeight:600,textDecoration:"none"}}>✓</span>}
+
+                // ── MODE A: KIS timetable ──────────────────────────────────
+                if(kisSlots){
+                  const dayEntries=(data.notes?.[activeClass?.id]||{})[selectedDate]||[];
+                  const usedStarts=new Set(
+                    dayEntries.filter(e=>!isEdit||e.id!==form.id).map(e=>e.timeStart).filter(Boolean)
+                  );
+                  return(
+                    <>
+                      {/* Slot pills */}
+                      <div style={{marginBottom:form._manualTime?12:20}}>
+                        <label style={lbl}>Timetable slots</label>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                          {kisSlots.map(slot=>{
+                            const isUsed=usedStarts.has(slot.start);
+                            const isSel=!form._manualTime&&form.timeStart===slot.start;
+                            return(
+                              <button key={slot.start} type="button" disabled={isUsed}
+                                onClick={()=>{
+                                  if(isUsed) return;
+                                  setForm({...form,timeStart:slot.start,timeEnd:slot.end,_dur:slot.durMins,_kisSlot:true,_manualTime:false,_suggested:false,_suggestedEnd:slot.end});
+                                }}
+                                style={{
+                                  padding:"10px 16px",borderRadius:22,fontSize:14,fontFamily:G.mono,fontWeight:700,
+                                  border:`2px solid ${isSel?G.forest:isUsed?"#E5E7EB":G.border}`,
+                                  background:isSel?G.forest:isUsed?"#F9FAFB":G.surface,
+                                  color:isSel?"#fff":isUsed?"#9CA3AF":G.text,
+                                  cursor:isUsed?"not-allowed":"pointer",
+                                  textDecoration:isUsed?"line-through":"none",
+                                  WebkitTapHighlightColor:"transparent",transition:"all 0.15s",minHeight:44,
+                                }}>
+                                {fmtSlot(slot.start)}–{fmtSlot(slot.end)}
+                                {isUsed&&<span style={{fontSize:11,marginLeft:6,fontWeight:600,textDecoration:"none",opacity:0.7}}>✓ done</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Off-schedule toggle line */}
+                      {!form._manualTime&&(
+                        <button type="button"
+                          onClick={()=>setForm({...form,_kisSlot:false,_manualTime:true,timeStart:"",timeEnd:"",_suggestedEnd:null})}
+                          style={{background:"none",border:"none",padding:"0 0 16px",cursor:"pointer",
+                            color:G.textL,fontSize:13,fontFamily:G.sans,textAlign:"left",
+                            display:"flex",alignItems:"center",gap:5,WebkitTapHighlightColor:"transparent"}}>
+                          <span style={{fontSize:15}}>＋</span>
+                          <span style={{textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:3}}>
+                            This class isn't in the schedule — log a custom time
+                          </span>
+                        </button>
+                      )}
+
+                      {/* Manual expand (off-schedule) */}
+                      {form._manualTime&&(
+                        <>
+                          <button type="button"
+                            onClick={()=>setForm({...form,_manualTime:false,timeStart:"",timeEnd:"",_suggestedEnd:null})}
+                            style={{background:"none",border:"none",padding:"0 0 14px",cursor:"pointer",
+                              color:G.green,fontSize:13,fontFamily:G.sans,fontWeight:600,
+                              display:"flex",alignItems:"center",gap:5,WebkitTapHighlightColor:"transparent"}}>
+                            ← Back to timetable slots
                           </button>
-                        );
-                      })}
-                    </div>
-                    <div style={{fontSize:12,color:G.textL,marginTop:6}}>Greyed slots already logged today</div>
-                  </div>
+                          <label style={lbl}>Start Time <span style={{color:G.red,marginLeft:3}}>*</span></label>
+                          <input type="time" value={form.timeStart||""}
+                            onChange={e=>{
+                              const s=e.target.value;
+                              const dur=form._dur||(activeClass?.duration)||60;
+                              if(s){
+                                const [h,m]=s.split(":").map(Number);
+                                const end=new Date(2000,0,1,h,m+dur);
+                                const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
+                                setForm({...form,timeStart:s,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
+                              } else {
+                                setForm({...form,timeStart:"",timeEnd:"",_suggestedEnd:null});
+                              }
+                            }}
+                            style={{...inp,fontSize:16}}/>
+                          {form.timeStart&&(
+                            <div style={{marginBottom:12}}>
+                              <label style={{...lbl,marginBottom:8}}>Duration</label>
+                              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                                {[45,60,75,90,105,120].map(mins=>{
+                                  const isSel=(form._dur||(activeClass?.duration)||60)===mins;
+                                  const label=mins<60?`${mins}m`:mins===60?"1 hr":`${Math.floor(mins/60)}h${mins%60?" "+mins%60+"m":""}`;
+                                  return(
+                                    <button key={mins} type="button"
+                                      onClick={()=>{
+                                        const [h,m]=(form.timeStart||"00:00").split(":").map(Number);
+                                        const end=new Date(2000,0,1,h,m+mins);
+                                        const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
+                                        setForm({...form,_dur:mins,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
+                                      }}
+                                      style={{padding:"9px 16px",borderRadius:20,border:`2px solid ${isSel?G.forest:G.border}`,cursor:"pointer",
+                                        fontFamily:G.sans,fontSize:14,fontWeight:isSel?700:500,minHeight:42,WebkitTapHighlightColor:"transparent",
+                                        background:isSel?G.forest:"transparent",color:isSel?"#fff":G.textM,transition:"all 0.15s"}}>
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          {form.timeStart&&(
+                            <div>
+                              <label style={{...lbl,marginBottom:6}}>End Time
+                                {form._suggestedEnd&&form.timeEnd===form._suggestedEnd&&
+                                  <span style={{color:G.green,fontWeight:500,textTransform:"none",fontSize:12,marginLeft:8}}>suggested</span>}
+                              </label>
+                              <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                                <input type="time" value={form.timeEnd||""}
+                                  onChange={e=>setForm({...form,timeEnd:e.target.value,_suggestedEnd:null})}
+                                  style={{...inp,marginBottom:0,flex:1,fontSize:16,
+                                    borderColor:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.green:G.border,
+                                    background:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.greenL:G.surface}}/>
+                                {form.timeStart&&form.timeEnd&&(()=>{
+                                  const[sh,sm]=form.timeStart.split(":").map(Number);
+                                  const[eh,em]=form.timeEnd.split(":").map(Number);
+                                  const d=(eh*60+em)-(sh*60+sm);
+                                  if(d<=0) return null;
+                                  return <span style={{fontSize:14,color:G.green,fontWeight:700,fontFamily:G.mono,flexShrink:0,background:G.greenL,borderRadius:8,padding:"6px 10px"}}>{d<60?d+"m":Math.floor(d/60)+"h"+(d%60?d%60+"m":"")}</span>;
+                                })()}
+                              </div>
+                            </div>
+                          )}
+                          {!form.timeStart&&<div style={{fontSize:13,color:G.red,marginTop:4}}>Start time is required.</div>}
+                        </>
+                      )}
+                    </>
+                  );
+                }
+
+                // ── MODE B: Non-KIS — history suggestion + manual ──────────
+                return(
+                  <>
+                    {form._suggested&&form.timeStart&&(
+                      <div style={{background:G.greenL,border:"1px solid "+G.green,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                        <span style={{fontSize:18}}>&#128161;</span>
+                        <div style={{flex:1,minWidth:120}}>
+                          <div style={{fontSize:13,fontWeight:700,color:G.green}}>Suggested from your history</div>
+                          <div style={{fontSize:12,color:G.textM,marginTop:1}}>
+                            {fmtSlot(form.timeStart)} – {fmtSlot(form.timeEnd)} · same time as your usual {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(selectedDate).getDay()]} class
+                          </div>
+                        </div>
+                        <button onClick={()=>setForm(f=>({...f,_suggested:false,timeStart:"",timeEnd:"",_suggestedEnd:null}))}
+                          style={{background:"none",border:"1px solid "+G.borderM,borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans,flexShrink:0}}>
+                          Change
+                        </button>
+                      </div>
+                    )}
+                    <label style={lbl}>Start Time <span style={{color:G.red,marginLeft:3}}>*</span></label>
+                    {!form._suggested&&<input type="time" value={form.timeStart||""}
+                      onChange={e=>{
+                        const s=e.target.value;
+                        const dur=form._dur||(activeClass?.duration)||60;
+                        if(s){
+                          const [h,m]=s.split(":").map(Number);
+                          const end=new Date(2000,0,1,h,m+dur);
+                          const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
+                          setForm({...form,timeStart:s,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
+                        } else {
+                          setForm({...form,timeStart:"",timeEnd:"",_suggestedEnd:null});
+                        }
+                      }}
+                      style={{...inp,fontSize:16}}/>}
+                    {form.timeStart&&(
+                      <div style={{marginBottom:12}}>
+                        <label style={{...lbl,marginBottom:8}}>Duration</label>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                          {[45,60,75,90,105,120].map(mins=>{
+                            const isSel=(form._dur||(activeClass?.duration)||60)===mins;
+                            const label=mins<60?`${mins}m`:mins===60?"1 hr":`${Math.floor(mins/60)}h${mins%60?" "+mins%60+"m":""}`;
+                            return(
+                              <button key={mins} type="button"
+                                onClick={()=>{
+                                  const [h,m]=(form.timeStart||"00:00").split(":").map(Number);
+                                  const end=new Date(2000,0,1,h,m+mins);
+                                  const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
+                                  setForm({...form,_dur:mins,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
+                                }}
+                                style={{padding:"9px 16px",borderRadius:20,border:`2px solid ${isSel?G.forest:G.border}`,cursor:"pointer",
+                                  fontFamily:G.sans,fontSize:14,fontWeight:isSel?700:500,minHeight:42,WebkitTapHighlightColor:"transparent",
+                                  background:isSel?G.forest:"transparent",color:isSel?"#fff":G.textM,transition:"all 0.15s"}}>
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {form.timeStart&&(
+                      <div>
+                        <label style={{...lbl,marginBottom:6}}>End Time
+                          {form._suggestedEnd&&form.timeEnd===form._suggestedEnd&&
+                            <span style={{color:G.green,fontWeight:500,textTransform:"none",fontSize:12,marginLeft:8}}>suggested — edit if different</span>}
+                        </label>
+                        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                          <input type="time" value={form.timeEnd||""}
+                            onChange={e=>setForm({...form,timeEnd:e.target.value,_suggestedEnd:null})}
+                            style={{...inp,marginBottom:0,flex:1,fontSize:16,
+                              borderColor:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.green:G.border,
+                              background:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.greenL:G.surface}}/>
+                          {form.timeStart&&form.timeEnd&&(()=>{
+                            const[sh,sm]=form.timeStart.split(":").map(Number);
+                            const[eh,em]=form.timeEnd.split(":").map(Number);
+                            const d=(eh*60+em)-(sh*60+sm);
+                            if(d<=0) return null;
+                            return <span style={{fontSize:14,color:G.green,fontWeight:700,fontFamily:G.mono,flexShrink:0,background:G.greenL,borderRadius:8,padding:"6px 10px"}}>{d<60?d+"m":Math.floor(d/60)+"h"+(d%60?d%60+"m":"")}</span>;
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                    {!form.timeStart&&<div style={{fontSize:13,color:G.red,marginTop:4}}>Start time is required.</div>}
+                  </>
                 );
               })()}
-
-              {/* ── Active selection banners ──────────────────────────────── */}
-              {form._kisSlot&&form.timeStart&&(
-                <div style={{background:G.greenL,border:"1px solid "+G.green,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                  <span style={{fontSize:18}}>📅</span>
-                  <div style={{flex:1,minWidth:120}}>
-                    <div style={{fontSize:13,fontWeight:700,color:G.green}}>Timetable slot selected</div>
-                    <div style={{fontSize:12,color:G.textM,marginTop:1}}>{fmtSlot(form.timeStart)} – {fmtSlot(form.timeEnd)} · from KIS schedule</div>
-                  </div>
-                  <button onClick={()=>setForm(f=>({...f,_kisSlot:false,_suggested:false,timeStart:"",timeEnd:"",_suggestedEnd:null}))}
-                    style={{background:"none",border:"1px solid "+G.borderM,borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans,flexShrink:0}}>
-                    Change
-                  </button>
-                </div>
-              )}
-              {form._suggested&&!form._kisSlot&&form.timeStart&&(
-                <div style={{background:G.greenL,border:"1px solid "+G.green,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                  <span style={{fontSize:18}}>&#128161;</span>
-                  <div style={{flex:1,minWidth:120}}>
-                    <div style={{fontSize:13,fontWeight:700,color:G.green}}>Suggested from your history</div>
-                    <div style={{fontSize:12,color:G.textM,marginTop:1}}>
-                      {fmtSlot(form.timeStart)} – {fmtSlot(form.timeEnd)} · same time as your usual {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(selectedDate).getDay()]} class
-                    </div>
-                  </div>
-                  <button onClick={()=>setForm(f=>({...f,_suggested:false,timeStart:"",timeEnd:"",_suggestedEnd:null}))}
-                    style={{background:"none",border:"1px solid "+G.borderM,borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans,flexShrink:0}}>
-                    Change
-                  </button>
-                </div>
-              )}
-
-              {/* ── Manual input — only when no slot/history active ─────── */}
-              <label style={lbl}>Start Time <span style={{color:G.red,marginLeft:3}}>*</span></label>
-              {!form._suggested&&!form._kisSlot&&<input type="time" value={form.timeStart||""}
-                onChange={e=>{
-                  const s=e.target.value;
-                  const dur=form._dur||(activeClass?.duration)||60;
-                  if(s){
-                    const [h,m]=s.split(":").map(Number);
-                    const end=new Date(2000,0,1,h,m+dur);
-                    const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
-                    setForm({...form,timeStart:s,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
-                  } else {
-                    setForm({...form,timeStart:"",timeEnd:"",_suggestedEnd:null});
-                  }
-                }}
-                style={{...inp,fontSize:16}}/>}
-
-              {/* Duration pills */}
-              {form.timeStart&&(
-                <div style={{marginBottom:12}}>
-                  <label style={{...lbl,marginBottom:8}}>Duration</label>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {[45,60,75,90,105,120].map(mins=>{
-                      const isSel=(form._dur||(activeClass?.duration)||60)===mins;
-                      const label=mins<60?`${mins}m`:mins===60?"1 hr":`${Math.floor(mins/60)}h${mins%60?" "+mins%60+"m":""}`;
-                      return(
-                        <button key={mins} type="button"
-                          onClick={()=>{
-                            const [h,m]=(form.timeStart||"00:00").split(":").map(Number);
-                            const end=new Date(2000,0,1,h,m+mins);
-                            const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
-                            setForm({...form,_dur:mins,_kisSlot:false,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
-                          }}
-                          style={{padding:"9px 16px",borderRadius:20,border:`2px solid ${isSel?G.forest:G.border}`,cursor:"pointer",fontFamily:G.sans,fontSize:14,fontWeight:isSel?700:500,minHeight:42,WebkitTapHighlightColor:"transparent",
-                            background:isSel?G.forest:"transparent",color:isSel?"#fff":G.textM,transition:"all 0.15s"}}>
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* End time */}
-              {form.timeStart&&(
-                <div>
-                  <label style={{...lbl,marginBottom:6}}>
-                    End Time
-                    {form._suggestedEnd&&form.timeEnd===form._suggestedEnd&&
-                      <span style={{color:G.green,fontWeight:500,textTransform:"none",fontSize:12,marginLeft:8}}>suggested — edit if different</span>}
-                  </label>
-                  <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                    <input type="time" value={form.timeEnd||""}
-                      onChange={e=>setForm({...form,timeEnd:e.target.value,_suggestedEnd:null,_kisSlot:false})}
-                      style={{...inp,marginBottom:0,flex:1,fontSize:16,
-                        borderColor:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.green:G.border,
-                        background:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.greenL:G.surface}}/>
-                    {form.timeStart&&form.timeEnd&&(()=>{
-                      const[sh,sm]=form.timeStart.split(":").map(Number);
-                      const[eh,em]=form.timeEnd.split(":").map(Number);
-                      const d=(eh*60+em)-(sh*60+sm);
-                      if(d<=0) return null;
-                      return <span style={{fontSize:14,color:G.green,fontWeight:700,fontFamily:G.mono,flexShrink:0,background:G.greenL,borderRadius:8,padding:"6px 10px"}}>{d<60?d+"m":Math.floor(d/60)+"h"+(d%60?d%60+"m":"")}</span>;
-                    })()}
-                  </div>
-                </div>
-              )}
-              {!form.timeStart&&<div style={{fontSize:13,color:G.red,marginTop:4}}>Start time is required.</div>}
             </div>
             <div style={{marginBottom:14}}>
               <label style={lbl}>Title</label>
