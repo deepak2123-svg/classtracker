@@ -11,41 +11,27 @@ service cloud.firestore {
         get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role == "admin";
     }
 
-    // ── User app data ──────────────────────────────────────────────────────
-    // Teachers read/write only their own data.
-    // Admins can read any teacher's data (needed for admin panel).
     match /users/{uid}/appdata/{doc} {
       allow read:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
       allow write: if isSignedIn() && request.auth.uid == uid;
     }
 
-    // ── Roles ─────────────────────────────────────────────────────────────
-    // Teachers create their own role doc on first login (getUserRole does setDoc).
-    // Only admins can promote/demote others.
     match /roles/{uid} {
       allow read:   if isSignedIn() && (request.auth.uid == uid || isAdmin());
       allow create: if isSignedIn() && request.auth.uid == uid;
       allow update: if isAdmin() || request.auth.uid == uid;
     }
 
-    // ── Teacher index ──────────────────────────────────────────────────────
-    // Teachers write their own index entry (syncTeacherIndex).
-    // Admins can write any entry (rename, remove).
     match /teachers/{uid} {
       allow read:  if isSignedIn();
       allow write: if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
-    // ── Global config (institutes list) ───────────────────────────────────
     match /config/{doc} {
       allow read:  if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // ── Invite links ───────────────────────────────────────────────────────
-    // Admins create invite tokens.
-    // Any authenticated user can read (to verify token on arrival).
-    // Any authenticated user can mark a token as used (useInviteToken).
     match /invites/{token} {
       allow read:   if isSignedIn();
       allow create: if isAdmin();
