@@ -167,6 +167,70 @@ class ErrorBoundary extends Component {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
+// ── Admin Export Modal — bottom sheet, works on all devices ──────────────────
+function AdminExportModal({ exportActions, onClose }) {
+  return (
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose}
+        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:800,backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}}/>
+      {/* Sheet */}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:801,background:"#fff",borderRadius:"20px 20px 0 0",maxHeight:"80vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,16px)"}}>
+        {/* Handle */}
+        <div style={{display:"flex",justifyContent:"center",padding:"12px 0 4px"}}>
+          <div style={{width:40,height:4,borderRadius:2,background:"#E2E8F0"}}/>
+        </div>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 20px 14px"}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:700,color:"#0E1F18",fontFamily:"'Poppins',sans-serif"}}>Export entries</div>
+            <div style={{fontSize:13,color:"#6B7280",fontFamily:"'Inter',sans-serif",marginTop:2}}>Choose what to export</div>
+          </div>
+          <button onClick={onClose}
+            style={{background:"#F1F5F9",border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:"#64748B",WebkitTapHighlightColor:"transparent"}}>
+            ✕
+          </button>
+        </div>
+        {/* Actions */}
+        {exportActions.length === 0 && (
+          <div style={{padding:"20px",textAlign:"center",fontSize:14,color:"#94A3B8",fontFamily:"'JetBrains Mono',monospace"}}>
+            Select a teacher or class first
+          </div>
+        )}
+        {exportActions.map((action, ai) => (
+          <div key={ai}>
+            {/* Section header */}
+            <div style={{padding:"10px 20px 6px",background:"#F8FAFC",borderTop:"1px solid #E2E8F0",display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:18}}>{action.icon}</span>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:"#0E1F18",fontFamily:"'Poppins',sans-serif"}}>{action.label}</div>
+                <div style={{fontSize:12,color:"#94A3B8",fontFamily:"'JetBrains Mono',monospace"}}>{action.sub}</div>
+              </div>
+            </div>
+            {/* Format rows */}
+            {[
+              {fmt:"CSV",  icon:"📊", sub:"Excel / Google Sheets", fn:action.csv},
+              {fmt:"PDF",  icon:"📄", sub:"Print-ready report",    fn:action.pdf},
+              {fmt:"JSON", icon:"🗂", sub:"Raw data backup",        fn:action.json},
+            ].map(({fmt,icon,sub,fn}, i, arr) => (
+              <button key={fmt} onClick={fn}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"14px 20px 14px 36px",background:"none",border:"none",borderBottom:i<arr.length-1||ai<exportActions.length-1?"1px solid #F1F5F9":"none",cursor:"pointer",WebkitTapHighlightColor:"transparent",minHeight:56,textAlign:"left"}}>
+                <span style={{fontSize:22,flexShrink:0}}>{icon}</span>
+                <div>
+                  <div style={{fontSize:15,fontWeight:600,color:"#0E1F18",fontFamily:"'Inter',sans-serif"}}>{fmt}</div>
+                  <div style={{fontSize:12,color:"#94A3B8",fontFamily:"'Inter',sans-serif"}}>{sub}</div>
+                </div>
+                <span style={{marginLeft:"auto",color:"#CBD5E1",fontSize:18}}>›</span>
+              </button>
+            ))}
+          </div>
+        ))}
+        <div style={{height:8}}/>
+      </div>
+    </>
+  );
+}
+
 function AdminPanelInner({user}){
   const [teachers,    setTeachers]    = useState([]);
   const [fullData,    setFullData]    = useState({});
@@ -1424,14 +1488,20 @@ function AdminPanelInner({user}){
         <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
           {binView&&<AdminBinModal/>}
           {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+          {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
           <MobileNav/><MobileBreadcrumb/>
           <div style={{padding:"12px 14px 40px"}}>
             <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>{selP3.teacherName} — {selP3.className}</h2>
             <div style={{fontSize:14,color:G.textM,marginBottom:16}}>{selP3.institute||selInst} · {selP3.subject}</div>
-            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center",rowGap:8}}>
               {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
-                <button key={k} onClick={()=>setPeriod(k)} style={{padding:"7px 14px",borderRadius:16,fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,background:period===k?G.navy:"none",color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`}}>{l}</button>
+                <button key={k} onClick={()=>setPeriod(k)} style={{padding:"7px 14px",borderRadius:16,fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,background:period===k?G.navy:"none",color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`,minHeight:36,WebkitTapHighlightColor:"transparent"}}>{l}</button>
               ))}
+              {/* Export button — mobile */}
+              <button onClick={()=>setExportOpen(true)}
+                style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:36,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+                ↓ Export
+              </button>
             </div>
             {entries.length===0?(
               <div style={{textAlign:"center",padding:"48px 20px",color:G.textM,fontSize:15}}>No entries for this period.</div>
@@ -1469,6 +1539,7 @@ function AdminPanelInner({user}){
     <div style={{minHeight:"100svh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
       {binView&&<AdminBinModal/>}
       {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+      {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
       <style>{`
         @media (min-width: 768px) { .admin-mobile-back { display: none !important; } }
         .admin-mobile-back { display: none; }
@@ -1842,48 +1913,10 @@ function AdminPanelInner({user}){
               {/* Spacer pushes Export right on desktop; on mobile it wraps to new line */}
               <div style={{flex:1,minWidth:8}}/>
               {selP3&&(
-                <div style={{position:"relative",flexShrink:0}}>
-                  <button onClick={()=>setExportOpen(o=>!o)}
-                    style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:36,WebkitTapHighlightColor:"transparent"}}>
-                    ↓ Export
-                  </button>
-                  {exportOpen&&(
-                    <>
-                      {/* Full-screen tap-away overlay for mobile */}
-                      <div style={{position:"fixed",inset:0,zIndex:998}} onClick={()=>setExportOpen(false)}/>
-                      <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,boxShadow:"0 8px 24px rgba(15,23,42,0.15)",zIndex:999,minWidth:240,maxWidth:"90vw",overflow:"hidden"}}>
-                        {exportActions.length===0&&(
-                          <div style={{padding:"14px 16px",fontSize:14,color:G.textL,fontFamily:G.mono,textAlign:"center"}}>Select a teacher or class first</div>
-                        )}
-                        {exportActions.map((action,ai)=>(
-                          <div key={ai}>
-                            <div style={{padding:"9px 16px 5px",background:G.bg,borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:8}}>
-                              <span style={{fontSize:16}}>{action.icon}</span>
-                              <div>
-                                <div style={{fontSize:13,fontWeight:700,color:G.textS,fontFamily:G.display}}>{action.label}</div>
-                                <div style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{action.sub}</div>
-                              </div>
-                            </div>
-                            {[
-                              {fmt:"CSV",  icon:"📊", sub:"Excel / Sheets", fn:action.csv},
-                              {fmt:"PDF",  icon:"📄", sub:"Print-ready",    fn:action.pdf},
-                              {fmt:"JSON", icon:"🗂", sub:"Raw backup",      fn:action.json},
-                            ].map(({fmt,icon,sub,fn},i,arr)=>(
-                              <div key={fmt} onClick={fn}
-                                style={{padding:"12px 16px 12px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,borderBottom:i<arr.length-1||ai<exportActions.length-1?`1px solid ${G.border}`:"none",WebkitTapHighlightColor:"transparent",minHeight:44}}>
-                                <span style={{fontSize:16}}>{icon}</span>
-                                <div>
-                                  <div style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.sans}}>{fmt}</div>
-                                  <div style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{sub}</div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
+                <button onClick={()=>setExportOpen(true)}
+                  style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:36,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+                  ↓ Export
+                </button>
               )}
             </div>
           </div>
