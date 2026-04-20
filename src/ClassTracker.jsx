@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, Component } from "react";
-import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db, getGlobalInstitutes } from "./firebase";
+import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db, getGlobalInstitutes, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
@@ -165,32 +165,14 @@ function groupDatesByPeriod(dates){
 }
 
 // ── Date window ───────────────────────────────────────────────────────────────
-// Rule: if today >= 7th of month → allow back to 1st of previous month.
-//       if today < 7th (days 1-6) → allow back to 1st of 2 months ago.
 function buildDateWindow(){
-  const MONTHS      = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const MONTHS_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const now   = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // midnight local
-  const monthsBack = today.getDate() >= 7 ? 1 : 2;
-  const earliest   = new Date(today.getFullYear(), today.getMonth() - monthsBack, 1);
-  const days = [];
-  const cur  = new Date(earliest);
-  while (cur <= today) {
-    const y   = cur.getFullYear();
-    const m   = String(cur.getMonth() + 1).padStart(2, "0");
-    const day = String(cur.getDate()).padStart(2, "0");
-    days.push({
-      key:       `${y}-${m}-${day}`,
-      num:       cur.getDate(),
-      dayName:   ["SUN","MON","TUE","WED","THU","FRI","SAT"][cur.getDay()],
-      isSun:     cur.getDay() === 0,
-      month:     MONTHS[cur.getMonth()],
-      monthFull: MONTHS_FULL[cur.getMonth()],
-      year:      cur.getFullYear(),
-      offset:    Math.round((cur - today) / (1000 * 60 * 60 * 24)),
-    });
-    cur.setDate(cur.getDate() + 1);
+  const now=new Date(),days=[];
+  for(let i=-7;i<=0;i++){
+    const d=new Date(now);d.setDate(d.getDate()+i);
+    const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
+    const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const MONTHS_FULL=["January","February","March","April","May","June","July","August","September","October","November","December"];
+    days.push({key:`${y}-${m}-${day}`,num:d.getDate(),dayName:["SUN","MON","TUE","WED","THU","FRI","SAT"][d.getDay()],isSun:d.getDay()===0,month:MONTHS[d.getMonth()],monthFull:MONTHS_FULL[d.getMonth()],year:d.getFullYear(),offset:i});
   }
   return days;
 }
@@ -317,26 +299,10 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
   const weekSunday   = new Date(selDateObj); weekSunday.setDate(selDateObj.getDate() - selDateObj.getDay());
   const weekSaturday = new Date(weekSunday); weekSaturday.setDate(weekSunday.getDate() + 6);
 
-  // Compute the allowed month range (mirrors buildDateWindow rule)
-  const _now      = new Date();
-  const _todayObj = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate());
-  const _mBack    = _todayObj.getDate() >= 7 ? 1 : 2;
-  const _earliest = new Date(_todayObj.getFullYear(), _todayObj.getMonth() - _mBack, 1);
-  const minYear   = _earliest.getFullYear();
-  const minMonth  = _earliest.getMonth();
-  const maxYear   = _todayObj.getFullYear();
-  const maxMonth  = _todayObj.getMonth();
-
-  const atMin = viewYear < minYear || (viewYear === minYear && viewMonth <= minMonth);
-  const atMax = viewYear > maxYear || (viewYear === maxYear && viewMonth >= maxMonth);
-
   function changeMonth(delta) {
     let m = viewMonth + delta, y = viewYear;
     if (m > 11) { m = 0; y++; }
     if (m < 0)  { m = 11; y--; }
-    // Hard-clamp to allowed window
-    if (y < minYear || (y === minYear && m < minMonth)) { m = minMonth; y = minYear; }
-    if (y > maxYear || (y === maxYear && m > maxMonth)) { m = maxMonth; y = maxYear; }
     setViewMonth(m); setViewYear(y);
   }
 
@@ -386,15 +352,15 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
       <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,overflow:'hidden'}}>
         {/* Month nav — compact */}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px 4px'}}>
-          <button onClick={()=>!atMin&&changeMonth(-1)} disabled={atMin}
-            style={{background:'none',border:`1px solid ${G.border}`,borderRadius:7,width:26,height:26,cursor:atMin?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:atMin?G.border:G.textM,WebkitTapHighlightColor:'transparent',flexShrink:0,opacity:atMin?0.35:1}}>
+          <button onClick={()=>changeMonth(-1)}
+            style={{background:'none',border:`1px solid ${G.border}`,borderRadius:7,width:26,height:26,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:G.textM,WebkitTapHighlightColor:'transparent',flexShrink:0}}>
             ‹
           </button>
           <span style={{fontFamily:G.display,fontSize:13,fontWeight:700,color:G.text}}>
             {MONTHS[viewMonth]} {viewYear}
           </span>
-          <button onClick={()=>!atMax&&changeMonth(1)} disabled={atMax}
-            style={{background:'none',border:`1px solid ${G.border}`,borderRadius:7,width:26,height:26,cursor:atMax?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:atMax?G.border:G.textM,WebkitTapHighlightColor:'transparent',flexShrink:0,opacity:atMax?0.35:1}}>
+          <button onClick={()=>changeMonth(1)}
+            style={{background:'none',border:`1px solid ${G.border}`,borderRadius:7,width:26,height:26,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:G.textM,WebkitTapHighlightColor:'transparent',flexShrink:0}}>
             ›
           </button>
         </div>
@@ -415,7 +381,7 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
               onClick={() => {
                 if (otherMonth) return;
                 if (key > todayStr) { showToast("Can't log future dates"); return; }
-                if (!allowed) { showToast("This date is outside the allowed entry window"); return; }
+                if (!allowed) { showToast("Only last 7 days can be edited"); return; }
                 onSelectDate(key);
               }}
               style={{
@@ -770,6 +736,7 @@ function ExportModal({data, teacherName, onClose}){
   td{padding:7px 10px;border-bottom:1px solid #e5e5e5;vertical-align:top}
   tr:nth-child(even) td{background:#f9fafb}
   .empty{text-align:center;padding:40px;color:#999}
+  @media print{body{padding:0}}
 </style></head><body>
 <h1>ClassLog — ${teacherName}</h1>
 <div class="sub">${label} · Exported ${new Date().toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</div>
@@ -778,12 +745,19 @@ ${rows.length===0
   : `<table><thead><tr><th>Date</th><th>Class</th><th>Institute</th><th>Subject</th><th>Time</th><th>Status</th><th>Title</th><th>Notes</th></tr></thead><tbody>
 ${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><td>${r.subject}</td><td style="white-space:nowrap">${r.time}</td><td>${r.status||""}</td><td><strong>${r.title}</strong></td><td>${r.notes}</td></tr>`).join("")}
 </tbody></table>`}
+<script>window.onload=()=>{window.print();}<\/script>
 </body></html>`;
 
-    const w=window.open("","_blank");
-    w.document.write(html);
-    w.document.close();
-    setTimeout(()=>w.print(),400);
+    // Use a Blob URL so browsers don't treat it as a popup
+    const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.target   = "_blank";
+    a.rel      = "noopener";
+    a.click();
+    // Revoke after a short delay to allow the tab to load the blob
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
   }
 
   function exportExcel(){
@@ -899,6 +873,44 @@ ${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><
 }
 
 
+// ── KIS SIP Kunjpura preset timetable slots ────────────────────────────────────
+// Yellow (break) rows from the timetable are excluded.
+// Match is case-insensitive on the institute name containing "kis".
+const KIS_SLOTS = {
+  senior: [ // 11th and 12th
+    { start:"09:00", end:"10:30", durMins:90  },
+    { start:"10:45", end:"12:00", durMins:75  },
+    { start:"12:00", end:"13:30", durMins:90  },
+    { start:"15:00", end:"16:15", durMins:75  },
+    { start:"16:15", end:"17:30", durMins:75  },
+  ],
+  junior: [ // 6th to 10th
+    { start:"09:00", end:"10:00", durMins:60  },
+    { start:"10:00", end:"11:00", durMins:60  },
+    { start:"11:15", end:"12:15", durMins:60  },
+    { start:"12:15", end:"13:00", durMins:45  },
+    { start:"15:00", end:"16:00", durMins:60  },
+    { start:"16:00", end:"17:00", durMins:60  },
+  ],
+};
+
+function getKisSlots(cls) {
+  if (!cls) return null;
+  if (!(cls.institute || "").toLowerCase().includes("kis")) return null;
+  const m = (cls.section || "").match(/(\d+)/);
+  if (!m) return null;
+  const grade = parseInt(m[1]);
+  if (grade >= 11) return KIS_SLOTS.senior;
+  if (grade >= 6)  return KIS_SLOTS.junior;
+  return null;
+}
+
+// "09:00" → "9:00 AM"
+function fmtSlot(t) {
+  const [h, m] = t.split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+}
+
 // ── Time suggestion: same day-of-week first, fall back to most recent if no DOW history ──
 function getSuggestedTime(notes, classId, dateKey) {
   const dayOfWeek = new Date(dateKey).getDay();
@@ -988,8 +1000,10 @@ function ClassTrackerInner({user}){
   useEffect(()=>{
     loadUserData(user.uid).then(d=>{
       const base = d ? {...DEFAULT_DATA,...d,profile:d.profile||{name:""},trash:d.trash||{classes:[],notes:[]}} : DEFAULT_DATA;
-      if(!base.profile?.name && user.displayName) {
-        base.profile = { name: user.displayName.trim() };
+      // Purge trash items older than 30 days before they reach the UI
+      const purged = purgeExpiredTrash(base);
+      if(!purged.profile?.name && user.displayName) {
+        purged.profile = { name: user.displayName.trim() };
       }
 
       // Check localStorage for a pending save that may be newer than Firebase
@@ -997,29 +1011,26 @@ function ClassTrackerInner({user}){
         const pending=localStorage.getItem("classlog_pending_"+user.uid);
         if(pending){
           const {data:localData,savedAt}=JSON.parse(pending);
-          // Use local data if it's newer (saved within last 24h and Firebase didn't have it)
           const ageHrs=(Date.now()-savedAt)/(1000*60*60);
           if(ageHrs<24 && localData){
-            setData({...base,...localData,profile:base.profile});
-            // Try to push the pending save to Firebase now
-            saveUserData(user.uid,{...base,...localData,profile:base.profile})
+            setData({...purged,...localData,profile:purged.profile});
+            saveUserData(user.uid,{...purged,...localData,profile:purged.profile})
               .then(()=>{
                 localStorage.removeItem("classlog_pending_"+user.uid);
                 setSaveErr(false);
               })
               .catch(()=>setSaveErr(true));
-            if(base.profile?.name) syncTeacherIndex(user.uid,base).catch(()=>{});
+            if(purged.profile?.name) syncTeacherIndex(user.uid,purged).catch(()=>{});
             setLoading(false);
             return;
           } else {
-            // Stale pending save — discard
             localStorage.removeItem("classlog_pending_"+user.uid);
           }
         }
       }catch(e){}
 
-      setData(base);
-      if(base.profile?.name) syncTeacherIndex(user.uid,base).catch(()=>{});
+      setData(purged);
+      if(purged.profile?.name) syncTeacherIndex(user.uid,purged).catch(()=>{});
       setLoading(false);
     }).catch(err=>{
       console.error("Failed to load data:",err);
@@ -1176,7 +1187,6 @@ function ClassTrackerInner({user}){
   const addNote=()=>{
     if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     if(!newNote.title.trim()&&!newNote.body.trim()){showInlineToast("Please add a title or notes before saving.");return;}
-    if(newNote.body.length>500){showInlineToast("Notes exceed 500 character limit.");return;}
 
     // Duplicate check — same class, same date, overlapping or identical time
     const existing=(data.notes?.[activeClass.id]||{})[selectedDate]||[];
@@ -1207,7 +1217,6 @@ function ClassTrackerInner({user}){
   };
   const saveEdit=()=>{
     if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
-    if((editNote.body||"").length>500){showInlineToast("Notes exceed 500 character limit.");return;}
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};});
     setEditNote(null);setView("classDetail");
   };
@@ -1220,10 +1229,10 @@ function ClassTrackerInner({user}){
   const restoreNote=(tn)=>{setData(d=>{const{classId,dateKey,deletedAt,className,institute,...note}=tn;const cn=d.notes[classId]||{};const dn=cn[dateKey]||[];return{...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:[note,...dn]}},trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==note.id)}};});};
   const permDeleteNote=(id)=>setData(d=>({...d,trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==id)}}));
 
-  const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>s+(Array.isArray(arr)?arr.length:0),0);},0);
+  const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);},0);
   const canAdd=isDateAllowed(selectedDate);
   const dates=buildDateWindow();
-  const selDateObj=dates.find(d=>d.key===selectedDate)||dates[dates.length-1];
+  const selDateObj=dates.find(d=>d.key===selectedDate)||dates[7];
 
   // Build a noteDates map across ALL classes for the date strip dots
   // ── SINGLE SCROLLABLE HOME ───────────────────────────────────────────────
@@ -1953,13 +1962,67 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:12,color:G.textL,marginTop:5}}>Tap again to deselect</div>
             </div>
             <div style={{marginBottom:16}}>
-              {form._suggested&&form.timeStart&&(
+
+              {/* ── KIS Timetable Slot Picker ─────────────────────────────── */}
+              {(()=>{
+                const kisSlots=getKisSlots(activeClass);
+                if(!kisSlots) return null;
+                const dayEntries=(data.notes?.[activeClass?.id]||{})[selectedDate]||[];
+                const usedStarts=new Set(
+                  dayEntries.filter(e=>!isEdit||e.id!==form.id).map(e=>e.timeStart).filter(Boolean)
+                );
+                return(
+                  <div style={{marginBottom:16}}>
+                    <label style={lbl}>Timetable slots</label>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                      {kisSlots.map(slot=>{
+                        const isUsed=usedStarts.has(slot.start);
+                        const isSel=form.timeStart===slot.start;
+                        return(
+                          <button key={slot.start} type="button" disabled={isUsed}
+                            onClick={()=>{
+                              if(isUsed) return;
+                              setForm({...form,timeStart:slot.start,timeEnd:slot.end,_dur:slot.durMins,_kisSlot:true,_suggested:false,_suggestedEnd:slot.end});
+                            }}
+                            style={{padding:"9px 14px",borderRadius:20,fontSize:13,fontFamily:G.mono,fontWeight:700,
+                              border:`2px solid ${isSel?G.forest:G.border}`,
+                              background:isSel?G.forest:isUsed?"#F3F4F6":G.surface,
+                              color:isSel?"#fff":isUsed?G.textL:G.text,
+                              cursor:isUsed?"not-allowed":"pointer",opacity:isUsed?0.5:1,
+                              textDecoration:isUsed?"line-through":"none",
+                              WebkitTapHighlightColor:"transparent",transition:"all 0.15s",minHeight:42}}>
+                            {fmtSlot(slot.start)}–{fmtSlot(slot.end)}
+                            {isUsed&&<span style={{fontSize:10,marginLeft:5,fontWeight:600,textDecoration:"none"}}>✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{fontSize:12,color:G.textL,marginTop:6}}>Greyed slots already logged today</div>
+                  </div>
+                );
+              })()}
+
+              {/* ── Active selection banners ──────────────────────────────── */}
+              {form._kisSlot&&form.timeStart&&(
+                <div style={{background:G.greenL,border:"1px solid "+G.green,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                  <span style={{fontSize:18}}>📅</span>
+                  <div style={{flex:1,minWidth:120}}>
+                    <div style={{fontSize:13,fontWeight:700,color:G.green}}>Timetable slot selected</div>
+                    <div style={{fontSize:12,color:G.textM,marginTop:1}}>{fmtSlot(form.timeStart)} – {fmtSlot(form.timeEnd)} · from KIS schedule</div>
+                  </div>
+                  <button onClick={()=>setForm(f=>({...f,_kisSlot:false,_suggested:false,timeStart:"",timeEnd:"",_suggestedEnd:null}))}
+                    style={{background:"none",border:"1px solid "+G.borderM,borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",color:G.textM,fontFamily:G.sans,flexShrink:0}}>
+                    Change
+                  </button>
+                </div>
+              )}
+              {form._suggested&&!form._kisSlot&&form.timeStart&&(
                 <div style={{background:G.greenL,border:"1px solid "+G.green,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                   <span style={{fontSize:18}}>&#128161;</span>
                   <div style={{flex:1,minWidth:120}}>
                     <div style={{fontSize:13,fontWeight:700,color:G.green}}>Suggested from your history</div>
                     <div style={{fontSize:12,color:G.textM,marginTop:1}}>
-                      {form.timeStart} &#8211; {form.timeEnd} · same time as your usual {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(selectedDate).getDay()]} class
+                      {fmtSlot(form.timeStart)} – {fmtSlot(form.timeEnd)} · same time as your usual {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(selectedDate).getDay()]} class
                     </div>
                   </div>
                   <button onClick={()=>setForm(f=>({...f,_suggested:false,timeStart:"",timeEnd:"",_suggestedEnd:null}))}
@@ -1968,8 +2031,10 @@ function ClassTrackerInner({user}){
                   </button>
                 </div>
               )}
+
+              {/* ── Manual input — only when no slot/history active ─────── */}
               <label style={lbl}>Start Time <span style={{color:G.red,marginLeft:3}}>*</span></label>
-              {!form._suggested&&<input type="time" value={form.timeStart||""}
+              {!form._suggested&&!form._kisSlot&&<input type="time" value={form.timeStart||""}
                 onChange={e=>{
                   const s=e.target.value;
                   const dur=form._dur||(activeClass?.duration)||60;
@@ -1984,7 +2049,7 @@ function ClassTrackerInner({user}){
                 }}
                 style={{...inp,fontSize:16}}/>}
 
-              {/* Duration suggestion pills — shown after start time entered */}
+              {/* Duration pills */}
               {form.timeStart&&(
                 <div style={{marginBottom:12}}>
                   <label style={{...lbl,marginBottom:8}}>Duration</label>
@@ -1998,7 +2063,7 @@ function ClassTrackerInner({user}){
                             const [h,m]=(form.timeStart||"00:00").split(":").map(Number);
                             const end=new Date(2000,0,1,h,m+mins);
                             const eh=String(end.getHours()).padStart(2,"0"),em=String(end.getMinutes()).padStart(2,"0");
-                            setForm({...form,_dur:mins,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
+                            setForm({...form,_dur:mins,_kisSlot:false,timeEnd:`${eh}:${em}`,_suggestedEnd:`${eh}:${em}`});
                           }}
                           style={{padding:"9px 16px",borderRadius:20,border:`2px solid ${isSel?G.forest:G.border}`,cursor:"pointer",fontFamily:G.sans,fontSize:14,fontWeight:isSel?700:500,minHeight:42,WebkitTapHighlightColor:"transparent",
                             background:isSel?G.forest:"transparent",color:isSel?"#fff":G.textM,transition:"all 0.15s"}}>
@@ -2010,7 +2075,7 @@ function ClassTrackerInner({user}){
                 </div>
               )}
 
-              {/* End time — auto-calculated, still editable */}
+              {/* End time */}
               {form.timeStart&&(
                 <div>
                   <label style={{...lbl,marginBottom:6}}>
@@ -2020,7 +2085,7 @@ function ClassTrackerInner({user}){
                   </label>
                   <div style={{display:"flex",gap:10,alignItems:"center"}}>
                     <input type="time" value={form.timeEnd||""}
-                      onChange={e=>setForm({...form,timeEnd:e.target.value,_suggestedEnd:null})}
+                      onChange={e=>setForm({...form,timeEnd:e.target.value,_suggestedEnd:null,_kisSlot:false})}
                       style={{...inp,marginBottom:0,flex:1,fontSize:16,
                         borderColor:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.green:G.border,
                         background:form._suggestedEnd&&form.timeEnd===form._suggestedEnd?G.greenL:G.surface}}/>
@@ -2038,28 +2103,11 @@ function ClassTrackerInner({user}){
             </div>
             <div style={{marginBottom:14}}>
               <label style={lbl}>Title</label>
-              <input value={form.title} onChange={e=>setForm({...form,title:e.target.value.slice(0,100)})} maxLength={100} placeholder="What was covered?" style={{...inp,fontSize:16,fontWeight:500}}/>
+              <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="What was covered?" style={{...inp,fontSize:16,fontWeight:500}}/>
             </div>
             <div>
-              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:7}}>
-                <label style={{...lbl,marginBottom:0}}>Notes</label>
-                {form.body.length>=350&&(
-                  <span style={{fontSize:12,fontFamily:G.mono,fontWeight:700,
-                    color:form.body.length>=500?G.red:form.body.length>=400?"#B45309":G.textL}}>
-                    {form.body.length}/500
-                  </span>
-                )}
-              </div>
-              <textarea ref={noteRef} value={form.body}
-                onChange={e=>setForm({...form,body:e.target.value.slice(0,500)})}
-                maxLength={500}
-                placeholder="Write your notes, tasks, or resources here…" rows={6}
-                style={{...inp,resize:"vertical",lineHeight:1.7,marginBottom:0,
-                  borderColor:form.body.length>=500?G.red:form.body.length>=400?"#D97706":G.border,
-                  transition:"border-color 0.2s"}}/>
-              {form.body.length>=500&&(
-                <div style={{fontSize:12,color:G.red,marginTop:4,fontFamily:G.sans}}>Character limit reached.</div>
-              )}
+              <label style={lbl}>Notes</label>
+              <textarea ref={noteRef} value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Write your notes, tasks, or resources here…" rows={6} style={{...inp,resize:"vertical",lineHeight:1.7,marginBottom:0}}/>
             </div>
             <PrimaryBtn onClick={save} disabled={!form.timeStart} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:16,opacity:form.timeStart?1:0.45,cursor:form.timeStart?"pointer":"not-allowed",width:"100%"}}>
               {isEdit?"Save Changes":"Save Entry"}
