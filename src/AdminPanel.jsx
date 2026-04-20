@@ -1828,60 +1828,64 @@ function AdminPanelInner({user}){
               </div>}
             </div>
           </div>
-          {/* Period filter */}
-          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"8px 14px",display:"flex",gap:5,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
-            <span style={{fontSize:13,color:G.textL,fontFamily:G.mono}}>Period:</span>
-            {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
-              <button key={k} onClick={()=>setPeriod(k)}
-                style={{padding:"6px 14px",borderRadius:16,fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,transition:"all 0.12s",background:period===k?G.navy:G.surface,color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`}}>
-                {l}
-              </button>
-            ))}
-            {selP3&&(
-              <div style={{marginLeft:"auto",position:"relative"}}>
-                <button onClick={()=>setExportOpen(o=>!o)}
-                  style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600}}>
-                  ↓ Export
+          {/* Period filter + Export — stacks cleanly on all screen sizes */}
+          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"8px 14px",flexShrink:0}}>
+            {/* Row 1: period pills + export button side by side, both wrap if needed */}
+            <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap",rowGap:6}}>
+              <span style={{fontSize:13,color:G.textL,fontFamily:G.mono,flexShrink:0}}>Period:</span>
+              {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
+                <button key={k} onClick={()=>setPeriod(k)}
+                  style={{padding:"6px 14px",borderRadius:16,fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,transition:"all 0.12s",background:period===k?G.navy:G.surface,color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`,flexShrink:0,minHeight:36,WebkitTapHighlightColor:"transparent"}}>
+                  {l}
                 </button>
-                {exportOpen&&(
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,boxShadow:"0 8px 24px rgba(15,23,42,0.12)",zIndex:999,minWidth:240,overflow:"hidden"}}
-                    onMouseLeave={()=>setExportOpen(false)}>
-                    {exportActions.length===0&&(
-                      <div style={{padding:"14px 16px",fontSize:14,color:G.textL,fontFamily:G.mono,textAlign:"center"}}>Select a teacher or class first</div>
-                    )}
-                    {exportActions.map((action,ai)=>(
-                      <div key={ai}>
-                        {/* Section header */}
-                        <div style={{padding:"9px 16px 5px",background:G.bg,borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontSize:16}}>{action.icon}</span>
-                          <div>
-                            <div style={{fontSize:13,fontWeight:700,color:G.textS,fontFamily:G.display}}>{action.label}</div>
-                            <div style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{action.sub}</div>
-                          </div>
-                        </div>
-                        {/* Format options */}
-                        {[
-                          {fmt:"CSV",  icon:"📊", sub:"Excel / Sheets", fn:action.csv},
-                          {fmt:"PDF",  icon:"📄", sub:"Print-ready",    fn:action.pdf},
-                          {fmt:"JSON", icon:"🗂", sub:"Raw backup",      fn:action.json},
-                        ].map(({fmt,icon,sub,fn},i,arr)=>(
-                          <div key={fmt} onClick={fn}
-                            style={{padding:"9px 16px 9px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,borderBottom:i<arr.length-1||ai<exportActions.length-1?`1px solid ${G.border}`:"none",transition:"background 0.1s"}}
-                            onMouseEnter={e=>e.currentTarget.style.background=G.bg}
-                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                            <span style={{fontSize:16}}>{icon}</span>
-                            <div>
-                              <div style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.sans}}>{fmt}</div>
-                              <div style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{sub}</div>
+              ))}
+              {/* Spacer pushes Export right on desktop; on mobile it wraps to new line */}
+              <div style={{flex:1,minWidth:8}}/>
+              {selP3&&(
+                <div style={{position:"relative",flexShrink:0}}>
+                  <button onClick={()=>setExportOpen(o=>!o)}
+                    style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:36,WebkitTapHighlightColor:"transparent"}}>
+                    ↓ Export
+                  </button>
+                  {exportOpen&&(
+                    <>
+                      {/* Full-screen tap-away overlay for mobile */}
+                      <div style={{position:"fixed",inset:0,zIndex:998}} onClick={()=>setExportOpen(false)}/>
+                      <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,boxShadow:"0 8px 24px rgba(15,23,42,0.15)",zIndex:999,minWidth:240,maxWidth:"90vw",overflow:"hidden"}}>
+                        {exportActions.length===0&&(
+                          <div style={{padding:"14px 16px",fontSize:14,color:G.textL,fontFamily:G.mono,textAlign:"center"}}>Select a teacher or class first</div>
+                        )}
+                        {exportActions.map((action,ai)=>(
+                          <div key={ai}>
+                            <div style={{padding:"9px 16px 5px",background:G.bg,borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:8}}>
+                              <span style={{fontSize:16}}>{action.icon}</span>
+                              <div>
+                                <div style={{fontSize:13,fontWeight:700,color:G.textS,fontFamily:G.display}}>{action.label}</div>
+                                <div style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{action.sub}</div>
+                              </div>
                             </div>
+                            {[
+                              {fmt:"CSV",  icon:"📊", sub:"Excel / Sheets", fn:action.csv},
+                              {fmt:"PDF",  icon:"📄", sub:"Print-ready",    fn:action.pdf},
+                              {fmt:"JSON", icon:"🗂", sub:"Raw backup",      fn:action.json},
+                            ].map(({fmt,icon,sub,fn},i,arr)=>(
+                              <div key={fmt} onClick={fn}
+                                style={{padding:"12px 16px 12px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,borderBottom:i<arr.length-1||ai<exportActions.length-1?`1px solid ${G.border}`:"none",WebkitTapHighlightColor:"transparent",minHeight:44}}>
+                                <span style={{fontSize:16}}>{icon}</span>
+                                <div>
+                                  <div style={{fontSize:14,fontWeight:600,color:G.text,fontFamily:G.sans}}>{fmt}</div>
+                                  <div style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{sub}</div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         ))}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           {/* Entries body */}
           <div style={{flex:1,overflowY:"auto",padding:"14px 16px 32px"}}>
