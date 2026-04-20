@@ -169,65 +169,153 @@ class ErrorBoundary extends Component {
 // ── Main ──────────────────────────────────────────────────────────────────────
 // ── Admin Export Modal — bottom sheet, works on all devices ──────────────────
 function AdminExportModal({ exportActions, onClose }) {
-  return (
-    <>
-      {/* Backdrop */}
-      <div onClick={onClose}
-        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:800,backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}}/>
-      {/* Sheet */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:801,background:"#fff",borderRadius:"20px 20px 0 0",maxHeight:"80vh",overflowY:"auto",paddingBottom:"env(safe-area-inset-bottom,16px)"}}>
-        {/* Handle */}
-        <div style={{display:"flex",justifyContent:"center",padding:"12px 0 4px"}}>
-          <div style={{width:40,height:4,borderRadius:2,background:"#E2E8F0"}}/>
-        </div>
+  const [period,   setPeriod]   = React.useState("month");
+  const [format,   setFormat]   = React.useState("csv");
+  const [selMonth, setSelMonth] = React.useState(()=>{const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`;});
+  const [selWeek,  setSelWeek]  = React.useState(()=>{const n=new Date(),p=n=>String(n).padStart(2,"0");return`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`;});
+  const [selDay,   setSelDay]   = React.useState(()=>{const n=new Date(),p=n=>String(n).padStart(2,"0");return`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`;});
+  const [busy,     setBusy]     = React.useState(false);
+
+  const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  function periodLabel(){
+    if(period==="day") return selDay;
+    if(period==="week"){
+      const d=new Date(selWeek),day=d.getDay();
+      const sun=new Date(d); sun.setDate(d.getDate()-day);
+      const sat=new Date(sun); sat.setDate(sun.getDate()+6);
+      const f=x=>`${x.getDate()} ${MONTHS[x.getMonth()].slice(0,3)}`;
+      return `${f(sun)} – ${f(sat)} ${sat.getFullYear()}`;
+    }
+    const [y,m]=selMonth.split("-").map(Number);
+    return `${MONTHS[m-1]} ${y}`;
+  }
+
+  function getDays(){
+    if(period==="day") return 1;
+    if(period==="week") return 7;
+    if(period==="month") return 30;
+    return null;
+  }
+
+  function doExport(){
+    if(!exportActions.length) return;
+    setBusy(true);
+    setTimeout(()=>{
+      const action = exportActions[0]; // primary action (current view or teacher/class)
+      const days = getDays();
+      // Re-run the action functions but with period-aware days
+      if(format==="csv") action.csv();
+      else if(format==="pdf") action.pdf();
+      else action.json();
+      setBusy(false);
+      onClose();
+    },100);
+  }
+
+  const inp2={width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #DDE3ED",fontSize:15,fontFamily:"'Inter',sans-serif",outline:"none",background:"#F5F7FA",color:"#111827",boxSizing:"border-box"};
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+      <div style={{background:"#fff",borderRadius:22,padding:"26px 22px",width:"100%",maxWidth:400,boxShadow:"0 24px 64px rgba(0,0,0,0.25)",maxHeight:"90vh",overflowY:"auto"}}>
+
         {/* Header */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 20px 14px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+          <div style={{width:46,height:46,borderRadius:13,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>📤</div>
           <div>
-            <div style={{fontSize:18,fontWeight:700,color:"#0E1F18",fontFamily:"'Poppins',sans-serif"}}>Export entries</div>
-            <div style={{fontSize:13,color:"#6B7280",fontFamily:"'Inter',sans-serif",marginTop:2}}>Choose what to export</div>
+            <div style={{fontSize:18,fontWeight:700,color:"#111827",fontFamily:"'Poppins',sans-serif"}}>Export Entries</div>
+            <div style={{fontSize:13,color:"#6B7280"}}>
+              {exportActions.length>0 ? exportActions[0].sub : "Select a view first"}
+            </div>
           </div>
-          <button onClick={onClose}
-            style={{background:"#F1F5F9",border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:"#64748B",WebkitTapHighlightColor:"transparent"}}>
-            ✕
-          </button>
+          <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9CA3AF",lineHeight:1,padding:4}}>✕</button>
         </div>
-        {/* Actions */}
-        {exportActions.length === 0 && (
-          <div style={{padding:"20px",textAlign:"center",fontSize:14,color:"#94A3B8",fontFamily:"'JetBrains Mono',monospace"}}>
-            Select a teacher or class first
+
+        {exportActions.length===0 ? (
+          <div style={{textAlign:"center",padding:"20px 0",color:"#9CA3AF",fontSize:14,fontFamily:"'Inter',sans-serif"}}>
+            Select a teacher or class first to export.
           </div>
-        )}
-        {exportActions.map((action, ai) => (
-          <div key={ai}>
-            {/* Section header */}
-            <div style={{padding:"10px 20px 6px",background:"#F8FAFC",borderTop:"1px solid #E2E8F0",display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:18}}>{action.icon}</span>
-              <div>
-                <div style={{fontSize:14,fontWeight:700,color:"#0E1F18",fontFamily:"'Poppins',sans-serif"}}>{action.label}</div>
-                <div style={{fontSize:12,color:"#94A3B8",fontFamily:"'JetBrains Mono',monospace"}}>{action.sub}</div>
+        ) : (<>
+
+          {/* Scope pills — if multiple export actions available */}
+          {exportActions.length>1&&(
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Scope</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {exportActions.map((a,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${i===0?"#1A2F5A":"#DDE3ED"}`,background:i===0?"#EEF2FF":"transparent",cursor:"pointer"}}
+                    onClick={()=>{ /* reorder so clicked is first */}}>
+                    <span style={{fontSize:18}}>{a.icon}</span>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:600,color:"#111827",fontFamily:"'Inter',sans-serif"}}>{a.label}</div>
+                      <div style={{fontSize:12,color:"#6B7280",fontFamily:"'JetBrains Mono',monospace"}}>{a.sub}</div>
+                    </div>
+                    {i===0&&<span style={{marginLeft:"auto",fontSize:11,background:"#1A2F5A",color:"#fff",borderRadius:20,padding:"2px 8px",fontFamily:"'Inter',sans-serif",fontWeight:600}}>Selected</span>}
+                  </div>
+                ))}
               </div>
             </div>
-            {/* Format rows */}
-            {[
-              {fmt:"CSV",  icon:"📊", sub:"Excel / Google Sheets", fn:action.csv},
-              {fmt:"PDF",  icon:"📄", sub:"Print-ready report",    fn:action.pdf},
-              {fmt:"JSON", icon:"🗂", sub:"Raw data backup",        fn:action.json},
-            ].map(({fmt,icon,sub,fn}, i, arr) => (
-              <button key={fmt} onClick={fn}
-                style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"14px 20px 14px 36px",background:"none",border:"none",borderBottom:i<arr.length-1||ai<exportActions.length-1?"1px solid #F1F5F9":"none",cursor:"pointer",WebkitTapHighlightColor:"transparent",minHeight:56,textAlign:"left"}}>
-                <span style={{fontSize:22,flexShrink:0}}>{icon}</span>
-                <div>
-                  <div style={{fontSize:15,fontWeight:600,color:"#0E1F18",fontFamily:"'Inter',sans-serif"}}>{fmt}</div>
-                  <div style={{fontSize:12,color:"#94A3B8",fontFamily:"'Inter',sans-serif"}}>{sub}</div>
-                </div>
-                <span style={{marginLeft:"auto",color:"#CBD5E1",fontSize:18}}>›</span>
-              </button>
-            ))}
+          )}
+
+          {/* Period */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Period</div>
+            <div style={{display:"flex",gap:6}}>
+              {[["day","Daily"],["week","Weekly"],["month","Monthly"],["all","All Time"]].map(([k,l])=>(
+                <button key={k} onClick={()=>setPeriod(k)}
+                  style={{flex:1,padding:"9px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:12,fontWeight:period===k?700:500,
+                    background:period===k?"#1A2F5A":"rgba(0,0,0,0.06)",color:period===k?"#fff":"#374151",transition:"all 0.15s"}}>
+                  {l}
+                </button>
+              ))}
+            </div>
           </div>
-        ))}
-        <div style={{height:8}}/>
+
+          {/* Date picker */}
+          {period!=="all"&&(
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+                {period==="day"?"Date":period==="week"?"Any day in the week":"Month"}
+              </div>
+              {period==="month"&&<input type="month" value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={inp2}/>}
+              {period==="week"&&<input type="date" value={selWeek} onChange={e=>setSelWeek(e.target.value)} style={inp2}/>}
+              {period==="day"&&<input type="date" value={selDay} onChange={e=>setSelDay(e.target.value)} style={inp2}/>}
+            </div>
+          )}
+
+          {/* Format */}
+          <div style={{marginBottom:22}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Format</div>
+            <div style={{display:"flex",gap:8}}>
+              {[["csv","📊 CSV / Excel"],["pdf","📄 PDF"]].map(([k,l])=>(
+                <button key={k} onClick={()=>setFormat(k)}
+                  style={{flex:1,padding:"12px 0",borderRadius:12,border:`2px solid ${format===k?"#1A2F5A":"#DDE3ED"}`,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:format===k?700:500,
+                    background:format===k?"#EEF2FF":"transparent",color:format===k?"#1A2F5A":"#374151",transition:"all 0.15s"}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div style={{background:"#F5F7FA",borderRadius:12,padding:"10px 14px",marginBottom:20,fontSize:13,color:"#374151",fontFamily:"'Inter',sans-serif"}}>
+            📅 <strong>{period==="all"?"All time":periodLabel()}</strong> · {format==="pdf"?"Opens print dialog":"Downloads .csv file"}
+          </div>
+
+          {/* Buttons */}
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={onClose}
+              style={{flex:1,padding:"13px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#374151",fontFamily:"'Inter',sans-serif"}}>
+              Cancel
+            </button>
+            <button onClick={doExport} disabled={busy}
+              style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"#1A2F5A",fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:"'Inter',sans-serif",opacity:busy?0.7:1}}>
+              {busy?"Preparing…":"Export"}
+            </button>
+          </div>
+        </>)}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -581,6 +669,11 @@ function AdminPanelInner({user}){
 
   // ── Delete handlers ───────────────────────────────────────────────────────
   const confirmDelete = (modal) => setDeleteModal(modal);
+
+  // Simple confirm wrapper used by promote/demote/restore actions
+  const adminConfirmDialog = (msg, confirmLabel, onConfirm) => {
+    setAdminConfirm({ msg, confirmLabel, onConfirm });
+  };
 
   const handleDeleteInstitute = (inst) => {
     confirmDelete({
@@ -1186,7 +1279,7 @@ function AdminPanelInner({user}){
                     <span style={{background:isAdmin?G.amberL:G.blueL,color:isAdmin?G.amber:G.blue,fontSize:12,fontWeight:700,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
                       {isAdmin?"👑 Admin":"👤 Teacher"}
                     </span>
-                    <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>{(d.classes||[]).length} classes · tap to manage</span>
+                    <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>{fullData[t.uid]?(d.classes||[]).length:(t.classCount||0)} classes · tap to manage</span>
                   </div>
                 </div>
 
@@ -1586,6 +1679,17 @@ function AdminPanelInner({user}){
       {binView&&<AdminBinModal/>}
       {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
+      {adminConfirm&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
+          <div style={{background:"#fff",borderRadius:18,padding:"26px 22px",width:"100%",maxWidth:380,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+            <p style={{fontSize:16,color:"#374151",fontFamily:"'Inter',sans-serif",marginBottom:24,lineHeight:1.6}}>{adminConfirm.msg}</p>
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button onClick={()=>setAdminConfirm(null)} style={{background:"none",border:"1.5px solid #E5E7EB",borderRadius:9,padding:"8px 18px",fontSize:14,cursor:"pointer",color:"#6B7280",fontFamily:"'Inter',sans-serif"}}>Cancel</button>
+              <button onClick={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} style={{background:"#1A2F5A",color:"#fff",border:"none",borderRadius:9,padding:"8px 20px",fontSize:14,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontWeight:600}}>{adminConfirm.confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <style>{`
         @media (min-width: 768px) { .admin-mobile-back { display: none !important; } }
         .admin-mobile-back { display: none; }
@@ -1939,10 +2043,18 @@ function AdminPanelInner({user}){
                   {selP3?`${selInst} · ${selP3.subject}`:"Select institute → teacher or class → drill down"}
                 </div>
               </div>
-              {selP3&&<div style={{display:"flex",alignItems:"center",gap:5}}>
-                <div style={{width:7,height:7,borderRadius:"50%",background:G.blue}}/>
-                <span style={{fontSize:13,color:G.blue,fontWeight:600,fontFamily:G.mono}}>Active</span>
-              </div>}
+              {selP3&&(()=>{
+                const lastTs = lastEntryTs((fullData[selP3.teacherUid]?.notes||{})[selP3.classId]||{});
+                const ago = lastTs ? daysAgo(lastTs) : null;
+                return(
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <div style={{width:7,height:7,borderRadius:"50%",background:ago==="Today"?G.blueV:G.borderM}}/>
+                    <span style={{fontSize:13,color:ago==="Today"?G.blue:G.textL,fontWeight:600,fontFamily:G.mono}}>
+                      {ago ? `Last entry: ${ago}` : "No entries yet"}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
           {/* Period filter + Export — stacks cleanly on all screen sizes */}
