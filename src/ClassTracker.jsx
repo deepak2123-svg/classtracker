@@ -589,7 +589,10 @@ function EditClassModal({cls,data,onSave,onClose,sortedByUsage,globalInstitutes,
       <label style={lbl}>Institute</label>
       <ReadOnlyDropdown value={institute} onChange={setInstitute} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select institute"/>
       <label style={{...lbl,marginTop:8}}>Class / Section</label>
-      <CreatableDropdown value={section} onChange={setSection} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
+      {isKisSipKunjpura(institute)
+        ? <KisSectionDropdown value={section} onChange={setSection} placeholder="Select class / section"/>
+        : <CreatableDropdown value={section} onChange={setSection} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section2026"/>
+      }
       <label style={{...lbl,marginTop:8}}>Subject</label>
       <CreatableDropdown value={subject} onChange={setSubject} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics" addPlaceholder="Type subject…"/>
       <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
@@ -898,6 +901,132 @@ const KIS_SLOTS = {
 function isKisSipKunjpura(institute) {
   const s = (institute || "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
   return s.includes("kis") && s.includes("kunjpura");
+}
+
+// ── KIS SIP Kunjpura fixed section list ───────────────────────────────────────
+const KIS_SECTIONS = [
+  { grade: "6th",  sections: ["6TH"] },
+  { grade: "7th",  sections: ["7TH"] },
+  { grade: "8th",  sections: ["8TH-B", "8TH-C"] },
+  { grade: "9th",  sections: ["9TH-B", "9TH-C", "9TH-D"] },
+  { grade: "10th", sections: ["10TH-B", "10TH-C"] },
+  { grade: "11th", sections: ["XI-IIT STAR", "XI-IIT SHIKHAR", "XI-NDA", "XI-MED"] },
+  { grade: "12th", sections: ["XII-IIT STAR", "XII-IIT SHIKHAR", "XII-MED SHIKHAR", "XII-NDA"] },
+];
+
+// localStorage key for remembering last picked section per grade
+const KIS_LAST_KEY = "kis_last_section";
+function kisGetLast() { try { return JSON.parse(localStorage.getItem(KIS_LAST_KEY)||"{}"); } catch{ return {}; } }
+function kisSetLast(grade, section) { try { const m=kisGetLast(); m[grade]=section; localStorage.setItem(KIS_LAST_KEY, JSON.stringify(m)); } catch{} }
+
+// ── KIS Grouped Section Dropdown ──────────────────────────────────────────────
+function KisSectionDropdown({ value, onChange, placeholder }) {
+  const lastMap = kisGetLast();
+  // Auto-open the grade group that was last used
+  const defaultOpen = (() => {
+    for (const g of KIS_SECTIONS) {
+      if (g.sections.includes(value)) return g.grade;
+      if (Object.values(lastMap).some(s => g.sections.includes(s))) {
+        // find the grade whose last-used section matches
+      }
+    }
+    // open the grade of the last used section overall
+    for (const g of KIS_SECTIONS) {
+      if (Object.values(lastMap).find(s => g.sections.includes(s))) return g.grade;
+    }
+    return null;
+  })();
+
+  const [open, setOpen] = useState(false);
+  const [expandedGrade, setExpandedGrade] = useState(defaultOpen);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    const h = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  // When dropdown opens, auto-expand grade of current value or last used
+  useEffect(() => {
+    if (!open) return;
+    if (value) {
+      const g = KIS_SECTIONS.find(g => g.sections.includes(value));
+      if (g) { setExpandedGrade(g.grade); return; }
+    }
+    // fallback: open grade of most recent last-used section
+    for (const g of KIS_SECTIONS) {
+      if (lastMap[g.grade]) { setExpandedGrade(g.grade); return; }
+    }
+  }, [open]);
+
+  const handleSelect = (grade, section) => {
+    kisSetLast(grade, section);
+    onChange(section);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", marginBottom: 10 }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ ...inp, marginBottom: 0, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", color: value ? G.text : G.textL }}>
+        <span style={{ fontWeight: value ? 400 : 300 }}>{value || placeholder}</span>
+        <span style={{ color: G.textL, fontSize: 11, fontFamily: G.mono, display: "inline-block", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 400, background: G.surface, borderRadius: 12, border: `1px solid ${G.border}`, boxShadow: G.shadowLg, overflow: "hidden" }}>
+          <div style={{ maxHeight: 300, overflowY: "auto" }}>
+            {KIS_SECTIONS.map(({ grade, sections }) => {
+              const isExpanded = expandedGrade === grade;
+              const lastSec = lastMap[grade];
+              // Put last-used section first
+              const ordered = lastSec && sections.includes(lastSec)
+                ? [lastSec, ...sections.filter(s => s !== lastSec)]
+                : sections;
+              return (
+                <div key={grade}>
+                  {/* Grade header row */}
+                  <div onClick={() => setExpandedGrade(isExpanded ? null : grade)}
+                    style={{ padding: "10px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", background: isExpanded ? G.greenL : "transparent", borderBottom: `1px solid ${G.border}`, transition: "background 0.15s" }}
+                    onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = G.bg; }}
+                    onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = "transparent"; }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: isExpanded ? G.green : G.text, fontFamily: G.display }}>Class {grade}</span>
+                      {lastSec && (
+                        <span style={{ fontSize: 11, color: G.green, background: G.greenL, borderRadius: 20, padding: "2px 8px", fontWeight: 600, fontFamily: G.mono }}>
+                          last: {lastSec}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11, color: G.textL, fontFamily: G.mono, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+                  </div>
+                  {/* Section list */}
+                  {isExpanded && (
+                    <div style={{ background: G.bg }}>
+                      {ordered.map(sec => {
+                        const isSel = sec === value;
+                        const isLast = sec === lastSec;
+                        return (
+                          <div key={sec} onClick={() => handleSelect(grade, sec)}
+                            style={{ padding: "10px 16px 10px 32px", cursor: "pointer", fontSize: 14, color: isSel ? G.green : G.text, fontWeight: isSel ? 600 : 400, background: isSel ? G.greenL : "transparent", display: "flex", alignItems: "center", gap: 10, transition: "background 0.1s", borderBottom: `1px solid ${G.border}` }}
+                            onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = G.surface; }}
+                            onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
+                            <span style={{ width: 16, color: G.green, fontSize: 13, fontFamily: G.mono }}>{isSel ? "✓" : ""}</span>
+                            <span style={{ flex: 1 }}>{sec}</span>
+                            {isLast && !isSel && <span style={{ fontSize: 10, color: G.green, fontFamily: G.mono, opacity: 0.8 }}>recent</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Convert Roman numerals (I–XII) to integer, returns null if not Roman
@@ -1694,7 +1823,10 @@ function ClassTrackerInner({user}){
           <label style={lbl}>Institute</label>
           <ReadOnlyDropdown value={newClass.institute} onChange={s=>setNewClass(c=>({...c,institute:s}))} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select your institute"/>
           <label style={{...lbl,marginTop:10}}>Class / Section</label>
-          <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
+          {isKisSipKunjpura(newClass.institute)
+            ? <KisSectionDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} placeholder="Select class / section"/>
+            : <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section2026"/>
+          }
           <label style={{...lbl,marginTop:10}}>Subject</label>
           <CreatableDropdown value={newClass.subject} onChange={s=>setNewClass(c=>({...c,subject:s}))} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics, Geography" addPlaceholder="Type subject…"/>
           <label style={{...lbl,marginTop:14}}>Default Class Duration</label>
