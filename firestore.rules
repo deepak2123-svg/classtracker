@@ -11,9 +11,12 @@ service cloud.firestore {
         get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role == "admin";
     }
 
-    // ── User app data — owner only ─────────────────────────────────────────
+    // ── User app data ──────────────────────────────────────────────────────
+    // Teachers read/write only their own data.
+    // Admins can read any teacher's data (needed for admin panel).
     match /users/{uid}/appdata/{doc} {
-      allow read, write: if isSignedIn() && request.auth.uid == uid;
+      allow read:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isSignedIn() && request.auth.uid == uid;
     }
 
     // ── Roles ─────────────────────────────────────────────────────────────
