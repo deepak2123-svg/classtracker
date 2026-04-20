@@ -250,7 +250,7 @@ function AdminPanelInner({user}){
   const [exportOpen,   setExportOpen]   = useState(false);
   const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
   const [isMobile,     setIsMobile]     = useState(false);
-  const [manageTab,    setManageTab]    = useState("teachers"); // teachers | institutes
+  const [manageTab,    setManageTab]    = useState("teachers"); // teachers | admins | institutes
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
   const [selTeacher,   setSelTeacher]   = useState(null); // uid of teacher in detail modal
@@ -975,9 +975,9 @@ function AdminPanelInner({user}){
 
         {/* Tab switcher */}
         <div style={{display:"flex",background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:4,marginBottom:22,gap:4}}>
-          {[["teachers","👤 Teachers"],["institutes","🏫 Institutes"]].map(([key,label])=>(
+          {[["teachers","👤 Teachers"],["admins","👑 Admins"],["institutes","🏫 Institutes"]].map(([key,label])=>(
             <button key={key} onClick={()=>setManageTab(key)}
-              style={{flex:1,padding:"10px 0",borderRadius:9,border:"none",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:G.sans,transition:"all 0.15s",
+              style={{flex:1,padding:"10px 0",borderRadius:9,border:"none",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:G.sans,transition:"all 0.15s",
                 background:manageTab===key?G.navy:"none",color:manageTab===key?"#fff":G.textM}}>
               {label}
             </button>
@@ -1078,32 +1078,77 @@ function AdminPanelInner({user}){
 
         </>}
 
+        {manageTab==="admins"&&(()=>{
+          const adminList = teachers.filter(t=>roles[t.uid]==="admin");
+          return(
+            <>
+              {/* Invite link */}
+              <div style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:13,padding:"14px 16px",marginBottom:20}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                  <div>
+                    <div style={{fontSize:16,fontWeight:700,color:G.navy,fontFamily:G.display}}>Generate Admin Invite Link</div>
+                    <div style={{fontSize:14,color:"#1D4ED8",marginTop:3}}>Single-use · expires in 7 days</div>
+                  </div>
+                  <button onClick={handleGenerateInvite} disabled={inviteLoading}
+                    style={{...pill(G.navy,"#fff","transparent"),padding:"8px 18px",fontSize:15,flexShrink:0}}>
+                    {inviteLoading?"Generating…":"🔗 Generate Link"}
+                  </button>
+                </div>
+                {inviteLink&&(
+                  <div style={{marginTop:14}}>
+                    <div style={{background:"#fff",border:"1px solid #BFDBFE",borderRadius:9,padding:"10px 14px",fontSize:14,fontFamily:G.mono,color:"#1A2F5A",wordBreak:"break-all",marginBottom:10}}>{inviteLink}</div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>showAdminToast("Link copied!"))} style={{...pill("#1D4ED8","#fff","transparent"),fontSize:14,padding:"6px 16px"}}>Copy Link</button>
+                      <button onClick={()=>setInviteLink(null)} style={{...pill("none",G.textM,G.border),fontSize:14,padding:"6px 16px"}}>Dismiss</button>
+                    </div>
+                    <div style={{fontSize:13,color:"#1D4ED8",marginTop:10}}>⚠ Share privately. Grants full admin access, single-use.</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Admin list */}
+              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
+                <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
+                  Admins ({adminList.length})
+                </div>
+                <div style={{fontSize:14,color:G.textM,marginBottom:14}}>These accounts have full access to the admin panel.</div>
+                {adminList.length===0
+                  ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No admins yet. Generate an invite link above.</div>
+                  :<div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {adminList.map(t=>{
+                      const d=fullData[t.uid]||{};
+                      const name=d.profile?.name||t.name||"Unknown";
+                      const isMe=t.uid===user.uid;
+                      return(
+                        <div key={t.uid} style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:12}}>
+                          <div style={{width:42,height:42,borderRadius:11,background:G.amberL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:G.amber,fontFamily:G.mono,flexShrink:0}}>
+                            {(name[0]||"?").toUpperCase()}
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8}}>
+                              {name}
+                              {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
+                            </div>
+                            <div style={{fontSize:13,color:G.textM,marginTop:2}}>{t.email||""}</div>
+                          </div>
+                          {!isMe&&(
+                            <button onClick={()=>handleDemote(t.uid)}
+                              style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,flexShrink:0}}>
+                              Remove Admin
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                }
+              </div>
+            </>
+          );
+        })()}
+
         {/* ── TEACHERS TAB ── */}
         {manageTab==="teachers"&&<>
-
-        {/* Invite link */}
-        <div style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:13,padding:"14px 16px",marginBottom:20}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-            <div>
-              <div style={{fontSize:16,fontWeight:700,color:G.navy,fontFamily:G.display}}>Generate Admin Invite Link</div>
-              <div style={{fontSize:14,color:"#1D4ED8",marginTop:3}}>Single-use · expires in 7 days</div>
-            </div>
-            <button onClick={handleGenerateInvite} disabled={inviteLoading}
-              style={{...pill(G.navy,"#fff","transparent"),padding:"8px 18px",fontSize:15,flexShrink:0}}>
-              {inviteLoading?"Generating…":"🔗 Generate Link"}
-            </button>
-          </div>
-          {inviteLink&&(
-            <div style={{marginTop:14}}>
-              <div style={{background:"#fff",border:"1px solid #BFDBFE",borderRadius:9,padding:"10px 14px",fontSize:14,fontFamily:G.mono,color:"#1A2F5A",wordBreak:"break-all",marginBottom:10}}>{inviteLink}</div>
-              <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>alert("Link copied!"))} style={{...pill("#1D4ED8","#fff","transparent"),fontSize:14,padding:"6px 16px"}}>Copy Link</button>
-                <button onClick={()=>setInviteLink(null)} style={{...pill("none",G.textM,G.border),fontSize:14,padding:"6px 16px"}}>Dismiss</button>
-              </div>
-              <div style={{fontSize:13,color:"#1D4ED8",marginTop:10}}>⚠ Share privately. Grants full admin access, single-use.</div>
-            </div>
-          )}
-        </div>
 
         {/* Teachers grouped by institute */}
         {(()=>{

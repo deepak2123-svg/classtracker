@@ -1020,7 +1020,11 @@ function ClassTrackerInner({user}){
       const base = d ? {...DEFAULT_DATA,...d,profile:d.profile||{name:""},trash:d.trash||{classes:[],notes:[]}} : DEFAULT_DATA;
       // Purge trash items older than 30 days before they reach the UI
       const purged = purgeExpiredTrash(base);
-      if(!purged.profile?.name && user.displayName) {
+      // For brand-new users (no Firestore doc yet), always ask for name
+      // even if Google provided a displayName — let them confirm/correct it
+      if (!d) {
+        purged.profile = { name: "" }; // force ProfileSetup screen
+      } else if (!purged.profile?.name && user.displayName) {
         purged.profile = { name: user.displayName.trim() };
       }
 
@@ -1954,10 +1958,10 @@ function ClassTrackerInner({user}){
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<>
-            {activeClass&&<div style={{display:"flex",alignItems:"center",gap:8,maxWidth:320,overflow:"hidden"}}>
+            {activeClass&&<div className="desktop-only" style={{display:"flex",alignItems:"center",gap:8,maxWidth:260,overflow:"hidden"}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:"#34D077",flexShrink:0}}/>
               <span style={{fontSize:14,fontWeight:600,color:"rgba(255,255,255,0.95)",fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{activeClass.section}</span>
-              <span style={{fontSize:13,color:"rgba(255,255,255,0.5)",flexShrink:0,whiteSpace:"nowrap"}}>· {activeClass.institute}</span>
+              <span style={{fontSize:13,color:"rgba(255,255,255,0.5)",flexShrink:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:120}}>· {activeClass.institute}</span>
             </div>}
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
           </>}

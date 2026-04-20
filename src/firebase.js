@@ -239,6 +239,18 @@ export function purgeExpiredTrash(data) {
   return { ...data, trash: { classes: trashedClasses, notes: trashedNotes } };
 }
 
+// ── Save a name to a user's profile (used by admin + teacher name setup) ─────
+export async function saveProfileName(uid, name) {
+  try {
+    const ref = userDocRef(uid);
+    const snap = await getDoc(ref);
+    const existing = snap.exists() ? snap.data() : {};
+    await setDoc(ref, { ...existing, profile: { ...(existing.profile || {}), name: name.trim() } });
+    // Also update the teacher index entry
+    await setDoc(doc(db, "teachers", uid), { name: name.trim() }, { merge: true });
+  } catch (e) { console.error("saveProfileName", e); }
+}
+
 // ── Remove institute ──────────────────────────────────────────────────────────
 // Strips this institute from every teacher's index entry.
 // Teachers are NOT deleted — they may belong to other institutes.

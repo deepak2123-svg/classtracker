@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { loginWithGoogle, loginWithEmail, signupWithEmail, verifyInviteToken, useInviteToken, db } from "./firebase";
+import { loginWithGoogle, loginWithEmail, signupWithEmail, verifyInviteToken, useInviteToken, db, saveProfileName } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { friendlyError } from "./shared.jsx";
 
@@ -11,15 +11,54 @@ const G = {
   display:"'Poppins',sans-serif", mono:"'JetBrains Mono',monospace",
 };
 
+// ── Name setup screen — shown after first admin login ─────────────────────────
+function NameSetup({ user, onDone }) {
+  const [name, setName] = useState(user.displayName || "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    if (!name.trim()) return;
+    setSaving(true);
+    await saveProfileName(user.uid, name.trim());
+    setSaving(false);
+    onDone();
+  }
+
+  return (
+    <div style={{minHeight:"100svh",width:"100%",background:G.navy,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
+      <div style={{width:"100%",maxWidth:400,background:"rgba(255,255,255,0.06)",borderRadius:20,padding:"28px 20px",border:"1px solid rgba(255,255,255,0.1)"}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:36,marginBottom:12}}>👑</div>
+          <h2 style={{fontSize:22,fontWeight:700,color:"#fff",fontFamily:G.display,margin:0}}>Welcome, Admin!</h2>
+          <p style={{fontSize:15,color:"rgba(255,255,255,0.55)",marginTop:8,lineHeight:1.5}}>
+            What should we call you? Your name will appear on the admin panel.
+          </p>
+        </div>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleSave()}
+          placeholder="Your full name"
+          autoFocus
+          style={{width:"100%",padding:"13px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.09)",color:"#fff",fontSize:16,fontFamily:G.sans,outline:"none",boxSizing:"border-box",marginBottom:12}}
+        />
+        <button onClick={handleSave} disabled={!name.trim() || saving}
+          style={{width:"100%",padding:"13px",background:name.trim()?G.blueV:"rgba(255,255,255,0.1)",color:name.trim()?"#fff":"rgba(255,255,255,0.3)",border:"none",borderRadius:10,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:name.trim()?"pointer":"not-allowed"}}>
+          {saving ? "Saving…" : "Get started →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminAuth({ onVerified }) {
-  const [mode,    setMode]    = useState("choose"); // choose | email
+  const [mode,    setMode]    = useState("choose");
   const [email,   setEmail]   = useState("");
   const [pass,    setPass]    = useState("");
   const [error,   setError]   = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingUser, setPendingUser] = useState(null); // waiting for name setup
 
-  // Read invite token from URL — but DON'T verify until after login
-  // (Firestore requires auth to read, so we verify post-login)
   const [inviteToken] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("invite") || null;
@@ -29,20 +68,34 @@ export default function AdminAuth({ onVerified }) {
 
   async function afterLogin(user) {
     try {
-      // 1. Check if already admin
+      // 1. Already admin?
       const snap = await getDoc(doc(db, "roles", user.uid));
-      if (snap.exists() && snap.data().role === "admin") {
+      const isAdmin = snap.exists() && snap.data().role === "admin";
+
+      if (isAdmin) {
+        // Check if they have a saved name — if not, show name setup
+        const dataSnap = await getDoc(doc(db, "users", user.uid, "appdata", "main")).catch(() => null);
+        const hasName = dataSnap?.exists() && dataSnap.data()?.profile?.name;
+        if (!hasName && !user.displayName) {
+          setPendingUser(user);
+          return;
+        }
+        // Save displayName if we have it but Firestore doesn't
+        if (!hasName && user.displayName) {
+          await saveProfileName(user.uid, user.displayName);
+        }
         onVerified(user);
         return;
       }
 
-      // 2. Try to activate invite token (now authenticated, so Firestore read works)
+      // 2. Try invite token
       if (inviteToken) {
         try {
-          await verifyInviteToken(inviteToken);      // validate: not used, not expired
-          await useInviteToken(inviteToken, user.uid); // mark used + write admin role
+          await verifyInviteToken(inviteToken);
+          await useInviteToken(inviteToken, user.uid);
           window.history.replaceState({}, "", window.location.pathname);
-          onVerified(user);
+          // New admin — always ask for name
+          setPendingUser(user);
           return;
         } catch (e) {
           setError(e.message || "Invite link is invalid or expired.");
@@ -50,7 +103,6 @@ export default function AdminAuth({ onVerified }) {
         }
       }
 
-      // 3. Neither admin nor valid invite
       setError("You don't have admin access. Ask an admin to promote you or share an invite link.");
     } catch (e) {
       setError("Something went wrong. Please try again.");
@@ -69,20 +121,21 @@ export default function AdminAuth({ onVerified }) {
     setError(""); setLoading(true);
     try {
       let u;
-      try {
-        u = await loginWithEmail(email, pass);
-      } catch (err) {
-        // New user — create account on the fly
+      try { u = await loginWithEmail(email, pass); }
+      catch (err) {
         if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
           u = await signupWithEmail(email.split("@")[0], email, pass);
-        } else {
-          throw err;
-        }
+        } else throw err;
       }
       await afterLogin(u);
     }
     catch (e) { setError(friendlyError(e.code)); }
     finally { setLoading(false); }
+  }
+
+  // Show name setup screen before handing off to the admin panel
+  if (pendingUser) {
+    return <NameSetup user={pendingUser} onDone={() => onVerified(pendingUser)} />;
   }
 
   const inp = {
@@ -95,10 +148,8 @@ export default function AdminAuth({ onVerified }) {
   return (
     <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.navy,fontFamily:G.sans,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 16px",position:"relative",overflow:"hidden"}}>
 
-      {/* Background dots */}
       <div style={{position:"absolute",inset:0,opacity:0.03,backgroundImage:"radial-gradient(circle,#fff 1px,transparent 1px)",backgroundSize:"28px 28px",pointerEvents:"none"}}/>
 
-      {/* Logo */}
       <div style={{marginBottom:32,textAlign:"center"}}>
         <div style={{width:60,height:60,borderRadius:18,background:G.blueV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(59,130,246,0.4)"}}>🔐</div>
         <div style={{fontSize:12,fontFamily:G.mono,letterSpacing:3,color:"rgba(255,255,255,0.65)",textTransform:"uppercase",marginBottom:5}}>ClassLog</div>
@@ -108,10 +159,8 @@ export default function AdminAuth({ onVerified }) {
         </p>
       </div>
 
-      {/* Card */}
       <div style={{width:"100%",maxWidth:400,background:"rgba(255,255,255,0.06)",borderRadius:20,padding:"22px 16px",border:"1px solid rgba(255,255,255,0.1)",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
 
-        {/* Invite badge */}
         {hasInvite && (
           <div style={{background:"rgba(59,130,246,0.12)",border:"1px solid rgba(59,130,246,0.25)",borderRadius:10,padding:"9px 14px",marginBottom:18,fontSize:14,color:"rgba(255,255,255,0.7)",display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:17}}>🔗</span>
@@ -119,7 +168,6 @@ export default function AdminAuth({ onVerified }) {
           </div>
         )}
 
-        {/* Login — always shown */}
         {mode === "choose" && (
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <button onClick={handleGoogle} disabled={loading}
