@@ -875,7 +875,7 @@ ${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><
 
 // ── KIS SIP Kunjpura preset timetable slots ────────────────────────────────────
 // Yellow (break) rows from the timetable are excluded.
-// Match is case-insensitive on the institute name containing "kis".
+// Only applies to KIS SIP Kunjpura — NOT KIS Competition Wing or other KIS branches.
 const KIS_SLOTS = {
   senior: [ // 11th and 12th
     { start:"09:00", end:"10:30", durMins:90  },
@@ -894,12 +894,58 @@ const KIS_SLOTS = {
   ],
 };
 
+// Matches only KIS SIP Kunjpura — any capitalisation / spacing variation
+function isKisSipKunjpura(institute) {
+  const s = (institute || "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
+  return s.includes("kis") && s.includes("kunjpura");
+}
+
+// Convert Roman numerals (I–XII) to integer, returns null if not Roman
+const ROMAN_MAP = { i:1, v:5, x:10, l:50, c:100, d:500, m:1000 };
+function romanToInt(str) {
+  const s = str.toLowerCase().replace(/[^ivxlcdm]/g, "");
+  if (!s.length) return null;
+  let total = 0, prev = 0;
+  for (let i = s.length - 1; i >= 0; i--) {
+    const val = ROMAN_MAP[s[i]];
+    if (!val) return null;
+    total += val < prev ? -val : val;
+    prev = val;
+  }
+  // Sanity check: 1–12 only (class grades)
+  return total >= 1 && total <= 12 ? total : null;
+}
+
+// Extract grade number from a section name.
+// Handles: "11th NDA", "12th A", "XI NDA", "IX B", "9 A", "Class 8"
+function extractGrade(section) {
+  const s = (section || "").trim();
+  // 1. Arabic numerals first: "11th", "12", "9"
+  const arabic = s.match(/\b(\d{1,2})(st|nd|rd|th)?\b/i);
+  if (arabic) {
+    const n = parseInt(arabic[1]);
+    if (n >= 1 && n <= 12) return n;
+  }
+  // 2. Roman numerals: look for standalone Roman word at start
+  const romanMatch = s.match(/^([IVXivx]{1,6})\b/);
+  if (romanMatch) {
+    const n = romanToInt(romanMatch[1]);
+    if (n) return n;
+  }
+  // 3. Roman numeral anywhere in the string (e.g. "NDA XI")
+  const words = s.split(/\s+/);
+  for (const w of words) {
+    const n = romanToInt(w);
+    if (n) return n;
+  }
+  return null;
+}
+
 function getKisSlots(cls) {
   if (!cls) return null;
-  if (!(cls.institute || "").toLowerCase().includes("kis")) return null;
-  const m = (cls.section || "").match(/(\d+)/);
-  if (!m) return null;
-  const grade = parseInt(m[1]);
+  if (!isKisSipKunjpura(cls.institute)) return null;
+  const grade = extractGrade(cls.section);
+  if (!grade) return null;
   if (grade >= 11) return KIS_SLOTS.senior;
   if (grade >= 6)  return KIS_SLOTS.junior;
   return null;
