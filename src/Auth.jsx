@@ -46,7 +46,7 @@ export default function Auth() {
   };
 
   return (
-    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px 14px"}}>
+    <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px 14px"}}>
       <div style={{width:"100%",maxWidth:420}}>
 
         {/* Logo */}

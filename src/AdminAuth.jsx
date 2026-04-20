@@ -79,7 +79,7 @@ export default function AdminAuth({ onVerified }) {
   };
 
   return (
-    <div style={{minHeight:"100vh",background:G.navy,fontFamily:G.sans,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 16px",position:"relative",overflow:"hidden"}}>
+    <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.navy,fontFamily:G.sans,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 16px",position:"relative",overflow:"hidden"}}>
 
       {/* Background dots */}
       <div style={{position:"absolute",inset:0,opacity:0.03,backgroundImage:"radial-gradient(circle,#fff 1px,transparent 1px)",backgroundSize:"28px 28px",pointerEvents:"none"}}/>

@@ -146,7 +146,7 @@ class ErrorBoundary extends Component {
   static getDerivedStateFromError(e){ return {error:e}; }
   render(){
     if(this.state.error) return(
-      <div style={{minHeight:"100vh",background:"#F7F8F6",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",padding:24}}>
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:"#F7F8F6",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",padding:24}}>
         <div style={{textAlign:"center",maxWidth:400}}>
           <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
           <h2 style={{color:"#0E1F18",fontFamily:"'Poppins',sans-serif",marginBottom:8}}>Something went wrong</h2>
@@ -597,17 +597,6 @@ function AdminPanelInner({user}){
 
   const resetNav=(newTab)=>{setSelP2(null);setSelP3(null);if(newTab)setTab(newTab);setMobileStep(s=>Math.min(s,1));};
 
-  // ── Toast + Confirm helpers ───────────────────────────────────────────────
-  const showAdminToast = (msg) => {
-    setAdminToast(msg);
-    if (adminToastTimer.current) clearTimeout(adminToastTimer.current);
-    adminToastTimer.current = setTimeout(() => setAdminToast(null), 3500);
-  };
-
-  const adminConfirmDialog = (msg, confirmLabel, onConfirm) => {
-    setAdminConfirm({ msg, confirmLabel, onConfirm });
-  };
-
   // When institute is selected, pre-load its teachers in background
   const onSelectInstitute = (inst) => {
     setSelInst(inst); resetNav();
@@ -785,33 +774,8 @@ function AdminPanelInner({user}){
   };
 
 
-  // ── Shared overlay components ─────────────────────────────────────────────
-  const AdminToastBanner = () => adminToast ? (
-    <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#1A2F5A",color:"#fff",padding:"11px 22px",borderRadius:12,zIndex:9999,fontSize:14,fontFamily:G.sans,fontWeight:500,boxShadow:"0 6px 24px rgba(0,0,0,0.35)",whiteSpace:"nowrap",maxWidth:"90vw",overflow:"hidden",textOverflow:"ellipsis"}}>
-      {adminToast}
-    </div>
-  ) : null;
-
-  const AdminConfirmModal = () => adminConfirm ? (
-    <div style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.5)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
-      <div style={{background:G.surface,borderRadius:18,padding:"26px 24px",width:"100%",maxWidth:400,boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}}>
-        <p style={{fontSize:16,color:G.text,fontFamily:G.sans,lineHeight:1.55,marginBottom:22}}>{adminConfirm.msg}</p>
-        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-          <button onClick={()=>setAdminConfirm(null)}
-            style={{background:"none",border:`1.5px solid ${G.border}`,borderRadius:9,padding:"8px 18px",fontSize:15,cursor:"pointer",color:G.textM,fontFamily:G.sans,fontWeight:500}}>
-            Cancel
-          </button>
-          <button onClick={async()=>{const cb=adminConfirm.onConfirm;setAdminConfirm(null);try{await cb();}catch(e){showAdminToast("Error: "+e.message);}}}
-            style={{background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"8px 20px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:600}}>
-            {adminConfirm.confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  ) : null;
-
   if(loading) return(
-    <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.sans}}>
+    <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.sans}}>
       <div style={{textAlign:"center"}}>
         <div style={{width:36,height:36,borderRadius:"50%",border:`3px solid ${G.border}`,borderTopColor:G.blue,animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}/>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -924,11 +888,9 @@ function AdminPanelInner({user}){
 
   // ── MANAGE ACCESS VIEW ────────────────────────────────────────────────────
   if(view==="manage") return(
-    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans,overflowX:"hidden"}}>
+    <div style={{minHeight:"100svh",background:G.bg,fontFamily:G.sans,overflowX:"hidden"}}>
       {binView&&<AdminBinModal/>}
       {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
-      <AdminConfirmModal/>
-      <AdminToastBanner/>
       {/* nav */}
       <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
@@ -1267,11 +1229,9 @@ function AdminPanelInner({user}){
 
     // ── STEP 0: Institute list ────────────────────────────────────────────────
     if(mobileStep===0) return(
-      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         {binView&&<AdminBinModal/>}
         {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
-        <AdminConfirmModal/>
-        <AdminToastBanner/>
         <MobileNav/>
         <MobileStats/>
         <div style={{padding:"12px 14px 40px"}}>
@@ -1377,11 +1337,9 @@ function AdminPanelInner({user}){
 
     // ── STEP 1: Teachers or Classes for selected institute ────────────────────
     if(mobileStep===1) return(
-      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         {binView&&<AdminBinModal/>}
         {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
-        <AdminConfirmModal/>
-        <AdminToastBanner/>
         <MobileNav/><MobileBreadcrumb/>
         <div style={{padding:"12px 14px 40px"}}>
           <h2 style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:14}}>{selInst}</h2>
@@ -1428,11 +1386,9 @@ function AdminPanelInner({user}){
 
     // ── STEP 2: Classes for teacher / Teachers for class ─────────────────────
     if(mobileStep===2) return(
-      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         {binView&&<AdminBinModal/>}
         {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
-        <AdminConfirmModal/>
-        <AdminToastBanner/>
         <MobileNav/><MobileBreadcrumb/>
         <div style={{padding:"12px 14px 40px"}}>
           <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}</h2>
@@ -1462,11 +1418,9 @@ function AdminPanelInner({user}){
       const classNotes=(fullData[selP3.teacherUid]?.notes||{})[selP3.classId]||{};
       const entries=groupByDate(getEntriesInRange(classNotes,days));
       return(
-        <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+        <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
           {binView&&<AdminBinModal/>}
           {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
-          <AdminConfirmModal/>
-          <AdminToastBanner/>
           <MobileNav/><MobileBreadcrumb/>
           <div style={{padding:"12px 14px 40px"}}>
             <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>{selP3.teacherName} — {selP3.className}</h2>
@@ -1509,11 +1463,9 @@ function AdminPanelInner({user}){
 
   // ── DESKTOP: original 4-panel layout ─────────────────────────────────────
   return(
-    <div style={{minHeight:"100vh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
+    <div style={{minHeight:"100svh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
       {binView&&<AdminBinModal/>}
       {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
-      <AdminConfirmModal/>
-      <AdminToastBanner/>
       <style>{`
         @media (min-width: 768px) { .admin-mobile-back { display: none !important; } }
         .admin-mobile-back { display: none; }

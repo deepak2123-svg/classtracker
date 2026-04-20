@@ -1631,7 +1631,7 @@ function ClassTrackerInner({user}){
   }
   if(view==="addClass"){
     return(
-    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+    <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
       <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
         right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
       <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px 80px"}}>
@@ -1744,7 +1744,7 @@ function ClassTrackerInner({user}){
     const navBtnStyle={background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",fontFamily:G.sans};
 
     return(
-      <div style={{minHeight:"100svh",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<button onClick={()=>setView("home")} style={navBtnStyle}>← Back</button>}/>
@@ -1852,7 +1852,7 @@ function ClassTrackerInner({user}){
     const tNotes=(Array.isArray(data.trash?.notes)?data.trash.notes:[]).sort((a,b)=>b.deletedAt-a.deletedAt);
     const daysLeft=ts=>Math.max(0,30-Math.floor((Date.now()-ts)/(1000*60*60*24)));
     return(
-      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         <SaveBadge/>
         <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
@@ -1951,7 +1951,7 @@ function ClassTrackerInner({user}){
     const color=activeClass?instColor(activeClass.institute):COLORS[0];
 
     return(
-      <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.sans}}>
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<>
             {activeClass&&<div style={{display:"flex",alignItems:"center",gap:8,maxWidth:320,overflow:"hidden"}}>
@@ -1963,17 +1963,33 @@ function ClassTrackerInner({user}){
           </>}
         />
         {!isEdit&&(
-          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"16px 32px"}}>
-            <div style={{maxWidth:1000,margin:"0 auto"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                <span style={{fontSize:15,color:G.green}}>📅</span>
-                <span style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
-              </div>
-              <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={{}}/>
+          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"12px 16px"}}>
+            <div style={{maxWidth:660,margin:"0 auto"}}>
+              {isMobile
+                ? /* Mobile: compact date chip — date was already chosen in class detail */
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:22}}>📅</span>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{formatDateLabel(selectedDate)}</div>
+                      <button onClick={()=>setView("classDetail")}
+                        style={{background:"none",border:"none",padding:0,fontSize:12,color:G.green,fontFamily:G.sans,fontWeight:600,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:2}}>
+                        Change date
+                      </button>
+                    </div>
+                  </div>
+                : /* Desktop: full date strip */
+                  <>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <span style={{fontSize:15,color:G.green}}>📅</span>
+                      <span style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
+                    </div>
+                    <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={{}}/>
+                  </>
+              }
             </div>
           </div>
         )}
-        <div className="mobile-pad" style={{maxWidth:660,margin:"0 auto",padding:"32px 24px 72px"}}>
+        <div className="mobile-pad" style={{maxWidth:660,width:"100%",margin:"0 auto",padding:"32px 16px 72px",boxSizing:"border-box"}}>
           <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:5,textTransform:"uppercase",fontWeight:600}}>{isEdit?"Editing Entry":"New Entry For"}</p>
           <h2 style={{marginBottom:22,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>{isEdit?form.title||"Entry":formatDateLabel(selectedDate)}</h2>
           <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
