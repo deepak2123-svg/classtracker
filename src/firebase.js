@@ -105,10 +105,7 @@ export function roleDocRef(uid) { return doc(db, "roles", uid); }
 export async function getUserRole(uid) {
   try {
     const snap = await getDoc(roleDocRef(uid));
-    if (snap.exists()) return snap.data().role;
-    // First-ever login — write default role
-    await setDoc(roleDocRef(uid), { role: "teacher", grantedAt: Date.now() });
-    return "teacher";
+    return snap.exists() ? snap.data().role : "teacher";
   } catch { return "teacher"; }
 }
 

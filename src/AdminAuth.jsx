@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { loginWithGoogle, loginWithEmail, verifyInviteToken, useInviteToken, db } from "./firebase";
+import { loginWithGoogle, loginWithEmail, signupWithEmail, verifyInviteToken, useInviteToken, db } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { friendlyError } from "./shared.jsx";
 
@@ -66,7 +66,21 @@ export default function AdminAuth({ onVerified }) {
   async function handleEmail(e) {
     e.preventDefault();
     setError(""); setLoading(true);
-    try { const u = await loginWithEmail(email, pass); await afterLogin(u); }
+    try {
+      let u;
+      try {
+        // Try signing in first (existing account)
+        u = await loginWithEmail(email, pass);
+      } catch (err) {
+        // New user — create account automatically
+        if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+          u = await signupWithEmail(email.split("@")[0], email, pass);
+        } else {
+          throw err;
+        }
+      }
+      await afterLogin(u);
+    }
     catch (e) { setError(friendlyError(e.code)); }
     finally { setLoading(false); }
   }
