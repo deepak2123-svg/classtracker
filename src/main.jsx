@@ -1,4 +1,4 @@
-import { StrictMode, useState, useEffect } from "react";
+import { StrictMode, useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { onAuth, getUserRole, logout } from "./firebase";
 import { Spinner } from "./shared.jsx";
@@ -7,10 +7,7 @@ import ClassTracker from "./ClassTracker";
 import AdminAuth from "./AdminAuth";
 import AdminPanel from "./AdminPanel";
 
-// ── Detect which app we are ───────────────────────────────────────────────────
-// VITE_APP_MODE is set per-deployment in Vercel environment variables:
-//   classtracker.vercel.app  → VITE_APP_MODE = "teacher"  (or not set)
-//   ctadmin.vercel.app       → VITE_APP_MODE = "admin"
+// VITE_APP_MODE = "admin" on ctadmin.vercel.app, unset on teacherct.vercel.app
 const IS_ADMIN_APP = import.meta.env.VITE_APP_MODE === "admin";
 
 function App() {
@@ -18,35 +15,54 @@ function App() {
   const [role,        setRole]        = useState(null);
   const [roleLoading, setRoleLoading] = useState(false);
 
+  // Prevents onAuth's async getUserRole from overwriting the role
+  // after handleAdminVerified has already set it correctly.
+  const adminVerifiedRef = useRef(false);
+
   useEffect(() => onAuth(async (u) => {
     setUser(u);
     if (u) {
+      // handleAdminVerified already owns the role — don't race against it
+      if (adminVerifiedRef.current) return;
       setRoleLoading(true);
-      // Always fetch the real role from Firestore — never auto-promote on the admin URL.
-      // Promotion only happens inside AdminAuth after a valid invite token is consumed.
       const r = await getUserRole(u.uid);
-      setRole(r);
+      // Check again — handleAdminVerified may have fired while we were fetching
+      if (!adminVerifiedRef.current) {
+        setRole(r);
+      }
       setRoleLoading(false);
     } else {
+      adminVerifiedRef.current = false;
       setRole(null);
     }
   }), []);
+
+  // Called by AdminAuth after login + any promotion via invite.
+  // Sets the lock so onAuth can't overwrite the freshly-written role.
+  const handleAdminVerified = async (u) => {
+    adminVerifiedRef.current = true;
+    setUser(u);
+    setRoleLoading(true);
+    const r = await getUserRole(u.uid);
+    setRole(r);
+    setRoleLoading(false);
+  };
 
   // ── ADMIN APP (ctadmin.vercel.app) ────────────────────────────────────────
   if (IS_ADMIN_APP) {
     if (user === undefined || roleLoading) return <Spinner text="Loading…" />;
 
     // Not logged in → admin login screen
-    if (!user) return <AdminAuth onVerified={setUser} />;
+    if (!user) return <AdminAuth onVerified={handleAdminVerified} />;
 
-    // Admin verified → panel
+    // Logged in and confirmed admin → panel
     if (role === "admin") return <AdminPanel user={user} />;
 
-    // Signed in but not admin — not yet promoted via invite
+    // Signed in but role not admin — show denied
     return <AccessDenied />;
   }
 
-  // ── TEACHER APP (classtracker.vercel.app) ─────────────────────────────────
+  // ── TEACHER APP (teacherct.vercel.app) ───────────────────────────────────
   if (user === undefined || (user && roleLoading)) return <Spinner text="Loading…" />;
   if (!user) return <Auth />;
   return <ClassTracker user={user} />;
