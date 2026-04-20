@@ -216,7 +216,7 @@ function AdminExportModal({ exportActions, onClose }) {
   const inp2={width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #DDE3ED",fontSize:15,fontFamily:"'Inter',sans-serif",outline:"none",background:"#F5F7FA",color:"#111827",boxSizing:"border-box"};
 
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
       <div style={{background:"#fff",borderRadius:22,padding:"26px 22px",width:"100%",maxWidth:400,boxShadow:"0 24px 64px rgba(0,0,0,0.25)",maxHeight:"90vh",overflowY:"auto"}}>
 
         {/* Header */}
@@ -287,9 +287,9 @@ function AdminExportModal({ exportActions, onClose }) {
           <div style={{marginBottom:22}}>
             <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Format</div>
             <div style={{display:"flex",gap:8}}>
-              {[["csv","📊 CSV / Excel"],["pdf","📄 PDF"]].map(([k,l])=>(
+              {[["csv","📊 CSV / Excel"],["pdf","📄 PDF"],["json","🗂 JSON"]].map(([k,l])=>(
                 <button key={k} onClick={()=>setFormat(k)}
-                  style={{flex:1,padding:"12px 0",borderRadius:12,border:`2px solid ${format===k?"#1A2F5A":"#DDE3ED"}`,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:format===k?700:500,
+                  style={{flex:1,padding:"12px 0",borderRadius:12,border:`2px solid ${format===k?"#1A2F5A":"#DDE3ED"}`,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:format===k?700:500,
                     background:format===k?"#EEF2FF":"transparent",color:format===k?"#1A2F5A":"#374151",transition:"all 0.15s"}}>
                   {l}
                 </button>
@@ -299,7 +299,7 @@ function AdminExportModal({ exportActions, onClose }) {
 
           {/* Summary */}
           <div style={{background:"#F5F7FA",borderRadius:12,padding:"10px 14px",marginBottom:20,fontSize:13,color:"#374151",fontFamily:"'Inter',sans-serif"}}>
-            📅 <strong>{period==="all"?"All time":periodLabel()}</strong> · {format==="pdf"?"Opens print dialog":"Downloads .csv file"}
+            📅 <strong>{period==="all"?"All time":periodLabel()}</strong> · {format==="pdf"?"Opens print dialog":format==="json"?"Downloads .json backup":"Downloads .csv file"}
           </div>
 
           {/* Buttons */}
