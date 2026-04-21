@@ -331,6 +331,28 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
     red:"#DC2626",redL:"#FEF2F2",amber:"#D97706",amberL:"#FFFBEB",
     sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace" };
 
+  const overlayRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const el = overlayRef.current;
+      if (!el) return;
+      el.style.top    = vv.offsetTop  + "px";
+      el.style.left   = vv.offsetLeft + "px";
+      el.style.width  = vv.width      + "px";
+      el.style.height = vv.height     + "px";
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    update();
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+
   const [step,       setStep]       = React.useState(1);
   const [gradeNums,  setGradeNums]  = React.useState(group?.gradeNums||[]);
   const [secText,    setSecText]    = React.useState((group?.sections||[]).join("\n"));
@@ -535,8 +557,8 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
   const StepComponent=STEPS[step];
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:16,paddingTop:"max(16px, env(safe-area-inset-top))",backdropFilter:"blur(6px)"}}>
-      <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:520,maxHeight:"calc(100dvh - 32px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",margin:"auto 0"}}>
+    <div ref={overlayRef} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:16,backdropFilter:"blur(6px)"}}>
+      <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:520,maxHeight:"calc(100% - 32px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",margin:"auto 0"}}>
 
         {/* Header */}
         <div style={{padding:"18px 20px 0",flexShrink:0}}>
