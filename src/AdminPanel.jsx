@@ -373,6 +373,7 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
   const [secText,    setSecText]    = React.useState((group?.sections||[]).join("\n"));
   const [durMins,    setDurMins]    = React.useState(group?.durMins||60);
   const [startTimes, setStartTimes] = React.useState(group?.slots?.map(s=>s.start)||[""]);
+  const [slotDurs,   setSlotDurs]   = React.useState(group?.slots?.map(s=>s.durMins)||[]);
   const [overrides,  setOverrides]  = React.useState(group?.sectionOverrides||{});
   const [showOv,     setShowOv]     = React.useState(false);
   const [busy,       setBusy]       = React.useState(false);
@@ -382,7 +383,11 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
   const fmtDisp = t=>{ if(!t) return "--"; const[h,m]=t.split(":").map(Number); return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`; };
   const toMins = t=>{ if(!t) return 0; const[h,m]=t.split(":").map(Number); return h*60+m; };
   const sections = secText.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
-  const validSlots = startTimes.filter(Boolean).sort((a,b)=>toMins(a)-toMins(b));
+  // validSlots: sorted array of {start, dur} — dur falls back to global durMins
+  const validSlots = startTimes
+    .map((s,i)=>({start:s, dur: slotDurs[i]||durMins}))
+    .filter(s=>s.start)
+    .sort((a,b)=>toMins(a.start)-toMins(b.start));
   const STEP_LABELS = ["Grades","Sections","Duration","Time slots","Review"];
 
   function quickSelect(type) {
@@ -395,7 +400,7 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
     if(!gradeNums.length) { setError("Select at least one grade."); setStep(1); return; }
     if(!sections.length)  { setError("Add at least one section."); setStep(2); return; }
     if(!validSlots.length){ setError("Add at least one start time."); setStep(4); return; }
-    const slots = validSlots.map(s=>({ start:s, end:fmtEnd(s,durMins), durMins }));
+    const slots = validSlots.map(s=>({ start:s.start, end:fmtEnd(s.start,s.dur), durMins:s.dur }));
     const minG=Math.min(...gradeNums), maxG=Math.max(...gradeNums);
     const label = gradeNums.length===1 ? `${gradeNums[0]}th` : `${minG}th–${maxG}th`;
     const saved = { id:group?.id||("grp_"+Date.now()), gradeNums, label, sections, slots, durMins, sectionOverrides:overrides };
@@ -474,48 +479,95 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
   }
 
   function Step4() {
-    // Visual timeline
-    const tSlots = startTimes.filter(Boolean).sort((a,b)=>toMins(a)-toMins(b));
-    const showTimeline = tSlots.length>0;
-    const allMins = tSlots.flatMap(s=>[toMins(s),toMins(s)+durMins]);
-    const minT=(showTimeline?Math.min(...allMins):0)-15;
-    const maxT=(showTimeline?Math.max(...allMins):0)+15;
-    const range=Math.max(maxT-minT,1);
+    const DUR_OPTIONS = [30,45,60,75,90,120];
+    // Build sorted preview slots with per-slot dur
+    const previewSlots = startTimes
+      .map((t,i)=>({t, dur: slotDurs[i]||durMins, i}))
+      .filter(s=>s.t)
+      .sort((a,b)=>toMins(a.t)-toMins(b.t));
+    const showTimeline = previewSlots.length>0;
+    const allMins = previewSlots.flatMap(s=>[toMins(s.t), toMins(s.t)+s.dur]);
+    const minT = (showTimeline ? Math.min(...allMins) : 0) - 10;
+    const maxT = (showTimeline ? Math.max(...allMins) : 60) + 10;
+    const range = Math.max(maxT - minT, 1);
+
     return (<>
-      <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>When do classes start?</div>
-      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>Add each slot start time. End fills automatically. Breaks between classes are fine — just add the next start time.</div>
+      <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:4}}>When do classes start?</div>
+      <div style={{fontSize:13,color:W.textM,marginBottom:14,lineHeight:1.5}}>Set start time and duration per slot. Breaks are shown automatically.</div>
+
+      {/* Slot rows */}
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
-        {startTimes.map((t,i)=>(
-          <div key={i} style={{background:W.surface,border:`1.5px solid ${t?W.blueV:W.border}`,borderRadius:12,display:"flex",alignItems:"center",overflow:"hidden",transition:"border-color 0.15s"}}>
-            <input type="time" value={t} onChange={e=>{const n=[...startTimes];n[i]=e.target.value;setStartTimes(n);}}
-              style={{flex:1,border:"none",padding:"13px 14px",fontSize:15,fontFamily:W.mono,fontWeight:600,color:W.text,outline:"none",background:"transparent",cursor:"pointer"}}/>
-            <span style={{color:W.textL,fontSize:13,fontFamily:W.mono,padding:"0 4px",flexShrink:0}}>→</span>
-            <span style={{fontSize:14,fontFamily:W.mono,fontWeight:600,color:W.green,padding:"0 10px",flexShrink:0,minWidth:88,textAlign:"right"}}>{t?fmtDisp(fmtEnd(t,durMins)):"--"}</span>
-            {startTimes.length>1&&<button onClick={()=>setStartTimes(n=>n.filter((_,j)=>j!==i))} style={{background:"none",borderLeft:`1px solid ${W.border}`,padding:"0 14px",height:48,cursor:"pointer",color:W.textL,fontSize:18,flexShrink:0,display:"flex",alignItems:"center",transition:"all 0.15s"}}>✕</button>}
-          </div>
-        ))}
-        <button onClick={()=>setStartTimes(n=>[...n,""])} style={{width:"100%",padding:"11px",borderRadius:12,border:`2px dashed ${W.border}`,background:"transparent",color:W.blue,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:W.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>+ Add start time</button>
+        {startTimes.map((t,i)=>{
+          const slotDur = slotDurs[i]||durMins;
+          const isCustomDur = slotDurs[i] && slotDurs[i]!==durMins;
+          return (
+            <div key={i} style={{borderRadius:12,border:`1.5px solid ${t?W.blueV:W.border}`,background:W.surface,transition:"border-color 0.15s"}}>
+              {/* Main row */}
+              <div style={{display:"flex",alignItems:"center"}}>
+                <input type="time" value={t} onChange={e=>{const n=[...startTimes];n[i]=e.target.value;setStartTimes(n);}}
+                  style={{flex:1,border:"none",padding:"12px 14px",fontSize:15,fontFamily:W.mono,fontWeight:600,color:W.text,outline:"none",background:"transparent",cursor:"pointer",minWidth:0}}/>
+                <span style={{color:W.textL,fontSize:12,fontFamily:W.mono,padding:"0 2px",flexShrink:0}}>→</span>
+                <span style={{fontSize:13,fontFamily:W.mono,fontWeight:600,color:W.green,padding:"0 8px",flexShrink:0,minWidth:80,textAlign:"center"}}>{t?fmtDisp(fmtEnd(t,slotDur)):"--"}</span>
+                {startTimes.length>1&&(
+                  <button onClick={()=>{
+                    setStartTimes(n=>n.filter((_,j)=>j!==i));
+                    setSlotDurs(n=>n.filter((_,j)=>j!==i));
+                  }} style={{background:"none",borderLeft:`1px solid ${W.border}`,padding:"0 12px",height:46,cursor:"pointer",color:W.textL,fontSize:16,flexShrink:0,display:"flex",alignItems:"center"}}>✕</button>
+                )}
+              </div>
+              {/* Duration row */}
+              <div style={{borderTop:`1px solid ${W.border}`,padding:"7px 12px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <span style={{fontSize:11,color:W.textL,fontFamily:W.sans,flexShrink:0}}>Duration:</span>
+                {DUR_OPTIONS.map(d=>(
+                  <button key={d} onClick={()=>{const n=[...slotDurs];n[i]=d;setSlotDurs(n);}}
+                    style={{padding:"3px 10px",borderRadius:20,border:`1.5px solid ${slotDur===d?W.navy:W.border}`,background:slotDur===d?W.navy:"transparent",color:slotDur===d?"#fff":W.textM,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:W.sans,transition:"all 0.12s"}}>
+                    {d<60?`${d}m`:d===60?"1h":`${Math.floor(d/60)}h${d%60?d%60+"m":""}`}
+                  </button>
+                ))}
+                {isCustomDur&&<span style={{fontSize:11,color:W.blue,fontFamily:W.sans,marginLeft:2}}>✓ custom</span>}
+              </div>
+            </div>
+          );
+        })}
+        <button onClick={()=>{setStartTimes(n=>[...n,""]);setSlotDurs(n=>[...n,durMins]);}}
+          style={{width:"100%",padding:"11px",borderRadius:12,border:`2px dashed ${W.border}`,background:"transparent",color:W.blue,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:W.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          + Add start time
+        </button>
       </div>
-      {/* Visual timeline */}
+
+      {/* Visual timeline with breaks */}
       {showTimeline&&(
         <div style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:12,padding:14,marginBottom:14}}>
           <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:W.textL,marginBottom:10}}>📅 Timetable preview</div>
-          <div style={{position:"relative",height:40,background:W.bg,borderRadius:8,overflow:"hidden",border:`1px solid ${W.border}`}}>
-            {tSlots.map((s,si)=>{
-              const sm=toMins(s),em=sm+durMins;
+          <div style={{position:"relative",height:40,background:W.bg,borderRadius:8,border:`1px solid ${W.border}`}}>
+            {previewSlots.map((s,si)=>{
+              const sm=toMins(s.t);
               const left=((sm-minT)/range*100).toFixed(1)+"%";
-              const width=(durMins/range*100).toFixed(1)+"%";
+              const width=(s.dur/range*100).toFixed(1)+"%";
               return (<div key={si} style={{position:"absolute",top:3,bottom:3,left,width,background:W.greenL,border:"1px solid rgba(27,138,76,0.25)",borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-                <span style={{fontSize:9,fontWeight:700,fontFamily:W.mono,color:W.green,padding:"0 3px",whiteSpace:"nowrap",overflow:"hidden"}}>{fmtDisp(s)}</span>
+                <span style={{fontSize:9,fontWeight:700,fontFamily:W.mono,color:W.green,padding:"0 3px",whiteSpace:"nowrap",overflow:"hidden"}}>{fmtDisp(s.t)}</span>
+              </div>);
+            })}
+            {/* Break indicators */}
+            {previewSlots.slice(0,-1).map((s,si)=>{
+              const nextS = previewSlots[si+1];
+              const endM = toMins(s.t)+s.dur;
+              const breakMins = toMins(nextS.t)-endM;
+              if(breakMins<=0) return null;
+              const left=((endM-minT)/range*100).toFixed(1)+"%";
+              const width=(breakMins/range*100).toFixed(1)+"%";
+              return (<div key={"b"+si} style={{position:"absolute",top:"50%",transform:"translateY(-50%)",left,width,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:8,fontFamily:W.mono,color:W.textL,whiteSpace:"nowrap"}}>{breakMins}m</span>
               </div>);
             })}
           </div>
           <div style={{display:"flex",justifyContent:"space-between",marginTop:5,fontSize:10,color:W.textL,fontFamily:W.mono}}>
-            <span>{fmtDisp(tSlots[0])}</span>
-            <span>{fmtDisp(fmtEnd(tSlots[tSlots.length-1],durMins))}</span>
+            <span>{fmtDisp(previewSlots[0].t)}</span>
+            <span>{fmtDisp(fmtEnd(previewSlots[previewSlots.length-1].t, previewSlots[previewSlots.length-1].dur))}</span>
           </div>
         </div>
       )}
+
       {/* Per-section overrides */}
       <div style={{background:W.bg,border:`1px solid ${W.border}`,borderRadius:12,padding:14}}>
         <button onClick={()=>setShowOv(o=>!o)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,color:W.blue,fontFamily:W.sans,padding:0,display:"flex",alignItems:"center",gap:6,width:"100%"}}>
@@ -525,7 +577,6 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
           <div style={{fontSize:13,color:W.textL,margin:"8px 0"}}>Only fill this if one section has different timings from the rest of the group.</div>
           {sections.map(sec=>{
             const secSlots=overrides[sec]||[];
-            if(!secSlots.length&&!showOv) return null;
             return(<div key={sec} style={{background:W.surface,borderRadius:10,padding:"12px 14px",border:`1px solid ${W.border}`,marginBottom:8}}>
               <div style={{fontSize:13,fontWeight:700,fontFamily:W.mono,color:W.text,marginBottom:8}}>{sec}</div>
               {secSlots.map((slot,si)=>(
@@ -553,7 +604,7 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
         {icon:"🎓",bg:"#EEF2FF",label:"Grades",val:<span>{gradeNums.map(g=>g+"th").join(", ")||"None"}</span>,s:1},
         {icon:"📚",bg:W.greenL,label:"Sections",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>,s:2},
         {icon:"⏱",bg:"#FFFBEB",label:"Duration",val:<span>{DURLABELS[durMins]||durMins+" min"}</span>,s:3},
-        {icon:"🕐",bg:W.greenL,label:"Time slots",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{validSlots.map((t,i)=><span key={i} style={{background:W.greenL,color:W.green,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{fmtDisp(t)}–{fmtDisp(fmtEnd(t,durMins))}</span>)}</div>,s:4},
+        {icon:"🕐",bg:W.greenL,label:"Time slots",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{validSlots.map((s,i)=><span key={i} style={{background:W.greenL,color:W.green,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{fmtDisp(s.start)}–{fmtDisp(fmtEnd(s.start,s.dur))}{s.dur!==durMins?` (${s.dur}m)`:""}</span>)}</div>,s:4},
       ].map(({icon,bg,label,val,s})=>(
         <div key={label} style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:12,marginBottom:8,padding:"14px 16px",display:"flex",alignItems:"flex-start",gap:12}}>
           <div style={{width:36,height:36,borderRadius:10,background:bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{icon}</div>
