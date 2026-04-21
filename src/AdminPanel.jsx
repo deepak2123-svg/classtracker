@@ -433,7 +433,7 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
     return (<>
       <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>What are the section names?</div>
       <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>One per line. Teachers will see these exact names in their class dropdown — be consistent. Use "11th NDA" not "XI NDA".</div>
-      <textarea value={secText} onChange={e=>setSecText(e.target.value)} rows={7}
+      <textarea value={secText} onChange={e=>setSecText(e.target.value)} rows={4}
         placeholder={"11th NDA\n11th IIT Star\n11th IIT Shikhar\n11th MED\n12th NDA\n12th IIT Star"}
         style={{...inp,resize:"vertical",lineHeight:1.9,fontFamily:W.mono,fontSize:14}}/>
       <div style={{fontSize:12,color:W.textL,textAlign:"right",marginTop:5}}>{sections.length} section{sections.length!==1?"s":""}</div>
@@ -570,22 +570,22 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
       left:   vp ? vp.left   : 0,
       width:  vp ? vp.width  : "100%",
       height: vp ? vp.height : "100%",
-      background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"flex-start",
-      justifyContent:"center",overflowY:"auto",padding:16,backdropFilter:"blur(6px)"}}>
-      <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:520,maxHeight:"calc(100% - 32px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",margin:"auto 0"}}>
+      background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"stretch",
+      justifyContent:"center",padding:12,backdropFilter:"blur(6px)",boxSizing:"border-box"}}>
+      <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:520,height:"100%",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
 
         {/* Header */}
-        <div style={{padding:"18px 20px 0",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-            <div style={{fontSize:13,color:W.textL,fontFamily:W.mono}}>{inst}</div>
+        <div style={{padding:"12px 16px 0",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{fontSize:12,color:W.textL,fontFamily:W.mono}}>{inst}</div>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:W.textL,lineHeight:1}}>✕</button>
           </div>
           {/* Progress dots */}
-          <div style={{display:"flex",alignItems:"center",marginBottom:18}}>
+          <div style={{display:"flex",alignItems:"center",marginBottom:10}}>
             {STEP_LABELS.map((label,i)=>{
               const n=i+1,state=n<step?"done":n===step?"active":"inactive";
               return (<React.Fragment key={n}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
                   <div onClick={()=>state!=="inactive"&&setStep(n)}
                     style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,fontFamily:"'Poppins',sans-serif",cursor:state!=="inactive"?"pointer":"default",transition:"all 0.2s",
                       background:state==="done"?"#1B8A4C":state==="active"?W.navy:W.border,
@@ -595,20 +595,20 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
                   </div>
                   <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,color:state==="active"?W.navy:W.textL,whiteSpace:"nowrap"}}>{label}</div>
                 </div>
-                {i<STEP_LABELS.length-1&&<div style={{flex:1,height:2,background:n<step?"#1B8A4C":W.border,margin:"0 4px 18px",transition:"background 0.3s"}}/>}
+                {i<STEP_LABELS.length-1&&<div style={{flex:1,height:2,background:n<step?"#1B8A4C":W.border,margin:"0 4px 14px",transition:"background 0.3s"}}/>}
               </React.Fragment>);
             })}
           </div>
         </div>
 
         {/* Content */}
-        <div style={{flex:1,overflowY:"auto",padding:"0 20px 16px"}}>
+        <div style={{flex:1,overflowY:"auto",padding:"0 16px 12px",minHeight:0}}>
           {error&&<div style={{background:W.redL,color:W.red,borderRadius:9,padding:"8px 12px",fontSize:13,marginBottom:14}}>{error}</div>}
           <StepComponent/>
         </div>
 
         {/* Nav */}
-        <div style={{padding:"12px 20px 20px",borderTop:`1px solid ${W.border}`,display:"flex",gap:10,flexShrink:0}}>
+        <div style={{padding:"10px 16px 14px",borderTop:`1px solid ${W.border}`,display:"flex",gap:10,flexShrink:0}}>
           {step>1
             ?<button onClick={()=>{setStep(s=>s-1);setError("");}} style={{padding:"13px 20px",borderRadius:12,border:`1.5px solid ${W.border}`,background:W.surface,fontSize:15,fontWeight:600,cursor:"pointer",color:W.textM,fontFamily:W.sans,flexShrink:0}}>← Back</button>
             :<button onClick={onClose} style={{padding:"13px 20px",borderRadius:12,border:`1.5px solid ${W.border}`,background:W.surface,fontSize:15,fontWeight:600,cursor:"pointer",color:W.textM,fontFamily:W.sans,flexShrink:0}}>Cancel</button>
