@@ -1455,7 +1455,11 @@ function ClassTrackerInner({user}){
   // ══════════════════════════════════════════════════════════════════════
   if(view==="home"){
     const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
-    const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
+    // Show ALL institutes the teacher is associated with (from all classes — active + archived — and the
+    // stored institutes list), so both tabs always appear even if one institute has no active classes yet.
+    const institutesFromAllClasses=[...new Set((data.classes||[]).map(c=>c.institute||""))].filter(Boolean);
+    const institutesFromStore=(data.institutes||[]).filter(Boolean);
+    const institutes=[...new Set([...institutesFromAllClasses,...institutesFromStore])].filter(Boolean);
     const filtered=instFilter==="all"?activeClasses:activeClasses.filter(c=>c.institute===instFilter);
 
     // For tablet/desktop split view
