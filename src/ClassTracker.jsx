@@ -1141,7 +1141,8 @@ function ClassTrackerInner({user}){
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups}}
   const [unlinkedClasses,   setUnlinkedClasses]   = useState([]);  // classes needing link
-  const [linkingDone,       setLinkingDone]        = useState(false);
+  // Use sessionStorage so "Remind later" hides for this session only — shows again on next app open
+  const [linkingDone,       setLinkingDone]        = useState(()=>sessionStorage.getItem("linkDismissed")==="1");
 
   useEffect(()=>{
     // Load admin-created institutes list and section definitions
@@ -1435,10 +1436,11 @@ function ClassTrackerInner({user}){
           instituteSections={instituteSections}
           onConfirm={(renames)=>{
             setData(d=>({...d,classes:(d.classes||[]).map(cls=>renames[cls.id]?{...cls,section:renames[cls.id]}:cls)}));
+            sessionStorage.removeItem("linkDismissed");
             setLinkingDone(true);
             setUnlinkedClasses([]);
           }}
-          onLater={()=>setLinkingDone(true)}
+          onLater={()=>{sessionStorage.setItem("linkDismissed","1");setLinkingDone(true);}}
         />
       )}
       {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
