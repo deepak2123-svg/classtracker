@@ -1587,10 +1587,43 @@ function ClassTrackerInner({user}){
     );
 
     // ── TABLET / DESKTOP VIEW: sidebar + detail panel ────────────────────────
-    const SplitView = () => (
-      <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+    const SplitView = () => {
+      const [sidebarWidth, setSidebarWidth] = React.useState(280);
+      const isDragging = React.useRef(false);
+      const dragStartX = React.useRef(0);
+      const dragStartW = React.useRef(280);
+      const containerRef = React.useRef(null);
+
+      function onDividerPointerDown(e) {
+        e.preventDefault();
+        isDragging.current = true;
+        dragStartX.current = e.clientX;
+        dragStartW.current = sidebarWidth;
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+
+        function onMove(ev) {
+          if (!isDragging.current) return;
+          const dx = ev.clientX - dragStartX.current;
+          const containerW = containerRef.current?.offsetWidth || window.innerWidth;
+          const newW = Math.min(Math.max(dragStartW.current + dx, 180), containerW * 0.6);
+          setSidebarWidth(newW);
+        }
+        function onUp() {
+          isDragging.current = false;
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+        }
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+      }
+
+      return (
+      <div ref={containerRef} style={{display:"flex",flex:1,overflow:"hidden"}}>
         {/* Left sidebar */}
-        <div style={{width:280,flexShrink:0,display:"flex",flexDirection:"column",borderRight:`1px solid ${G.border}`,background:G.surface,overflow:"hidden"}}>
+        <div style={{width:sidebarWidth,flexShrink:0,display:"flex",flexDirection:"column",background:G.surface,overflow:"hidden"}}>
           <div style={{padding:"16px 14px 12px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
             <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:5}}>{teacherName} 👋</div>
             <span style={{background:G.greenL,borderRadius:20,padding:"3px 10px",fontSize:12,color:G.green,fontWeight:700}}>{currentSession()}</span>
@@ -1628,6 +1661,33 @@ function ClassTrackerInner({user}){
             </div>
           </div>
         </div>
+
+        {/* ── Draggable divider ── */}
+        <div
+          onPointerDown={onDividerPointerDown}
+          style={{
+            width:8, flexShrink:0, cursor:"col-resize",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            background:"transparent", position:"relative", zIndex:10,
+            WebkitTapHighlightColor:"transparent",
+          }}
+          onMouseEnter={e=>{e.currentTarget.querySelector(".divider-line").style.background=G.green;e.currentTarget.querySelector(".divider-grip").style.opacity="1";}}
+          onMouseLeave={e=>{e.currentTarget.querySelector(".divider-line").style.background=G.border;e.currentTarget.querySelector(".divider-grip").style.opacity="0";}}>
+          <div className="divider-line" style={{position:"absolute",top:0,bottom:0,left:"50%",transform:"translateX(-50%)",width:1,background:G.border,transition:"background 0.15s"}}/>
+          <div className="divider-grip" style={{
+            position:"relative", zIndex:1,
+            width:20, height:48, borderRadius:10,
+            background:G.surface, border:`1.5px solid ${G.border}`,
+            display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+            gap:3, opacity:0, transition:"opacity 0.15s",
+            boxShadow:"0 2px 8px rgba(0,0,0,0.1)",
+          }}>
+            {[0,1,2].map(i=>(
+              <div key={i} style={{width:3,height:3,borderRadius:"50%",background:G.textL}}/>
+            ))}
+          </div>
+        </div>
+
         {/* Right detail panel */}
         {!selCls?(
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:G.textL,fontSize:15}}>Select a class from the left</div>
@@ -1701,7 +1761,8 @@ function ClassTrackerInner({user}){
           </div>
         )}
       </div>
-    );
+      );
+    };
 
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
