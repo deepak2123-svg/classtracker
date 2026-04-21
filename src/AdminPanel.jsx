@@ -535,8 +535,8 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
   const StepComponent=STEPS[step];
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)"}}>
-      <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:520,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:16,paddingTop:"max(16px, env(safe-area-inset-top))",backdropFilter:"blur(6px)"}}>
+      <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:520,maxHeight:"calc(100dvh - 32px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",margin:"auto 0"}}>
 
         {/* Header */}
         <div style={{padding:"18px 20px 0",flexShrink:0}}>
