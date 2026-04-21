@@ -325,3 +325,34 @@ export async function deleteGlobalInstitute(name) {
   const filtered = existing.filter(i => i.toLowerCase() !== name.trim().toLowerCase());
   await setDoc(doc(db, "config", "institutes"), { list: filtered });
 }
+
+// ── Institute sections (admin-managed) ────────────────────────────────────────
+// config/sections = { [instituteName]: { gradeGroups: [...] } }
+// gradeGroup: { id, gradeNums, label, sections, slots, sectionOverrides }
+
+export async function getAllInstituteSections() {
+  try {
+    const snap = await getDoc(doc(db, "config", "sections"));
+    return snap.exists() ? snap.data() : {};
+  } catch { return {}; }
+}
+
+export async function saveInstituteGradeGroups(instituteName, gradeGroups) {
+  const snap = await getDoc(doc(db, "config", "sections"));
+  const existing = snap.exists() ? snap.data() : {};
+  await setDoc(doc(db, "config", "sections"), {
+    ...existing,
+    [instituteName]: { gradeGroups }
+  });
+}
+
+export async function deleteInstituteGradeGroup(instituteName, groupId) {
+  const snap = await getDoc(doc(db, "config", "sections"));
+  const existing = snap.exists() ? snap.data() : {};
+  const current = existing[instituteName]?.gradeGroups || [];
+  const updated = current.filter(g => g.id !== groupId);
+  await setDoc(doc(db, "config", "sections"), {
+    ...existing,
+    [instituteName]: { gradeGroups: updated }
+  });
+}

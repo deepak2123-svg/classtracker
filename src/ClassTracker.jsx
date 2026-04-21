@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, Component } from "react";
-import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db, getGlobalInstitutes, purgeExpiredTrash } from "./firebase";
+import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
@@ -873,6 +873,27 @@ ${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><
 }
 
 
+// ── Slot resolution: Firestore sections first, KIS hardcode as fallback ─────────
+// getSlotsForSection(cls, instituteSections) → slots array | null
+// instituteSections = getAllInstituteSections() result: { [instName]: { gradeGroups } }
+function getSlotsForSection(cls, instituteSections) {
+  if (!cls) return null;
+  // 1. Check Firestore admin-created sections for this institute
+  const instData = instituteSections?.[cls.institute];
+  if (instData?.gradeGroups?.length) {
+    for (const grp of instData.gradeGroups) {
+      if ((grp.sections || []).includes(cls.section)) {
+        // Per-section override?
+        const ov = (grp.sectionOverrides || {})[cls.section];
+        if (ov?.length) return ov;
+        if (grp.slots?.length) return grp.slots;
+      }
+    }
+  }
+  // 2. Fallback: hardcoded KIS SIP logic
+  return getKisSlots(cls);
+}
+
 // ── KIS SIP Kunjpura preset timetable slots ────────────────────────────────────
 // Yellow (break) rows from the timetable are excluded.
 // Only applies to KIS SIP Kunjpura — NOT KIS Competition Wing or other KIS branches.
@@ -1025,6 +1046,68 @@ function getSuggestedTime(notes, classId, dateKey) {
 }
 
 
+// ── Section Linking Modal ─────────────────────────────────────────────────────
+function SectionLinkingModal({ unlinkedClasses, instituteSections, onConfirm, onLater }) {
+  const [selections, setSelections] = React.useState({});
+  const G3 = {forest:"#152B22",green:"#1B8A4C",greenV:"#34D077",greenL:"#E8F8EF",bg:"#F5F7F5",surface:"#FFFFFF",border:"#D9E4DC",text:"#111827",textM:"#374151",textL:"#6B7280",red:"#C93030",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace"};
+
+  function getAdminSections(cls) {
+    return (instituteSections[cls.institute]?.gradeGroups||[]).flatMap(g=>g.sections||[]);
+  }
+
+  function handleConfirm() {
+    const renames = {};
+    let ok = true;
+    unlinkedClasses.forEach(cls => {
+      const sel = selections[cls.id];
+      if (!sel) { ok = false; return; }
+      renames[cls.id] = sel;
+    });
+    if (!ok) { alert("Please select a section for each class."); return; }
+    onConfirm(renames);
+  }
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)"}}>
+      <div style={{background:G3.surface,borderRadius:22,width:"100%",maxWidth:480,maxHeight:"85vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+        <div style={{padding:"22px 20px 16px",borderBottom:`1px solid ${G3.border}`}}>
+          <div style={{fontSize:22,marginBottom:8}}>🔗</div>
+          <div style={{fontSize:19,fontWeight:700,color:G3.text,fontFamily:G3.display,marginBottom:6}}>Link your classes to the new section list</div>
+          <div style={{fontSize:14,color:G3.textM,lineHeight:1.6}}>Your admin has created an official section list. Please match each of your existing classes to the correct section — this keeps your data and logging history intact.</div>
+        </div>
+        <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:14}}>
+          {unlinkedClasses.map(cls=>{
+            const adminSecs=getAdminSections(cls);
+            const sel=selections[cls.id]||"";
+            return(
+              <div key={cls.id} style={{background:G3.bg,borderRadius:14,padding:"14px 16px",border:`1px solid ${G3.border}`}}>
+                <div style={{fontSize:15,fontWeight:700,color:G3.text,marginBottom:4}}>{cls.section}</div>
+                <div style={{fontSize:13,color:G3.textM,marginBottom:10}}>🏫 {cls.institute}{cls.subject?" · "+cls.subject:""}</div>
+                <div style={{fontSize:12,color:G3.textL,marginBottom:6,fontWeight:600}}>Which section is this?</div>
+                <select value={sel} onChange={e=>setSelections(s=>({...s,[cls.id]:e.target.value}))}
+                  style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${sel?G3.green:G3.border}`,fontSize:15,fontFamily:G3.sans,outline:"none",background:G3.surface,color:G3.text,cursor:"pointer"}}>
+                  <option value="">Select the correct section…</option>
+                  {adminSecs.map(s=>(<option key={s} value={s}>{s}</option>))}
+                </select>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{padding:"12px 20px 22px",display:"flex",gap:10,borderTop:`1px solid ${G3.border}`}}>
+          <button onClick={onLater}
+            style={{flex:1,padding:"12px",borderRadius:12,border:`1.5px solid ${G3.border}`,background:G3.surface,fontSize:15,fontWeight:600,cursor:"pointer",color:G3.textM,fontFamily:G3.sans}}>
+            Remind me later
+          </button>
+          <button onClick={handleConfirm}
+            style={{flex:1,padding:"12px",borderRadius:12,border:"none",background:G3.forest,fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:G3.sans}}>
+            Confirm & Link
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 function ClassTrackerInner({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
@@ -1055,10 +1138,15 @@ function ClassTrackerInner({user}){
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
 
-  const [globalInstitutes, setGlobalInstitutes] = useState([]);
+  const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
+  const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups}}
+  const [unlinkedClasses,   setUnlinkedClasses]   = useState([]);  // classes needing link
+  const [linkingDone,       setLinkingDone]        = useState(false);
+
   useEffect(()=>{
-    // Load admin-created institutes list
+    // Load admin-created institutes list and section definitions
     getGlobalInstitutes().then(list => setGlobalInstitutes(list)).catch(()=>{});
+    getAllInstituteSections().then(secs => setInstituteSections(secs||{})).catch(()=>{});
   },[]);
 
   useEffect(()=>{
@@ -1192,6 +1280,20 @@ function ClassTrackerInner({user}){
   },[saveErr,data,user.uid]);
 
   // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
+  // After both data and sections load, find classes that don't match admin sections
+  useEffect(()=>{
+    if(loading || !Object.keys(instituteSections).length || linkingDone) return;
+    const unlinked=(data.classes||[]).filter(cls=>{
+      if(cls.left) return false;
+      const instData=instituteSections[cls.institute];
+      if(!instData) return false;
+      const allSections=(instData.gradeGroups||[]).flatMap(g=>g.sections||[]);
+      if(!allSections.length) return false;
+      return !allSections.includes(cls.section);
+    });
+    setUnlinkedClasses(unlinked);
+  },[loading,instituteSections,data.classes,linkingDone]);
+
   const allNoteDates = useMemo(()=>{
     const map={};
     try {
@@ -1327,6 +1429,18 @@ function ClassTrackerInner({user}){
       {confirmModal && <ConfirmModal message={confirmModal.message} confirmLabel={confirmModal.label||"Delete"} onConfirm={confirmModal.onConfirm} onClose={()=>setConfirmModal(null)}/>}
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
+      {unlinkedClasses.length>0&&!linkingDone&&(
+        <SectionLinkingModal
+          unlinkedClasses={unlinkedClasses}
+          instituteSections={instituteSections}
+          onConfirm={(renames)=>{
+            setData(d=>({...d,classes:(d.classes||[]).map(cls=>renames[cls.id]?{...cls,section:renames[cls.id]}:cls)}));
+            setLinkingDone(true);
+            setUnlinkedClasses([]);
+          }}
+          onLater={()=>setLinkingDone(true)}
+        />
+      )}
       {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal && (()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);setActiveClass(null);setView("home");}} onClose={()=>setLeaveModal(null)}/>:null;})()}
     </>
@@ -1525,7 +1639,7 @@ function ClassTrackerInner({user}){
                 <span style={{fontSize:15,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:selDateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {selDateNotes.length} {selDateNotes.length===1?"entry":"entries"}</span></span>
                 {canAdd&&<button onClick={()=>{
   setActiveClass(selCls);
-  const _ks=getKisSlots(selCls);
+  const _ks=getSlotsForSection(selCls,instituteSections);
   const _used=new Set(((data.notes?.[selCls.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
   const _def=_ks?getDefaultKisSlot(data.notes,selCls.id,_ks,_used):null;
   setNewNote(_def&&!_used.has(_def.start)
@@ -1626,7 +1740,7 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:600,marginTop:2}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
             </div>
             {canAdd&&<button onClick={()=>{
-  const _ks=getKisSlots(activeClass);
+  const _ks=getSlotsForSection(activeClass,instituteSections);
   const _used=new Set(((data.notes?.[activeClass.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
   const _def=_ks?getDefaultKisSlot(data.notes,activeClass.id,_ks,_used):null;
   setNewNote(_def&&!_used.has(_def.start)
@@ -1694,7 +1808,12 @@ function ClassTrackerInner({user}){
           <label style={lbl}>Institute</label>
           <ReadOnlyDropdown value={newClass.institute} onChange={s=>setNewClass(c=>({...c,institute:s}))} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select your institute"/>
           <label style={{...lbl,marginTop:10}}>Class / Section</label>
-          <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
+          {(()=>{
+            const adminSecs=(instituteSections[newClass.institute]?.gradeGroups||[]).flatMap(g=>g.sections||[]);
+            return adminSecs.length>0
+              ? <ReadOnlyDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={adminSecs} placeholder="Select section" emptyMsg="Ask your admin to add sections."/>
+              : <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>;
+          })()}
           <label style={{...lbl,marginTop:10}}>Subject</label>
           <CreatableDropdown value={newClass.subject} onChange={s=>setNewClass(c=>({...c,subject:s}))} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics, Geography" addPlaceholder="Type subject…"/>
           <label style={{...lbl,marginTop:14}}>Default Class Duration</label>
@@ -2070,7 +2189,7 @@ function ClassTrackerInner({user}){
                    B) Other class → history suggestion + manual input
                 ══════════════════════════════════════════════════════ */}
               {(()=>{
-                const kisSlots=getKisSlots(activeClass);
+                const kisSlots=getSlotsForSection(activeClass,instituteSections);
 
                 // ── MODE A: KIS timetable ──────────────────────────────────
                 if(kisSlots){

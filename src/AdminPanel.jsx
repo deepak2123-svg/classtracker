@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, Component } from "react";
 import {
   logout, getAllTeachers, getTeacherFullData,
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
+  getAllInstituteSections, saveInstituteGradeGroups, deleteInstituteGradeGroup,
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute,
@@ -216,7 +217,7 @@ function AdminExportModal({ exportActions, onClose }) {
   const inp2={width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #DDE3ED",fontSize:15,fontFamily:"'Inter',sans-serif",outline:"none",background:"#F5F7FA",color:"#111827",boxSizing:"border-box"};
 
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
       <div style={{background:"#fff",borderRadius:22,padding:"26px 22px",width:"100%",maxWidth:400,boxShadow:"0 24px 64px rgba(0,0,0,0.25)",maxHeight:"90vh",overflowY:"auto"}}>
 
         {/* Header */}
@@ -287,9 +288,9 @@ function AdminExportModal({ exportActions, onClose }) {
           <div style={{marginBottom:22}}>
             <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Format</div>
             <div style={{display:"flex",gap:8}}>
-              {[["csv","📊 CSV / Excel"],["pdf","📄 PDF"],["json","🗂 JSON"]].map(([k,l])=>(
+              {[["csv","📊 CSV / Excel"],["pdf","📄 PDF"]].map(([k,l])=>(
                 <button key={k} onClick={()=>setFormat(k)}
-                  style={{flex:1,padding:"12px 0",borderRadius:12,border:`2px solid ${format===k?"#1A2F5A":"#DDE3ED"}`,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:format===k?700:500,
+                  style={{flex:1,padding:"12px 0",borderRadius:12,border:`2px solid ${format===k?"#1A2F5A":"#DDE3ED"}`,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:format===k?700:500,
                     background:format===k?"#EEF2FF":"transparent",color:format===k?"#1A2F5A":"#374151",transition:"all 0.15s"}}>
                   {l}
                 </button>
@@ -299,7 +300,7 @@ function AdminExportModal({ exportActions, onClose }) {
 
           {/* Summary */}
           <div style={{background:"#F5F7FA",borderRadius:12,padding:"10px 14px",marginBottom:20,fontSize:13,color:"#374151",fontFamily:"'Inter',sans-serif"}}>
-            📅 <strong>{period==="all"?"All time":periodLabel()}</strong> · {format==="pdf"?"Opens print dialog":format==="json"?"Downloads .json backup":"Downloads .csv file"}
+            📅 <strong>{period==="all"?"All time":periodLabel()}</strong> · {format==="pdf"?"Opens print dialog":"Downloads .csv file"}
           </div>
 
           {/* Buttons */}
@@ -314,6 +315,149 @@ function AdminExportModal({ exportActions, onClose }) {
             </button>
           </div>
         </>)}
+      </div>
+    </div>
+  );
+}
+
+// ── Grade Group Modal ─────────────────────────────────────────────────────────
+function GradeGroupModal({ inst, group, onSave, onClose }) {
+  const isEdit = !!group;
+  const ALL_GRADES = [6,7,8,9,10,11,12];
+  const G2 = { navy:"#1A2F5A",blue:"#1D4ED8",blueL:"#DBEAFE",border:"#DDE3ED",text:"#111827",textM:"#4B5563",textL:"#6B7280",bg:"#F5F7FA",red:"#C93030",redL:"#FDF1F1",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace" };
+  const [gradeNums, setGradeNums] = React.useState(group?.gradeNums || []);
+  const [sectionsText, setSectionsText] = React.useState((group?.sections||[]).join("\n"));
+  const [durMins, setDurMins] = React.useState(group?.durMins || 60);
+  const [startTimes, setStartTimes] = React.useState(group?.slots?.map(s=>s.start) || [""]);
+  const [showOverrides, setShowOverrides] = React.useState(false);
+  const [overrides, setOverrides] = React.useState(group?.sectionOverrides || {});
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  function fmtEnd(start, mins) {
+    if (!start) return "";
+    const [h,m] = start.split(":").map(Number);
+    const end = new Date(2000,0,1,h,m+mins);
+    return String(end.getHours()).padStart(2,"0")+":"+String(end.getMinutes()).padStart(2,"0");
+  }
+
+  function handleSave() {
+    if (!gradeNums.length) { setError("Select at least one grade."); return; }
+    const sections = sectionsText.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+    if (!sections.length) { setError("Add at least one section name."); return; }
+    const validTimes = startTimes.filter(Boolean);
+    if (!validTimes.length) { setError("Add at least one start time."); return; }
+    const slots = validTimes.map(start => ({ start, end: fmtEnd(start, durMins), durMins }));
+    const minG=Math.min(...gradeNums),maxG=Math.max(...gradeNums);
+    const gradeLabel = gradeNums.length===1?`${gradeNums[0]}th`:`${minG}th–${maxG}th`;
+    const saved = { id: group?.id||("grp_"+Date.now()), gradeNums, label:gradeLabel, sections, slots, durMins, sectionOverrides:overrides };
+    setBusy(true);
+    onSave(saved).then(()=>{ setBusy(false); onClose(); }).catch(e=>{ setBusy(false); setError(e.message||"Save failed."); });
+  }
+
+  const inp = { width:"100%", padding:"10px 12px", borderRadius:10, border:`1px solid ${G2.border}`, fontSize:15, fontFamily:G2.sans, outline:"none", background:G2.bg, color:G2.text, boxSizing:"border-box" };
+  const sections = sectionsText.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:950,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)"}}>
+      <div style={{background:"#fff",borderRadius:22,padding:"24px 20px",width:"100%",maxWidth:500,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:700,color:G2.text,fontFamily:G2.display}}>{isEdit?"Edit Grade Group":"Add Grade Group"}</div>
+            <div style={{fontSize:13,color:G2.textL,marginTop:2}}>{inst}</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:G2.textL}}>✕</button>
+        </div>
+
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:G2.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Grades in this group</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {ALL_GRADES.map(g=>{const sel=gradeNums.includes(g);return(
+              <button key={g} type="button" onClick={()=>setGradeNums(n=>sel?n.filter(x=>x!==g):[...n,g].sort((a,b)=>a-b))}
+                style={{padding:"7px 14px",borderRadius:20,border:`2px solid ${sel?G2.navy:G2.border}`,background:sel?G2.navy:"transparent",color:sel?"#fff":G2.textM,fontSize:14,fontWeight:sel?700:500,cursor:"pointer",minHeight:38,fontFamily:G2.sans}}>
+                {g}th
+              </button>);
+            })}
+          </div>
+        </div>
+
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:G2.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Section names (one per line or comma-separated)</div>
+          <textarea value={sectionsText} onChange={e=>setSectionsText(e.target.value)}
+            placeholder={"11th NDA\n11th IIT Star\n11th MED"} rows={5}
+            style={{...inp,resize:"vertical",lineHeight:1.6,fontFamily:G2.mono,fontSize:14}}/>
+        </div>
+
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:G2.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Default class duration</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {[45,60,75,90,105,120].map(m=>{const sel=durMins===m;const lbl=m<60?`${m}m`:m===60?"1 hr":`${Math.floor(m/60)}h${m%60?" "+m%60+"m":""}`;return(
+              <button key={m} type="button" onClick={()=>setDurMins(m)}
+                style={{padding:"8px 14px",borderRadius:20,border:`2px solid ${sel?G2.navy:G2.border}`,background:sel?G2.navy:"transparent",color:sel?"#fff":G2.textM,fontSize:14,fontWeight:sel?700:500,cursor:"pointer",minHeight:38,fontFamily:G2.sans}}>
+                {lbl}
+              </button>);
+            })}
+          </div>
+        </div>
+
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:G2.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Class start times <span style={{fontWeight:400,color:G2.textL,textTransform:"none"}}>(end auto-calculated)</span></div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {startTimes.map((t,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:8}}>
+                <input type="time" value={t} onChange={e=>{const n=[...startTimes];n[i]=e.target.value;setStartTimes(n);}} style={{...inp,marginBottom:0,flex:1}}/>
+                {t&&<span style={{fontSize:13,color:G2.textL,fontFamily:G2.mono,flexShrink:0,whiteSpace:"nowrap"}}>→ {fmtEnd(t,durMins)||"--"}</span>}
+                {startTimes.length>1&&<button onClick={()=>setStartTimes(n=>n.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:G2.textL,fontSize:18,padding:4,flexShrink:0}}>✕</button>}
+              </div>
+            ))}
+            <button type="button" onClick={()=>setStartTimes(n=>[...n,""])}
+              style={{background:"none",border:`1.5px dashed ${G2.border}`,borderRadius:10,padding:"9px 0",cursor:"pointer",color:G2.blue,fontFamily:G2.sans,fontSize:14,fontWeight:600}}>
+              + Add another start time
+            </button>
+          </div>
+        </div>
+
+        {sections.length>0&&(
+          <div style={{marginBottom:16}}>
+            <button type="button" onClick={()=>setShowOverrides(o=>!o)}
+              style={{background:"none",border:"none",cursor:"pointer",color:G2.blue,fontFamily:G2.sans,fontSize:13,padding:0,fontWeight:600}}>
+              {showOverrides?"▲":"▶"} Custom slots for a specific section (optional)
+            </button>
+            {showOverrides&&(
+              <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:10}}>
+                {sections.map(sec=>(
+                  <div key={sec} style={{background:G2.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${G2.border}`}}>
+                    <div style={{fontSize:14,fontWeight:600,color:G2.text,marginBottom:8}}>{sec}</div>
+                    {(overrides[sec]||[]).map((slot,si)=>(
+                      <div key={si} style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+                        <input type="time" value={slot.start} onChange={e=>{
+                          const s=[...(overrides[sec]||[])];s[si]={...s[si],start:e.target.value,end:fmtEnd(e.target.value,durMins)};
+                          setOverrides(o=>({...o,[sec]:s}));
+                        }} style={{...inp,marginBottom:0,flex:1,fontSize:14}}/>
+                        <span style={{fontSize:12,color:G2.textL,fontFamily:G2.mono}}>{slot.end||"--"}</span>
+                        <button onClick={()=>setOverrides(o=>({...o,[sec]:(o[sec]||[]).filter((_,j)=>j!==si)}))} style={{background:"none",border:"none",cursor:"pointer",color:G2.textL,fontSize:16}}>✕</button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={()=>setOverrides(o=>({...o,[sec]:[...(o[sec]||[]),{start:"",end:"",durMins}]}))}
+                      style={{background:"none",border:"none",cursor:"pointer",color:G2.blue,fontSize:12,fontFamily:G2.sans,padding:0}}>
+                      + Add time for {sec}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {error&&<div style={{background:G2.redL,color:G2.red,borderRadius:9,padding:"8px 12px",fontSize:14,marginBottom:12}}>{error}</div>}
+
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onClose} style={{flex:1,padding:"13px",borderRadius:12,border:`1.5px solid ${G2.border}`,background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:G2.textM,fontFamily:G2.sans}}>Cancel</button>
+          <button onClick={handleSave} disabled={busy}
+            style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:G2.navy,fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:G2.sans,opacity:busy?0.7:1}}>
+            {busy?"Saving…":isEdit?"Save Changes":"Add Group"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -357,6 +501,9 @@ function AdminPanelInner({user}){
   const [deleteBusy,  setDeleteBusy]  = useState(false);
   const [deletedInstitutes, setDeletedInstitutes] = useState(new Set());
   const [globalInstList, setGlobalInstList] = useState([]); // from config/institutes
+  const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
+  const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
+  const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
 
   useEffect(()=>{
     const check=()=>setIsMobile(window.innerWidth<768);
@@ -364,6 +511,12 @@ function AdminPanelInner({user}){
     window.addEventListener("resize",check);
     return ()=>window.removeEventListener("resize",check);
   },[]);
+
+  React.useEffect(()=>{
+    if(view==="manage"){
+      getAllInstituteSections().then(s=>setInstSectionsAll(s||{})).catch(()=>{});
+    }
+  },[view]);
 
   useEffect(()=>{
     (async()=>{
@@ -1064,6 +1217,77 @@ function AdminPanelInner({user}){
         </div>
       </div>
       <div style={{maxWidth:860,margin:"0 auto",padding:"20px 16px 72px"}}>
+
+        {/* Grade group modal (add/edit) */}
+        {grpModal&&(
+          <GradeGroupModal
+            inst={grpModal.inst}
+            group={grpModal.mode==="edit"?grpModal.group:null}
+            onSave={async(savedGroup)=>{
+              const existing=instSectionsAll[grpModal.inst]?.gradeGroups||[];
+              const updated=grpModal.mode==="edit"?existing.map(g=>g.id===savedGroup.id?savedGroup:g):[...existing,savedGroup];
+              await saveInstituteGradeGroups(grpModal.inst,updated);
+              setInstSectionsAll(a=>({...a,[grpModal.inst]:{gradeGroups:updated}}));
+            }}
+            onClose={()=>setGrpModal(null)}
+          />
+        )}
+
+        {/* Institute detail drill-down (replaces tab content when active) */}
+        {instDetailView?(()=>{
+          const groups=instSectionsAll[instDetailView]?.gradeGroups||[];
+          const fmtSlotPill=s=>{const[h,m]=s.start.split(":").map(Number);const e=s.end?.split(":").map(Number)||[0,0];const f=(hh,mm)=>`${hh%12||12}:${String(mm).padStart(2,"0")} ${hh>=12?"PM":"AM"}`;return`${f(h,m)}–${f(e[0],e[1])}`;};
+          return(
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+                <button onClick={()=>setInstDetailView(null)} style={{...pill(G.bg,G.textS,G.borderM),fontSize:14}}>← Back</button>
+                <div>
+                  <div style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display}}>{instDetailView}</div>
+                  <div style={{fontSize:13,color:G.textM}}>Sections &amp; timetable management</div>
+                </div>
+              </div>
+              {groups.length===0&&(
+                <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"36px 20px",textAlign:"center",marginBottom:16}}>
+                  <div style={{fontSize:32,marginBottom:10}}>📚</div>
+                  <div style={{fontSize:16,fontWeight:600,color:G.textM,marginBottom:6}}>No grade groups yet</div>
+                  <div style={{fontSize:14,color:G.textL}}>Add a grade group to define sections and timetable slots for this institute.</div>
+                </div>
+              )}
+              {groups.map(grp=>(
+                <div key={grp.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+                  <div style={{padding:"16px 18px"}}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:12}}>
+                      <div>
+                        <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{grp.label}</div>
+                        <div style={{fontSize:13,color:G.textM,marginTop:2}}>{grp.sections?.length||0} sections · {grp.slots?.length||0} time slots</div>
+                      </div>
+                      <div style={{display:"flex",gap:6,flexShrink:0}}>
+                        <button onClick={()=>setGrpModal({mode:"edit",inst:instDetailView,group:grp})} style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>Edit</button>
+                        <button onClick={async()=>{if(!window.confirm(`Delete "${grp.label}"?`))return;await deleteInstituteGradeGroup(instDetailView,grp.id);setInstSectionsAll(a=>({...a,[instDetailView]:{gradeGroups:(a[instDetailView]?.gradeGroups||[]).filter(g=>g.id!==grp.id)}}));}} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>Delete</button>
+                      </div>
+                    </div>
+                    <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Sections</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
+                      {(grp.sections||[]).map(s=>(<span key={s} style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 11px",fontSize:12,fontFamily:G.mono,fontWeight:600}}>{s}</span>))}
+                    </div>
+                    <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Time slots</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {(grp.slots||[]).map((s,si)=>(<span key={si} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"3px 11px",fontSize:12,fontFamily:G.mono,color:G.text}}>{fmtSlotPill(s)}</span>))}
+                    </div>
+                    {Object.keys(grp.sectionOverrides||{}).filter(k=>(grp.sectionOverrides[k]||[]).length>0).length>0&&(
+                      <div style={{fontSize:12,color:G.textL,marginTop:8}}>+ Custom slots for: {Object.keys(grp.sectionOverrides).filter(k=>(grp.sectionOverrides[k]||[]).length>0).join(", ")}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <button onClick={()=>setGrpModal({mode:"add",inst:instDetailView})}
+                style={{width:"100%",padding:"13px",borderRadius:12,border:`2px dashed ${G.blue}`,background:G.blueL,color:G.blue,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
+                + Add Grade Group
+              </button>
+            </div>
+          );
+        })():(<>
+
         <h2 style={{fontSize:24,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:16}}>Control Centre</h2>
 
         {/* Tab switcher */}
@@ -1143,6 +1367,10 @@ function AdminPanelInner({user}){
                         <button onClick={()=>{setRenamingInst(inst);setRenameInstVal(inst);}}
                           style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",color:G.textS,fontFamily:G.sans,fontWeight:500}}>
                           Rename
+                        </button>
+                        <button onClick={()=>{setInstDetailView(inst);setManageTab("institutes");}}
+                          style={{background:G.blueL,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap"}}>
+                          Manage Sections →
                         </button>
                         <button onClick={()=>handleDeleteInstitute(inst)}
                           style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500}}>
@@ -1385,6 +1613,7 @@ function AdminPanelInner({user}){
           );
         })()}
         </>}
+      </>)}
       </div>
     </div>
   );
