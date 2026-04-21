@@ -915,10 +915,10 @@ const KIS_SLOTS = {
   ],
 };
 
-// Matches only KIS SIP Kunjpura — any capitalisation / spacing variation
-function isKisSipKunjpura(institute) {
-  const s = (institute || "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
-  return s.includes("kis") && s.includes("kunjpura");
+// Matches any institute with "KIS SIP" in the name (case-insensitive)
+function isKisSip(institute) {
+  const s = (institute || "").toLowerCase();
+  return s.includes("kis") && s.includes("sip");
 }
 
 // Convert Roman numerals (I–XII) to integer, returns null if not Roman
@@ -964,7 +964,7 @@ function extractGrade(section) {
 
 function getKisSlots(cls) {
   if (!cls) return null;
-  if (!isKisSipKunjpura(cls.institute)) return null;
+  if (!isKisSip(cls.institute)) return null;
   const grade = extractGrade(cls.section);
   if (!grade) return null;
   if (grade >= 11) return KIS_SLOTS.senior;
