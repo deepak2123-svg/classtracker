@@ -1500,14 +1500,19 @@ function ClassTrackerInner({user}){
           onPointerDown={e=>{e.currentTarget.style.transform="scale(0.98)";e.currentTarget.style.boxShadow="none";}}
           onPointerUp={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}
           onPointerCancel={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}>
-          <div style={{height:4,background:ic.bg}}/>
+          <div style={{height:6,background:ic.bg}}/>
           <div style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
-            <div style={{width:46,height:46,borderRadius:12,background:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:ic.bg,fontFamily:G.mono}}>
+            <div style={{width:46,height:46,borderRadius:12,background:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,borderLeft:`4px solid ${ic.bg}`}}>
               {(cls.section||"?").slice(0,2).toUpperCase()}
             </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,marginBottom:3}}>{cls.section}</div>
-              <div style={{fontSize:14,color:G.textM}}>🏫 {cls.institute}{cls.subject?" · "+cls.subject:""}</div>
+              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,marginBottom:5}}>{cls.section}</div>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <span style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}44`,flexShrink:0}}>
+                  {cls.institute}
+                </span>
+                {cls.subject&&<span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>· {cls.subject}</span>}
+              </div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
               <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{total}</div>
