@@ -2253,14 +2253,18 @@ function ClassTrackerInner({user}){
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<>
-            {activeClass&&<div className="desktop-only" style={{display:"flex",alignItems:"center",gap:8,maxWidth:260,overflow:"hidden"}}>
-              <div style={{width:8,height:8,borderRadius:"50%",background:"#34D077",flexShrink:0}}/>
-              <span style={{fontSize:14,fontWeight:600,color:"rgba(255,255,255,0.95)",fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{activeClass.section}</span>
-              <span style={{fontSize:13,color:"rgba(255,255,255,0.5)",flexShrink:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:120}}>· {activeClass.institute}</span>
-            </div>}
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
           </>}
         />
+
+        {/* Fixed class name bar — always visible regardless of scroll */}
+        {activeClass&&(
+          <div style={{position:"fixed",top:58,left:0,right:0,zIndex:99,background:G.forest,borderBottom:"1px solid rgba(255,255,255,0.1)",padding:"7px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:"#34D077",flexShrink:0}}/>
+            <span style={{fontSize:16,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.2}}>{activeClass.section}</span>
+            <span style={{fontSize:13,color:"rgba(255,255,255,0.45)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:260}}>· {activeClass.institute}{activeClass.subject?` · ${activeClass.subject}`:""}</span>
+          </div>
+        )}
         {!isEdit&&(
           <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"12px 16px"}}>
             <div style={{maxWidth:660,margin:"0 auto"}}>
@@ -2288,14 +2292,7 @@ function ClassTrackerInner({user}){
             </div>
           </div>
         )}
-        <div className="mobile-pad" style={{maxWidth:660,width:"100%",margin:"0 auto",padding:"32px 16px 72px",boxSizing:"border-box"}}>
-          {/* Class name — prominent, centered */}
-          {activeClass&&(
-            <div style={{textAlign:"center",marginBottom:24}}>
-              <div style={{fontSize:32,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,lineHeight:1.1}}>{activeClass.section}</div>
-              <div style={{fontSize:14,color:G.textM,marginTop:5,fontFamily:G.sans}}>{activeClass.institute}{activeClass.subject?` · ${activeClass.subject}`:""}</div>
-            </div>
-          )}
+        <div className="mobile-pad" style={{maxWidth:660,width:"100%",margin:"0 auto",padding:"32px 16px 72px",paddingTop:activeClass?"74px":"32px",boxSizing:"border-box"}}>
           <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:5,textTransform:"uppercase",fontWeight:600}}>{isEdit?"Editing Entry":"New Entry For"}</p>
           <h2 style={{marginBottom:22,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>{isEdit?form.title||"Entry":formatDateLabel(selectedDate)}</h2>
           <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
