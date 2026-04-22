@@ -2261,16 +2261,6 @@ function ClassTrackerInner({user}){
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
           </>}
         />
-
-        {/* Sticky class context bar — visible on all screen sizes while scrolling */}
-        {activeClass&&(
-          <div style={{position:"sticky",top:58,zIndex:90,background:G.forest,borderBottom:"1px solid rgba(255,255,255,0.1)",padding:"8px 16px",display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:8,height:8,borderRadius:"50%",background:"#34D077",flexShrink:0}}/>
-            <span style={{fontSize:15,fontWeight:700,color:"#fff",fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{activeClass.section}</span>
-            <span style={{fontSize:13,color:"rgba(255,255,255,0.45)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>· {activeClass.institute}</span>
-            {activeClass.subject&&<span style={{fontSize:12,color:"rgba(255,255,255,0.35)",marginLeft:"auto",flexShrink:0,fontFamily:G.mono}}>{activeClass.subject}</span>}
-          </div>
-        )}
         {!isEdit&&(
           <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"12px 16px"}}>
             <div style={{maxWidth:660,margin:"0 auto"}}>
@@ -2299,6 +2289,13 @@ function ClassTrackerInner({user}){
           </div>
         )}
         <div className="mobile-pad" style={{maxWidth:660,width:"100%",margin:"0 auto",padding:"32px 16px 72px",boxSizing:"border-box"}}>
+          {/* Class name — prominent, centered */}
+          {activeClass&&(
+            <div style={{textAlign:"center",marginBottom:24}}>
+              <div style={{fontSize:32,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,lineHeight:1.1}}>{activeClass.section}</div>
+              <div style={{fontSize:14,color:G.textM,marginTop:5,fontFamily:G.sans}}>{activeClass.institute}{activeClass.subject?` · ${activeClass.subject}`:""}</div>
+            </div>
+          )}
           <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:5,textTransform:"uppercase",fontWeight:600}}>{isEdit?"Editing Entry":"New Entry For"}</p>
           <h2 style={{marginBottom:22,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>{isEdit?form.title||"Entry":formatDateLabel(selectedDate)}</h2>
           <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
