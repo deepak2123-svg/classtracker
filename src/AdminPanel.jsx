@@ -1967,9 +1967,7 @@ function AdminPanelInner({user}){
                       saveInstOrder(reordered);
                     }
                   } else if(!dragInstRef.current){
-                    setInstDetailView(inst);
-                    setManageTab("institutes");
-                    setView("manage");
+                    onSelectInstitute(inst);setMobileStep(1);
                   }
                   e.currentTarget.style.boxShadow="";
                   e.currentTarget.style.transform="";
@@ -2004,9 +2002,8 @@ function AdminPanelInner({user}){
                     <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 10px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>{clsCount} class{clsCount!==1?"es":""}</span>
                     <span style={{fontSize:13,color:G.textM,fontFamily:G.sans,alignSelf:"center"}}>{tCount} teacher{tCount!==1?"s":""}</span>
                   </div>
-                  {(()=>{const grps=instSectionsAll[inst]?.gradeGroups||[];return grps.length>0?<div style={{fontSize:12,color:G.blue,fontFamily:G.sans,marginTop:5,fontWeight:600}}>📚 {grps.length} grade group{grps.length!==1?"s":""} configured</div>:<div style={{fontSize:12,color:G.textL,fontFamily:G.sans,marginTop:5}}>Tap to set up sections & timetable</div>})()}
                 </div>
-                <span style={{fontSize:16,color:G.blue,marginLeft:4}}>📚</span>
+                <span style={{fontSize:20,color:G.textL}}>›</span>
               </div>
             );
           })}
