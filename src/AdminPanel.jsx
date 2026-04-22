@@ -846,13 +846,14 @@ function AdminPanelInner({user}){
       if(!d) return; // fullData not loaded yet for this teacher
       (d.classes||[]).filter(c=>norm(c.institute)===norm(selInst)).forEach(c=>{
         const key=c.section;
-        if(!map[key]) map[key]={raw:c.section,display:normaliseName(c.section),subject:c.subject,teachers:[]};
+        if(!map[key]) map[key]={raw:c.section,display:normaliseName(c.section),subjects:new Set(),teachers:[]};
+        if(c.subject) map[key].subjects.add(c.subject.trim());
         const entryCount=Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0);
         const lastActive=lastEntryTs((d.notes||{})[c.id]||{});
-        map[key].teachers.push({uid:t.uid,name:d.profile?.name||t.name,entryCount,lastActive,classId:c.id});
+        map[key].teachers.push({uid:t.uid,name:d.profile?.name||t.name,entryCount,lastActive,classId:c.id,subject:c.subject});
       });
     });
-    return Object.values(map).sort((a,b)=>classNum(b.display)-classNum(a.display));
+    return Object.values(map).map(c=>({...c,subjects:[...c.subjects].sort()})).sort((a,b)=>classNum(b.display)-classNum(a.display));
   },[selInst,teachers,fullData]);
 
   // ── P3 content based on tab + P2 selection ────────────────────────────────
@@ -1185,7 +1186,7 @@ function AdminPanelInner({user}){
     const cls = instClasses.find(c=>c.raw===selP2);
     if (!cls) return [];
     return (cls.teachers||[]).flatMap(t =>
-      rowsForTeacherClass(t.uid, t.name, t.classId, cls.display, cls.subject, days)
+      rowsForTeacherClass(t.uid, t.name, t.classId, cls.display, t.subject||cls.subjects[0]||"", days)
     );
   };
 
@@ -1269,7 +1270,7 @@ function AdminPanelInner({user}){
       const cls = instClasses.find(c=>c.raw===selP2);
       if (cls) {
         const name = `${cls.display} — All Teachers`;
-        const meta = `${selInst} · ${cls.subject} · ${periodLabel}`;
+        const meta = `${selInst} · ${cls.subjects.join(", ")||"—"} · ${periodLabel}`;
         actions.push({
           label: `All teachers`,
           sub: `${cls.display} · ${cls.teachers.length} teacher${cls.teachers.length!==1?"s":""}`,
@@ -2033,7 +2034,7 @@ function AdminPanelInner({user}){
               style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div>
                 <div style={{fontSize:16,fontWeight:700,color:G.text}}>{cls.display}</div>
-                <div style={{fontSize:14,color:G.textM,marginTop:2}}>{cls.subject}</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:2}}>{cls.subjects.length===0?"No subject":cls.subjects.length===1?cls.subjects[0]:`${cls.subjects.length} subjects`}</div>
                 <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:5,display:"inline-block"}}>{cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}</span>
               </div>
               <span style={{fontSize:20,color:G.textL}}>›</span>
@@ -2089,7 +2090,7 @@ function AdminPanelInner({user}){
               {tab==="teacher"&&(
                 <div style={{borderTop:`1px solid ${G.border}`,background:G.bg,padding:"8px 16px",display:"flex",justifyContent:"flex-end"}}>
                   <button onClick={()=>handleDeleteClass(selP2,cls.classId,cls.display,fullData[selP2]?.profile?.name||"Teacher")}
-                    style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>
+                    style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:6,WebkitTapHighlightColor:"transparent"}}>
                     🗑 Delete Class
                   </button>
                 </div>
@@ -2381,7 +2382,7 @@ function AdminPanelInner({user}){
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
                   <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
-                  <div style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginTop:3}}>{cls.subject}</div>
+                  <div style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginTop:3}}>{cls.subjects.length===0?"No subject":cls.subjects.length===1?cls.subjects[0]:`${cls.subjects.length} subjects`}</div>
                   <div style={{marginTop:4}}>
                     <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
                       {cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}
