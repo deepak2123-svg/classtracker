@@ -725,6 +725,7 @@ function AdminPanelInner({user}){
   const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
   const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
+  const [instMenuOpen, setInstMenuOpen]     = useState(null); // inst name whose ⋯ menu is open
 
   useEffect(()=>{
     const check=()=>setIsMobile(window.innerWidth<768);
@@ -1583,29 +1584,40 @@ function AdminPanelInner({user}){
                         )}
                         <div style={{fontSize:14,color:G.textM,marginTop:3}}>{clsCount} class{clsCount!==1?"es":""} · {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}</div>
                       </div>
-                      <div style={{display:"flex",gap:6,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                        {instIdx>0&&(
-                          <button onClick={()=>{
-                            const reordered=[...institutes];
-                            const [moved]=reordered.splice(instIdx,1);
-                            reordered.unshift(moved);
-                            saveInstOrder(reordered);
-                          }} style={{background:G.blueL,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"6px 10px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,whiteSpace:"nowrap"}}>
-                            ↑ Top
-                          </button>
-                        )}
-                        <button onClick={()=>{setRenamingInst(inst);setRenameInstVal(inst);}}
-                          style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",color:G.textS,fontFamily:G.sans,fontWeight:500}}>
-                          Rename
-                        </button>
-                        <button onClick={()=>{setInstDetailView(inst);setManageTab("institutes");setView("manage");}}
-                          style={{background:G.blueL,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap"}}>
+                      <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center",position:"relative"}}>
+                        <button onClick={()=>setInstDetailView(inst)}
+                          style={{background:G.blueL,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap"}}>
                           📚 Manage Sections →
                         </button>
-                        <button onClick={()=>handleDeleteInstitute(inst)}
-                          style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500}}>
-                          Delete
+                        <button
+                          onClick={e=>{e.stopPropagation();setInstMenuOpen(instMenuOpen===inst?null:inst);}}
+                          style={{width:34,height:34,background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:8,fontSize:20,cursor:"pointer",color:G.textM,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,letterSpacing:1}}>
+                          ⋯
                         </button>
+                        {instMenuOpen===inst&&(<>
+                          <div onClick={()=>setInstMenuOpen(null)} style={{position:"fixed",inset:0,zIndex:199}}/>
+                          <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:200,background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,boxShadow:G.shadowMd,overflow:"hidden",minWidth:165}}>
+                            {instIdx>0&&(
+                              <button onClick={()=>{
+                                const reordered=[...institutes];
+                                const [moved]=reordered.splice(instIdx,1);
+                                reordered.unshift(moved);
+                                saveInstOrder(reordered);
+                                setInstMenuOpen(null);
+                              }} style={{width:"100%",padding:"11px 16px",background:"none",border:"none",borderBottom:`1px solid ${G.border}`,textAlign:"left",fontSize:14,cursor:"pointer",color:G.textS,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:10}}>
+                                <span>↑</span> Move to Top
+                              </button>
+                            )}
+                            <button onClick={()=>{setRenamingInst(inst);setRenameInstVal(inst);setInstMenuOpen(null);}}
+                              style={{width:"100%",padding:"11px 16px",background:"none",border:"none",borderBottom:`1px solid ${G.border}`,textAlign:"left",fontSize:14,cursor:"pointer",color:G.textS,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:10}}>
+                              <span>✏</span> Rename
+                            </button>
+                            <button onClick={()=>{handleDeleteInstitute(inst);setInstMenuOpen(null);}}
+                              style={{width:"100%",padding:"11px 16px",background:"none",border:"none",textAlign:"left",fontSize:14,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:10}}>
+                              <span>🗑</span> Delete
+                            </button>
+                          </div>
+                        </>)}
                       </div>
                     </div>
                     {/* Teacher count tag — no names to avoid confusion */}
@@ -1955,7 +1967,9 @@ function AdminPanelInner({user}){
                       saveInstOrder(reordered);
                     }
                   } else if(!dragInstRef.current){
-                    onSelectInstitute(inst);setMobileStep(1);
+                    setInstDetailView(inst);
+                    setManageTab("institutes");
+                    setView("manage");
                   }
                   e.currentTarget.style.boxShadow="";
                   e.currentTarget.style.transform="";
@@ -1990,8 +2004,9 @@ function AdminPanelInner({user}){
                     <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 10px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>{clsCount} class{clsCount!==1?"es":""}</span>
                     <span style={{fontSize:13,color:G.textM,fontFamily:G.sans,alignSelf:"center"}}>{tCount} teacher{tCount!==1?"s":""}</span>
                   </div>
+                  {(()=>{const grps=instSectionsAll[inst]?.gradeGroups||[];return grps.length>0?<div style={{fontSize:12,color:G.blue,fontFamily:G.sans,marginTop:5,fontWeight:600}}>📚 {grps.length} grade group{grps.length!==1?"s":""} configured</div>:<div style={{fontSize:12,color:G.textL,fontFamily:G.sans,marginTop:5}}>Tap to set up sections & timetable</div>})()}
                 </div>
-                <span style={{fontSize:20,color:G.textL}}>›</span>
+                <span style={{fontSize:16,color:G.blue,marginLeft:4}}>📚</span>
               </div>
             );
           })}
