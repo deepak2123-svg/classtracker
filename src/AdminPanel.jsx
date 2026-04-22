@@ -1880,6 +1880,7 @@ function AdminPanelInner({user}){
             🗑{adminBin.length>0&&<span style={{position:"absolute",top:-3,right:-3,background:G.red,color:"#fff",borderRadius:"50%",width:13,height:13,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center"}}>{adminBin.length}</span>}
           </button>
           <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),padding:"6px 10px",fontSize:12}}>⚙</button>
+          <button onClick={()=>{setManageTab("institutes");setInstDetailView(null);setView("manage");}} style={{...pill("rgba(59,130,246,0.3)","rgba(255,255,255,0.9)","rgba(59,130,246,0.5)"),padding:"6px 10px",fontSize:12}}>📚</button>
           <button onClick={logout} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),padding:"6px 10px",fontSize:12}}>✕</button>
         </div>
       </div>
@@ -2200,6 +2201,7 @@ function AdminPanelInner({user}){
         🗑{adminBin.length>0&&<span style={{position:"absolute",top:-4,right:-4,background:G.red,color:"#fff",borderRadius:"50%",width:14,height:14,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.mono}}>{adminBin.length}</span>}
       </button>
       <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.12)","rgba(255,255,255,0.85)","rgba(255,255,255,0.2)"),fontSize:14,fontWeight:500}}>Control Centre</button>
+          <button onClick={()=>{setManageTab("institutes");setInstDetailView(null);setView("manage");}} style={{...pill("rgba(59,130,246,0.25)","rgba(255,255,255,0.9)","rgba(59,130,246,0.4)"),fontSize:14,fontWeight:600}}>📚 Manage Sections</button>
           <button onClick={logout} style={{...pill("none","rgba(255,255,255,0.65)","rgba(255,255,255,0.2)"),fontSize:14}}>Sign Out</button>
         </div>
       </div>
