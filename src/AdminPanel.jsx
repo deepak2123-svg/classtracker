@@ -766,6 +766,45 @@ function AdminPanelInner({user}){
     })();
   },[]);
 
+  // ── Browser history — Android back gesture ───────────────────────────────────
+  // Encode the full nav state so every meaningful screen transition is back-able
+  function navState() {
+    return { view, mobileStep, instDetailView: instDetailView||null };
+  }
+  function pushNav(state) {
+    window.history.pushState(state, "");
+  }
+
+  // Seed base history on mount
+  useEffect(() => {
+    window.history.replaceState({ view:"main", mobileStep:0, instDetailView:null }, "");
+    window.history.pushState({ view:"main", mobileStep:0, instDetailView:null }, "");
+  }, []);
+
+  // When key nav state changes, push a new history entry
+  useEffect(() => {
+    window.history.pushState({ view, mobileStep, instDetailView:instDetailView||null }, "");
+  }, [view, mobileStep, instDetailView]);
+
+  // Handle back gesture
+  useEffect(() => {
+    const onPop = (e) => {
+      const s = e.state;
+      if (!s) return;
+      // Restore nav state from history entry — use raw setters to avoid re-pushing
+      if (s.view !== undefined)            setView(s.view);
+      if (s.mobileStep !== undefined)      setMobileStep(s.mobileStep);
+      if (s.instDetailView !== undefined)  setInstDetailView(s.instDetailView);
+      // Reset sub-selections when stepping back
+      if (s.mobileStep < 3) setSelP3(null);
+      if (s.mobileStep < 2) setSelP2(null);
+      if (s.mobileStep < 1) { setSelInst(null); }
+      if (s.view === "main") setInstDetailView(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   // Lazy-load full data for a teacher only when needed
   const ensureFullData = async (uid) => {
     if (fullData[uid] || loadingUids.has(uid)) return; // already loaded or loading

@@ -1265,7 +1265,14 @@ function ClassTrackerInner({user}){
   },[data]);
   // Safe navigation — shows in-app warning if save is in flight
   // ── Browser history integration — enables Android back gesture ──────────────
-  // Each setView call pushes a history entry so the back gesture pops it
+  // On mount: seed the base history entry so back never exits the app accidentally
+  useEffect(() => {
+    window.history.replaceState({ view: "home" }, "", "");
+    // Push a sentinel so the first back press lands on "home" state, not empty
+    window.history.pushState({ view: "home" }, "", "");
+  }, []);
+
+  // Wrap raw setter: every navigation pushes a history entry
   const setView = React.useCallback((nextView) => {
     _setView(prev => {
       if (prev === nextView) return prev;
@@ -1274,25 +1281,16 @@ function ClassTrackerInner({user}){
     });
   }, []);
 
-  // On mount: replace the initial history entry with current view state
-  useEffect(() => {
-    window.history.replaceState({ view: "home" }, "", "");
-  }, []);
-
-  // Listen for back gesture / browser back button
+  // Listen for back gesture — just read the state, no extra pushing
   useEffect(() => {
     const onPop = (e) => {
-      const target = e.state?.view;
-      // Map back destinations: addNote/editNote → classDetail, classDetail → home, everything else → home
+      const target = e.state?.view || "home";
+      // addNote/editNote have no meaningful back target in history — go to classDetail
       if (target === "addNote" || target === "editNote") {
         _setView("classDetail");
-      } else if (target) {
-        _setView(target);
       } else {
-        _setView("home");
+        _setView(target);
       }
-      // Push a replacement so the back stack doesn't get exhausted
-      window.history.pushState({ view: "home" }, "", "");
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
