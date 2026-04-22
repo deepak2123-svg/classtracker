@@ -218,11 +218,45 @@ function GhostBtn({onClick,children,style={}}){
 }
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
-function TopNav({user,teacherName,right,onLogoClick,onSignOut}){
+function TopNav({user,teacherName,right,onLogoClick,onSignOut,data}){
   const shortName=(teacherName||"").split(" ")[0];
+  const [profileOpen, setProfileOpen] = React.useState(false);
+
+  // Compute total teaching hours (session = April 1 of current academic year)
+  const totalTeachingMins = React.useMemo(()=>{
+    if(!data) return 0;
+    function calcDur(tStart,tEnd){
+      if(!tStart||!tEnd) return 0;
+      try{
+        const [sh,sm]=tStart.split(":").map(Number);
+        const [eh,em]=tEnd.split(":").map(Number);
+        const d=(eh*60+em)-(sh*60+sm);
+        return d>0&&d<480?d:0;
+      }catch(e){return 0;}
+    }
+    const now=new Date();
+    const sesYear=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;
+    const rangeStart=`${sesYear}-04-01`;
+    const todayK=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+    let total=0;
+    (data.classes||[]).forEach(cls=>{
+      Object.entries(data.notes?.[cls.id]||{}).forEach(([dk,entries])=>{
+        if(dk<rangeStart||dk>todayK) return;
+        if(!Array.isArray(entries)) return;
+        entries.forEach(e=>{ total+=calcDur(e.timeStart,e.timeEnd); });
+      });
+    });
+    return total;
+  },[data]);
+
+  function fmtHours(m){
+    if(!m) return "0h";
+    const h=Math.floor(m/60), min=m%60;
+    return min?`${h}h ${min}m`:`${h}h`;
+  }
+
   return(
     <div style={{background:G.forest,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06)"}}>
-      {/* All items same height:42, same borderRadius:10, vertically centred */}
       <div style={{height:58,display:"flex",alignItems:"center",padding:"0 12px",gap:8}}>
 
         {/* Logo pill */}
@@ -234,34 +268,64 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut}){
           🎓
         </div>
 
-        {/* Spacer */}
         <div style={{flex:1}}/>
 
-        {/* Right group — all same height */}
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-
-          {/* Extra right items (Back button etc.) */}
           {right}
 
-          {/* Teacher name pill */}
-          <div style={{height:42,display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.1)",borderRadius:10,padding:"0 12px",flexShrink:0}}>
-            <Avatar user={user} size={22}/>
-            <span style={{fontWeight:600,fontSize:13,color:"rgba(255,255,255,0.92)",whiteSpace:"nowrap",fontFamily:G.sans}}>
-              <span className="desktop-only">{teacherName}</span>
-              <span className="mobile-inline">{shortName}</span>
-            </span>
-          </div>
+          {/* Clickable profile pill */}
+          <div style={{position:"relative"}}>
+            <div onClick={()=>setProfileOpen(o=>!o)}
+              style={{height:42,display:"flex",alignItems:"center",gap:7,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",borderRadius:10,padding:"0 12px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s"}}>
+              <Avatar user={user} size={22}/>
+              <span style={{fontWeight:600,fontSize:13,color:"rgba(255,255,255,0.92)",whiteSpace:"nowrap",fontFamily:G.sans}}>
+                <span className="desktop-only">{teacherName}</span>
+                <span className="mobile-inline">{shortName}</span>
+              </span>
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:2}}>{profileOpen?"▲":"▼"}</span>
+            </div>
 
-          {/* Sign out pill — same size, clean icon */}
-          <button onClick={onSignOut}
-            style={{height:42,width:42,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(220,38,38,0.2)",border:"1.5px solid rgba(220,38,38,0.45)",borderRadius:10,cursor:"pointer",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
-            {/* Clean power/exit icon using SVG — renders on all platforms */}
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
+            {/* Profile dropdown */}
+            {profileOpen&&(<>
+              <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
+              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#1B3A2E",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.35)",overflow:"hidden",minWidth:220}}>
+
+                {/* Profile header */}
+                <div style={{padding:"14px 16px 12px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                    <Avatar user={user} size={36}/>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:700,color:"rgba(255,255,255,0.95)",fontFamily:G.sans}}>{teacherName}</div>
+                      <div style={{fontSize:12,color:"rgba(255,255,255,0.45)",marginTop:2,fontFamily:G.sans}}>{user?.email||"—"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Teaching hours */}
+                <div style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:32,height:32,borderRadius:8,background:"rgba(52,208,119,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>⏱</div>
+                  <div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:G.sans,textTransform:"uppercase",letterSpacing:0.8,fontWeight:600}}>Teaching this session</div>
+                    <div style={{fontSize:18,fontWeight:800,color:G.green,fontFamily:G.sans,lineHeight:1.2,marginTop:2}}>{fmtHours(totalTeachingMins)}</div>
+                  </div>
+                </div>
+
+                {/* Sign out */}
+                <div style={{padding:"8px"}}>
+                  <button onClick={()=>{setProfileOpen(false);onSignOut();}}
+                    style={{width:"100%",padding:"10px 12px",background:"rgba(220,38,38,0.15)",border:"1px solid rgba(220,38,38,0.3)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#FCA5A5",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                      <polyline points="16 17 21 12 16 7"/>
+                      <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    Sign Out
+                  </button>
+                </div>
+
+              </div>
+            </>)}
+          </div>
 
         </div>
       </div>
@@ -1767,7 +1831,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} right={NavRight}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} right={NavRight}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
       </div>
     );
@@ -1786,7 +1850,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
         {/* Class header */}
@@ -1868,7 +1932,7 @@ function ClassTrackerInner({user}){
   if(view==="addClass"){
     return(
     <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
-      <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
         right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
       <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px 80px"}}>
         <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:6,textTransform:"uppercase",fontWeight:600}}>New Class</p>
@@ -1987,7 +2051,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<button onClick={()=>setView("home")} style={navBtnStyle}>← Back</button>}/>
 
         <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"16px 14px 48px",maxWidth:680,margin:"0 auto",width:"100%"}}>
@@ -2095,7 +2159,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         <SaveBadge/>
-        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>
@@ -2193,7 +2257,7 @@ function ClassTrackerInner({user}){
 
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
-        <TopNav user={user} teacherName={teacherName} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<>
             {activeClass&&<div className="desktop-only" style={{display:"flex",alignItems:"center",gap:8,maxWidth:260,overflow:"hidden"}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:"#34D077",flexShrink:0}}/>
