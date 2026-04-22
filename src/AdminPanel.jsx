@@ -172,6 +172,7 @@ class ErrorBoundary extends Component {
 function AdminExportModal({ exportActions, onClose }) {
   const [period,   setPeriod]   = React.useState("month");
   const [format,   setFormat]   = React.useState("csv");
+  const [selActionIdx, setSelActionIdx] = React.useState(0);
   const [selMonth, setSelMonth] = React.useState(()=>{const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`;});
   const [selWeek,  setSelWeek]  = React.useState(()=>{const n=new Date(),p=n=>String(n).padStart(2,"0");return`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`;});
   const [selDay,   setSelDay]   = React.useState(()=>{const n=new Date(),p=n=>String(n).padStart(2,"0");return`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`;});
@@ -203,9 +204,7 @@ function AdminExportModal({ exportActions, onClose }) {
     if(!exportActions.length) return;
     setBusy(true);
     setTimeout(()=>{
-      const action = exportActions[0]; // primary action (current view or teacher/class)
-      const days = getDays();
-      // Re-run the action functions but with period-aware days
+      const action = exportActions[selActionIdx] || exportActions[0];
       if(format==="csv") action.csv();
       else if(format==="pdf") action.pdf();
       else action.json();
@@ -218,103 +217,112 @@ function AdminExportModal({ exportActions, onClose }) {
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
-      <div style={{background:"#fff",borderRadius:22,padding:"26px 22px",width:"100%",maxWidth:400,boxShadow:"0 24px 64px rgba(0,0,0,0.25)",maxHeight:"90vh",overflowY:"auto"}}>
+      <div style={{background:"#fff",borderRadius:22,width:"100%",maxWidth:400,boxShadow:"0 24px 64px rgba(0,0,0,0.25)",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
 
-        {/* Header */}
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-          <div style={{width:46,height:46,borderRadius:13,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>📤</div>
-          <div>
-            <div style={{fontSize:18,fontWeight:700,color:"#111827",fontFamily:"'Poppins',sans-serif"}}>Export Entries</div>
-            <div style={{fontSize:13,color:"#6B7280"}}>
-              {exportActions.length>0 ? exportActions[0].sub : "Select a view first"}
+        {/* Scrollable content */}
+        <div style={{overflowY:"auto",flex:1,padding:"26px 22px 8px"}}>
+
+          {/* Header */}
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+            <div style={{width:46,height:46,borderRadius:13,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>📤</div>
+            <div>
+              <div style={{fontSize:18,fontWeight:700,color:"#111827",fontFamily:"'Poppins',sans-serif"}}>Export Entries</div>
+              <div style={{fontSize:13,color:"#6B7280"}}>
+                {exportActions.length>0 ? exportActions[selActionIdx]?.sub || exportActions[0].sub : "Select a view first"}
+              </div>
             </div>
+            <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9CA3AF",lineHeight:1,padding:4}}>✕</button>
           </div>
-          <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9CA3AF",lineHeight:1,padding:4}}>✕</button>
-        </div>
 
-        {exportActions.length===0 ? (
-          <div style={{textAlign:"center",padding:"20px 0",color:"#9CA3AF",fontSize:14,fontFamily:"'Inter',sans-serif"}}>
-            Select a teacher or class first to export.
-          </div>
-        ) : (<>
+          {exportActions.length===0 ? (
+            <div style={{textAlign:"center",padding:"20px 0",color:"#9CA3AF",fontSize:14,fontFamily:"'Inter',sans-serif"}}>
+              Select a teacher or class first to export.
+            </div>
+          ) : (<>
 
-          {/* Scope pills — if multiple export actions available */}
-          {exportActions.length>1&&(
+            {/* Scope — fully working selection */}
+            {exportActions.length>1&&(
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Scope</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {exportActions.map((a,i)=>{
+                    const isSel=selActionIdx===i;
+                    return(
+                      <div key={i} onClick={()=>setSelActionIdx(i)}
+                        style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${isSel?"#1A2F5A":"#DDE3ED"}`,background:isSel?"#EEF2FF":"transparent",cursor:"pointer",transition:"all 0.15s"}}>
+                        <span style={{fontSize:18}}>{a.icon}</span>
+                        <div>
+                          <div style={{fontSize:14,fontWeight:600,color:"#111827",fontFamily:"'Inter',sans-serif"}}>{a.label}</div>
+                          <div style={{fontSize:12,color:"#6B7280",fontFamily:"'JetBrains Mono',monospace"}}>{a.sub}</div>
+                        </div>
+                        {isSel&&<span style={{marginLeft:"auto",fontSize:11,background:"#1A2F5A",color:"#fff",borderRadius:20,padding:"2px 8px",fontFamily:"'Inter',sans-serif",fontWeight:600}}>Selected</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Period */}
             <div style={{marginBottom:16}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Scope</div>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {exportActions.map((a,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${i===0?"#1A2F5A":"#DDE3ED"}`,background:i===0?"#EEF2FF":"transparent",cursor:"pointer"}}
-                    onClick={()=>{ /* reorder so clicked is first */}}>
-                    <span style={{fontSize:18}}>{a.icon}</span>
-                    <div>
-                      <div style={{fontSize:14,fontWeight:600,color:"#111827",fontFamily:"'Inter',sans-serif"}}>{a.label}</div>
-                      <div style={{fontSize:12,color:"#6B7280",fontFamily:"'JetBrains Mono',monospace"}}>{a.sub}</div>
-                    </div>
-                    {i===0&&<span style={{marginLeft:"auto",fontSize:11,background:"#1A2F5A",color:"#fff",borderRadius:20,padding:"2px 8px",fontFamily:"'Inter',sans-serif",fontWeight:600}}>Selected</span>}
-                  </div>
+              <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Period</div>
+              <div style={{display:"flex",gap:6}}>
+                {[["day","Daily"],["week","Weekly"],["month","Monthly"],["all","All Time"]].map(([k,l])=>(
+                  <button key={k} onClick={()=>setPeriod(k)}
+                    style={{flex:1,padding:"9px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:12,fontWeight:period===k?700:500,
+                      background:period===k?"#1A2F5A":"rgba(0,0,0,0.06)",color:period===k?"#fff":"#374151",transition:"all 0.15s"}}>
+                    {l}
+                  </button>
                 ))}
               </div>
             </div>
-          )}
 
-          {/* Period */}
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Period</div>
-            <div style={{display:"flex",gap:6}}>
-              {[["day","Daily"],["week","Weekly"],["month","Monthly"],["all","All Time"]].map(([k,l])=>(
-                <button key={k} onClick={()=>setPeriod(k)}
-                  style={{flex:1,padding:"9px 0",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:12,fontWeight:period===k?700:500,
-                    background:period===k?"#1A2F5A":"rgba(0,0,0,0.06)",color:period===k?"#fff":"#374151",transition:"all 0.15s"}}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Date picker */}
-          {period!=="all"&&(
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
-                {period==="day"?"Date":period==="week"?"Any day in the week":"Month"}
+            {/* Date picker */}
+            {period!=="all"&&(
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+                  {period==="day"?"Date":period==="week"?"Any day in the week":"Month"}
+                </div>
+                {period==="month"&&<input type="month" value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={inp2}/>}
+                {period==="week"&&<input type="date" value={selWeek} onChange={e=>setSelWeek(e.target.value)} style={inp2}/>}
+                {period==="day"&&<input type="date" value={selDay} onChange={e=>setSelDay(e.target.value)} style={inp2}/>}
               </div>
-              {period==="month"&&<input type="month" value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={inp2}/>}
-              {period==="week"&&<input type="date" value={selWeek} onChange={e=>setSelWeek(e.target.value)} style={inp2}/>}
-              {period==="day"&&<input type="date" value={selDay} onChange={e=>setSelDay(e.target.value)} style={inp2}/>}
+            )}
+
+            {/* Format */}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Format</div>
+              <div style={{display:"flex",gap:8}}>
+                {[["csv","📊 CSV / Excel"],["pdf","📄 PDF"]].map(([k,l])=>(
+                  <button key={k} onClick={()=>setFormat(k)}
+                    style={{flex:1,padding:"12px 0",borderRadius:12,border:`2px solid ${format===k?"#1A2F5A":"#DDE3ED"}`,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:format===k?700:500,
+                      background:format===k?"#EEF2FF":"transparent",color:format===k?"#1A2F5A":"#374151",transition:"all 0.15s"}}>
+                    {l}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
 
-          {/* Format */}
-          <div style={{marginBottom:22}}>
-            <div style={{fontSize:12,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Format</div>
-            <div style={{display:"flex",gap:8}}>
-              {[["csv","📊 CSV / Excel"],["pdf","📄 PDF"]].map(([k,l])=>(
-                <button key={k} onClick={()=>setFormat(k)}
-                  style={{flex:1,padding:"12px 0",borderRadius:12,border:`2px solid ${format===k?"#1A2F5A":"#DDE3ED"}`,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:format===k?700:500,
-                    background:format===k?"#EEF2FF":"transparent",color:format===k?"#1A2F5A":"#374151",transition:"all 0.15s"}}>
-                  {l}
-                </button>
-              ))}
+            {/* Summary */}
+            <div style={{background:"#F5F7FA",borderRadius:12,padding:"10px 14px",fontSize:13,color:"#374151",fontFamily:"'Inter',sans-serif"}}>
+              📅 <strong>{period==="all"?"All time":periodLabel()}</strong> · {format==="pdf"?"Opens print dialog":"Downloads .csv file"}
             </div>
-          </div>
 
-          {/* Summary */}
-          <div style={{background:"#F5F7FA",borderRadius:12,padding:"10px 14px",marginBottom:20,fontSize:13,color:"#374151",fontFamily:"'Inter',sans-serif"}}>
-            📅 <strong>{period==="all"?"All time":periodLabel()}</strong> · {format==="pdf"?"Opens print dialog":"Downloads .csv file"}
-          </div>
+          </>)}
+        </div>
 
-          {/* Buttons */}
-          <div style={{display:"flex",gap:10}}>
-            <button onClick={onClose}
-              style={{flex:1,padding:"13px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#374151",fontFamily:"'Inter',sans-serif"}}>
-              Cancel
-            </button>
-            <button onClick={doExport} disabled={busy}
-              style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"#1A2F5A",fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:"'Inter',sans-serif",opacity:busy?0.7:1}}>
-              {busy?"Preparing…":"Export"}
-            </button>
-          </div>
-        </>)}
+        {/* Fixed footer buttons — never clipped */}
+        <div style={{flexShrink:0,padding:"12px 22px 20px",borderTop:"1px solid #F3F4F6",display:"flex",gap:10,background:"#fff"}}>
+          <button onClick={onClose}
+            style={{flex:1,padding:"13px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#374151",fontFamily:"'Inter',sans-serif"}}>
+            Cancel
+          </button>
+          <button onClick={doExport} disabled={busy||exportActions.length===0}
+            style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:(busy||exportActions.length===0)?"#D5D5D5":"#1A2F5A",fontSize:15,fontWeight:700,cursor:(busy||exportActions.length===0)?"not-allowed":"pointer",color:"#fff",fontFamily:"'Inter',sans-serif",opacity:busy?0.7:1}}>
+            {busy?"Preparing…":"Export"}
+          </button>
+        </div>
+
       </div>
     </div>
   );
