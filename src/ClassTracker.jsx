@@ -223,7 +223,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,data})
   const [profileOpen, setProfileOpen] = React.useState(false);
 
   return(
-    <div style={{background:G.forest,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06)"}}>
+    <div style={{background:G.forest,position:"sticky",top:0,zIndex:100}}>
       <div style={{height:58,display:"flex",alignItems:"center",padding:"0 12px",gap:8}}>
 
         {/* Logo pill */}
@@ -2235,7 +2235,7 @@ function ClassTrackerInner({user}){
     const color=activeClass?instColor(activeClass.institute):COLORS[0];
 
     return(
-      <div style={{height:"100svh",width:"100%",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans}}>
+      <div style={{height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans}}>
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<>
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
@@ -2244,7 +2244,7 @@ function ClassTrackerInner({user}){
 
         {/* Class name bar — static in flow, always visible above scrollable content */}
         {activeClass&&(
-          <div style={{flexShrink:0,background:G.forest,borderBottom:"1px solid rgba(255,255,255,0.1)",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          <div style={{flexShrink:0,background:G.forest,padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
             <div style={{width:8,height:8,borderRadius:"50%",background:"#34D077",flexShrink:0}}/>
             <span style={{fontSize:16,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.2}}>{activeClass.section}</span>
             <span style={{fontSize:13,color:"rgba(255,255,255,0.45)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:260}}>· {activeClass.institute}{activeClass.subject?` · ${activeClass.subject}`:""}</span>
@@ -2252,7 +2252,7 @@ function ClassTrackerInner({user}){
         )}
 
         {/* Scrollable content */}
-        <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
+        <div style={{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch"}}>
           {!isEdit&&(
             <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"12px 16px"}}>
               <div style={{maxWidth:660,margin:"0 auto"}}>
