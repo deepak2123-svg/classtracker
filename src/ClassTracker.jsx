@@ -1145,7 +1145,7 @@ function ClassTrackerInner({user}){
   const [loading,setLoading]   = useState(true);
   const [saving,setSaving]     = useState(false);
   const [saveErr,setSaveErr]   = useState(false);
-  const [view,setView]         = useState("home");
+  const [view,_setView]         = useState("home");
   const [activeClass,setActiveClass] = useState(null);
   const [selectedDate,setSelectedDate] = useState(todayKey());
   const [newNote,setNewNote]   = useState({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});
@@ -1264,6 +1264,40 @@ function ClassTrackerInner({user}){
     return()=>clearTimeout(saveTimer.current);
   },[data]);
   // Safe navigation — shows in-app warning if save is in flight
+  // ── Browser history integration — enables Android back gesture ──────────────
+  // Each setView call pushes a history entry so the back gesture pops it
+  const setView = React.useCallback((nextView) => {
+    _setView(prev => {
+      if (prev === nextView) return prev;
+      window.history.pushState({ view: nextView }, "", "");
+      return nextView;
+    });
+  }, []);
+
+  // On mount: replace the initial history entry with current view state
+  useEffect(() => {
+    window.history.replaceState({ view: "home" }, "", "");
+  }, []);
+
+  // Listen for back gesture / browser back button
+  useEffect(() => {
+    const onPop = (e) => {
+      const target = e.state?.view;
+      // Map back destinations: addNote/editNote → classDetail, classDetail → home, everything else → home
+      if (target === "addNote" || target === "editNote") {
+        _setView("classDetail");
+      } else if (target) {
+        _setView(target);
+      } else {
+        _setView("home");
+      }
+      // Push a replacement so the back stack doesn't get exhausted
+      window.history.pushState({ view: "home" }, "", "");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   function safeNav(destination, action){
     if(saving){
       setSavingGuard({onLeave: action || (()=>setView(destination))});
