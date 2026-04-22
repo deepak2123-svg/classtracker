@@ -112,9 +112,9 @@ function getEntriesInRange(classNotes={}, days=null){
     if(!Array.isArray(arr)) return;
     arr.forEach(e=>{ if(e) result.push({dateKey:dk,entry:e}); });
   });
-  // sort by date desc, within date by timeStart asc
+  // sort by date asc (oldest first), within date by timeStart asc
   result.sort((a,b)=>{
-    if(b.dateKey!==a.dateKey) return b.dateKey.localeCompare(a.dateKey);
+    if(a.dateKey!==b.dateKey) return a.dateKey.localeCompare(b.dateKey);
     return (a.entry.timeStart||"").localeCompare(b.entry.timeStart||"");
   });
   return result;
@@ -125,7 +125,7 @@ function groupByDate(flatEntries){
     if(!map[dateKey]) map[dateKey]=[];
     map[dateKey].push(entry);
   });
-  return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0]));
+  return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
 }
 function formatDateLabel(dk){
   if(!dk) return "";
@@ -2459,6 +2459,17 @@ function AdminPanelInner({user}){
             <div style={{fontSize:12,color:G.textM,fontFamily:G.mono,marginTop:2}}>
               {tab==="class"?"Teachers in this class":"Their classes at "+selInst}
             </div>
+            {/* Export button for class tab — export all teachers in this class */}
+            {selP2&&tab==="class"&&(()=>{
+              const cls=instClasses.find(c=>c.raw===selP2);
+              if(!cls) return null;
+              return(
+                <button onClick={()=>setExportOpen(true)}
+                  style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:7,padding:"7px 0",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
+                  ↓ Export {cls.display} — All Teachers
+                </button>
+              );
+            })()}
           </div>
           <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
             {tab==="teacher"?"Classes":"Teachers"}
