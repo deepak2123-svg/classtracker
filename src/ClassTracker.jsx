@@ -218,42 +218,9 @@ function GhostBtn({onClick,children,style={}}){
 }
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
-function TopNav({user,teacherName,right,onLogoClick,onSignOut,data}){
+function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,data}){
   const shortName=(teacherName||"").split(" ")[0];
   const [profileOpen, setProfileOpen] = React.useState(false);
-
-  // Compute total teaching hours (session = April 1 of current academic year)
-  const totalTeachingMins = React.useMemo(()=>{
-    if(!data) return 0;
-    function calcDur(tStart,tEnd){
-      if(!tStart||!tEnd) return 0;
-      try{
-        const [sh,sm]=tStart.split(":").map(Number);
-        const [eh,em]=tEnd.split(":").map(Number);
-        const d=(eh*60+em)-(sh*60+sm);
-        return d>0&&d<480?d:0;
-      }catch(e){return 0;}
-    }
-    const now=new Date();
-    const sesYear=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;
-    const rangeStart=`${sesYear}-04-01`;
-    const todayK=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-    let total=0;
-    (data.classes||[]).forEach(cls=>{
-      Object.entries(data.notes?.[cls.id]||{}).forEach(([dk,entries])=>{
-        if(dk<rangeStart||dk>todayK) return;
-        if(!Array.isArray(entries)) return;
-        entries.forEach(e=>{ total+=calcDur(e.timeStart,e.timeEnd); });
-      });
-    });
-    return total;
-  },[data]);
-
-  function fmtHours(m){
-    if(!m) return "0h";
-    const h=Math.floor(m/60), min=m%60;
-    return min?`${h}h ${min}m`:`${h}h`;
-  }
 
   return(
     <div style={{background:G.forest,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06)"}}>
@@ -301,13 +268,13 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,data}){
                   </div>
                 </div>
 
-                {/* Teaching hours */}
-                <div style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:32,height:32,borderRadius:8,background:"rgba(52,208,119,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>⏱</div>
-                  <div>
-                    <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:G.sans,textTransform:"uppercase",letterSpacing:0.8,fontWeight:600}}>Teaching this session</div>
-                    <div style={{fontSize:18,fontWeight:800,color:G.green,fontFamily:G.sans,lineHeight:1.2,marginTop:2}}>{fmtHours(totalTeachingMins)}</div>
-                  </div>
+                {/* Stats button */}
+                <div style={{padding:"8px 8px 0"}}>
+                  <button onClick={()=>{setProfileOpen(false);onViewStats();}}
+                    style={{width:"100%",padding:"10px 12px",background:"rgba(52,208,119,0.12)",border:"1px solid rgba(52,208,119,0.25)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#34D07A",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
+                    View Stats
+                  </button>
                 </div>
 
                 {/* Sign out */}
@@ -1540,11 +1507,6 @@ function ClassTrackerInner({user}){
         style={{background:G.redL,border:"none",borderRadius:8,padding:"7px 11px",cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>
         🗑 {trashCount}
       </button>}
-      <button onClick={()=>setView("stats")}
-        style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
-        <span className="desktop-only" style={{display:"inline",fontSize:13,fontWeight:600}}>Stats</span>
-      </button>
       <button onClick={()=>setExportOpen(true)}
         style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1831,7 +1793,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} right={NavRight}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} right={NavRight}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
       </div>
     );
@@ -2159,7 +2121,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         <SaveBadge/>
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>
