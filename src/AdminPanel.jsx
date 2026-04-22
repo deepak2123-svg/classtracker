@@ -323,7 +323,7 @@ function AdminExportModal({ exportActions, onClose }) {
 // ── Institute Wizard (step-by-step grade group creator) ─────────────────────
 function GradeGroupModal({ inst, group, onSave, onClose }) {
   const isEdit = !!group;
-  const TOTAL = 5;
+  const TOTAL = 4;
   const W = { navy:"#1A2F5A",blue:"#1D4ED8",blueL:"#EEF2FF",blueV:"#3B82F6",
     bg:"#F4F6FA",surface:"#fff",border:"#E2E8F0",borderM:"#CBD5E1",
     text:"#0F172A",textM:"#475569",textL:"#94A3B8",
@@ -388,7 +388,7 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
     .map((s,i)=>({start:s, dur: slotDurs[i]||durMins}))
     .filter(s=>s.start)
     .sort((a,b)=>toMins(a.start)-toMins(b.start));
-  const STEP_LABELS = ["Grades","Sections","Duration","Time slots","Review"];
+  const STEP_LABELS = ["Grades","Sections","Time slots","Review"];
 
   function quickSelect(type) {
     if(type==="junior") setGradeNums([6,7,8,9,10]);
@@ -596,15 +596,13 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
   }
 
   function Step5() {
-    const DURLABELS={45:"45 minutes",60:"1 hour",75:"1h 15 minutes",90:"1h 30 minutes",105:"1h 45 minutes",120:"2 hours"};
     return (<>
       <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>Looks good?</div>
       <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>Review everything before saving. Tap Edit to go back to any section.</div>
       {[
         {icon:"🎓",bg:"#EEF2FF",label:"Grades",val:<span>{gradeNums.map(g=>g+"th").join(", ")||"None"}</span>,s:1},
         {icon:"📚",bg:W.greenL,label:"Sections",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>,s:2},
-        {icon:"⏱",bg:"#FFFBEB",label:"Duration",val:<span>{DURLABELS[durMins]||durMins+" min"}</span>,s:3},
-        {icon:"🕐",bg:W.greenL,label:"Time slots",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{validSlots.map((s,i)=><span key={i} style={{background:W.greenL,color:W.green,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{fmtDisp(s.start)}–{fmtDisp(fmtEnd(s.start,s.dur))}{s.dur!==durMins?` (${s.dur}m)`:""}</span>)}</div>,s:4},
+        {icon:"🕐",bg:W.greenL,label:"Time slots",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{validSlots.map((s,i)=><span key={i} style={{background:W.greenL,color:W.green,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{fmtDisp(s.start)}–{fmtDisp(fmtEnd(s.start,s.dur))}</span>)}</div>,s:3},
       ].map(({icon,bg,label,val,s})=>(
         <div key={label} style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:12,marginBottom:8,padding:"14px 16px",display:"flex",alignItems:"flex-start",gap:12}}>
           <div style={{width:36,height:36,borderRadius:10,background:bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{icon}</div>
@@ -619,7 +617,7 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
     </>);
   }
 
-  const STEPS=[null,Step1,Step2,Step3,Step4,Step5];
+  const STEPS=[null,Step1,Step2,Step4,Step5];
   const StepComponent=STEPS[step];
 
   return (
