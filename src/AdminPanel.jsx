@@ -1569,20 +1569,33 @@ function AdminPanelInner({user}){
                 return(
                   <div key={inst}
                     style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`}}>
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:instTeacherList.length>0?12:0}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        {renamingInst===inst?(
-                          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                            <input value={renameInstVal} onChange={e=>setRenameInstVal(e.target.value)}
-                              onKeyDown={e=>{if(e.key==="Enter")handleRenameInstitute(inst,renameInstVal);if(e.key==="Escape")setRenamingInst(null);}}
-                              autoFocus style={{flex:1,minWidth:120,padding:"7px 11px",borderRadius:8,border:`1.5px solid ${G.blue}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
-                            <button onClick={()=>handleRenameInstitute(inst,renameInstVal)} style={{...pill(G.navy,"#fff","transparent"),fontSize:13,padding:"6px 14px"}}>Save</button>
-                            <button onClick={()=>setRenamingInst(null)} style={{...pill("none",G.textM,G.border),fontSize:13,padding:"6px 10px"}}>✕</button>
+                    {/* Row 1: Institute name — full width */}
+                    {renamingInst===inst?(
+                      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
+                        <input value={renameInstVal} onChange={e=>setRenameInstVal(e.target.value)}
+                          onKeyDown={e=>{if(e.key==="Enter")handleRenameInstitute(inst,renameInstVal);if(e.key==="Escape")setRenamingInst(null);}}
+                          autoFocus style={{flex:1,minWidth:120,padding:"7px 11px",borderRadius:8,border:`1.5px solid ${G.blue}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
+                        <button onClick={()=>handleRenameInstitute(inst,renameInstVal)} style={{...pill(G.navy,"#fff","transparent"),fontSize:13,padding:"6px 14px"}}>Save</button>
+                        <button onClick={()=>setRenamingInst(null)} style={{...pill("none",G.textM,G.border),fontSize:13,padding:"6px 10px"}}>✕</button>
+                      </div>
+                    ):(
+                      <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:3}}>{inst}</div>
+                    )}
+                    {/* Row 2: stats + buttons on same line */}
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                      <div>
+                        <div style={{fontSize:14,color:G.textM}}>{clsCount} class{clsCount!==1?"es":""} · {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}</div>
+                        {instTeacherList.length>0&&(
+                          <div style={{display:"flex",gap:8,marginTop:6,alignItems:"center"}}>
+                            <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 12px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>
+                              {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}
+                            </span>
+                            <button onClick={()=>setManageTab("teachers")}
+                              style={{background:"none",border:"none",fontSize:12,color:G.textM,cursor:"pointer",fontFamily:G.sans,textDecoration:"underline",padding:0}}>
+                              View in Teachers →
+                            </button>
                           </div>
-                        ):(
-                          <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{inst}</div>
                         )}
-                        <div style={{fontSize:14,color:G.textM,marginTop:3}}>{clsCount} class{clsCount!==1?"es":""} · {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}</div>
                       </div>
                       <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center",position:"relative"}}>
                         <button onClick={()=>setInstDetailView(inst)}
@@ -1591,7 +1604,7 @@ function AdminPanelInner({user}){
                         </button>
                         <button
                           onClick={e=>{e.stopPropagation();setInstMenuOpen(instMenuOpen===inst?null:inst);}}
-                          style={{width:34,height:34,background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:8,fontSize:20,cursor:"pointer",color:G.textM,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,letterSpacing:1}}>
+                          style={{width:34,height:34,background:G.surface,border:`1px solid ${G.borderM}`,borderRadius:8,fontSize:20,cursor:"pointer",color:G.textM,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,letterSpacing:1}}>
                           ⋯
                         </button>
                         {instMenuOpen===inst&&(<>
@@ -1620,18 +1633,6 @@ function AdminPanelInner({user}){
                         </>)}
                       </div>
                     </div>
-                    {/* Teacher count tag — no names to avoid confusion */}
-                    {instTeacherList.length>0&&(
-                      <div style={{display:"flex",gap:8,marginTop:4}}>
-                        <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 12px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>
-                          {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}
-                        </span>
-                        <button onClick={()=>setManageTab("teachers")}
-                          style={{background:"none",border:"none",fontSize:12,color:G.textM,cursor:"pointer",fontFamily:G.sans,textDecoration:"underline",padding:0}}>
-                          View in Teachers →
-                        </button>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -2070,18 +2071,29 @@ function AdminPanelInner({user}){
           <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}</h2>
           <div style={{fontSize:14,color:G.textM,marginBottom:16}}>{selInst}</div>
           {p3Items.map(cls=>(
-            <div key={cls.classId||cls.uid} onClick={()=>{
-              if(tab==="teacher") setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute||selInst});
-              else { const clsObj=instClasses.find(c=>c.raw===selP2); setSelP3({teacherUid:cls.uid,classId:cls.classId,teacherName:cls.name,className:normaliseName(selP2),subject:clsObj?.subject}); ensureFullData(cls.uid); }
-              setMobileStep(3);
-            }}
-              style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-              <div>
-                <div style={{fontSize:16,fontWeight:700,color:G.text}}>{tab==="teacher"?cls.display:cls.name}</div>
-                <div style={{fontSize:14,color:G.textM,marginTop:2}}>{tab==="teacher"?cls.subject:""}</div>
-                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:5,display:"inline-block"}}>{cls.entryCount} {cls.entryCount===1?"entry":"entries"}</span>
+            <div key={cls.classId||cls.uid}
+              style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,marginBottom:8,overflow:"hidden"}}>
+              <div onClick={()=>{
+                if(tab==="teacher") setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute||selInst});
+                else { const clsObj=instClasses.find(c=>c.raw===selP2); setSelP3({teacherUid:cls.uid,classId:cls.classId,teacherName:cls.name,className:normaliseName(selP2),subject:clsObj?.subject}); ensureFullData(cls.uid); }
+                setMobileStep(3);
+              }}
+                style={{padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+                <div>
+                  <div style={{fontSize:16,fontWeight:700,color:G.text}}>{tab==="teacher"?cls.display:cls.name}</div>
+                  <div style={{fontSize:14,color:G.textM,marginTop:2}}>{tab==="teacher"?cls.subject:""}</div>
+                  <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:5,display:"inline-block"}}>{cls.entryCount} {cls.entryCount===1?"entry":"entries"}</span>
+                </div>
+                <span style={{fontSize:20,color:G.textL}}>›</span>
               </div>
-              <span style={{fontSize:20,color:G.textL}}>›</span>
+              {tab==="teacher"&&(
+                <div style={{borderTop:`1px solid ${G.border}`,background:G.bg,padding:"8px 16px",display:"flex",justifyContent:"flex-end"}}>
+                  <button onClick={()=>handleDeleteClass(selP2,cls.classId,cls.display,fullData[selP2]?.profile?.name||"Teacher")}
+                    style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>
+                    🗑 Delete Class
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -2403,17 +2415,25 @@ function AdminPanelInner({user}){
               const isSel=selP3?.classId===cls.classId;
               const tName=fullData[selP2]?.profile?.name||"";
               return(
-                <div key={cls.classId} onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
-                  style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
+                <div key={cls.classId}
+                  style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent",paddingRight:8}}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
-                  <div style={{fontSize:14,color:G.textM,marginTop:3}}>{cls.subject}</div>
-                  <div style={{marginTop:5}}>
-                    <span style={{background:isSel?G.navy:G.blueL,color:isSel?"#fff":G.blue,borderRadius:10,padding:"3px 9px",fontSize:12,fontFamily:G.mono,fontWeight:600}}>
-                      {cls.entryCount} {cls.entryCount===1?"entry":"entries"}
-                    </span>
+                  <div onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
+                    style={{cursor:"pointer"}}>
+                    <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
+                    <div style={{fontSize:14,color:G.textM,marginTop:3}}>{cls.subject}</div>
+                    <div style={{marginTop:5}}>
+                      <span style={{background:isSel?G.navy:G.blueL,color:isSel?"#fff":G.blue,borderRadius:10,padding:"3px 9px",fontSize:12,fontFamily:G.mono,fontWeight:600}}>
+                        {cls.entryCount} {cls.entryCount===1?"entry":"entries"}
+                      </span>
+                    </div>
                   </div>
+                  <button onClick={e=>{e.stopPropagation();handleDeleteClass(selP2,cls.classId,cls.display,tName);}}
+                    title="Delete class"
+                    style={{marginTop:6,width:"100%",padding:"5px 0",background:G.redL,border:"1px solid #F5CACA",borderRadius:7,fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                    🗑 Delete
+                  </button>
                 </div>
               );
             })}
