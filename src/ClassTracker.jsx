@@ -1569,6 +1569,8 @@ function ClassTrackerInner({user}){
       const monthLabel=`${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
       const monthN=Object.entries(data.notes?.[cls.id]||{}).reduce((s,[dk,arr])=>
         s+(dk.startsWith(monthKey)&&Array.isArray(arr)?arr.length:0),0);
+      const todayArr=(data.notes?.[cls.id]||{})[todayKey()];
+      const todayN=Array.isArray(todayArr)?todayArr.length:0;
       // Truncate long institute names with ellipsis
       const instFull=cls.institute||"";
       const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
@@ -1592,13 +1594,16 @@ function ClassTrackerInner({user}){
                 {cls.subject&&<span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>· {cls.subject}</span>}
               </div>
             </div>
-            {/* Right: month count primary (bold), total secondary (small) */}
-            <div style={{textAlign:"right",flexShrink:0}}>
+            {/* Right: today pill + month count + total */}
+            <div style={{textAlign:"right",flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+              {todayN>0&&(
+                <div style={{background:G.forest,color:"#fff",borderRadius:20,padding:"2px 9px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>+{todayN} today</div>
+              )}
               {monthN>0?(
                 <>
                   <div style={{fontSize:20,fontWeight:800,color:G.green,fontFamily:G.display,lineHeight:1}}>{monthN}</div>
                   <div style={{fontSize:10,color:G.green,fontWeight:700,whiteSpace:"nowrap"}}>{monthLabel}</div>
-                  <div style={{fontSize:11,color:G.textL,fontWeight:500,marginTop:3}}>{total} total</div>
+                  <div style={{fontSize:11,color:G.textL,fontWeight:500}}>{total} total</div>
                 </>
               ):(
                 <>
