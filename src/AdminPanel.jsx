@@ -1475,8 +1475,10 @@ function AdminPanelInner({user}){
       {/* nav */}
       <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
-          <div style={{width:28,height:28,background:G.blueV,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>🎓</div>
-          <span style={{fontFamily:G.display,fontSize:16,fontWeight:700,color:"#fff"}}>ClassLog</span>
+          <div style={{width:28,height:28,background:G.blueV,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
+          </div>
+          <span style={{fontFamily:G.display,fontSize:16,fontWeight:800,color:"#fff",letterSpacing:-0.3}}>Ledgr</span>
           <span style={{fontSize:11,letterSpacing:2,color:"rgba(255,255,255,0.25)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</span>
         </div>
         <div style={{display:"flex",gap:8}}>
@@ -1914,9 +1916,11 @@ function AdminPanelInner({user}){
     const MobileNav = ()=>(
       <div style={{background:G.navy,minHeight:60,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.08)",gap:8,position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:32,height:32,background:G.blueV,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🎓</div>
+          <div style={{width:32,height:32,background:G.blueV,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
+          </div>
           <div>
-            <div style={{fontFamily:G.display,fontSize:16,fontWeight:700,color:"#fff",lineHeight:1.1}}>ClassLog</div>
+            <div style={{fontFamily:G.display,fontSize:17,fontWeight:800,color:"#fff",lineHeight:1.1,letterSpacing:-0.3}}>Ledgr</div>
             <div style={{fontSize:9,letterSpacing:2,color:"rgba(255,255,255,0.4)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</div>
           </div>
         </div>
@@ -2233,9 +2237,11 @@ function AdminPanelInner({user}){
       {/* Nav */}
       <div style={{background:G.navy,minHeight:64,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 18px",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.08)",gap:12}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
-          <div style={{width:36,height:36,background:G.blueV,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🎓</div>
+          <div style={{width:36,height:36,background:G.blueV,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <svg width="19" height="19" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
+          </div>
           <div>
-            <div style={{fontFamily:G.display,fontSize:18,fontWeight:700,color:"#fff",lineHeight:1.2,letterSpacing:-0.3}}>ClassLog</div>
+            <div style={{fontFamily:G.display,fontSize:20,fontWeight:800,color:"#fff",lineHeight:1.2,letterSpacing:-0.5}}>Ledgr</div>
             <div style={{fontSize:11,letterSpacing:2,color:"rgba(255,255,255,0.45)",fontFamily:G.mono,textTransform:"uppercase",marginTop:2}}>Admin Panel</div>
           </div>
         </div>
@@ -2686,6 +2692,10 @@ function AdminPanelInner({user}){
             ))}
           </div>
         </div>
+      </div>
+      {/* Tagline footer */}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,height:28,background:G.navy,borderTop:"1px solid rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50}}>
+        <span style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontFamily:"'Inter',sans-serif",letterSpacing:0.3}}>Every class. Every teacher. One place.</span>
       </div>
     </div>
   );

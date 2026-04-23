@@ -218,21 +218,28 @@ function GhostBtn({onClick,children,style={}}){
 }
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
-function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,data}){
+function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,data,trashCount=0}){
   const shortName=(teacherName||"").split(" ")[0];
   const [profileOpen, setProfileOpen] = React.useState(false);
 
   return(
-    <div style={{background:G.forest,position:"sticky",top:0,zIndex:100}}>
+    <div style={{background:G.forest,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06)"}}>
       <div style={{height:58,display:"flex",alignItems:"center",padding:"0 12px",gap:8}}>
 
-        {/* Logo pill */}
+        {/* Ledgr logo wordmark */}
         <div onClick={onLogoClick}
-          style={{width:42,height:42,borderRadius:10,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
+          style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
           onPointerDown={e=>{e.currentTarget.style.opacity="0.75";}}
           onPointerUp={e=>{e.currentTarget.style.opacity="1";}}
           onPointerCancel={e=>{e.currentTarget.style.opacity="1";}}>
-          🎓
+          {/* L icon */}
+          <div style={{width:34,height:34,borderRadius:9,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M4 3H7V13H14V16H4V3Z" fill="white"/>
+            </svg>
+          </div>
+          {/* Wordmark — hidden on very small screens */}
+          <span style={{fontFamily:G.display,fontWeight:800,fontSize:20,color:"#fff",letterSpacing:-0.5,lineHeight:1}} className="desktop-only">Ledgr</span>
         </div>
 
         <div style={{flex:1}}/>
@@ -240,8 +247,22 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,data})
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           {right}
 
+          {/* Quick + button */}
+          {onLogoClick&&(
+            <button onClick={onLogoClick}
+              style={{display:"none"}} className="desktop-only-flex"
+            />
+          )}
+
           {/* Clickable profile pill */}
-          <div style={{position:"relative"}}>
+          <div style={{position:"relative",display:"flex",alignItems:"center",gap:6}}>
+
+            {/* + Add Class quick button */}
+            <button
+              onClick={()=>{ setProfileOpen(false); if(onLogoClick) onLogoClick(); }}
+              style={{display:"none"}}
+            />
+
             <div onClick={()=>setProfileOpen(o=>!o)}
               style={{height:42,display:"flex",alignItems:"center",gap:7,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",borderRadius:10,padding:"0 12px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s"}}>
               <Avatar user={user} size={22}/>
@@ -255,11 +276,11 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,data})
             {/* Profile dropdown */}
             {profileOpen&&(<>
               <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
-              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#1B3A2E",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.35)",overflow:"hidden",minWidth:220}}>
+              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#1B3A2E",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.35)",overflow:"hidden",minWidth:230}}>
 
                 {/* Profile header */}
                 <div style={{padding:"14px 16px 12px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <Avatar user={user} size={36}/>
                     <div>
                       <div style={{fontSize:15,fontWeight:700,color:"rgba(255,255,255,0.95)",fontFamily:G.sans}}>{teacherName}</div>
@@ -268,17 +289,25 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,data})
                   </div>
                 </div>
 
-                {/* Stats button */}
+                {/* Menu items */}
                 <div style={{padding:"8px 8px 0"}}>
                   <button onClick={()=>{setProfileOpen(false);onViewStats();}}
-                    style={{width:"100%",padding:"10px 12px",background:"rgba(52,208,119,0.12)",border:"1px solid rgba(52,208,119,0.25)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#34D07A",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
+                    style={{width:"100%",padding:"10px 12px",background:"rgba(52,208,119,0.12)",border:"1px solid rgba(52,208,119,0.25)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#34D07A",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent",marginBottom:6}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
                     View Stats
+                  </button>
+
+                  {/* Recycle bin */}
+                  <button onClick={()=>{setProfileOpen(false);onViewTrash&&onViewTrash();}}
+                    style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.75)",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent",marginBottom:6}}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    Recycle Bin
+                    {trashCount>0&&<span style={{marginLeft:"auto",background:"rgba(220,38,38,0.6)",color:"#fff",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>{trashCount}</span>}
                   </button>
                 </div>
 
                 {/* Sign out */}
-                <div style={{padding:"8px"}}>
+                <div style={{padding:"0 8px 8px"}}>
                   <button onClick={()=>{setProfileOpen(false);onSignOut();}}
                     style={{width:"100%",padding:"10px 12px",background:"rgba(220,38,38,0.15)",border:"1px solid rgba(220,38,38,0.3)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#FCA5A5",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -288,6 +317,11 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,data})
                     </svg>
                     Sign Out
                   </button>
+                </div>
+
+                {/* Tagline footer */}
+                <div style={{padding:"8px 16px 10px",borderTop:"1px solid rgba(255,255,255,0.06)",textAlign:"center"}}>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:G.sans,letterSpacing:0.2}}>Every class. Every teacher. One place.</span>
                 </div>
 
               </div>
@@ -1556,6 +1590,17 @@ function ClassTrackerInner({user}){
       const total=Object.values(data.notes?.[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
       const todayArr=(data.notes[cls.id]||{})[todayKey()];
       const todayN=Array.isArray(todayArr)?todayArr.length:0;
+      // This-month entries
+      const now=new Date();
+      const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+      const MONTH_NAMES=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const monthLabel=`${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
+      const monthN=Object.entries(data.notes?.[cls.id]||{}).reduce((s,[dk,arr])=>{
+        return s+(dk.startsWith(monthKey)&&Array.isArray(arr)?arr.length:0);
+      },0);
+      // Truncate long institute names
+      const instName=cls.institute||"";
+      const shortInst=instName.length>22?instName.slice(0,20)+"…":instName;
       return(
         <div onClick={onClick}
           style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"transform 0.1s,box-shadow 0.1s"}}
@@ -1570,18 +1615,17 @@ function ClassTrackerInner({user}){
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,marginBottom:5}}>{cls.section}</div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}44`,flexShrink:0}}>
-                  {cls.institute}
+                <span title={instName} style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}44`,flexShrink:0}}>
+                  {shortInst}
                 </span>
                 {cls.subject&&<span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>· {cls.subject}</span>}
               </div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
               <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{total}</div>
-              <div style={{fontSize:11,color:G.textL,fontWeight:600}}>entries</div>
-              {todayN>0&&<div style={{background:G.greenL,color:G.green,borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700,marginTop:3}}>+{todayN} today</div>}
+              <div style={{fontSize:11,color:G.textL,fontWeight:600}}>total</div>
+              {monthN>0&&<div style={{background:G.greenL,color:G.green,borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700,marginTop:3,whiteSpace:"nowrap"}}>{monthN} in {monthLabel}</div>}
             </div>
-            {/* Arrow hint — tap to open */}
             <div style={{color:G.textL,fontSize:20,flexShrink:0,paddingLeft:4}}>›</div>
           </div>
         </div>
@@ -1825,7 +1869,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} right={NavRight}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} trashCount={trashCount} right={NavRight}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
       </div>
     );
@@ -2138,7 +2182,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         <SaveBadge/>
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} trashCount={trashCount} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>
