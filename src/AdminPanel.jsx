@@ -1925,9 +1925,6 @@ function AdminPanelInner({user}){
           </div>
         </div>
         <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setBinView(true)} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),position:"relative",padding:"6px 10px"}}>
-            🗑{adminBin.length>0&&<span style={{position:"absolute",top:-3,right:-3,background:G.red,color:"#fff",borderRadius:"50%",width:13,height:13,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center"}}>{adminBin.length}</span>}
-          </button>
           <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),padding:"6px 10px",fontSize:12}}>⚙</button>
           <button onClick={()=>{setManageTab("institutes");setInstDetailView(null);setView("manage");}} style={{...pill("rgba(59,130,246,0.3)","rgba(255,255,255,0.9)","rgba(59,130,246,0.5)"),padding:"6px 10px",fontSize:12}}>📚</button>
           <button onClick={logout} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),padding:"6px 10px",fontSize:12}}>✕</button>
