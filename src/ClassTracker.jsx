@@ -1589,25 +1589,25 @@ function ClassTrackerInner({user}){
                 {cls.subject&&<span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>· {cls.subject}</span>}
               </div>
             </div>
-            {/* Right: today pill + month count + total */}
-            <div style={{textAlign:"right",flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
-              {todayN>0&&(
-                <div style={{background:G.forest,color:"#fff",borderRadius:20,padding:"2px 9px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>+{todayN} today</div>
-              )}
-              {monthN>0?(
-                <>
-                  <div style={{fontSize:20,fontWeight:800,color:G.green,fontFamily:G.display,lineHeight:1}}>{monthN}</div>
-                  <div style={{fontSize:10,color:G.green,fontWeight:700,whiteSpace:"nowrap"}}>{monthLabel}</div>
-                  <div style={{fontSize:11,color:G.textL,fontWeight:500}}>{total} total</div>
-                </>
-              ):(
-                <>
-                  <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{total}</div>
-                  <div style={{fontSize:11,color:G.textL,fontWeight:600}}>total</div>
-                </>
-              )}
+            {/* Right: clearly labelled stats */}
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
+              {/* Today */}
+              <div style={{display:"flex",alignItems:"center",gap:5}}>
+                <span style={{fontSize:11,color:G.textL,fontFamily:G.sans}}>Today</span>
+                <span style={{minWidth:26,height:22,borderRadius:20,background:todayN>0?G.forest:"rgba(0,0,0,0.06)",color:todayN>0?"#fff":G.textL,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 7px",fontFamily:G.mono}}>{todayN}</span>
+              </div>
+              {/* This month */}
+              <div style={{display:"flex",alignItems:"center",gap:5}}>
+                <span style={{fontSize:11,color:G.textL,fontFamily:G.sans}}>{monthLabel}</span>
+                <span style={{minWidth:26,height:22,borderRadius:20,background:monthN>0?G.greenL:"rgba(0,0,0,0.06)",color:monthN>0?G.green:G.textL,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 7px",fontFamily:G.mono}}>{monthN}</span>
+              </div>
+              {/* Total */}
+              <div style={{display:"flex",alignItems:"center",gap:5}}>
+                <span style={{fontSize:11,color:G.textL,fontFamily:G.sans}}>Total</span>
+                <span style={{minWidth:26,height:22,borderRadius:20,background:"rgba(0,0,0,0.06)",color:G.textM,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 7px",fontFamily:G.mono}}>{total}</span>
+              </div>
             </div>
-            <div style={{color:G.textL,fontSize:20,flexShrink:0,paddingLeft:4}}>›</div>
+            <div style={{color:G.textL,fontSize:20,flexShrink:0,paddingLeft:2}}>›</div>
           </div>
         </div>
       );
