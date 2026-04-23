@@ -76,6 +76,28 @@ function normaliseName(raw){
   return rest?`${num}${ordSuffix(num)} ${rest}`:`${num}${ordSuffix(num)}`;
 }
 function classNum(name){const m=(name||"").match(/(\d+)/);return m?parseInt(m[1]):0;}
+const exportTextSorter = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+function exportClassMeta(name){
+  const clean = (name || "").trim();
+  const grade = classNum(clean);
+  const gradeOrder = grade >= 6 && grade <= 12 ? grade : 99;
+  return { gradeOrder, clean };
+}
+function compareExportRows(a,b){
+  const aClass = exportClassMeta(a.class);
+  const bClass = exportClassMeta(b.class);
+  if (aClass.gradeOrder !== bClass.gradeOrder) return aClass.gradeOrder - bClass.gradeOrder;
+  const classCmp = exportTextSorter.compare(aClass.clean, bClass.clean);
+  if (classCmp !== 0) return classCmp;
+  if ((a.date || "") !== (b.date || "")) return (a.date || "").localeCompare(b.date || "");
+  if ((a.start_time || "") !== (b.start_time || "")) return (a.start_time || "").localeCompare(b.start_time || "");
+  if ((a.end_time || "") !== (b.end_time || "")) return (a.end_time || "").localeCompare(b.end_time || "");
+  const teacherCmp = exportTextSorter.compare(a.teacher || "", b.teacher || "");
+  if (teacherCmp !== 0) return teacherCmp;
+  const subjectCmp = exportTextSorter.compare(a.subject || "", b.subject || "");
+  if (subjectCmp !== 0) return subjectCmp;
+  return exportTextSorter.compare(a.title || "", b.title || "");
+}
 function fmt12(t){
   if(!t) return "";
   const[h,m]=t.split(":").map(Number);
@@ -1236,7 +1258,7 @@ function AdminPanelInner({user}){
       class: className, subject: subject,
       type: e.tag||"", title: e.title||"",
       notes: (e.body||"").replace(/\n/g," "),
-    }));
+    })).sort(compareExportRows);
   };
 
   const rowsForInstitute = (startKey, endKey) => {
@@ -1261,7 +1283,7 @@ function AdminPanelInner({user}){
             )
           );
       })
-      .sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):(a.start_time||"").localeCompare(b.start_time||""));
+      .sort(compareExportRows);
   };
 
   const doExport = (rows, filename, title, meta) => {
@@ -1342,7 +1364,7 @@ function AdminPanelInner({user}){
         getRows: (sk, ek) => (d.classes||[])
           .filter(c=>sameInstitute(c.institute, selInst))
           .flatMap(c => rowsForTeacherClass(selP2, tName, c.id, normaliseName(c.section), c.subject, sk, ek, c.institute || selInst))
-          .sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):(a.start_time||"").localeCompare(b.start_time||"")),
+          .sort(compareExportRows),
         triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
       });
     }
@@ -1360,7 +1382,7 @@ function AdminPanelInner({user}){
           meta: `${selInst} · ${cls.subjects.join(", ")||"—"}`,
           getRows: (sk, ek) => (cls.teachers||[])
             .flatMap(t => rowsForTeacherClass(t.uid, t.name, t.classId, cls.display, t.subject||cls.subjects[0]||"", sk, ek, selInst))
-            .sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):(a.start_time||"").localeCompare(b.start_time||"")),
+            .sort(compareExportRows),
           triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
         });
       }

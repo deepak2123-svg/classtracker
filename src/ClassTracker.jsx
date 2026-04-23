@@ -849,11 +849,32 @@ function ExportModal({data, teacherName, onClose}){
   const [busy,    setBusy]    = React.useState(false);
 
   const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const textSorter = useMemo(() => new Intl.Collator("en", { numeric: true, sensitivity: "base" }), []);
+
+  function sectionSortMeta(section){
+    const clean = (section || "").trim();
+    const grade = extractGrade(clean);
+    const gradeOrder = grade && grade >= 6 && grade <= 12 ? grade : 99;
+    return { gradeOrder, clean };
+  }
+
+  function exportRowCompare(a,b){
+    const aSection = sectionSortMeta(a.class);
+    const bSection = sectionSortMeta(b.class);
+    if (aSection.gradeOrder !== bSection.gradeOrder) return aSection.gradeOrder - bSection.gradeOrder;
+    const classCmp = textSorter.compare(aSection.clean, bSection.clean);
+    if (classCmp !== 0) return classCmp;
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    if ((a.timeStart || "") !== (b.timeStart || "")) return (a.timeStart || "").localeCompare(b.timeStart || "");
+    if ((a.timeEnd || "") !== (b.timeEnd || "")) return (a.timeEnd || "").localeCompare(b.timeEnd || "");
+    const subjectCmp = textSorter.compare(a.subject || "", b.subject || "");
+    if (subjectCmp !== 0) return subjectCmp;
+    return textSorter.compare(a.title || "", b.title || "");
+  }
 
   // Collect entries within the selected range
   function getEntries(){
     const rows=[];
-    const now=new Date();
 
     let from, to;
     if(period==="day"){
@@ -885,6 +906,8 @@ function ExportModal({data, teacherName, onClose}){
             subject:cls.subject,
             type:note.tag||"note",
             time:note.timeStart?(note.timeEnd?`${note.timeStart} - ${note.timeEnd}`:note.timeStart):"",
+            timeStart:note.timeStart||"",
+            timeEnd:note.timeEnd||"",
             status:note.status&&STATUS_STYLES[note.status]?STATUS_STYLES[note.status].label.replace(/[🔵🟡🟢🟠]/g,'').trim():"",
             title:note.title||"",
             notes:note.body||"",
@@ -893,7 +916,7 @@ function ExportModal({data, teacherName, onClose}){
       });
       cur.setDate(cur.getDate()+1);
     }
-    return rows.sort((a,b)=>a.date.localeCompare(b.date));
+    return rows.sort(exportRowCompare);
   }
 
   function periodLabel(){
