@@ -712,6 +712,7 @@ function AdminPanelInner({user}){
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | admins | institutes
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
+  const [profileOpen,  setProfileOpen]  = useState(false);
   const [selTeacher,   setSelTeacher]   = useState(null); // uid of teacher in detail modal
   const [newInstName,  setNewInstName]  = useState(""); // new institute input
   const [renamingInst,  setRenamingInst]  = useState(null);
@@ -1924,10 +1925,55 @@ function AdminPanelInner({user}){
             <div style={{fontSize:9,letterSpacing:2,color:"rgba(255,255,255,0.4)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</div>
           </div>
         </div>
-        <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),padding:"6px 10px",fontSize:12}}>⚙</button>
-          <button onClick={()=>{setManageTab("institutes");setInstDetailView(null);setView("manage");}} style={{...pill("rgba(59,130,246,0.3)","rgba(255,255,255,0.9)","rgba(59,130,246,0.5)"),padding:"6px 10px",fontSize:12}}>📚</button>
-          <button onClick={logout} style={{...pill("rgba(255,255,255,0.1)","rgba(255,255,255,0.8)","transparent"),padding:"6px 10px",fontSize:12}}>✕</button>
+        <div style={{position:"relative"}}>
+          <div onClick={()=>setProfileOpen(o=>!o)}
+            style={{height:36,display:"flex",alignItems:"center",gap:7,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",borderRadius:9,padding:"0 10px",cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s"}}>
+            <div style={{width:22,height:22,borderRadius:"50%",background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",flexShrink:0,fontFamily:G.sans}}>
+              {(user?.email||"A").charAt(0).toUpperCase()}
+            </div>
+            <span style={{fontSize:12,color:"rgba(255,255,255,0.9)",fontFamily:G.sans,fontWeight:600}}>Admin</span>
+            <span style={{fontSize:9,color:"rgba(255,255,255,0.45)"}}>{profileOpen?"▲":"▼"}</span>
+          </div>
+          {profileOpen&&(<>
+            <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
+            <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#0F1E3D",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 12px 40px rgba(0,0,0,0.5)",minWidth:240,overflow:"hidden"}}>
+              <div style={{padding:"14px 14px 11px",borderBottom:"1px solid rgba(255,255,255,0.09)"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:38,height:38,borderRadius:"50%",background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#fff",flexShrink:0,boxShadow:"0 0 0 2px rgba(59,130,246,0.35)"}}>
+                    {(user?.email||"A").charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.95)",fontFamily:G.sans}}>Administrator</div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2,fontFamily:G.mono,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:150}}>{user?.email||"—"}</div>
+                  </div>
+                </div>
+              </div>
+              <div style={{padding:"7px"}}>
+                <button onClick={()=>{setProfileOpen(false);setView("manage");}}
+                  style={{width:"100%",marginBottom:4,padding:"9px 10px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left"}}>
+                  <span style={{fontSize:16}}>⚙️</span>
+                  <div><div style={{fontSize:12,fontWeight:600}}>Control Centre</div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>Manage teachers &amp; access</div></div>
+                </button>
+                <button onClick={()=>{setProfileOpen(false);setManageTab("institutes");setInstDetailView(null);setView("manage");}}
+                  style={{width:"100%",marginBottom:4,padding:"9px 10px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left"}}>
+                  <span style={{fontSize:16}}>📚</span>
+                  <div><div style={{fontSize:12,fontWeight:600}}>Section Management</div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>Institutes &amp; timetables</div></div>
+                </button>
+                <button onClick={()=>{setProfileOpen(false);setBinView(true);}}
+                  style={{width:"100%",marginBottom:4,padding:"9px 10px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:"rgba(255,255,255,0.75)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left"}}>
+                  <span style={{fontSize:16}}>🗑️</span>
+                  <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>Recycle Bin</div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>Deleted items</div></div>
+                  {adminBin.length>0&&<span style={{background:"rgba(201,48,48,0.75)",color:"#fff",borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:700}}>{adminBin.length}</span>}
+                </button>
+                <div style={{height:1,background:"rgba(255,255,255,0.07)",margin:"5px 0"}}/>
+                <button onClick={()=>{setProfileOpen(false);logout();}}
+                  style={{width:"100%",padding:"9px 10px",background:"rgba(220,38,38,0.12)",border:"1px solid rgba(220,38,38,0.25)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:"#FCA5A5",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left"}}>
+                  <span style={{fontSize:16}}>🚪</span>
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </>)}
         </div>
       </div>
     );
@@ -2246,14 +2292,89 @@ function AdminPanelInner({user}){
           </div>
         </div>
         <div className="admin-nav-r" style={{display:"flex",alignItems:"center",gap:8}}>
-          <span className="desktop-only" style={{fontSize:13,color:"rgba(255,255,255,0.5)",fontFamily:G.sans}}>Session {currentSession()}</span>
-          <button onClick={()=>setBinView(true)}
-        style={{...pill("rgba(255,255,255,0.08)","rgba(255,255,255,0.55)","rgba(255,255,255,0.1)"),fontSize:13,position:"relative"}}>
-        🗑{adminBin.length>0&&<span style={{position:"absolute",top:-4,right:-4,background:G.red,color:"#fff",borderRadius:"50%",width:14,height:14,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.mono}}>{adminBin.length}</span>}
-      </button>
-      <button onClick={()=>setView("manage")} style={{...pill("rgba(255,255,255,0.12)","rgba(255,255,255,0.85)","rgba(255,255,255,0.2)"),fontSize:14,fontWeight:500}}>Control Centre</button>
-          <button onClick={()=>{setManageTab("institutes");setInstDetailView(null);setView("manage");}} style={{...pill("rgba(59,130,246,0.25)","rgba(255,255,255,0.9)","rgba(59,130,246,0.4)"),fontSize:14,fontWeight:600}}>📚 Manage Sections</button>
-          <button onClick={logout} style={{...pill("none","rgba(255,255,255,0.65)","rgba(255,255,255,0.2)"),fontSize:14}}>Sign Out</button>
+          {/* ── Admin Profile Pill ─────────────────────────────────── */}
+          <div style={{position:"relative"}}>
+            <div onClick={()=>setProfileOpen(o=>!o)}
+              style={{height:42,display:"flex",alignItems:"center",gap:8,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",borderRadius:10,padding:"0 12px",cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s",flexShrink:0}}>
+              <div style={{width:26,height:26,borderRadius:"50%",background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",flexShrink:0,fontFamily:G.sans}}>
+                {(user?.email||"A").charAt(0).toUpperCase()}
+              </div>
+              <span style={{fontWeight:600,fontSize:13,color:"rgba(255,255,255,0.92)",whiteSpace:"nowrap",fontFamily:G.sans}}>Admin</span>
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:2}}>{profileOpen?"▲":"▼"}</span>
+            </div>
+            {profileOpen&&(<>
+              <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
+              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#0F1E3D",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,boxShadow:"0 12px 40px rgba(0,0,0,0.45)",minWidth:252,overflow:"hidden"}}>
+                {/* Profile header */}
+                <div style={{padding:"16px 16px 13px",borderBottom:"1px solid rgba(255,255,255,0.09)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:11}}>
+                    <div style={{width:42,height:42,borderRadius:"50%",background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,color:"#fff",flexShrink:0,fontFamily:G.sans,boxShadow:"0 0 0 3px rgba(59,130,246,0.3)"}}>
+                      {(user?.email||"A").charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:"rgba(255,255,255,0.95)",fontFamily:G.sans,lineHeight:1.2}}>Administrator</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:3,fontFamily:G.mono,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:165}}>{user?.email||"—"}</div>
+                    </div>
+                  </div>
+                  <div style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:5,background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",borderRadius:6,padding:"3px 8px"}}>
+                    <span style={{width:6,height:6,borderRadius:"50%",background:"#3B82F6",display:"inline-block"}}/>
+                    <span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.mono}}>Session {currentSession()}</span>
+                  </div>
+                </div>
+                {/* Menu items */}
+                <div style={{padding:"8px"}}>
+                  <button onClick={()=>{setProfileOpen(false);setView("manage");}}
+                    style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.11)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}>
+                    <div style={{width:30,height:30,borderRadius:8,background:"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 1.41 14.14M4.93 4.93A10 10 0 0 0 3.52 19.07"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M8.46 8.46a5 5 0 0 0 0 7.07"/></svg>
+                    </div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.88)"}}>Control Centre</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>Manage teachers &amp; access</div>
+                    </div>
+                    <svg style={{marginLeft:"auto",flexShrink:0}} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                  <button onClick={()=>{setProfileOpen(false);setManageTab("institutes");setInstDetailView(null);setView("manage");}}
+                    style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(59,130,246,0.18)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="rgba(59,130,246,0.1)"}>
+                    <div style={{width:30,height:30,borderRadius:8,background:"rgba(59,130,246,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>📚</div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.88)"}}>Section Management</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>Institutes, grades &amp; timetables</div>
+                    </div>
+                    <svg style={{marginLeft:"auto",flexShrink:0}} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                  <button onClick={()=>{setProfileOpen(false);setBinView(true);}}
+                    style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.75)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.05)"}>
+                    <div style={{width:30,height:30,borderRadius:8,background:"rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)"}}>Recycle Bin</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>Deleted classes &amp; entries</div>
+                    </div>
+                    {adminBin.length>0&&<span style={{marginLeft:"auto",background:"rgba(201,48,48,0.75)",color:"#fff",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700,flexShrink:0}}>{adminBin.length}</span>}
+                  </button>
+                  <div style={{height:1,background:"rgba(255,255,255,0.07)",margin:"6px 0"}}/>
+                  <button onClick={()=>{setProfileOpen(false);logout();}}
+                    style={{width:"100%",padding:"10px 12px",background:"rgba(220,38,38,0.12)",border:"1px solid rgba(220,38,38,0.25)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#FCA5A5",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(220,38,38,0.2)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="rgba(220,38,38,0.12)"}>
+                    <div style={{width:30,height:30,borderRadius:8,background:"rgba(220,38,38,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    </div>
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            </>)}
+          </div>
+          {/* ── End Admin Profile Pill ──────────────────────────────── */}
         </div>
       </div>
 
