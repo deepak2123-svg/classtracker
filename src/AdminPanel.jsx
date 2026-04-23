@@ -1478,7 +1478,7 @@ function AdminPanelInner({user}){
           <div style={{width:28,height:28,background:G.blueV,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
           </div>
-          <span style={{fontFamily:G.display,fontSize:16,fontWeight:800,color:"#fff",letterSpacing:-0.3}}>Ledgr</span>
+          <span style={{fontFamily:G.display,fontSize:18,fontWeight:800,color:"#fff",letterSpacing:-0.4}}>Ledgr</span>
           <span style={{fontSize:11,letterSpacing:2,color:"rgba(255,255,255,0.25)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</span>
         </div>
         <div style={{display:"flex",gap:8}}>
@@ -1920,7 +1920,7 @@ function AdminPanelInner({user}){
             <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
           </div>
           <div>
-            <div style={{fontFamily:G.display,fontSize:17,fontWeight:800,color:"#fff",lineHeight:1.1,letterSpacing:-0.3}}>Ledgr</div>
+            <div style={{fontFamily:G.display,fontSize:17,fontWeight:800,color:"#fff",lineHeight:1.1,letterSpacing:-0.4}}>Ledgr</div>
             <div style={{fontSize:9,letterSpacing:2,color:"rgba(255,255,255,0.4)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</div>
           </div>
         </div>
@@ -1935,7 +1935,11 @@ function AdminPanelInner({user}){
       </div>
     );
 
-    const MobileBreadcrumb = ()=>(
+    const MobileFooter = ()=>(
+      <div style={{textAlign:"center",padding:"20px 0 10px",borderTop:`1px solid ${G.border}`,marginTop:8}}>
+        <span style={{fontSize:11,color:G.textL,fontFamily:G.sans,letterSpacing:0.2}}>Every class. Every teacher. One place.</span>
+      </div>
+    );
       mobileStep>0&&(
         <div style={{background:G.navyS,padding:"8px 14px",display:"flex",alignItems:"center",gap:5,fontSize:12,fontFamily:G.sans,overflow:"hidden"}}>
           <span onClick={()=>{setMobileStep(0);setSelInst(null);resetNav();}} style={{color:"rgba(255,255,255,0.45)",cursor:"pointer",flexShrink:0}}>Inst.</span>
@@ -2060,10 +2064,9 @@ function AdminPanelInner({user}){
             );
           })}
         </div>
+        <MobileFooter/>
       </div>
     );
-
-    // ── STEP 1: Teachers or Classes for selected institute ────────────────────
     if(mobileStep===1) return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         {binView&&<AdminBinModal/>}
@@ -2693,8 +2696,8 @@ function AdminPanelInner({user}){
           </div>
         </div>
       </div>
-      {/* Tagline footer */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,height:28,background:G.navy,borderTop:"1px solid rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50}}>
+      {/* Tagline footer — fixed, slim, both desktop and wide screens */}
+      <div style={{flexShrink:0,height:26,background:G.navy,borderTop:"1px solid rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"center"}}>
         <span style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontFamily:"'Inter',sans-serif",letterSpacing:0.3}}>Every class. Every teacher. One place.</span>
       </div>
     </div>

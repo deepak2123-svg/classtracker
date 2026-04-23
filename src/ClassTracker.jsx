@@ -218,7 +218,7 @@ function GhostBtn({onClick,children,style={}}){
 }
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
-function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,data,trashCount=0}){
+function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,trashCount,data}){
   const shortName=(teacherName||"").split(" ")[0];
   const [profileOpen, setProfileOpen] = React.useState(false);
 
@@ -226,20 +226,18 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
     <div style={{background:G.forest,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06)"}}>
       <div style={{height:58,display:"flex",alignItems:"center",padding:"0 12px",gap:8}}>
 
-        {/* Ledgr logo wordmark */}
+        {/* Ledgr logo */}
         <div onClick={onLogoClick}
-          style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
-          onPointerDown={e=>{e.currentTarget.style.opacity="0.75";}}
+          style={{display:"flex",alignItems:"center",gap:7,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
+          onPointerDown={e=>{e.currentTarget.style.opacity="0.7";}}
           onPointerUp={e=>{e.currentTarget.style.opacity="1";}}
           onPointerCancel={e=>{e.currentTarget.style.opacity="1";}}>
-          {/* L icon */}
           <div style={{width:34,height:34,borderRadius:9,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path d="M4 3H7V13H14V16H4V3Z" fill="white"/>
             </svg>
           </div>
-          {/* Wordmark — hidden on very small screens */}
-          <span style={{fontFamily:G.display,fontWeight:800,fontSize:20,color:"#fff",letterSpacing:-0.5,lineHeight:1}} className="desktop-only">Ledgr</span>
+          <span style={{fontFamily:G.display,fontWeight:800,fontSize:19,color:"#fff",letterSpacing:-0.5,lineHeight:1}}>Ledgr</span>
         </div>
 
         <div style={{flex:1}}/>
@@ -247,22 +245,8 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           {right}
 
-          {/* Quick + button */}
-          {onLogoClick&&(
-            <button onClick={onLogoClick}
-              style={{display:"none"}} className="desktop-only-flex"
-            />
-          )}
-
           {/* Clickable profile pill */}
-          <div style={{position:"relative",display:"flex",alignItems:"center",gap:6}}>
-
-            {/* + Add Class quick button */}
-            <button
-              onClick={()=>{ setProfileOpen(false); if(onLogoClick) onLogoClick(); }}
-              style={{display:"none"}}
-            />
-
+          <div style={{position:"relative"}}>
             <div onClick={()=>setProfileOpen(o=>!o)}
               style={{height:42,display:"flex",alignItems:"center",gap:7,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",borderRadius:10,padding:"0 12px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s"}}>
               <Avatar user={user} size={22}/>
@@ -276,7 +260,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
             {/* Profile dropdown */}
             {profileOpen&&(<>
               <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
-              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#1B3A2E",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.35)",overflow:"hidden",minWidth:230}}>
+              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#1B3A2E",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.35)",minWidth:230,overflow:"hidden"}}>
 
                 {/* Profile header */}
                 <div style={{padding:"14px 16px 12px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
@@ -289,25 +273,23 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
                   </div>
                 </div>
 
-                {/* Menu items */}
-                <div style={{padding:"8px 8px 0"}}>
+                <div style={{padding:"8px"}}>
+                  {/* Stats */}
                   <button onClick={()=>{setProfileOpen(false);onViewStats();}}
-                    style={{width:"100%",padding:"10px 12px",background:"rgba(52,208,119,0.12)",border:"1px solid rgba(52,208,119,0.25)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#34D07A",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent",marginBottom:6}}>
+                    style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(52,208,119,0.12)",border:"1px solid rgba(52,208,119,0.25)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#34D07A",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
                     View Stats
                   </button>
 
-                  {/* Recycle bin */}
+                  {/* Recycle Bin */}
                   <button onClick={()=>{setProfileOpen(false);onViewTrash&&onViewTrash();}}
-                    style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.75)",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent",marginBottom:6}}>
+                    style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.75)",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                     Recycle Bin
-                    {trashCount>0&&<span style={{marginLeft:"auto",background:"rgba(220,38,38,0.6)",color:"#fff",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>{trashCount}</span>}
+                    {(trashCount||0)>0&&<span style={{marginLeft:"auto",background:"rgba(201,48,48,0.7)",color:"#fff",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>{trashCount}</span>}
                   </button>
-                </div>
 
-                {/* Sign out */}
-                <div style={{padding:"0 8px 8px"}}>
+                  {/* Sign out */}
                   <button onClick={()=>{setProfileOpen(false);onSignOut();}}
                     style={{width:"100%",padding:"10px 12px",background:"rgba(220,38,38,0.15)",border:"1px solid rgba(220,38,38,0.3)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#FCA5A5",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -319,9 +301,9 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
                   </button>
                 </div>
 
-                {/* Tagline footer */}
+                {/* Tagline */}
                 <div style={{padding:"8px 16px 10px",borderTop:"1px solid rgba(255,255,255,0.06)",textAlign:"center"}}>
-                  <span style={{fontSize:11,color:"rgba(255,255,255,0.25)",fontFamily:G.sans,letterSpacing:0.2}}>Every class. Every teacher. One place.</span>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.22)",fontFamily:G.sans,letterSpacing:0.2}}>Every class. Every teacher. One place.</span>
                 </div>
 
               </div>
@@ -1569,10 +1551,6 @@ function ClassTrackerInner({user}){
 
     // Nav buttons — same on all screen sizes
     const NavRight = <>
-      {trashCount>0&&<button onClick={()=>setView("trash")}
-        style={{background:G.redL,border:"none",borderRadius:8,padding:"7px 11px",cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>
-        🗑 {trashCount}
-      </button>}
       <button onClick={()=>setExportOpen(true)}
         style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1580,7 +1558,7 @@ function ClassTrackerInner({user}){
       </button>
       <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)}
         style={{background:G.green,color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",boxShadow:"0 2px 8px rgba(27,138,76,0.3)"}}>
-        + <span style={{display:"none"}} className="desktop-show"> New Class</span>
+        + <span style={{fontSize:13,fontWeight:700}} className="desktop-only"> New Class</span>
       </button>
     </>;
 
@@ -1588,19 +1566,16 @@ function ClassTrackerInner({user}){
     const ClassCard = ({cls, onClick}) => {
       const ic=instColor(cls.institute);
       const total=Object.values(data.notes?.[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
-      const todayArr=(data.notes[cls.id]||{})[todayKey()];
-      const todayN=Array.isArray(todayArr)?todayArr.length:0;
       // This-month entries
       const now=new Date();
       const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
       const MONTH_NAMES=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
       const monthLabel=`${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
-      const monthN=Object.entries(data.notes?.[cls.id]||{}).reduce((s,[dk,arr])=>{
-        return s+(dk.startsWith(monthKey)&&Array.isArray(arr)?arr.length:0);
-      },0);
-      // Truncate long institute names
-      const instName=cls.institute||"";
-      const shortInst=instName.length>22?instName.slice(0,20)+"…":instName;
+      const monthN=Object.entries(data.notes?.[cls.id]||{}).reduce((s,[dk,arr])=>
+        s+(dk.startsWith(monthKey)&&Array.isArray(arr)?arr.length:0),0);
+      // Truncate long institute names with ellipsis
+      const instFull=cls.institute||"";
+      const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
       return(
         <div onClick={onClick}
           style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"transform 0.1s,box-shadow 0.1s"}}
@@ -1615,16 +1590,26 @@ function ClassTrackerInner({user}){
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,marginBottom:5}}>{cls.section}</div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span title={instName} style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}44`,flexShrink:0}}>
-                  {shortInst}
+                <span title={instFull} style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}44`,flexShrink:0,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {instShort}
                 </span>
                 {cls.subject&&<span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>· {cls.subject}</span>}
               </div>
             </div>
+            {/* Right: month count primary (bold), total secondary (small) */}
             <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{total}</div>
-              <div style={{fontSize:11,color:G.textL,fontWeight:600}}>total</div>
-              {monthN>0&&<div style={{background:G.greenL,color:G.green,borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700,marginTop:3,whiteSpace:"nowrap"}}>{monthN} in {monthLabel}</div>}
+              {monthN>0?(
+                <>
+                  <div style={{fontSize:20,fontWeight:800,color:G.green,fontFamily:G.display,lineHeight:1}}>{monthN}</div>
+                  <div style={{fontSize:10,color:G.green,fontWeight:700,whiteSpace:"nowrap"}}>{monthLabel}</div>
+                  <div style={{fontSize:11,color:G.textL,fontWeight:500,marginTop:3}}>{total} total</div>
+                </>
+              ):(
+                <>
+                  <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{total}</div>
+                  <div style={{fontSize:11,color:G.textL,fontWeight:600}}>total</div>
+                </>
+              )}
             </div>
             <div style={{color:G.textL,fontSize:20,flexShrink:0,paddingLeft:4}}>›</div>
           </div>
