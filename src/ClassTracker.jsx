@@ -336,10 +336,7 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
   const todayStr = todayKey();
   const pad = n => String(n).padStart(2,'0');
   const toKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-
-  const selDateObj   = new Date(Number(selectedDate.split('-')[0]), Number(selectedDate.split('-')[1])-1, Number(selectedDate.split('-')[2]));
-  const weekSunday   = new Date(selDateObj); weekSunday.setDate(selDateObj.getDate() - selDateObj.getDay());
-  const weekSaturday = new Date(weekSunday); weekSaturday.setDate(weekSunday.getDate() + 6);
+  const editableDateKeys = useMemo(() => new Set(buildDateWindow().map(d => d.key)), [todayStr]);
 
   function changeMonth(delta) {
     let m = viewMonth + delta, y = viewYear;
@@ -366,19 +363,35 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
       date = new Date(viewYear, viewMonth, i - firstDay + 1);
     }
     const key      = toKey(date);
-    const inWeek   = !otherMonth && date >= weekSunday && date <= weekSaturday;
     const isSel    = key === selectedDate;
     const isToday  = key === todayStr;
     const hasEntry = (noteDates[key] || 0) > 0;
     const isSun    = date.getDay() === 0;
-    const allowed  = isDateAllowed(key);
+    const allowed  = editableDateKeys.has(key);
+    const isHighlighted = !otherMonth && allowed;
     let stripe = '';
-    if (inWeek) {
-      const s = date.getDay() === 0 || date.getDate() === 1;
-      const e = date.getDay() === 6 || date.getDate() === daysInMonth;
-      stripe = s && e ? 'only' : s ? 'start' : e ? 'end' : 'mid';
+    if (isHighlighted) {
+      const prevDate = new Date(date);
+      prevDate.setDate(date.getDate() - 1);
+      const nextDate = new Date(date);
+      nextDate.setDate(date.getDate() + 1);
+
+      const prevHighlighted =
+        date.getDay() !== 0 &&
+        prevDate.getFullYear() === viewYear &&
+        prevDate.getMonth() === viewMonth &&
+        editableDateKeys.has(toKey(prevDate));
+      const nextHighlighted =
+        date.getDay() !== 6 &&
+        nextDate.getFullYear() === viewYear &&
+        nextDate.getMonth() === viewMonth &&
+        editableDateKeys.has(toKey(nextDate));
+
+      stripe = prevHighlighted
+        ? (nextHighlighted ? 'mid' : 'end')
+        : (nextHighlighted ? 'start' : 'only');
     }
-    cells.push({ date, key, otherMonth, inWeek, isSel, isToday, hasEntry, isSun, stripe, allowed });
+    cells.push({ date, key, otherMonth, isHighlighted, isSel, isToday, hasEntry, isSun, stripe, allowed });
   }
 
   const stripeStyle = (stripe) => {
@@ -418,12 +431,12 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
 
         {/* Calendar grid — fixed 32px cell height */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',padding:'0 4px 6px',gap:1}}>
-          {cells.map(({date,key,otherMonth,inWeek,isSel,isToday,hasEntry,isSun,stripe,allowed},i) => (
+          {cells.map(({date,key,otherMonth,isHighlighted,isSel,isToday,hasEntry,isSun,stripe,allowed},i) => (
             <div key={i}
               onClick={() => {
                 if (otherMonth) return;
                 if (key > todayStr) { showToast("Can't log future dates"); return; }
-                if (!allowed) { showToast("Only last 7 days can be edited"); return; }
+                if (!allowed) { showToast("Only dates from the past week can be edited"); return; }
                 onSelectDate(key);
               }}
               style={{
@@ -442,15 +455,15 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
               onPointerUp={e=>{e.currentTarget.style.transform='scale(1)';}}
               onPointerCancel={e=>{e.currentTarget.style.transform='scale(1)';}}>
 
-              {inWeek && !isSel && !isToday && stripe && (
+              {isHighlighted && !isSel && !isToday && stripe && (
                 <div style={stripeStyle(stripe)}/>
               )}
 
               <span style={{
                 position:'relative', zIndex:1,
                 fontSize:12, lineHeight:1,
-                fontWeight: isSel||isToday ? 800 : inWeek ? 700 : 400,
-                color: isSel||isToday ? '#fff' : isSun ? G.red : inWeek ? G.text : G.textL,
+                fontWeight: isSel||isToday ? 800 : isHighlighted ? 700 : 400,
+                color: isSel||isToday ? '#fff' : isSun ? G.red : isHighlighted ? G.text : G.textL,
                 fontFamily: G.display,
               }}>
                 {date.getDate()}
