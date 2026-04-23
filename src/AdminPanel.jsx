@@ -193,11 +193,25 @@ function AdminExportModal({ exportActions, onClose }) {
     return `${MONTHS[m-1]} ${y}`;
   }
 
-  function getDays(){
-    if(period==="day") return 1;
-    if(period==="week") return 7;
-    if(period==="month") return 30;
-    return null;
+  // Compute exact startKey and endKey (YYYY-MM-DD) from modal's own date pickers
+  function getDateRange(){
+    if(period==="all") return {startKey:null, endKey:null};
+    if(period==="day") return {startKey:selDay, endKey:selDay};
+    if(period==="month"){
+      const [y,m]=selMonth.split("-").map(Number);
+      const start=`${y}-${String(m).padStart(2,"0")}-01`;
+      const lastDay=new Date(y,m,0).getDate();
+      const end=`${y}-${String(m).padStart(2,"0")}-${String(lastDay).padStart(2,"0")}`;
+      return {startKey:start, endKey:end};
+    }
+    if(period==="week"){
+      const d=new Date(selWeek), day=d.getDay();
+      const sun=new Date(d); sun.setDate(d.getDate()-day);
+      const sat=new Date(sun); sat.setDate(sun.getDate()+6);
+      const fmt=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
+      return {startKey:fmt(sun), endKey:fmt(sat)};
+    }
+    return {startKey:null, endKey:null};
   }
 
   function doExport(){
@@ -205,9 +219,15 @@ function AdminExportModal({ exportActions, onClose }) {
     setBusy(true);
     setTimeout(()=>{
       const action = exportActions[selActionIdx] || exportActions[0];
-      if(format==="csv") action.csv();
-      else if(format==="pdf") action.pdf();
-      else action.json();
+      const {startKey, endKey} = getDateRange();
+      // getRows filters by exact date range and sorts ascending (oldest first)
+      const rows = action.getRows(startKey, endKey);
+      if(!rows.length){ setBusy(false); onClose(); alert("No entries found for the selected period."); return; }
+      const label = period==="all"?"All Time":periodLabel();
+      const filename = `${action.filename}_${label.replace(/[^a-zA-Z0-9]/g,"_")}`;
+      if(format==="csv") action.triggerCSV(rows, filename);
+      else if(format==="pdf") action.triggerPDF(rows, action.title, `${action.meta} · ${label}`);
+      else action.triggerJSON(rows, filename, label);
       setBusy(false);
       onClose();
     },100);
@@ -1192,48 +1212,30 @@ function AdminPanelInner({user}){
 
   // ── Export helpers ────────────────────────────────────────────────────────
 
-  // Collect rows for a specific teacher + classId
-  const rowsForTeacherClass = (teacherUid, teacherName, classId, className, subject, days) => {
+  // Collect rows for a specific teacher + classId, filtered by date range, sorted ascending
+  const rowsForTeacherClass = (teacherUid, teacherName, classId, className, subject, startKey, endKey) => {
     const d = fullData[teacherUid];
     if (!d) return [];
     const classNotes = (d.notes || {})[classId] || {};
-    const flat = getEntriesInRange(classNotes, days);
-    return flat.map(({dateKey, entry: e}) => ({
-      date: dateKey, start_time: e.timeStart||"", end_time: e.timeEnd||"",
+    const result = [];
+    Object.entries(classNotes || {}).forEach(([dk, arr]) => {
+      if (startKey && dk < startKey) return;
+      if (endKey && dk > endKey) return;
+      if (!Array.isArray(arr)) return;
+      arr.forEach(e => { if (e) result.push({dateKey: dk, entry: e}); });
+    });
+    // sort ascending: oldest first, within same date by timeStart asc
+    result.sort((a, b) => {
+      if (a.dateKey !== b.dateKey) return a.dateKey.localeCompare(b.dateKey);
+      return (a.entry.timeStart || "").localeCompare(b.entry.timeStart || "");
+    });
+    return result.map(({dateKey: dk, entry: e}) => ({
+      date: dk, start_time: e.timeStart||"", end_time: e.timeEnd||"",
       teacher: teacherName, institute: selInst,
       class: className, subject: subject,
       type: e.tag||"", title: e.title||"",
       notes: (e.body||"").replace(/\n/g," "),
     }));
-  };
-
-  const days = period==="today"?1:period==="week"?7:period==="month"?30:null;
-
-  // 1. Current P4 view (specific teacher + class)
-  const getViewRows = () => {
-    if (!selP3) return [];
-    return rowsForTeacherClass(selP3.teacherUid, selP3.teacherName, selP3.classId, selP3.className, selP3.subject, days);
-  };
-
-  // 2. By Teacher — all classes for selected teacher at this institute
-  const getTeacherRows = () => {
-    if (!selP2 || tab!=="teacher") return [];
-    const d = fullData[selP2];
-    if (!d) return [];
-    const teacherName = d.profile?.name || instTeachers.find(t=>t.uid===selP2)?.name || "?";
-    return (d.classes||[])
-      .filter(c=>(c.institute||"").trim()===(selInst||"").trim())
-      .flatMap(c => rowsForTeacherClass(selP2, teacherName, c.id, normaliseName(c.section), c.subject, days));
-  };
-
-  // 3. By Class — all teachers for selected class
-  const getClassRows = () => {
-    if (!selP2 || tab!=="class") return [];
-    const cls = instClasses.find(c=>c.raw===selP2);
-    if (!cls) return [];
-    return (cls.teachers||[]).flatMap(t =>
-      rowsForTeacherClass(t.uid, t.name, t.classId, cls.display, t.subject||cls.subjects[0]||"", days)
-    );
   };
 
   const doExport = (rows, filename, title, meta) => {
@@ -1277,37 +1279,45 @@ function AdminPanelInner({user}){
   };
 
   // ── Export action builders ─────────────────────────────────────────────────
+  // getRows(startKey, endKey) — called by modal at export time with exact date range
   const exportActions = (() => {
     const actions = [];
-    const periodLabel = {today:"Today",week:"This Week",month:"This Month",all:"All Time"}[period];
+
+    // Shared trigger helpers (standalone, not closures over stale days)
+    const _csv = (rows, filename) => triggerCSV(rows, filename);
+    const _pdf = (rows, title, meta) => triggerPDF(rows, title, meta);
+    const _json = (rows, filename, label) => triggerJSON(rows, filename, {institute:selInst,period:label});
 
     // Current view (teacher + class)
     if (selP3) {
-      const name = `${selP3.teacherName} — ${selP3.className}`;
-      const meta = `${selInst} · ${selP3.subject} · ${periodLabel}`;
       actions.push({
-        label: `This view`,
+        label: "This view",
         sub: `${selP3.teacherName} · ${selP3.className}`,
         icon: "📋",
-        csv:  ()=>triggerCSV(getViewRows(),  name),
-        json: ()=>triggerJSON(getViewRows(),  name, {teacher:selP3.teacherName,class:selP3.className,institute:selInst,period}),
-        pdf:  ()=>triggerPDF(getViewRows(),  name, meta),
+        filename: `${selP3.teacherName}_${selP3.className}`,
+        title: `${selP3.teacherName} — ${selP3.className}`,
+        meta: `${selInst} · ${selP3.subject||""}`,
+        getRows: (sk, ek) => rowsForTeacherClass(selP3.teacherUid, selP3.teacherName, selP3.classId, selP3.className, selP3.subject, sk, ek),
+        triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
       });
     }
 
-    // By teacher — all their classes
+    // By teacher — all their classes at this institute
     if (tab==="teacher" && selP2 && fullData[selP2]) {
       const d = fullData[selP2];
       const tName = d.profile?.name || "Teacher";
-      const name  = `${tName} — All Classes`;
-      const meta  = `${selInst} · ${periodLabel}`;
       actions.push({
-        label: `All classes`,
+        label: "All classes",
         sub: `${tName} across ${selInst}`,
         icon: "👤",
-        csv:  ()=>triggerCSV(getTeacherRows(),  name),
-        json: ()=>triggerJSON(getTeacherRows(), name, {teacher:tName,institute:selInst,period}),
-        pdf:  ()=>triggerPDF(getTeacherRows(),  name, meta),
+        filename: `${tName}_All_Classes`,
+        title: `${tName} — All Classes`,
+        meta: `${selInst}`,
+        getRows: (sk, ek) => (d.classes||[])
+          .filter(c=>(c.institute||"").trim()===(selInst||"").trim())
+          .flatMap(c => rowsForTeacherClass(selP2, tName, c.id, normaliseName(c.section), c.subject, sk, ek))
+          .sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):(a.start_time||"").localeCompare(b.start_time||"")),
+        triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
       });
     }
 
@@ -1315,15 +1325,17 @@ function AdminPanelInner({user}){
     if (tab==="class" && selP2) {
       const cls = instClasses.find(c=>c.raw===selP2);
       if (cls) {
-        const name = `${cls.display} — All Teachers`;
-        const meta = `${selInst} · ${cls.subjects.join(", ")||"—"} · ${periodLabel}`;
         actions.push({
-          label: `All teachers`,
+          label: "All teachers",
           sub: `${cls.display} · ${cls.teachers.length} teacher${cls.teachers.length!==1?"s":""}`,
           icon: "🏫",
-          csv:  ()=>triggerCSV(getClassRows(),  name),
-          json: ()=>triggerJSON(getClassRows(), name, {class:cls.display,institute:selInst,period}),
-          pdf:  ()=>triggerPDF(getClassRows(),  name, meta),
+          filename: `${cls.display}_All_Teachers`,
+          title: `${cls.display} — All Teachers`,
+          meta: `${selInst} · ${cls.subjects.join(", ")||"—"}`,
+          getRows: (sk, ek) => (cls.teachers||[])
+            .flatMap(t => rowsForTeacherClass(t.uid, t.name, t.classId, cls.display, t.subject||cls.subjects[0]||"", sk, ek))
+            .sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):(a.start_time||"").localeCompare(b.start_time||"")),
+          triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
         });
       }
     }
@@ -2182,9 +2194,9 @@ function AdminPanelInner({user}){
             </div>
             {tab==="class"&&selP2&&(()=>{const cls=instClasses.find(c=>c.raw===selP2);return cls?(
               <button onClick={()=>setExportOpen(true)}
-                style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,background:G.blueL,border:`1px solid ${G.blue}33`,borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,color:G.blue,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent",marginTop:2}}>
+                style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent",marginTop:2}}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Export {cls.display}
+                Export
               </button>
             ):null;})()}
           </div>
@@ -2241,7 +2253,8 @@ function AdminPanelInner({user}){
             {/* Export — its own row, always visible */}
             <button onClick={()=>setExportOpen(true)}
               style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"11px 0",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:44,WebkitTapHighlightColor:"transparent",marginBottom:20}}>
-              ↓ Export entries
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
             </button>
             {entries.length===0?(
               <div style={{textAlign:"center",padding:"48px 20px",color:G.textM,fontSize:15}}>No entries for this period.</div>
@@ -2764,7 +2777,8 @@ function AdminPanelInner({user}){
               {selP3&&(
                 <button onClick={()=>setExportOpen(true)}
                   style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:36,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
-                  ↓ Export
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Export
                 </button>
               )}
             </div>
