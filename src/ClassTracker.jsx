@@ -1556,10 +1556,6 @@ function ClassTrackerInner({user}){
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span className="desktop-only" style={{display:"inline",fontSize:13,fontWeight:600}}>Export</span>
       </button>
-      <button onClick={()=>setView("addClass")} onPointerDown={e=>rpl(e,true)}
-        style={{background:G.green,color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",boxShadow:"0 2px 8px rgba(27,138,76,0.3)"}}>
-        + <span style={{fontSize:13,fontWeight:700}} className="desktop-only"> New Class</span>
-      </button>
     </>;
 
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
