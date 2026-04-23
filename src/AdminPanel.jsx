@@ -112,9 +112,9 @@ function getEntriesInRange(classNotes={}, days=null){
     if(!Array.isArray(arr)) return;
     arr.forEach(e=>{ if(e) result.push({dateKey:dk,entry:e}); });
   });
-  // sort by date asc (oldest first), within date by timeStart asc
+  // sort by date desc, within date by timeStart asc
   result.sort((a,b)=>{
-    if(a.dateKey!==b.dateKey) return a.dateKey.localeCompare(b.dateKey);
+    if(b.dateKey!==a.dateKey) return b.dateKey.localeCompare(a.dateKey);
     return (a.entry.timeStart||"").localeCompare(b.entry.timeStart||"");
   });
   return result;
@@ -125,7 +125,7 @@ function groupByDate(flatEntries){
     if(!map[dateKey]) map[dateKey]=[];
     map[dateKey].push(entry);
   });
-  return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
+  return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0]));
 }
 function formatDateLabel(dk){
   if(!dk) return "";
@@ -1933,12 +1933,12 @@ function AdminPanelInner({user}){
 
     const MobileBreadcrumb = ()=>(
       mobileStep>0&&(
-        <div style={{background:G.navyS,padding:"8px 14px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:13,fontFamily:G.sans}}>
-          <span onClick={()=>{setMobileStep(0);setSelInst(null);resetNav();}} style={{color:"rgba(255,255,255,0.5)",cursor:"pointer"}}>Institutes</span>
-          {mobileStep>=1&&selInst&&<><span style={{color:"rgba(255,255,255,0.3)"}}>›</span><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);}} style={{color:mobileStep===1?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontWeight:mobileStep===1?700:400}}>{selInst}</span></>}
-          {mobileStep>=2&&selP2&&<><span style={{color:"rgba(255,255,255,0.3)"}}>›</span><span onClick={()=>{setMobileStep(2);setSelP3(null);}} style={{color:mobileStep===2?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontWeight:mobileStep===2?700:400}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}</span></>}
-          {mobileStep>=3&&selP3&&<><span style={{color:"rgba(255,255,255,0.3)"}}>›</span><span style={{color:"#fff",fontWeight:700}}>{selP3.className}</span></>}
-          <span onClick={()=>setMobileStep(s=>Math.max(0,s-1))} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",borderRadius:7,padding:"4px 10px",color:"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:12}}>← Back</span>
+        <div style={{background:G.navyS,padding:"8px 14px",display:"flex",alignItems:"center",gap:5,fontSize:12,fontFamily:G.sans,overflow:"hidden"}}>
+          <span onClick={()=>{setMobileStep(0);setSelInst(null);resetNav();}} style={{color:"rgba(255,255,255,0.45)",cursor:"pointer",flexShrink:0}}>Inst.</span>
+          {mobileStep>=1&&selInst&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);}} style={{color:mobileStep===1?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===1?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{selInst}</span></>}
+          {mobileStep>=2&&selP2&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{setMobileStep(2);setSelP3(null);}} style={{color:mobileStep===2?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===2?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2).split(" ")[0]:normaliseName(selP2)}</span></>}
+          {mobileStep>=3&&selP3&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span style={{color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{selP3.className}</span></>}
+          <button onClick={()=>setMobileStep(s=>Math.max(0,s-1))} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",borderRadius:7,padding:"5px 12px",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:12,fontFamily:G.sans,fontWeight:600,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>← Back</button>
         </div>
       )
     );
@@ -2165,10 +2165,10 @@ function AdminPanelInner({user}){
           <div style={{padding:"12px 14px 40px"}}>
             <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>{selP3.teacherName} — {selP3.className}</h2>
             <div style={{fontSize:14,color:G.textM,marginBottom:16}}>{selP3.institute||selInst} · {selP3.subject}</div>
-            {/* Period pills */}
-            <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+            {/* Period pills — horizontal scroll, never wraps */}
+            <div style={{display:"flex",gap:6,marginBottom:10,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none",paddingBottom:2}}>
               {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
-                <button key={k} onClick={()=>setPeriod(k)} style={{padding:"7px 14px",borderRadius:16,fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,background:period===k?G.navy:"transparent",color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`,minHeight:36,WebkitTapHighlightColor:"transparent"}}>{l}</button>
+                <button key={k} onClick={()=>setPeriod(k)} style={{padding:"7px 14px",borderRadius:16,fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,background:period===k?G.navy:"transparent",color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`,minHeight:36,WebkitTapHighlightColor:"transparent",flexShrink:0}}>{l}</button>
               ))}
             </div>
             {/* Export — its own row, always visible */}
@@ -2459,17 +2459,6 @@ function AdminPanelInner({user}){
             <div style={{fontSize:12,color:G.textM,fontFamily:G.mono,marginTop:2}}>
               {tab==="class"?"Teachers in this class":"Their classes at "+selInst}
             </div>
-            {/* Export button for class tab — export all teachers in this class */}
-            {selP2&&tab==="class"&&(()=>{
-              const cls=instClasses.find(c=>c.raw===selP2);
-              if(!cls) return null;
-              return(
-                <button onClick={()=>setExportOpen(true)}
-                  style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:7,padding:"7px 0",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
-                  ↓ Export {cls.display} — All Teachers
-                </button>
-              );
-            })()}
           </div>
           <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
             {tab==="teacher"?"Classes":"Teachers"}
