@@ -141,6 +141,10 @@ function SignOutModal({onConfirm,onClose}){
 // ── Academic session ──────────────────────────────────────────────────────────
 function getAcademicSession(dk){const[y,m]=dk.split("-").map(Number);return m>=4?`${y}-${String(y+1).slice(2)}`:`${y-1}-${String(y).slice(2)}`;}
 function currentSession(){const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;return m>=4?`${y}-${String(y+1).slice(2)}`:`${y-1}-${String(y).slice(2)}`;}
+function dateFromKey(dk){
+  const [y,m,d] = `${dk||""}`.split("-").map(Number);
+  return new Date(y || 1970, (m || 1) - 1, d || 1);
+}
 function groupDatesByPeriod(dates){
   const now=new Date(),tk=todayKey();
   const weekStart=new Date(now);weekStart.setDate(now.getDate()-now.getDay());
@@ -368,6 +372,8 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
     const hasEntry = (noteDates[key] || 0) > 0;
     const isSun    = date.getDay() === 0;
     const allowed  = editableDateKeys.has(key);
+    const isFuture = key > todayStr;
+    const canOpen  = !otherMonth && !isFuture && (allowed || hasEntry);
     const isHighlighted = !otherMonth && allowed;
     let stripe = '';
     if (isHighlighted) {
@@ -391,7 +397,7 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
         ? (nextHighlighted ? 'mid' : 'end')
         : (nextHighlighted ? 'start' : 'only');
     }
-    cells.push({ date, key, otherMonth, isHighlighted, isSel, isToday, hasEntry, isSun, stripe, allowed });
+    cells.push({ date, key, otherMonth, isHighlighted, isSel, isToday, hasEntry, isSun, stripe, allowed, canOpen, isFuture });
   }
 
   const stripeStyle = (stripe) => {
@@ -431,27 +437,27 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
 
         {/* Calendar grid — fixed 32px cell height */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',padding:'0 4px 6px',gap:1}}>
-          {cells.map(({date,key,otherMonth,isHighlighted,isSel,isToday,hasEntry,isSun,stripe,allowed},i) => (
+          {cells.map(({date,key,otherMonth,isHighlighted,isSel,isToday,hasEntry,isSun,stripe,allowed,canOpen,isFuture},i) => (
             <div key={i}
               onClick={() => {
                 if (otherMonth) return;
-                if (key > todayStr) { showToast("Can't log future dates"); return; }
-                if (!allowed) { showToast("Only dates from the past week can be edited"); return; }
+                if (isFuture) { showToast("Can't log future dates"); return; }
+                if (!canOpen) { showToast("Only the past week can be edited. Older dates open only when entries exist."); return; }
                 onSelectDate(key);
               }}
               style={{
                 position:'relative', height:34,
                 display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
                 borderRadius:8,
-                cursor:(otherMonth||!allowed||key>todayStr)?'default':'pointer',
-                opacity:otherMonth?0.15:(!allowed||key>todayStr)?0.25:1,
+                cursor:(otherMonth||!canOpen)?'default':'pointer',
+                opacity:otherMonth?0.15:(canOpen?1:0.25),
                 WebkitTapHighlightColor:'transparent',
                 touchAction:'manipulation', userSelect:'none', WebkitUserSelect:'none',
                 background: isSel||isToday ? G.forest : 'transparent',
                 boxShadow: isSel||isToday ? '0 2px 8px rgba(21,43,34,0.2)' : 'none',
                 transition:'transform 0.1s',
               }}
-              onPointerDown={e=>{if(!otherMonth&&allowed&&key<=todayStr)e.currentTarget.style.transform='scale(0.85)';}}
+              onPointerDown={e=>{if(canOpen)e.currentTarget.style.transform='scale(0.85)';}}
               onPointerUp={e=>{e.currentTarget.style.transform='scale(1)';}}
               onPointerCancel={e=>{e.currentTarget.style.transform='scale(1)';}}>
 
@@ -462,8 +468,8 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
               <span style={{
                 position:'relative', zIndex:1,
                 fontSize:12, lineHeight:1,
-                fontWeight: isSel||isToday ? 800 : isHighlighted ? 700 : 400,
-                color: isSel||isToday ? '#fff' : isSun ? G.red : isHighlighted ? G.text : G.textL,
+                fontWeight: isSel||isToday ? 800 : (isHighlighted || hasEntry) ? 700 : 400,
+                color: isSel||isToday ? '#fff' : isSun ? G.red : (isHighlighted || hasEntry) ? G.text : G.textL,
                 fontFamily: G.display,
               }}>
                 {date.getDate()}
@@ -692,6 +698,132 @@ function LeaveClassModal({cls,onConfirm,onClose}){
         </button>
       </div>
     </Modal>
+  );
+}
+
+function HistoryModal({cls,classNotes={},selectedDate,onSelectDate,onClose}){
+  const [query,setQuery]=useState("");
+
+  const rows=useMemo(()=>{
+    return Object.entries(classNotes)
+      .filter(([,arr])=>Array.isArray(arr)&&arr.length>0)
+      .sort(([a],[b])=>b.localeCompare(a))
+      .map(([dk,arr])=>{
+        const d=dateFromKey(dk);
+        const label=d.toLocaleDateString("en-US",{weekday:"short",month:"long",day:"numeric",year:"numeric"});
+        const monthLabel=d.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+        const previewRaw=arr
+          .map(note=>(note?.title||"").trim() || (note?.body||"").trim())
+          .find(Boolean) || "";
+        const preview=previewRaw.length>88?`${previewRaw.slice(0,85)}...`:previewRaw;
+        const searchText=[
+          dk,
+          label,
+          ...arr.map(note=>`${note?.title||""} ${note?.body||""} ${note?.timeStart||""} ${note?.timeEnd||""}`),
+        ].join(" ").toLowerCase();
+        return {dk,count:arr.length,label,monthLabel,preview,searchText};
+      });
+  },[classNotes]);
+
+  const filteredRows=useMemo(()=>{
+    const q=query.trim().toLowerCase();
+    return q ? rows.filter(r=>r.searchText.includes(q)) : rows;
+  },[rows,query]);
+
+  const totalEntries=rows.reduce((sum,row)=>sum+row.count,0);
+  let currentMonth="";
+
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.55)",zIndex:9997,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:G.surface,borderRadius:24,width:"100%",maxWidth:560,maxHeight:"86vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.28)",overflow:"hidden"}}>
+        <div style={{padding:"22px 22px 16px",borderBottom:`1px solid ${G.border}`}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+            <div style={{width:44,height:44,borderRadius:14,background:G.greenL,color:G.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>🕘</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:22,fontWeight:700,color:G.text,fontFamily:G.display,lineHeight:1.2}}>Entry History</div>
+              <div style={{fontSize:14,color:G.textM,marginTop:4,lineHeight:1.5}}>
+                {cls.section} · {cls.institute}
+                {cls.subject?` · ${cls.subject}`:""}
+              </div>
+              <div style={{fontSize:13,color:G.textL,marginTop:6,fontFamily:G.mono}}>
+                {rows.length} saved date{rows.length===1?"":"s"} · {totalEntries} total entr{totalEntries===1?"y":"ies"}
+              </div>
+            </div>
+            <button onClick={onClose} style={{width:38,height:38,borderRadius:12,border:`1px solid ${G.border}`,background:G.surface,color:G.textM,cursor:"pointer",fontSize:18,flexShrink:0}}>
+              ×
+            </button>
+          </div>
+          <input
+            value={query}
+            onChange={e=>setQuery(e.target.value)}
+            placeholder="Search by date, title, or notes"
+            style={{...inp,marginBottom:0,marginTop:16}}
+          />
+          <div style={{marginTop:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#9A3412",fontWeight:600}}>
+            Past week stays editable here. Older dates open as view-only.
+          </div>
+        </div>
+
+        <div style={{padding:"12px 14px 16px",overflowY:"auto"}}>
+          {filteredRows.length===0 ? (
+            <div style={{padding:"28px 18px",textAlign:"center",color:G.textM}}>
+              <div style={{fontSize:34,marginBottom:8}}>🔎</div>
+              <div style={{fontSize:16,fontWeight:700,color:G.text}}>No matching dates</div>
+              <div style={{fontSize:14,marginTop:4}}>Try a different date, title, or keyword.</div>
+            </div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {filteredRows.map(row=>{
+                const showMonth=row.monthLabel!==currentMonth;
+                currentMonth=row.monthLabel;
+                const isSelected=row.dk===selectedDate;
+                return(
+                  <React.Fragment key={row.dk}>
+                    {showMonth&&(
+                      <div style={{padding:"10px 8px 2px",fontSize:12,fontWeight:700,color:G.textL,textTransform:"uppercase",letterSpacing:0.5}}>
+                        {row.monthLabel}
+                      </div>
+                    )}
+                    <button
+                      onClick={()=>{onSelectDate(row.dk);onClose();}}
+                      style={{
+                        width:"100%",
+                        textAlign:"left",
+                        border:isSelected?`1.5px solid ${G.green}`:`1px solid ${G.border}`,
+                        background:isSelected?G.greenL:G.surface,
+                        borderRadius:16,
+                        padding:"14px 14px",
+                        cursor:"pointer",
+                        display:"flex",
+                        alignItems:"flex-start",
+                        justifyContent:"space-between",
+                        gap:12,
+                      }}>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>
+                          {row.label}
+                        </div>
+                        {row.preview&&(
+                          <div style={{fontSize:13,color:G.textM,marginTop:5,lineHeight:1.5}}>
+                            {row.preview}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+                        <span style={{background:isSelected?G.green:"#F3F4F6",color:isSelected?"#fff":G.textM,borderRadius:999,padding:"4px 10px",fontSize:12,fontWeight:700,fontFamily:G.mono}}>
+                          {row.count} {row.count===1?"entry":"entries"}
+                        </span>
+                        {isSelected&&<span style={{fontSize:12,color:G.green,fontWeight:700}}>Viewing</span>}
+                      </div>
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1181,6 +1313,7 @@ function ClassTrackerInner({user}){
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [instFilter,      setInstFilter]      = useState("all"); // institute filter on home
   const [leaveModal,setLeaveModal]     = useState(null);
+  const [historyClassId,setHistoryClassId] = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
   const [exportOpen,setExportOpen]       = useState(false);
   const [statPeriod,setStatPeriod]       = useState("month");
@@ -1489,6 +1622,7 @@ function ClassTrackerInner({user}){
 
   const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);},0);
   const canAdd=isDateAllowed(selectedDate);
+  const isReadOnlyDate=!canAdd;
   const dates=buildDateWindow();
   const selDateObj=dates.find(d=>d.key===selectedDate)||dates[7];
 
@@ -1517,6 +1651,7 @@ function ClassTrackerInner({user}){
       {confirmModal && <ConfirmModal message={confirmModal.message} confirmLabel={confirmModal.label||"Delete"} onConfirm={confirmModal.onConfirm} onClose={()=>setConfirmModal(null)}/>}
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
+      {historyClassId && (()=>{const cls=data.classes.find(c=>c.id===historyClassId);return cls?<HistoryModal cls={cls} classNotes={data.notes[historyClassId]||{}} selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={()=>setHistoryClassId(null)}/>:null;})()}
       {unlinkedClasses.length>0&&!linkingDone&&(
         <SectionLinkingModal
           unlinkedClasses={unlinkedClasses}
@@ -1806,18 +1941,41 @@ function ClassTrackerInner({user}){
               <div style={{maxWidth:420,margin:"0 auto"}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/></div>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:10}}>
                 <span style={{fontSize:15,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}<span style={{color:selDateNotes.length>0?G.green:G.textM,marginLeft:8}}>· {selDateNotes.length} {selDateNotes.length===1?"entry":"entries"}</span></span>
-                {canAdd&&<button onClick={()=>{
-  setActiveClass(selCls);
-  const _ks=getSlotsForSection(selCls,instituteSections);
-  const _used=new Set(((data.notes?.[selCls.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
-  const _def=_ks?getDefaultKisSlot(data.notes,selCls.id,_ks,_used):null;
-  setNewNote(_def&&!_used.has(_def.start)
-    ?{title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
-    :{title:"",body:"",tag:"note",status:"",...(_ks?{}:(getSuggestedTime(data.notes,selCls.id,selectedDate)||{_dur:selCls?.duration||60}))});
-  safeNav("addNote");
-}} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>+ Add Entry</button>}
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                  <button
+                    onClick={()=>setHistoryClassId(selCls.id)}
+                    disabled={selTotal===0}
+                    style={{
+                      background:selTotal===0?G.bg:G.surface,
+                      color:selTotal===0?G.textL:G.textS,
+                      border:`1px solid ${selTotal===0?G.border:G.borderM}`,
+                      borderRadius:9,
+                      padding:"8px 14px",
+                      fontSize:14,
+                      cursor:selTotal===0?"not-allowed":"pointer",
+                      fontFamily:G.sans,
+                      fontWeight:700,
+                      display:"flex",
+                      alignItems:"center",
+                      gap:5,
+                      minHeight:40,
+                      WebkitTapHighlightColor:"transparent"
+                    }}>
+                    🕘 History
+                  </button>
+                  {canAdd&&<button onClick={()=>{
+    setActiveClass(selCls);
+    const _ks=getSlotsForSection(selCls,instituteSections);
+    const _used=new Set(((data.notes?.[selCls.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
+    const _def=_ks?getDefaultKisSlot(data.notes,selCls.id,_ks,_used):null;
+    setNewNote(_def&&!_used.has(_def.start)
+      ?{title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
+      :{title:"",body:"",tag:"note",status:"",...(_ks?{}:(getSuggestedTime(data.notes,selCls.id,selectedDate)||{_dur:selCls?.duration||60}))});
+    safeNav("addNote");
+  }} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>+ Add Entry</button>}
+                </div>
               </div>
               {selDateNotes.length===0?(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"40px 20px",textAlign:"center"}}>
@@ -1826,6 +1984,11 @@ function ClassTrackerInner({user}){
                 </div>
               ):(
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {isReadOnlyDate&&(
+                    <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#9A3412",fontWeight:600}}>
+                      Viewing past entries only. Dates older than the past week cannot be edited.
+                    </div>
+                  )}
                   {selDateNotes.map(note=>{const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;return(
                     <div key={note.id} style={{background:G.surface,borderRadius:13,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
                       <div style={{height:3,background:tag.bg}}/>
@@ -1839,18 +2002,20 @@ function ClassTrackerInner({user}){
                             {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display}}>{note.title}</div>}
                             {note.body&&<p style={{margin:"6px 0 0",fontSize:14,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
                           </div>
-                          <div style={{display:"flex",gap:6,flexShrink:0}}>
-                            <button onClick={()=>{setEditNote({...note});setView("editNote");}}
-                              style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:36,WebkitTapHighlightColor:"transparent"}}
-                              onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;e.currentTarget.style.background=G.greenL;}}
-                              onMouseLeave={e=>{e.currentTarget.style.borderColor=G.borderM;e.currentTarget.style.color=G.textS;e.currentTarget.style.background=G.bg;}}>
-                              Edit
-                            </button>
-                            <button onClick={()=>deleteNote(note.id)}
-                              style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"7px 12px",fontSize:13,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:36,WebkitTapHighlightColor:"transparent"}}>
-                              ✕
-                            </button>
-                          </div>
+                          {canAdd&&(
+                            <div style={{display:"flex",gap:6,flexShrink:0}}>
+                              <button onClick={()=>{setEditNote({...note});setView("editNote");}}
+                                style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:36,WebkitTapHighlightColor:"transparent"}}
+                                onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;e.currentTarget.style.background=G.greenL;}}
+                                onMouseLeave={e=>{e.currentTarget.style.borderColor=G.borderM;e.currentTarget.style.color=G.textS;e.currentTarget.style.background=G.bg;}}>
+                                Edit
+                              </button>
+                              <button onClick={()=>deleteNote(note.id)}
+                                style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"7px 12px",fontSize:13,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:36,WebkitTapHighlightColor:"transparent"}}>
+                                ✕
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1911,18 +2076,42 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:16,fontWeight:700,color:G.text}}>{formatDateLabel(selectedDate)}</div>
               <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:600,marginTop:2}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
             </div>
-            {canAdd&&<button onClick={()=>{
-  const _ks=getSlotsForSection(activeClass,instituteSections);
-  const _used=new Set(((data.notes?.[activeClass.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
-  const _def=_ks?getDefaultKisSlot(data.notes,activeClass.id,_ks,_used):null;
-  setNewNote(_def&&!_used.has(_def.start)
-    ?{title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
-    :{title:"",body:"",tag:"note",status:"",...(_ks?{}:(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60}))});
-  safeNav("addNote");
-}} onPointerDown={e=>rpl(e,true)}
-              style={{background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",boxShadow:`0 4px 14px ${color.bg}55`,flexShrink:0}}>
-              + Add Entry
-            </button>}
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+              <button
+                onClick={()=>setHistoryClassId(activeClass.id)}
+                disabled={totalCount===0}
+                style={{
+                  background:totalCount===0?G.bg:G.surface,
+                  color:totalCount===0?G.textL:G.textS,
+                  border:`1px solid ${totalCount===0?G.border:G.borderM}`,
+                  borderRadius:12,
+                  padding:"11px 18px",
+                  fontSize:15,
+                  cursor:totalCount===0?"not-allowed":"pointer",
+                  fontFamily:G.sans,
+                  fontWeight:700,
+                  display:"flex",
+                  alignItems:"center",
+                  gap:6,
+                  minHeight:48,
+                  WebkitTapHighlightColor:"transparent",
+                  flexShrink:0
+                }}>
+                🕘 History
+              </button>
+              {canAdd&&<button onClick={()=>{
+    const _ks=getSlotsForSection(activeClass,instituteSections);
+    const _used=new Set(((data.notes?.[activeClass.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
+    const _def=_ks?getDefaultKisSlot(data.notes,activeClass.id,_ks,_used):null;
+    setNewNote(_def&&!_used.has(_def.start)
+      ?{title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
+      :{title:"",body:"",tag:"note",status:"",...(_ks?{}:(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60}))});
+    safeNav("addNote");
+  }} onPointerDown={e=>rpl(e,true)}
+                style={{background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",boxShadow:`0 4px 14px ${color.bg}55`,flexShrink:0}}>
+                + Add Entry
+              </button>}
+            </div>
           </div>
           {dateNotes.length===0?(
             <div style={{background:G.surface,borderRadius:16,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center"}}>
@@ -1932,6 +2121,11 @@ function ClassTrackerInner({user}){
             </div>
           ):(
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {isReadOnlyDate&&(
+                <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#9A3412",fontWeight:600}}>
+                  Viewing past entries only. Dates older than the past week cannot be edited.
+                </div>
+              )}
               {dateNotes.map(note=>{
                 const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
                 return(
@@ -1948,12 +2142,14 @@ function ClassTrackerInner({user}){
                           {note.title&&<div style={{fontWeight:700,fontSize:17,color:G.text,fontFamily:G.display,lineHeight:1.3,marginBottom:4}}>{note.title}</div>}
                           {note.body&&<p style={{margin:0,fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
                         </div>
-                        <div style={{display:"flex",gap:6,flexShrink:0}}>
-                          <button onClick={()=>{setEditNote({...note});setView("editNote");}}
-                            style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"8px 16px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent"}}>Edit</button>
-                          <button onClick={()=>deleteNote(note.id)}
-                            style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"8px 14px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent"}}>✕</button>
-                        </div>
+                        {canAdd&&(
+                          <div style={{display:"flex",gap:6,flexShrink:0}}>
+                            <button onClick={()=>{setEditNote({...note});setView("editNote");}}
+                              style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"8px 16px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent"}}>Edit</button>
+                            <button onClick={()=>deleteNote(note.id)}
+                              style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"8px 14px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent"}}>✕</button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
