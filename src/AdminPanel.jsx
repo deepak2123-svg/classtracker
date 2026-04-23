@@ -1995,10 +1995,15 @@ function AdminPanelInner({user}){
     );
 
     const MobileStats = ()=>(
-      <div style={{background:G.navyS,padding:"10px 16px",display:"flex",gap:16,flexWrap:"wrap",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-        {[{n:institutes.length,l:"institutes"},{n:teachers.length,l:"teachers"},{n:totalClasses,l:"classes"},{n:totalEntries,l:"entries"}].map(({n,l})=>(
-          <span key={l}><span style={{fontSize:18,fontWeight:800,color:G.blueV,fontFamily:G.display}}>{n}</span>{" "}<span style={{fontSize:13,color:"rgba(255,255,255,0.6)",fontFamily:G.sans}}>{l}</span></span>
-        ))}
+      <div style={{background:G.navyS,padding:"10px 12px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+          {[{n:institutes.length,l:"institutes"},{n:teachers.length,l:"teachers"},{n:totalClasses,l:"classes"},{n:totalEntries,l:"entries"}].map(({n,l})=>(
+            <div key={l} style={{background:"rgba(255,255,255,0.07)",borderRadius:8,padding:"9px 12px"}}>
+              <div style={{fontSize:22,fontWeight:700,color:G.blueV,fontFamily:G.display,lineHeight:1}}>{n}</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:G.sans,marginTop:3}}>{l}</div>
+            </div>
+          ))}
+        </div>
       </div>
     );
 
@@ -2169,8 +2174,19 @@ function AdminPanelInner({user}){
         {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         <MobileNav/><MobileBreadcrumb/>
         <div style={{padding:"12px 14px 40px"}}>
-          <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}</h2>
-          <div style={{fontSize:14,color:G.textM,marginBottom:16}}>{selInst}</div>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:16}}>
+            <div>
+              <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}</h2>
+              <div style={{fontSize:14,color:G.textM}}>{selInst}</div>
+            </div>
+            {tab==="class"&&selP2&&(()=>{const cls=instClasses.find(c=>c.raw===selP2);return cls?(
+              <button onClick={()=>setExportOpen(true)}
+                style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,background:G.blueL,border:`1px solid ${G.blue}33`,borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,color:G.blue,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent",marginTop:2}}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export {cls.display}
+              </button>
+            ):null;})()}
+          </div>
           {p3Items.map(cls=>(
             <div key={cls.classId||cls.uid}
               style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,marginBottom:8,overflow:"hidden"}}>
