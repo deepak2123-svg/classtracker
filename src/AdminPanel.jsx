@@ -256,7 +256,7 @@ function AdminExportModal({ exportActions, onClose }) {
 
           {exportActions.length===0 ? (
             <div style={{textAlign:"center",padding:"20px 0",color:"#9CA3AF",fontSize:14,fontFamily:"'Inter',sans-serif"}}>
-              Select a teacher or class first to export.
+              Select an institute, teacher, or class first to export.
             </div>
           ) : (<>
 
@@ -1211,9 +1211,10 @@ function AdminPanelInner({user}){
   };
 
   // ── Export helpers ────────────────────────────────────────────────────────
+  const sameInstitute = (a, b) => (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase();
 
   // Collect rows for a specific teacher + classId, filtered by date range, sorted ascending
-  const rowsForTeacherClass = (teacherUid, teacherName, classId, className, subject, startKey, endKey) => {
+  const rowsForTeacherClass = (teacherUid, teacherName, classId, className, subject, startKey, endKey, instituteName = selInst) => {
     const d = fullData[teacherUid];
     if (!d) return [];
     const classNotes = (d.notes || {})[classId] || {};
@@ -1231,11 +1232,36 @@ function AdminPanelInner({user}){
     });
     return result.map(({dateKey: dk, entry: e}) => ({
       date: dk, start_time: e.timeStart||"", end_time: e.timeEnd||"",
-      teacher: teacherName, institute: selInst,
+      teacher: teacherName, institute: instituteName || selInst,
       class: className, subject: subject,
       type: e.tag||"", title: e.title||"",
       notes: (e.body||"").replace(/\n/g," "),
     }));
+  };
+
+  const rowsForInstitute = (startKey, endKey) => {
+    if (!selInst) return [];
+    return teachers
+      .flatMap(t => {
+        const d = fullData[t.uid];
+        if (!d) return [];
+        const teacherName = d.profile?.name || t.name || "Teacher";
+        return (d.classes || [])
+          .filter(c => sameInstitute(c.institute, selInst))
+          .flatMap(c =>
+            rowsForTeacherClass(
+              t.uid,
+              teacherName,
+              c.id,
+              normaliseName(c.section),
+              c.subject,
+              startKey,
+              endKey,
+              c.institute || selInst
+            )
+          );
+      })
+      .sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):(a.start_time||"").localeCompare(b.start_time||""));
   };
 
   const doExport = (rows, filename, title, meta) => {
@@ -1297,7 +1323,7 @@ function AdminPanelInner({user}){
         filename: `${selP3.teacherName}_${selP3.className}`,
         title: `${selP3.teacherName} — ${selP3.className}`,
         meta: `${selInst} · ${selP3.subject||""}`,
-        getRows: (sk, ek) => rowsForTeacherClass(selP3.teacherUid, selP3.teacherName, selP3.classId, selP3.className, selP3.subject, sk, ek),
+        getRows: (sk, ek) => rowsForTeacherClass(selP3.teacherUid, selP3.teacherName, selP3.classId, selP3.className, selP3.subject, sk, ek, selP3.institute || selInst),
         triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
       });
     }
@@ -1314,8 +1340,8 @@ function AdminPanelInner({user}){
         title: `${tName} — All Classes`,
         meta: `${selInst}`,
         getRows: (sk, ek) => (d.classes||[])
-          .filter(c=>(c.institute||"").trim()===(selInst||"").trim())
-          .flatMap(c => rowsForTeacherClass(selP2, tName, c.id, normaliseName(c.section), c.subject, sk, ek))
+          .filter(c=>sameInstitute(c.institute, selInst))
+          .flatMap(c => rowsForTeacherClass(selP2, tName, c.id, normaliseName(c.section), c.subject, sk, ek, c.institute || selInst))
           .sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):(a.start_time||"").localeCompare(b.start_time||"")),
         triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
       });
@@ -1333,11 +1359,24 @@ function AdminPanelInner({user}){
           title: `${cls.display} — All Teachers`,
           meta: `${selInst} · ${cls.subjects.join(", ")||"—"}`,
           getRows: (sk, ek) => (cls.teachers||[])
-            .flatMap(t => rowsForTeacherClass(t.uid, t.name, t.classId, cls.display, t.subject||cls.subjects[0]||"", sk, ek))
+            .flatMap(t => rowsForTeacherClass(t.uid, t.name, t.classId, cls.display, t.subject||cls.subjects[0]||"", sk, ek, selInst))
             .sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):(a.start_time||"").localeCompare(b.start_time||"")),
           triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
         });
       }
+    }
+
+    if (selInst) {
+      actions.push({
+        label: "Entire institute",
+        sub: `${selInst} · all classes and sections`,
+        icon: "🏫",
+        filename: `${selInst}_All_Classes_All_Sections`,
+        title: `${selInst} — All Classes & Sections`,
+        meta: `${selInst} · all teachers`,
+        getRows: (sk, ek) => rowsForInstitute(sk, ek),
+        triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
+      });
     }
 
     return actions;
@@ -2131,9 +2170,17 @@ function AdminPanelInner({user}){
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         {binView&&<AdminBinModal/>}
         {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         <MobileNav/><MobileBreadcrumb/>
         <div style={{padding:"12px 14px 40px"}}>
-          <h2 style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:14}}>{selInst}</h2>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:14}}>
+            <h2 style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display,margin:0,minWidth:0}}>{selInst}</h2>
+            <button onClick={()=>setExportOpen(true)}
+              style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+          </div>
           <div style={{display:"flex",background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:3,marginBottom:16,gap:3}}>
             {["class","teacher"].map(t=>(
               <button key={t} onClick={()=>resetNav(t)}
@@ -2529,7 +2576,16 @@ function AdminPanelInner({user}){
         {/* ── P2: Toggle + Teacher or Class list ── */}
         <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:G.surface,borderRight:`1px solid ${G.border}`}}>
           <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-            <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text,marginBottom:10}}>{selInst||"—"}</div>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10}}>
+              <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selInst||"—"}</div>
+              {selInst&&(
+                <button onClick={()=>setExportOpen(true)}
+                  style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Export
+                </button>
+              )}
+            </div>
             {/* Toggle */}
             <div style={{display:"flex",gap:0,background:G.bg,borderRadius:8,padding:3,border:`1px solid ${G.border}`}}>
               {["class","teacher"].map(t=>(
