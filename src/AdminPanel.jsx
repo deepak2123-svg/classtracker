@@ -410,19 +410,23 @@ function InstTypePicker({ inst, onSelect, onClose }) {
 }
 
 // ── Duration Stepper (replaces pill grid) ─────────────────────────────────────
-function DurStepper({ value, onChange }) {
+function DurStepper({ value, onChange, compact = false }) {
   const W = { navy:"#1A2F5A",border:"#E2E8F0",text:"#0F172A",textM:"#475569",textL:"#94A3B8",surface:"#fff",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace" };
   const fmt = m => m < 60 ? `${m} min` : m === 60 ? "1 hour" : m % 60 === 0 ? `${m/60} hours` : `${Math.floor(m/60)}h ${m%60}m`;
   const dec = () => onChange(Math.max(30, value - 5));
   const inc = () => onChange(Math.min(180, value + 5));
+  const buttonSize = compact ? 42 : 52;
+  const labelWidth = compact ? 96 : 110;
+  const valueSize = compact ? 16 : 20;
+  const metaSize = compact ? 9 : 10;
   return (
-    <div style={{display:"flex",alignItems:"center",gap:0,background:W.surface,border:`2px solid ${W.navy}`,borderRadius:14,overflow:"hidden",width:"fit-content"}}>
-      <button onClick={dec} style={{width:52,height:52,border:"none",background:"transparent",fontSize:22,fontWeight:700,cursor:"pointer",color:W.navy,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent",flexShrink:0}}>−</button>
-      <div style={{width:110,textAlign:"center",padding:"0 4px",borderLeft:`1px solid ${W.border}`,borderRight:`1px solid ${W.border}`}}>
-        <div style={{fontFamily:W.display,fontWeight:800,fontSize:20,color:W.navy,lineHeight:1.2}}>{fmt(value)}</div>
-        <div style={{fontSize:10,color:W.textL,fontFamily:W.mono}}>{value} min</div>
+    <div style={{display:"flex",alignItems:"center",gap:0,background:W.surface,border:`2px solid ${W.navy}`,borderRadius:compact?12:14,overflow:"hidden",width:"fit-content",boxShadow:compact?"none":"0 4px 10px rgba(15,23,42,0.04)"}}>
+      <button onClick={dec} style={{width:buttonSize,height:buttonSize,border:"none",background:"transparent",fontSize:compact?20:22,fontWeight:700,cursor:"pointer",color:W.navy,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent",flexShrink:0}}>−</button>
+      <div style={{width:labelWidth,textAlign:"center",padding:"0 4px",borderLeft:`1px solid ${W.border}`,borderRight:`1px solid ${W.border}`}}>
+        <div style={{fontFamily:W.display,fontWeight:800,fontSize:valueSize,color:W.navy,lineHeight:1.2}}>{fmt(value)}</div>
+        <div style={{fontSize:metaSize,color:W.textL,fontFamily:W.mono}}>{value} min</div>
       </div>
-      <button onClick={inc} style={{width:52,height:52,border:"none",background:"transparent",fontSize:22,fontWeight:700,cursor:"pointer",color:W.navy,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent",flexShrink:0}}>+</button>
+      <button onClick={inc} style={{width:buttonSize,height:buttonSize,border:"none",background:"transparent",fontSize:compact?20:22,fontWeight:700,cursor:"pointer",color:W.navy,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent",flexShrink:0}}>+</button>
     </div>
   );
 }
@@ -598,54 +602,112 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
     const allMins = previewSlots.flatMap(s=>[toMins(s.t),toMins(s.t)+s.dur]);
     const minT=(showTL?Math.min(...allMins):0)-10, maxT=(showTL?Math.max(...allMins):60)+10;
     const range = Math.max(maxT-minT,1);
+    const slotCount = validSlots.length;
+    const customCount = startTimes.reduce((count, t, i) => (
+      t && (slotDurs[i] || durMins) !== durMins ? count + 1 : count
+    ), 0);
+    const firstStart = showTL ? fmtDisp(previewSlots[0].t) : "Not set";
+    const lastEnd = showTL ? fmtDisp(fmtEnd(previewSlots[previewSlots.length-1].t, previewSlots[previewSlots.length-1].dur)) : "--";
+    const summaryCard = (label, value, tone="default") => (
+      <div style={{
+        flex:"1 1 140px",
+        minWidth:130,
+        background:tone==="accent"?"linear-gradient(135deg, #EEF2FF 0%, #F8FAFF 100%)":W.surface,
+        border:`1px solid ${tone==="accent"?"#C7D7F5":W.border}`,
+        borderRadius:14,
+        padding:"12px 14px"
+      }}>
+        <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:W.textL,marginBottom:6}}>{label}</div>
+        <div style={{fontSize:16,fontWeight:700,color:tone==="accent"?W.navy:W.text,fontFamily:W.display,lineHeight:1.25}}>{value}</div>
+      </div>
+    );
     return (<>
-      <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:4}}>Duration &amp; start times</div>
-      <div style={{fontSize:13,color:W.textM,marginBottom:16,lineHeight:1.5}}>Set the default class length, then add each slot's start time.</div>
+      <div style={{fontSize:20,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:4}}>Shared timetable setup</div>
+      <div style={{fontSize:13,color:W.textM,marginBottom:16,lineHeight:1.6}}>This is the shared time-slot editor used across the admin flow for all institutes. Set the base duration once, then organise the daily slot pattern below.</div>
 
-      {/* Duration stepper */}
-      <div style={{marginBottom:18}}>
-        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:10}}>Default duration</div>
+      <div style={{background:"linear-gradient(135deg, #F8FBFF 0%, #EEF4FF 100%)",border:"1px solid #D8E4FA",borderRadius:16,padding:"16px 16px 14px",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:12}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:W.blue,marginBottom:6}}>Quick overview</div>
+            <div style={{fontSize:16,fontWeight:700,color:W.text,fontFamily:W.display}}>Keep the common schedule clean, then only override exceptions.</div>
+          </div>
+          <div style={{fontSize:12,color:W.textM,background:"#fff",border:"1px solid #D8E4FA",borderRadius:999,padding:"7px 12px",fontWeight:600}}>9:00 AM starts → {fmtDisp(fmtEnd("09:00",durMins))}</div>
+        </div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          {summaryCard("Default duration", `${durMins} min`, "accent")}
+          {summaryCard("Active slots", slotCount ? `${slotCount} configured` : "None yet")}
+          {summaryCard("Day span", showTL ? `${firstStart} - ${lastEnd}` : "Add a slot to preview")}
+          {summaryCard("Custom durations", customCount ? `${customCount} custom` : "Using default")}
+        </div>
+      </div>
+
+      <div style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:16,padding:16,marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:W.textL,marginBottom:6}}>Base duration</div>
+            <div style={{fontSize:14,color:W.textM,lineHeight:1.5}}>New slots inherit this length automatically. You can still fine-tune any individual slot below.</div>
+          </div>
+          <span style={{fontSize:12,color:W.navy,background:"#F8FAFF",border:"1px solid #D8E4FA",borderRadius:999,padding:"7px 12px",fontWeight:700}}>Shared default</span>
+        </div>
         <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
           <DurStepper value={durMins} onChange={m=>{setDurMins(m);setSlotDurs(sd=>sd.map((d,i)=>d&&d!==durMins?d:m));}} />
-          <div style={{fontSize:13,color:W.textM}}>
-            💡 9:00 AM start → <strong style={{color:W.navy}}>{fmtDisp(fmtEnd("09:00",durMins))}</strong>
+          <div style={{flex:"1 1 220px",minWidth:220,background:W.bg,border:`1px solid ${W.border}`,borderRadius:12,padding:"12px 14px"}}>
+            <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.7,color:W.textL,marginBottom:5}}>How it works</div>
+            <div style={{fontSize:13,color:W.textM,lineHeight:1.55}}>Change this when most classes share the same length. Only slots that already have a custom duration will stay untouched.</div>
           </div>
         </div>
       </div>
 
-      {/* Slot rows */}
-      <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:8}}>Start times</div>
-      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
+      <div style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:16,padding:16,marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:W.textL,marginBottom:6}}>Daily start times</div>
+            <div style={{fontSize:14,color:W.textM,lineHeight:1.5}}>{slotCount ? `${slotCount} slot${slotCount!==1?"s":""} configured. Review each row and adjust only what needs to differ.` : "Add the first slot to build the common timetable pattern."}</div>
+          </div>
+          <button onClick={()=>{setStartTimes(n=>[...n,""]);setSlotDurs(n=>[...n,durMins]);}}
+            style={{padding:"10px 14px",borderRadius:12,border:`1.5px solid ${W.blue}`,background:W.blueL,color:W.blue,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:W.sans,whiteSpace:"nowrap"}}>
+            + Add slot
+          </button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {startTimes.map((t,i)=>{
           const slotDur=slotDurs[i]||durMins;
+          const isCustom = slotDur !== durMins;
+          const endTime = t ? fmtDisp(fmtEnd(t,slotDur)) : "Choose a start time";
           return (
-            <div key={i} style={{borderRadius:12,border:`1.5px solid ${t?W.blueV:W.border}`,background:W.surface,transition:"border-color 0.15s"}}>
-              <div style={{display:"flex",alignItems:"center"}}>
-                <input type="time" value={t} onChange={e=>{const n=[...startTimes];n[i]=e.target.value;setStartTimes(n);}}
-                  style={{flex:1,border:"none",padding:"12px 14px",fontSize:15,fontFamily:W.mono,fontWeight:600,color:W.text,outline:"none",background:"transparent",cursor:"pointer",minWidth:0}}/>
-                <span style={{color:W.textL,fontSize:12,fontFamily:W.mono,padding:"0 2px",flexShrink:0}}>→</span>
-                <span style={{fontSize:13,fontFamily:W.mono,fontWeight:600,color:W.green,padding:"0 8px",flexShrink:0,minWidth:80,textAlign:"center"}}>{t?fmtDisp(fmtEnd(t,slotDur)):"--"}</span>
-                {startTimes.length>1&&<button onClick={()=>{setStartTimes(n=>n.filter((_,j)=>j!==i));setSlotDurs(n=>n.filter((_,j)=>j!==i));}} style={{background:"none",borderLeft:`1px solid ${W.border}`,padding:"0 12px",height:46,cursor:"pointer",color:W.textL,fontSize:16,flexShrink:0,display:"flex",alignItems:"center"}}>✕</button>}
+            <div key={i} style={{borderRadius:14,border:`1.5px solid ${t?W.blueV:W.border}`,background:t?"#FBFDFF":W.surface,transition:"border-color 0.15s, box-shadow 0.15s",overflow:"hidden"}}>
+              <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",borderBottom:`1px solid ${W.border}`}}>
+                <span style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:t?W.blue:W.textL,background:t?W.blueL:W.bg,borderRadius:999,padding:"5px 10px"}}>Slot {i+1}</span>
+                <div style={{display:"flex",alignItems:"center",gap:8,flex:"1 1 260px",minWidth:240,flexWrap:"wrap"}}>
+                  <span style={{fontSize:12,color:W.textL,fontWeight:600}}>Start</span>
+                  <input type="time" value={t} onChange={e=>{const n=[...startTimes];n[i]=e.target.value;setStartTimes(n);}}
+                    style={{border:`1px solid ${W.border}`,borderRadius:10,padding:"9px 12px",fontSize:15,fontFamily:W.mono,fontWeight:600,color:W.text,outline:"none",background:"#fff",cursor:"pointer",minWidth:126}}/>
+                  <span style={{color:W.textL,fontSize:13,fontFamily:W.mono}}>→</span>
+                  <span style={{fontSize:13,fontFamily:W.mono,fontWeight:700,color:t?W.green:W.textL,background:t?W.greenL:W.bg,borderRadius:999,padding:"7px 12px"}}>{endTime}</span>
+                </div>
+                {startTimes.length>1&&<button onClick={()=>{setStartTimes(n=>n.filter((_,j)=>j!==i));setSlotDurs(n=>n.filter((_,j)=>j!==i));}} style={{background:"none",border:"none",padding:"6px 0",cursor:"pointer",color:W.textL,fontSize:14,flexShrink:0,fontWeight:700}}>Remove</button>}
               </div>
-              {/* Per-slot duration override */}
-              <div style={{borderTop:`1px solid ${W.border}`,padding:"6px 12px",display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:11,color:W.textL,flexShrink:0}}>Duration:</span>
-                <DurStepper value={slotDur} onChange={m=>{const n=[...slotDurs];n[i]=m;setSlotDurs(n);}} />
-                {slotDur!==durMins&&<span style={{fontSize:11,color:W.blue,fontFamily:W.sans}}>custom</span>}
+              <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                <div style={{minWidth:88}}>
+                  <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:4}}>Duration</div>
+                  <div style={{fontSize:12,color:W.textM}}>{isCustom ? "Custom for this slot" : "Using default"}</div>
+                </div>
+                <DurStepper compact value={slotDur} onChange={m=>{const n=[...slotDurs];n[i]=m;setSlotDurs(n);}} />
+                <span style={{fontSize:11,color:isCustom?W.blue:W.textL,fontFamily:W.sans,fontWeight:700,background:isCustom?W.blueL:W.bg,border:`1px solid ${isCustom?"#C7D7F5":W.border}`,borderRadius:999,padding:"6px 10px"}}>
+                  {isCustom ? "Custom duration" : "Matches default"}
+                </span>
               </div>
             </div>
           );
         })}
-        <button onClick={()=>{setStartTimes(n=>[...n,""]);setSlotDurs(n=>[...n,durMins]);}}
-          style={{width:"100%",padding:"11px",borderRadius:12,border:`2px dashed ${W.border}`,background:"transparent",color:W.blue,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:W.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-          + Add start time
-        </button>
+        </div>
       </div>
 
       {/* Timeline preview */}
       {showTL&&(
-        <div style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:12,padding:14,marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:W.textL,marginBottom:10}}>📅 Timetable preview</div>
+        <div style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:16,padding:16,marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:W.textL,marginBottom:6}}>Preview</div>
+          <div style={{fontSize:14,color:W.textM,lineHeight:1.5,marginBottom:12}}>Use this quick visual check to make sure the day flows in the right order and the gaps look intentional.</div>
           <div style={{position:"relative",height:40,background:W.bg,borderRadius:8,border:`1px solid ${W.border}`}}>
             {previewSlots.map((s,si)=>{
               const sm=toMins(s.t),left=((sm-minT)/range*100).toFixed(1)+"%",width=(s.dur/range*100).toFixed(1)+"%";
@@ -665,29 +727,43 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
             <span>{fmtDisp(previewSlots[0].t)}</span>
             <span>{fmtDisp(fmtEnd(previewSlots[previewSlots.length-1].t,previewSlots[previewSlots.length-1].dur))}</span>
           </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:7,marginTop:12}}>
+            {previewSlots.map((slot,si)=>(
+              <span key={si} style={{background:W.greenL,color:W.green,border:"1px solid rgba(27,138,76,0.16)",borderRadius:999,padding:"6px 10px",fontSize:11,fontFamily:W.mono,fontWeight:700}}>
+                {fmtDisp(slot.t)} - {fmtDisp(fmtEnd(slot.t,slot.dur))}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Per-section overrides */}
-      <div style={{background:W.bg,border:`1px solid ${W.border}`,borderRadius:12,padding:14}}>
-        <button onClick={()=>setShowOv(o=>!o)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,color:W.blue,fontFamily:W.sans,padding:0,display:"flex",alignItems:"center",gap:6,width:"100%"}}>
-          <span>{showOv?"▼":"▶"}</span> Custom slots for a specific {isCoaching?"batch":"section"} <span style={{fontWeight:400,color:W.textL}}>(optional)</span>
+      <div style={{background:W.bg,border:`1px solid ${W.border}`,borderRadius:16,padding:16}}>
+        <button onClick={()=>setShowOv(o=>!o)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:700,color:W.blue,fontFamily:W.sans,padding:0,display:"flex",alignItems:"center",gap:8,width:"100%",justifyContent:"space-between"}}>
+          <span style={{display:"flex",alignItems:"center",gap:8}}>
+            <span>{showOv?"▼":"▶"}</span>
+            Optional exceptions for a specific {isCoaching?"batch":"section"}
+          </span>
+          <span style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL}}>Advanced</span>
         </button>
         {showOv&&(<>
-          <div style={{fontSize:13,color:W.textL,margin:"8px 0"}}>Only fill this if one {isCoaching?"batch":"section"} runs at different times from the rest.</div>
+          <div style={{fontSize:13,color:W.textL,margin:"10px 0 12px",lineHeight:1.55}}>Only use this when one {isCoaching?"batch":"section"} should break away from the shared pattern above. If not, leave everything blank here.</div>
           {sections.map(sec=>{
             const ss=overrides[sec]||[];
-            return(<div key={sec} style={{background:W.surface,borderRadius:10,padding:"12px 14px",border:`1px solid ${W.border}`,marginBottom:8}}>
-              <div style={{fontSize:13,fontWeight:700,fontFamily:W.mono,color:W.text,marginBottom:8}}>{sec}</div>
+            return(<div key={sec} style={{background:W.surface,borderRadius:12,padding:"12px 14px",border:`1px solid ${W.border}`,marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10,flexWrap:"wrap"}}>
+                <div style={{fontSize:13,fontWeight:700,fontFamily:W.mono,color:W.text}}>{sec}</div>
+                <span style={{fontSize:11,color:ss.length?W.blue:W.textL,fontWeight:700,background:ss.length?W.blueL:W.bg,border:`1px solid ${ss.length?"#C7D7F5":W.border}`,borderRadius:999,padding:"5px 10px"}}>{ss.length||0} override{ss.length!==1?"s":""}</span>
+              </div>
               {ss.map((slot,si)=>(
-                <div key={si} style={{display:"flex",gap:8,marginBottom:6,alignItems:"center"}}>
+                <div key={si} style={{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
                   <input type="time" value={slot.start} onChange={e=>{const s=[...ss];s[si]={...s[si],start:e.target.value,end:fmtEnd(e.target.value,durMins)};setOverrides(o=>({...o,[sec]:s}));}}
-                    style={{...inp,marginBottom:0,flex:1,fontSize:14}}/>
-                  <span style={{fontSize:12,color:W.textL,fontFamily:W.mono,flexShrink:0}}>{slot.end||"--"}</span>
-                  <button onClick={()=>setOverrides(o=>({...o,[sec]:ss.filter((_,j)=>j!==si)}))} style={{background:"none",border:"none",cursor:"pointer",color:W.textL,fontSize:16}}>✕</button>
+                    style={{...inp,marginBottom:0,flex:"1 1 150px",fontSize:14}}/>
+                  <span style={{fontSize:12,color:slot.end?W.green:W.textL,fontFamily:W.mono,flexShrink:0,background:slot.end?W.greenL:W.bg,border:`1px solid ${slot.end?"rgba(27,138,76,0.16)":W.border}`,borderRadius:999,padding:"8px 10px"}}>{slot.end?fmtDisp(slot.end):"--"}</span>
+                  <button onClick={()=>setOverrides(o=>({...o,[sec]:ss.filter((_,j)=>j!==si)}))} style={{background:"none",border:"none",cursor:"pointer",color:W.textL,fontSize:13,fontWeight:700,padding:0}}>Remove</button>
                 </div>
               ))}
-              <button onClick={()=>setOverrides(o=>({...o,[sec]:[...ss,{start:"",end:"",durMins}]}))} style={{background:"none",border:"none",cursor:"pointer",color:W.blue,fontSize:12,fontFamily:W.sans,fontWeight:600,padding:0}}>+ Add time for {sec}</button>
+              <button onClick={()=>setOverrides(o=>({...o,[sec]:[...ss,{start:"",end:"",durMins}]}))} style={{background:"none",border:"none",cursor:"pointer",color:W.blue,fontSize:12,fontFamily:W.sans,fontWeight:700,padding:0}}>+ Add override for {sec}</button>
             </div>);
           })}
         </>)}
