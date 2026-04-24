@@ -451,19 +451,11 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
     ? ["Batches","Time slots","Review"]
     : ["Grades","Sections","Time slots","Review"];
 
-  const overlayRef = React.useRef(null);
+  // Lock body scroll while modal is open
   React.useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const el = overlayRef.current, vv = window.visualViewport;
-    const update = () => {
-      if (!el) return;
-      if (vv) { el.style.top=vv.offsetTop+"px";el.style.left=vv.offsetLeft+"px";el.style.width=vv.width+"px";el.style.height=vv.height+"px"; }
-      else { el.style.top="0";el.style.left="0";el.style.width="100%";el.style.height="100%"; }
-    };
-    if (vv) { vv.addEventListener("resize",update);vv.addEventListener("scroll",update); }
-    update();
-    return () => { document.body.style.overflow=prev;if(vv){vv.removeEventListener("resize",update);vv.removeEventListener("scroll",update);} };
+    return () => { document.body.style.overflow = prev; };
   }, []);
 
   const [step,       setStep]       = React.useState(1);
@@ -738,7 +730,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
   const StepComponent = STEPS[step];
 
   return (
-    <div ref={overlayRef} style={{position:"fixed",background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"stretch",justifyContent:"center",padding:12,backdropFilter:"blur(6px)",boxSizing:"border-box"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"stretch",justifyContent:"center",padding:12,backdropFilter:"blur(6px)",boxSizing:"border-box"}}>
       <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:520,height:"100%",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
 
         {/* Header */}
