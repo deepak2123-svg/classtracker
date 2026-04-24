@@ -727,7 +727,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
   const STEPS_COACHING = [null, StepCoachingBatches, StepTimeSlots, StepReview];
   const STEPS_SCHOOL   = [null, StepSchoolGrades, StepSchoolSections, StepTimeSlots, StepReview];
   const STEPS = isCoaching ? STEPS_COACHING : STEPS_SCHOOL;
-  const StepComponent = STEPS[step];
+  const renderStep = STEPS[step];
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"stretch",justifyContent:"center",padding:12,backdropFilter:"blur(6px)",boxSizing:"border-box"}}>
@@ -763,7 +763,8 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
         {/* Content */}
         <div style={{flex:1,overflowY:"auto",padding:"0 16px 12px",minHeight:0}}>
           {error&&<div style={{background:W.redL,color:W.red,borderRadius:9,padding:"8px 12px",fontSize:13,marginBottom:14}}>{error}</div>}
-          {StepComponent&&<StepComponent/>}
+          {/* Keep the current step mounted inline so mobile inputs do not lose focus on each keystroke. */}
+          {renderStep&&renderStep()}
         </div>
 
         {/* Nav */}
