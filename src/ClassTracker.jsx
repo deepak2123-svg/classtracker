@@ -221,6 +221,101 @@ function GhostBtn({onClick,children,style={}}){
   );
 }
 
+function OverflowMenu({ items = [], buttonSize = 36 }) {
+  const [open, setOpen] = React.useState(false);
+  const rootRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e) {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+    }
+    function handleEscape(e) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} style={{ position:"relative", flexShrink:0 }}>
+      <button
+        type="button"
+        aria-label="More actions"
+        onClick={e => {
+          e.stopPropagation();
+          setOpen(o => !o);
+        }}
+        style={{
+          width:buttonSize,
+          height:buttonSize,
+          borderRadius:10,
+          border:`1px solid ${G.border}`,
+          background:G.bg,
+          color:G.textM,
+          cursor:"pointer",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          fontSize:18,
+          fontWeight:700,
+          WebkitTapHighlightColor:"transparent"
+        }}>
+        ⋯
+      </button>
+      {open && (
+        <div style={{
+          position:"absolute",
+          top:"calc(100% + 8px)",
+          right:0,
+          minWidth:170,
+          background:G.surface,
+          border:`1px solid ${G.border}`,
+          borderRadius:12,
+          boxShadow:G.shadowMd,
+          padding:6,
+          zIndex:1200
+        }}>
+          {items.map(item => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                setOpen(false);
+                item.onClick?.();
+              }}
+              style={{
+                width:"100%",
+                border:"none",
+                background:"transparent",
+                borderRadius:9,
+                padding:"10px 12px",
+                cursor:"pointer",
+                display:"flex",
+                alignItems:"center",
+                gap:8,
+                textAlign:"left",
+                color:item.danger ? G.red : G.textS,
+                fontSize:14,
+                fontWeight:600,
+                fontFamily:G.sans,
+                WebkitTapHighlightColor:"transparent"
+              }}>
+              <span style={{ fontSize:15, lineHeight:1 }}>{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Top Nav ───────────────────────────────────────────────────────────────────
 function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,trashCount,data}){
   const shortName=(teacherName||"").split(" ")[0];
@@ -1188,6 +1283,13 @@ function fmtSlot(t) {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
+function clockToMinutes(t) {
+  if (!t || typeof t !== "string") return Number.MAX_SAFE_INTEGER;
+  const [h, m] = t.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return Number.MAX_SAFE_INTEGER;
+  return h * 60 + m;
+}
+
 // Returns the slot the teacher uses most, skipping any already used today.
 // Falls back to the first available slot if no history yet.
 function getDefaultKisSlot(notes, classId, kisSlots, usedStartsToday) {
@@ -1330,6 +1432,7 @@ function ClassTrackerInner({user}){
   const [newNote,setNewNote]   = useState({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});
   const [editNote,setEditNote] = useState(null);
   const [newClass,setNewClass] = useState({institute:"",section:"",subject:""});
+  const [showNoteDetails,setShowNoteDetails] = useState(false);
   const [search,setSearch]     = useState("");
   // Name editing removed — name set from Google/signup only
   const [editingClass,setEditingClass] = useState(null);
@@ -1551,6 +1654,79 @@ function ClassTrackerInner({user}){
     return map;
   },[data]);
 
+  const classInsights = useMemo(()=>{
+    const map={};
+    const today=todayKey();
+    (data.classes||[]).forEach(cls=>{
+      const classNotes=data.notes?.[cls.id]||{};
+      const todayEntries=Array.isArray(classNotes[today])?classNotes[today]:[];
+      const usedStarts=new Set(todayEntries.map(e=>e.timeStart).filter(Boolean));
+      const pendingSlots=(getSlotsForSection(cls,instituteSections)||[])
+        .filter(slot=>!usedStarts.has(slot.start))
+        .sort((a,b)=>clockToMinutes(a.start)-clockToMinutes(b.start));
+      const recentEntries=Object.entries(classNotes)
+        .sort(([a],[b])=>b.localeCompare(a))
+        .flatMap(([,entries])=>Array.isArray(entries)?[...entries].sort((a,b)=>(b.created||0)-(a.created||0)):[]);
+      const lastTitled=recentEntries.find(entry=>(entry?.title||"").trim());
+      map[cls.id]={
+        todayCount:todayEntries.length,
+        hasPendingSlot:pendingSlots.length>0,
+        pendingSlotCount:pendingSlots.length,
+        nextPendingSlot:pendingSlots[0]||null,
+        lastTopic:lastTitled?.title?.trim()||"",
+        lastEntryAt:recentEntries[0]?.created||0,
+      };
+    });
+    return map;
+  },[data.classes,data.notes,instituteSections]);
+
+  const preferredInstitute = useMemo(()=>{
+    const usage={};
+    (data.classes||[]).forEach(cls=>{
+      const inst=(cls.institute||"").trim();
+      if(!inst||cls.left) return;
+      if(!usage[inst]) usage[inst]={count:0,lastUsed:0};
+      usage[inst].count += 1;
+      usage[inst].lastUsed = Math.max(usage[inst].lastUsed, cls.created||0);
+    });
+    const ranked=Object.entries(usage).sort((a,b)=>b[1].count-a[1].count||b[1].lastUsed-a[1].lastUsed);
+    if(ranked[0]?.[0]) return ranked[0][0];
+    if((data.institutes||[]).length===1) return data.institutes[0];
+    return "";
+  },[data.classes,data.institutes]);
+
+  const recentClassCombos = useMemo(()=>{
+    const seen=new Set();
+    return [...(data.classes||[])]
+      .filter(cls=>!cls.left&&(cls.institute||cls.section||cls.subject))
+      .sort((a,b)=>(b.created||0)-(a.created||0))
+      .filter(cls=>{
+        const key=[cls.institute||"",cls.section||"",cls.subject||""].join("|").toLowerCase();
+        if(seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map(cls=>({
+        institute:cls.institute||"",
+        section:cls.section||"",
+        subject:cls.subject||"",
+        created:cls.created||0,
+      }));
+  },[data.classes]);
+
+  useEffect(()=>{
+    if(view!=="addClass") return;
+    setNewClass(curr=>{
+      if(curr.institute||curr.section||curr.subject||!preferredInstitute) return curr;
+      return {...curr,institute:preferredInstitute};
+    });
+  },[view,preferredInstitute]);
+
+  useEffect(()=>{
+    if(view==="editNote"){ setShowNoteDetails(true); return; }
+    if(view==="addNote") setShowNoteDetails(false);
+  },[view,activeClass?.id,selectedDate]);
+
     if(loading)return<Spinner text="Loading…"/>;
   if(!data.profile?.name)return<ProfileSetup user={user} onSave={name=>setData(d=>({...d,profile:{name}}))} />;
 
@@ -1586,11 +1762,37 @@ function ClassTrackerInner({user}){
   const addClass=()=>{
     if(!newClass.institute.trim()||!newClass.section.trim())return;
     const id=Date.now().toString();
-    setData(d=>{const inst=newClass.institute.trim(),sec=newClass.section.trim(),subj=newClass.subject.trim();return{...d,classes:[...d.classes,{id,institute:inst,section:sec,subject:subj,colorIdx:d.classes.length%COLORS.length,created:Date.now()}],notes:{...d.notes,[id]:{}},institutes:(d.institutes||[]).includes(inst)?d.institutes||[]:[...(d.institutes||[]),inst],sections:(d.sections||[]).includes(sec)?d.sections||[]:[...(d.sections||[]),sec],subjects:subj&&!(d.subjects||[]).includes(subj)?[...(d.subjects||[]),subj]:d.subjects||[]};});
+    const createdAt=Date.now();
+    setData(d=>{
+      const inst=newClass.institute.trim(),sec=newClass.section.trim(),subj=newClass.subject.trim();
+      return{
+        ...d,
+        classes:[...d.classes,{id,institute:inst,section:sec,subject:subj,colorIdx:d.classes.length%COLORS.length,created:createdAt}],
+        notes:{...d.notes,[id]:{}},
+        institutes:(d.institutes||[]).includes(inst)?d.institutes||[]:[...(d.institutes||[]),inst],
+        sections:(d.sections||[]).includes(sec)?d.sections||[]:[...(d.sections||[]),sec],
+        subjects:subj&&!(d.subjects||[]).includes(subj)?[...(d.subjects||[]),subj]:d.subjects||[]
+      };
+    });
     setNewClass({institute:"",section:"",subject:""});setView("home");
   };
   const deleteClass=(id,leaveReason,leaveReasonLabel)=>{setData(d=>{const cls=d.classes.find(c=>c.id===id);if(!cls)return d;const tc={...cls,deletedAt:Date.now(),savedNotes:d.notes[id]||{},leaveReason:leaveReason||"",leaveReasonLabel:leaveReasonLabel||""};return{...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id)),trash:{...d.trash,classes:[...(d.trash?.classes||[]),tc]}};});if(activeClass?.id===id){setActiveClass(null);setView("home");}};
-  const updateClass=(id,updates)=>{setData(d=>({...d,classes:d.classes.map(c=>c.id===id?{...c,...updates}:c)}));if(activeClass?.id===id)setActiveClass(ac=>({...ac,...updates}));setEditingClass(null);};
+  const updateClass=(id,updates)=>{
+    setData(d=>{
+      const inst=(updates.institute||"").trim();
+      const sec=(updates.section||"").trim();
+      const subj=(updates.subject||"").trim();
+      return{
+        ...d,
+        classes:d.classes.map(c=>c.id===id?{...c,...updates}:c),
+        institutes:inst&&!(d.institutes||[]).includes(inst)?[...(d.institutes||[]),inst]:d.institutes||[],
+        sections:sec&&!(d.sections||[]).includes(sec)?[...(d.sections||[]),sec]:d.sections||[],
+        subjects:subj&&!(d.subjects||[]).includes(subj)?[...(d.subjects||[]),subj]:d.subjects||[],
+      };
+    });
+    if(activeClass?.id===id)setActiveClass(ac=>({...ac,...updates}));
+    setEditingClass(null);
+  };
   const restoreClass=(tc)=>{setData(d=>{const{deletedAt,savedNotes,...cls}=tc;return{...d,classes:[...d.classes,cls],notes:{...d.notes,[cls.id]:savedNotes||{}},trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==cls.id)}};});};
   const permDeleteClass=(id)=>{deleteClassNotes(user.uid,id).catch(()=>{});setData(d=>({...d,trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==id)}}));};
 
@@ -1600,7 +1802,6 @@ function ClassTrackerInner({user}){
 
   const addNote=()=>{
     if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
-    if(!newNote.title.trim()&&!newNote.body.trim()){showInlineToast("Please add a title or notes before saving.");return;}
 
     // Duplicate check — same class, same date, overlapping or identical time
     const existing=(data.notes?.[activeClass.id]||{})[selectedDate]||[];
@@ -1627,11 +1828,13 @@ function ClassTrackerInner({user}){
 
     const note={id:Date.now().toString(),...newNote,status:newNote.status||"",teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
+    setShowNoteDetails(false);
     setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});setView("classDetail");
   };
   const saveEdit=()=>{
     if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};});
+    setShowNoteDetails(false);
     setEditNote(null);setView("classDetail");
   };
   const deleteNote=(noteId)=>setData(d=>{
@@ -1648,6 +1851,23 @@ function ClassTrackerInner({user}){
   const isReadOnlyDate=!canAdd;
   const dates=buildDateWindow();
   const selDateObj=dates.find(d=>d.key===selectedDate)||dates[7];
+  const getClassUrgencyMeta = (cls) => classInsights[cls?.id] || { todayCount:0, hasPendingSlot:false, pendingSlotCount:0, nextPendingSlot:null, lastTopic:"", lastEntryAt:0 };
+  const compareClassesByUrgency = (a, b) => {
+    const metaA = getClassUrgencyMeta(a);
+    const metaB = getClassUrgencyMeta(b);
+    if (metaA.hasPendingSlot !== metaB.hasPendingSlot) return metaA.hasPendingSlot ? -1 : 1;
+    if (metaA.hasPendingSlot && metaB.hasPendingSlot) {
+      const nextDiff = clockToMinutes(metaA.nextPendingSlot?.start) - clockToMinutes(metaB.nextPendingSlot?.start);
+      if (nextDiff !== 0) return nextDiff;
+      if (metaA.pendingSlotCount !== metaB.pendingSlotCount) return metaB.pendingSlotCount - metaA.pendingSlotCount;
+    }
+    const noTodayA = metaA.todayCount === 0;
+    const noTodayB = metaB.todayCount === 0;
+    if (noTodayA !== noTodayB) return noTodayA ? -1 : 1;
+    const activityDiff = (metaB.lastEntryAt || b.created || 0) - (metaA.lastEntryAt || a.created || 0);
+    if (activityDiff !== 0) return activityDiff;
+    return (b.created || 0) - (a.created || 0);
+  };
 
   // Build a noteDates map across ALL classes for the date strip dots
   // ── SINGLE SCROLLABLE HOME ───────────────────────────────────────────────
@@ -1699,7 +1919,7 @@ function ClassTrackerInner({user}){
   // Tablet+: left sidebar + right entries panel (split view)
   // ══════════════════════════════════════════════════════════════════════
   if(view==="home"){
-    const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
+    const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort(compareClassesByUrgency);
     // Show ALL institutes the teacher is associated with (from all classes — active + archived — and the
     // stored institutes list), so both tabs always appear even if one institute has no active classes yet.
     const institutesFromAllClasses=[...new Set((data.classes||[]).map(c=>c.institute||""))].filter(Boolean);
@@ -1727,6 +1947,7 @@ function ClassTrackerInner({user}){
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
     const ClassCard = ({cls, onClick}) => {
       const ic=instColor(cls.institute);
+      const insight=getClassUrgencyMeta(cls);
       const total=Object.values(data.notes?.[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
       // This-month entries
       const now=new Date();
@@ -1742,11 +1963,11 @@ function ClassTrackerInner({user}){
       const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
       return(
         <div onClick={onClick}
-          style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"transform 0.1s,box-shadow 0.1s"}}
+          style={{background:G.surface,borderRadius:16,border:`1px solid ${insight.hasPendingSlot?"#FCD34D":G.border}`,overflow:"hidden",boxShadow:insight.hasPendingSlot?"0 8px 24px rgba(217,119,6,0.10)":G.shadowSm,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"transform 0.1s,box-shadow 0.1s"}}
           onPointerDown={e=>{e.currentTarget.style.transform="scale(0.98)";e.currentTarget.style.boxShadow="none";}}
-          onPointerUp={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}
-          onPointerCancel={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}>
-          <div style={{height:6,background:ic.bg}}/>
+          onPointerUp={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=insight.hasPendingSlot?"0 8px 24px rgba(217,119,6,0.10)":G.shadowSm;}}
+          onPointerCancel={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=insight.hasPendingSlot?"0 8px 24px rgba(217,119,6,0.10)":G.shadowSm;}}>
+          <div style={{height:6,background:insight.hasPendingSlot?"#D97706":ic.bg}}/>
           <div style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
             <div style={{width:46,height:46,borderRadius:12,background:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,borderLeft:`4px solid ${ic.bg}`}}>
               {(cls.section||"?").slice(0,2).toUpperCase()}
@@ -1759,6 +1980,16 @@ function ClassTrackerInner({user}){
                 </span>
                 {cls.subject&&<span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>· {cls.subject}</span>}
               </div>
+              {insight.hasPendingSlot&&(
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:7}}>
+                  <span style={{background:"#FFFBEB",color:"#B45309",border:"1px solid #FDE68A",borderRadius:999,padding:"3px 9px",fontSize:11,fontWeight:700,fontFamily:G.sans}}>
+                    Next {fmtSlot(insight.nextPendingSlot.start)}
+                  </span>
+                  <span style={{fontSize:11,color:"#B45309",fontWeight:700}}>
+                    {insight.pendingSlotCount} slot{insight.pendingSlotCount!==1?"s":""} pending today
+                  </span>
+                </div>
+              )}
             </div>
             {/* Right: clearly labelled stats */}
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
@@ -1894,21 +2125,25 @@ function ClassTrackerInner({user}){
           <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
             {filtered.map(cls=>{
               const ic=instColor(cls.institute);
+              const insight=getClassUrgencyMeta(cls);
               const isSel=selCls?.id===cls.id;
               const total=Object.values(data.notes?.[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
               const todayN=Array.isArray((data.notes[cls.id]||{})[todayKey()])?(data.notes[cls.id]||{})[todayKey()].length:0;
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
-                  style={{borderRadius:12,padding:"10px 12px",marginBottom:4,cursor:"pointer",background:isSel?ic.light:"transparent",borderLeft:`4px solid ${isSel?ic.bg:"transparent"}`,transition:"all 0.12s"}}>
+                  style={{borderRadius:12,padding:"10px 12px",marginBottom:4,cursor:"pointer",background:isSel?ic.light:insight.hasPendingSlot?"#FFF9ED":"transparent",borderLeft:`4px solid ${isSel?ic.bg:insight.hasPendingSlot?"#D97706":"transparent"}`,transition:"all 0.12s"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <div style={{width:36,height:36,borderRadius:9,background:isSel?ic.bg:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:isSel?"#fff":ic.bg,fontFamily:G.mono}}>{(cls.section||"?").slice(0,2).toUpperCase()}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:700,color:isSel?ic.bg:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                       <div style={{fontSize:12,color:G.textL,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.subject||cls.institute}</div>
+                      {insight.hasPendingSlot&&<div style={{fontSize:10,color:"#B45309",fontWeight:700,marginTop:2}}>Next {fmtSlot(insight.nextPendingSlot.start)}</div>}
                     </div>
                     <div style={{textAlign:"right",flexShrink:0}}>
                       <div style={{fontSize:14,fontWeight:700,color:isSel?ic.bg:G.textM}}>{total}</div>
-                      {todayN>0&&<div style={{fontSize:10,color:G.green,fontWeight:700}}>+{todayN}</div>}
+                      {insight.hasPendingSlot
+                        ? <div style={{fontSize:10,color:"#B45309",fontWeight:700}}>{insight.pendingSlotCount} due</div>
+                        : todayN>0&&<div style={{fontSize:10,color:G.green,fontWeight:700}}>+{todayN}</div>}
                     </div>
                   </div>
                 </div>
@@ -1958,8 +2193,10 @@ function ClassTrackerInner({user}){
                   <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{selCls.section}</div>
                   <div style={{fontSize:13,color:G.textM}}>🏫 {selCls.institute}{selCls.subject?" · "+selCls.subject:""} · {selTotal} total entries</div>
                 </div>
-                <button onClick={()=>setEditingClass(selCls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✏</button>
-                <button onClick={()=>setLeaveModal(selCls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:13,width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🗑</button>
+                <OverflowMenu buttonSize={32} items={[
+                  { icon:"✏", label:"Edit class", onClick:()=>setEditingClass(selCls) },
+                  { icon:"🗑", label:"Archive class", danger:true, onClick:()=>setLeaveModal(selCls.id) },
+                ]}/>
               </div>
               <div style={{maxWidth:420,margin:"0 auto"}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/></div>
             </div>
@@ -2026,18 +2263,10 @@ function ClassTrackerInner({user}){
                             {note.body&&<p style={{margin:"6px 0 0",fontSize:14,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
                           </div>
                           {canAdd&&(
-                            <div style={{display:"flex",gap:6,flexShrink:0}}>
-                              <button onClick={()=>{setEditNote({...note});setView("editNote");}}
-                                style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:36,WebkitTapHighlightColor:"transparent"}}
-                                onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.color=G.green;e.currentTarget.style.background=G.greenL;}}
-                                onMouseLeave={e=>{e.currentTarget.style.borderColor=G.borderM;e.currentTarget.style.color=G.textS;e.currentTarget.style.background=G.bg;}}>
-                                Edit
-                              </button>
-                              <button onClick={()=>deleteNote(note.id)}
-                                style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"7px 12px",fontSize:13,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:36,WebkitTapHighlightColor:"transparent"}}>
-                                ✕
-                              </button>
-                            </div>
+                            <OverflowMenu items={[
+                              { icon:"✏", label:"Edit entry", onClick:()=>{setEditNote({...note});setView("editNote");} },
+                              { icon:"🗑", label:"Delete entry", danger:true, onClick:()=>deleteNote(note.id) },
+                            ]}/>
                           )}
                         </div>
                       </div>
@@ -2087,8 +2316,10 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display}}>{cls.section}</div>
               <div style={{fontSize:14,color:G.textM}}>🏫 {cls.institute}{cls.subject?" · "+cls.subject:""} · {totalCount} entries</div>
             </div>
-            <button onClick={()=>setEditingClass(cls)} style={{background:G.bg,border:`1px solid ${G.border}`,cursor:"pointer",color:G.textS,fontSize:14,width:36,height:36,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>✏</button>
-            <button onClick={()=>setLeaveModal(cls.id)} style={{background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",color:G.red,fontSize:14,width:36,height:36,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,WebkitTapHighlightColor:"transparent"}}>🗑</button>
+            <OverflowMenu items={[
+              { icon:"✏", label:"Edit class", onClick:()=>setEditingClass(cls) },
+              { icon:"🗑", label:"Archive class", danger:true, onClick:()=>setLeaveModal(cls.id) },
+            ]}/>
           </div>
           <div style={{maxWidth:420}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/></div>
         </div>
@@ -2166,12 +2397,10 @@ function ClassTrackerInner({user}){
                           {note.body&&<p style={{margin:0,fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
                         </div>
                         {canAdd&&(
-                          <div style={{display:"flex",gap:6,flexShrink:0}}>
-                            <button onClick={()=>{setEditNote({...note});setView("editNote");}}
-                              style={{background:G.bg,border:`1px solid ${G.borderM}`,borderRadius:9,padding:"8px 16px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.textS,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent"}}>Edit</button>
-                            <button onClick={()=>deleteNote(note.id)}
-                              style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:9,padding:"8px 14px",fontSize:14,fontWeight:600,cursor:"pointer",color:G.red,fontFamily:G.sans,minHeight:42,WebkitTapHighlightColor:"transparent"}}>✕</button>
-                          </div>
+                          <OverflowMenu items={[
+                            { icon:"✏", label:"Edit entry", onClick:()=>{setEditNote({...note});setView("editNote");} },
+                            { icon:"🗑", label:"Delete entry", danger:true, onClick:()=>deleteNote(note.id) },
+                          ]}/>
                         )}
                       </div>
                     </div>
@@ -2185,6 +2414,10 @@ function ClassTrackerInner({user}){
     );
   }
   if(view==="addClass"){
+    const selectedInstitute = newClass.institute || preferredInstitute;
+    const comboSuggestions = recentClassCombos
+      .filter(combo=>!selectedInstitute || combo.institute===selectedInstitute)
+      .slice(0,4);
     return(
     <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
       <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
@@ -2198,6 +2431,9 @@ function ClassTrackerInner({user}){
           </div>
           <label style={lbl}>Institute</label>
           <ReadOnlyDropdown value={newClass.institute} onChange={s=>setNewClass(c=>({...c,institute:s}))} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select your institute"/>
+          {preferredInstitute&&newClass.institute===preferredInstitute&&(
+            <div style={{fontSize:12,color:G.green,fontWeight:700,marginTop:-3,marginBottom:10}}>Using your most common institute to save time.</div>
+          )}
           <label style={{...lbl,marginTop:10}}>Class / Section</label>
           {(()=>{
             const adminSecs=(instituteSections[newClass.institute]?.gradeGroups||[]).flatMap(g=>g.sections||[]);
@@ -2207,6 +2443,25 @@ function ClassTrackerInner({user}){
           })()}
           <label style={{...lbl,marginTop:10}}>Subject</label>
           <CreatableDropdown value={newClass.subject} onChange={s=>setNewClass(c=>({...c,subject:s}))} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics, Geography" addPlaceholder="Type subject…"/>
+          {comboSuggestions.length>0&&(
+            <div style={{marginTop:4}}>
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:G.textL,marginBottom:8}}>Recent combinations</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {comboSuggestions.map((combo,idx)=>(
+                  <button key={`${combo.institute}-${combo.section}-${combo.subject}-${idx}`} type="button"
+                    onClick={()=>setNewClass(c=>({
+                      ...c,
+                      institute:combo.institute||c.institute,
+                      section:combo.section,
+                      subject:combo.subject,
+                    }))}
+                    style={{padding:"8px 12px",borderRadius:20,border:`1px solid ${G.border}`,background:G.surface,color:G.textM,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+                    {combo.section||"Untitled class"}{combo.subject?` · ${combo.subject}`:""}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <PrimaryBtn onClick={addClass} disabled={!newClass.institute.trim()||!newClass.section.trim()} onPointerDown={e=>rpl(e,true)} style={{marginTop:16,width:"100%",padding:"13px",fontSize:16}}>Add Class</PrimaryBtn>
         </div>
       </div>
@@ -2494,6 +2749,10 @@ function ClassTrackerInner({user}){
     const setForm=isEdit?setEditNote:setNewNote;
     const save=isEdit?saveEdit:addNote;
     const color=activeClass?instColor(activeClass.institute):COLORS[0];
+    const lastTopicSuggestion=!isEdit&&activeClass?getClassUrgencyMeta(activeClass).lastTopic:"";
+    const hasExtraDetails=Boolean((form.title||"").trim()||(form.body||"").trim());
+    const showSuggestedTopic=Boolean(lastTopicSuggestion&&lastTopicSuggestion!==(form.title||"").trim());
+    const saveLabel=isEdit?"Save Changes":hasExtraDetails?"Save Entry":"Quick Save";
 
     return(
       <div style={{height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans}}>
@@ -2546,6 +2805,15 @@ function ClassTrackerInner({user}){
               <span>👤</span><span>Logged as: <strong>{teacherName}</strong></span>
             </div>
           <div className="form-card" style={{...card,padding:"24px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:0.7,color:G.textL,marginBottom:4}}>Quick log</div>
+                <div style={{fontSize:14,color:G.textM,lineHeight:1.5}}>Save with status and time first. Topic and notes stay optional.</div>
+              </div>
+              <span style={{fontSize:12,fontWeight:700,color:hasExtraDetails?G.green:G.textL,background:hasExtraDetails?G.greenL:G.bg,border:`1px solid ${hasExtraDetails?G.green:G.border}`,borderRadius:999,padding:"6px 10px"}}>
+                {hasExtraDetails?"Details added":"Minimal entry"}
+              </span>
+            </div>
             <div style={{marginBottom:18}}>
               <label style={lbl}>Topic Status</label>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
@@ -2788,16 +3056,43 @@ function ClassTrackerInner({user}){
                 );
               })()}
             </div>
-            <div style={{marginBottom:14}}>
-              <label style={lbl}>Title</label>
-              <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="What was covered?" style={{...inp,fontSize:16,fontWeight:500}}/>
-            </div>
-            <div>
-              <label style={lbl}>Notes</label>
-              <textarea ref={noteRef} value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Write your notes, tasks, or resources here…" rows={6} style={{...inp,resize:"vertical",lineHeight:1.7,marginBottom:0}}/>
+            <div style={{marginBottom:18,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden",background:G.surface}}>
+              <button type="button" onClick={()=>setShowNoteDetails(o=>!o)}
+                style={{width:"100%",background:"transparent",border:"none",padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,textAlign:"left",WebkitTapHighlightColor:"transparent"}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:3}}>Add details</div>
+                  <div style={{fontSize:12,color:G.textM,lineHeight:1.5}}>
+                    {showSuggestedTopic
+                      ? `Suggested topic: ${lastTopicSuggestion}`
+                      : hasExtraDetails
+                        ? "Topic or notes added for this entry."
+                        : "Optional topic and notes for richer history."}
+                  </div>
+                </div>
+                <span style={{fontSize:18,color:G.textL,fontWeight:700}}>{showNoteDetails?"−":"+"}</span>
+              </button>
+              {showNoteDetails&&(
+                <div style={{padding:"0 16px 16px"}}>
+                  {showSuggestedTopic&&(
+                    <button type="button" onClick={()=>setForm({...form,title:lastTopicSuggestion})}
+                      style={{background:G.greenL,border:`1px solid ${G.green}`,borderRadius:12,padding:"10px 12px",fontSize:13,color:G.green,fontWeight:700,cursor:"pointer",fontFamily:G.sans,marginBottom:14,display:"flex",alignItems:"center",gap:8,WebkitTapHighlightColor:"transparent"}}>
+                      <span>💡</span>
+                      <span>Use last topic: {lastTopicSuggestion}</span>
+                    </button>
+                  )}
+                  <div style={{marginBottom:14}}>
+                    <label style={lbl}>Title</label>
+                    <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="What was covered?" style={{...inp,fontSize:16,fontWeight:500,marginBottom:0}}/>
+                  </div>
+                  <div>
+                    <label style={lbl}>Notes</label>
+                    <textarea ref={noteRef} value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Write your notes, tasks, or resources here…" rows={6} style={{...inp,resize:"vertical",lineHeight:1.7,marginBottom:0}}/>
+                  </div>
+                </div>
+              )}
             </div>
             <PrimaryBtn onClick={save} disabled={!form.timeStart} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:16,opacity:form.timeStart?1:0.45,cursor:form.timeStart?"pointer":"not-allowed",width:"100%"}}>
-              {isEdit?"Save Changes":"Save Entry"}
+              {saveLabel}
             </PrimaryBtn>
           </div>
           </div>{/* end mobile-pad */}
