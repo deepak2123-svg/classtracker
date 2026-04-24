@@ -967,6 +967,78 @@ function ExportModal({data, teacherName, onClose}){
     return textSorter.compare(a.title || "", b.title || "");
   }
 
+  function entryChronologicalCompare(a,b){
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    if ((a.timeStart || "") !== (b.timeStart || "")) return (a.timeStart || "").localeCompare(b.timeStart || "");
+    if ((a.timeEnd || "") !== (b.timeEnd || "")) return (a.timeEnd || "").localeCompare(b.timeEnd || "");
+    const statusCmp = textSorter.compare(a.status || "", b.status || "");
+    if (statusCmp !== 0) return statusCmp;
+    const titleCmp = textSorter.compare(a.title || "", b.title || "");
+    if (titleCmp !== 0) return titleCmp;
+    return textSorter.compare(a.notes || "", b.notes || "");
+  }
+
+  function groupRowsForPdf(rows){
+    const byInstitute = new Map();
+
+    rows.forEach(row=>{
+      const instituteName = (row.institute || "No Institute").trim() || "No Institute";
+      const className = (row.class || "Untitled Class").trim() || "Untitled Class";
+      const subjectName = (row.subject || "").trim();
+      const classKey = `${className}__${subjectName}`;
+
+      if(!byInstitute.has(instituteName)){
+        byInstitute.set(instituteName, { name: instituteName, classMap: new Map(), entryCount: 0 });
+      }
+      const inst = byInstitute.get(instituteName);
+      if(!inst.classMap.has(classKey)){
+        inst.classMap.set(classKey, { className, subject: subjectName, entries: [] });
+      }
+      inst.classMap.get(classKey).entries.push(row);
+      inst.entryCount += 1;
+    });
+
+    return Array.from(byInstitute.values())
+      .sort((a,b)=>textSorter.compare(a.name, b.name))
+      .map(inst=>{
+        const classes = Array.from(inst.classMap.values())
+          .sort((a,b)=>{
+            const aMeta = sectionSortMeta(a.className);
+            const bMeta = sectionSortMeta(b.className);
+            if (aMeta.gradeOrder !== bMeta.gradeOrder) return aMeta.gradeOrder - bMeta.gradeOrder;
+            const classCmp = textSorter.compare(aMeta.clean, bMeta.clean);
+            if (classCmp !== 0) return classCmp;
+            return textSorter.compare(a.subject || "", b.subject || "");
+          })
+          .map(group=>({
+            ...group,
+            entries:[...group.entries].sort(entryChronologicalCompare),
+          }));
+        return {
+          name: inst.name,
+          classes,
+          entryCount: inst.entryCount,
+          classCount: classes.length,
+        };
+      });
+  }
+
+  function escapeHtml(v){
+    return String(v || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function htmlWithBreaks(v){
+    return escapeHtml(v).replace(/\n/g,"<br/>");
+  }
+
+  function formatPdfDate(dk){
+    return dateFromKey(dk).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
+  }
+
   // Collect entries within the selected range
   function getEntries(){
     const rows=[];
@@ -1031,25 +1103,75 @@ function ExportModal({data, teacherName, onClose}){
   function exportPDF(){
     const rows=getEntries();
     const label=periodLabel();
+    const groups=groupRowsForPdf(rows);
+    const totalClasses=groups.reduce((sum,inst)=>sum+inst.classCount,0);
     const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <style>
-  body{font-family:Arial,sans-serif;padding:24px;color:#111;font-size:12px}
-  h1{font-size:18px;margin-bottom:4px}
-  .sub{color:#666;margin-bottom:20px;font-size:12px}
+  *{box-sizing:border-box}
+  body{font-family:Arial,sans-serif;padding:24px;color:#111;font-size:12px;background:#fff}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:#666;margin-bottom:16px;font-size:12px}
+  .summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+  .summary-card{border:1px solid #D9E4DC;border-radius:12px;padding:10px 12px;min-width:120px;background:#F8FBF8}
+  .summary-label{font-size:10px;text-transform:uppercase;letter-spacing:0.7px;color:#6B7280;font-weight:700;margin-bottom:4px}
+  .summary-value{font-size:16px;font-weight:700;color:#152B22}
+  .inst-block{margin-top:24px}
+  .inst-block:first-of-type{margin-top:0}
+  .inst-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;border-bottom:2px solid #152B22;padding-bottom:10px;margin-bottom:16px}
+  .inst-title{font-size:17px;font-weight:700;color:#152B22;margin:0}
+  .inst-meta{font-size:11px;color:#4B5563;font-weight:700;white-space:nowrap}
+  .class-block{border:1px solid #D9E4DC;border-radius:14px;overflow:hidden;margin-bottom:14px;page-break-inside:avoid}
+  .class-head{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;background:#F5F7F5;border-bottom:1px solid #D9E4DC}
+  .class-title{font-size:15px;font-weight:700;color:#111827}
+  .class-sub{font-size:12px;color:#4B5563;margin-top:3px}
   table{width:100%;border-collapse:collapse}
   th{background:#152B22;color:#fff;padding:8px 10px;text-align:left;font-size:11px}
-  td{padding:7px 10px;border-bottom:1px solid #e5e5e5;vertical-align:top}
-  tr:nth-child(even) td{background:#f9fafb}
-  .empty{text-align:center;padding:40px;color:#999}
+  td{padding:8px 10px;border-bottom:1px solid #e5e5e5;vertical-align:top}
+  tr:nth-child(even) td{background:#fafafa}
+  tr:last-child td{border-bottom:none}
+  .status{font-weight:700;color:#374151}
+  .title{font-weight:700;color:#111827}
+  .notes{color:#374151;line-height:1.45}
+  .empty{text-align:center;padding:40px;color:#999;border:1px dashed #D9E4DC;border-radius:16px}
   @media print{body{padding:0}}
 </style></head><body>
-<h1>ClassLog — ${teacherName}</h1>
-<div class="sub">${label} · Exported ${new Date().toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}</div>
+<h1>ClassLog — ${escapeHtml(teacherName)}</h1>
+<div class="sub">${escapeHtml(label)} · Exported ${escapeHtml(new Date().toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"}))}</div>
 ${rows.length===0
   ? '<div class="empty">No entries found for this period.</div>'
-  : `<table><thead><tr><th>Date</th><th>Class</th><th>Institute</th><th>Subject</th><th>Time</th><th>Status</th><th>Title</th><th>Notes</th></tr></thead><tbody>
-${rows.map(r=>`<tr><td>${r.date}</td><td>${r.class}</td><td>${r.institute}</td><td>${r.subject}</td><td style="white-space:nowrap">${r.time}</td><td>${r.status||""}</td><td><strong>${r.title}</strong></td><td>${r.notes}</td></tr>`).join("")}
-</tbody></table>`}
+  : `<div class="summary">
+      <div class="summary-card"><div class="summary-label">Institutes</div><div class="summary-value">${groups.length}</div></div>
+      <div class="summary-card"><div class="summary-label">Classes</div><div class="summary-value">${totalClasses}</div></div>
+      <div class="summary-card"><div class="summary-label">Entries</div><div class="summary-value">${rows.length}</div></div>
+    </div>
+${groups.map(inst=>`<section class="inst-block">
+  <div class="inst-head">
+    <h2 class="inst-title">${escapeHtml(inst.name)}</h2>
+    <div class="inst-meta">${inst.classCount} class${inst.classCount!==1?"es":""} · ${inst.entryCount} entr${inst.entryCount!==1?"ies":"y"}</div>
+  </div>
+  ${inst.classes.map(group=>`<div class="class-block">
+    <div class="class-head">
+      <div>
+        <div class="class-title">${escapeHtml(group.className)}</div>
+        <div class="class-sub">${group.subject?`${escapeHtml(group.subject)} · `:""}${group.entries.length} entr${group.entries.length!==1?"ies":"y"}</div>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Time</th><th>Status</th><th>Title</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        ${group.entries.map(r=>`<tr>
+          <td style="white-space:nowrap">${escapeHtml(formatPdfDate(r.date))}</td>
+          <td style="white-space:nowrap">${escapeHtml(r.time || "")}</td>
+          <td class="status">${escapeHtml(r.status || "")}</td>
+          <td class="title">${escapeHtml(r.title || "—")}</td>
+          <td class="notes">${htmlWithBreaks(r.notes || "—")}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+  </div>`).join("")}
+</section>`).join("")}`}
 <script>window.onload=()=>{window.print();}<\/script>
 </body></html>`;
 
@@ -1281,13 +1403,6 @@ function getKisSlots(cls) {
 function fmtSlot(t) {
   const [h, m] = t.split(":").map(Number);
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-}
-
-function clockToMinutes(t) {
-  if (!t || typeof t !== "string") return Number.MAX_SAFE_INTEGER;
-  const [h, m] = t.split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return Number.MAX_SAFE_INTEGER;
-  return h * 60 + m;
 }
 
 // Returns the slot the teacher uses most, skipping any already used today.
@@ -1656,29 +1771,19 @@ function ClassTrackerInner({user}){
 
   const classInsights = useMemo(()=>{
     const map={};
-    const today=todayKey();
     (data.classes||[]).forEach(cls=>{
       const classNotes=data.notes?.[cls.id]||{};
-      const todayEntries=Array.isArray(classNotes[today])?classNotes[today]:[];
-      const usedStarts=new Set(todayEntries.map(e=>e.timeStart).filter(Boolean));
-      const pendingSlots=(getSlotsForSection(cls,instituteSections)||[])
-        .filter(slot=>!usedStarts.has(slot.start))
-        .sort((a,b)=>clockToMinutes(a.start)-clockToMinutes(b.start));
       const recentEntries=Object.entries(classNotes)
         .sort(([a],[b])=>b.localeCompare(a))
         .flatMap(([,entries])=>Array.isArray(entries)?[...entries].sort((a,b)=>(b.created||0)-(a.created||0)):[]);
       const lastTitled=recentEntries.find(entry=>(entry?.title||"").trim());
       map[cls.id]={
-        todayCount:todayEntries.length,
-        hasPendingSlot:pendingSlots.length>0,
-        pendingSlotCount:pendingSlots.length,
-        nextPendingSlot:pendingSlots[0]||null,
         lastTopic:lastTitled?.title?.trim()||"",
         lastEntryAt:recentEntries[0]?.created||0,
       };
     });
     return map;
-  },[data.classes,data.notes,instituteSections]);
+  },[data.classes,data.notes]);
 
   const preferredInstitute = useMemo(()=>{
     const usage={};
@@ -1851,23 +1956,7 @@ function ClassTrackerInner({user}){
   const isReadOnlyDate=!canAdd;
   const dates=buildDateWindow();
   const selDateObj=dates.find(d=>d.key===selectedDate)||dates[7];
-  const getClassUrgencyMeta = (cls) => classInsights[cls?.id] || { todayCount:0, hasPendingSlot:false, pendingSlotCount:0, nextPendingSlot:null, lastTopic:"", lastEntryAt:0 };
-  const compareClassesByUrgency = (a, b) => {
-    const metaA = getClassUrgencyMeta(a);
-    const metaB = getClassUrgencyMeta(b);
-    if (metaA.hasPendingSlot !== metaB.hasPendingSlot) return metaA.hasPendingSlot ? -1 : 1;
-    if (metaA.hasPendingSlot && metaB.hasPendingSlot) {
-      const nextDiff = clockToMinutes(metaA.nextPendingSlot?.start) - clockToMinutes(metaB.nextPendingSlot?.start);
-      if (nextDiff !== 0) return nextDiff;
-      if (metaA.pendingSlotCount !== metaB.pendingSlotCount) return metaB.pendingSlotCount - metaA.pendingSlotCount;
-    }
-    const noTodayA = metaA.todayCount === 0;
-    const noTodayB = metaB.todayCount === 0;
-    if (noTodayA !== noTodayB) return noTodayA ? -1 : 1;
-    const activityDiff = (metaB.lastEntryAt || b.created || 0) - (metaA.lastEntryAt || a.created || 0);
-    if (activityDiff !== 0) return activityDiff;
-    return (b.created || 0) - (a.created || 0);
-  };
+  const getClassUrgencyMeta = (cls) => classInsights[cls?.id] || { lastTopic:"", lastEntryAt:0 };
 
   // Build a noteDates map across ALL classes for the date strip dots
   // ── SINGLE SCROLLABLE HOME ───────────────────────────────────────────────
@@ -1919,7 +2008,7 @@ function ClassTrackerInner({user}){
   // Tablet+: left sidebar + right entries panel (split view)
   // ══════════════════════════════════════════════════════════════════════
   if(view==="home"){
-    const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort(compareClassesByUrgency);
+    const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
     // Show ALL institutes the teacher is associated with (from all classes — active + archived — and the
     // stored institutes list), so both tabs always appear even if one institute has no active classes yet.
     const institutesFromAllClasses=[...new Set((data.classes||[]).map(c=>c.institute||""))].filter(Boolean);
@@ -1947,7 +2036,6 @@ function ClassTrackerInner({user}){
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
     const ClassCard = ({cls, onClick}) => {
       const ic=instColor(cls.institute);
-      const insight=getClassUrgencyMeta(cls);
       const total=Object.values(data.notes?.[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
       // This-month entries
       const now=new Date();
@@ -1963,11 +2051,11 @@ function ClassTrackerInner({user}){
       const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
       return(
         <div onClick={onClick}
-          style={{background:G.surface,borderRadius:16,border:`1px solid ${insight.hasPendingSlot?"#FCD34D":G.border}`,overflow:"hidden",boxShadow:insight.hasPendingSlot?"0 8px 24px rgba(217,119,6,0.10)":G.shadowSm,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"transform 0.1s,box-shadow 0.1s"}}
+          style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"transform 0.1s,box-shadow 0.1s"}}
           onPointerDown={e=>{e.currentTarget.style.transform="scale(0.98)";e.currentTarget.style.boxShadow="none";}}
-          onPointerUp={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=insight.hasPendingSlot?"0 8px 24px rgba(217,119,6,0.10)":G.shadowSm;}}
-          onPointerCancel={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=insight.hasPendingSlot?"0 8px 24px rgba(217,119,6,0.10)":G.shadowSm;}}>
-          <div style={{height:6,background:insight.hasPendingSlot?"#D97706":ic.bg}}/>
+          onPointerUp={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}
+          onPointerCancel={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}>
+          <div style={{height:6,background:ic.bg}}/>
           <div style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
             <div style={{width:46,height:46,borderRadius:12,background:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,borderLeft:`4px solid ${ic.bg}`}}>
               {(cls.section||"?").slice(0,2).toUpperCase()}
@@ -1980,16 +2068,6 @@ function ClassTrackerInner({user}){
                 </span>
                 {cls.subject&&<span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>· {cls.subject}</span>}
               </div>
-              {insight.hasPendingSlot&&(
-                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:7}}>
-                  <span style={{background:"#FFFBEB",color:"#B45309",border:"1px solid #FDE68A",borderRadius:999,padding:"3px 9px",fontSize:11,fontWeight:700,fontFamily:G.sans}}>
-                    Next {fmtSlot(insight.nextPendingSlot.start)}
-                  </span>
-                  <span style={{fontSize:11,color:"#B45309",fontWeight:700}}>
-                    {insight.pendingSlotCount} slot{insight.pendingSlotCount!==1?"s":""} pending today
-                  </span>
-                </div>
-              )}
             </div>
             {/* Right: clearly labelled stats */}
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
@@ -2125,25 +2203,21 @@ function ClassTrackerInner({user}){
           <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
             {filtered.map(cls=>{
               const ic=instColor(cls.institute);
-              const insight=getClassUrgencyMeta(cls);
               const isSel=selCls?.id===cls.id;
               const total=Object.values(data.notes?.[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
               const todayN=Array.isArray((data.notes[cls.id]||{})[todayKey()])?(data.notes[cls.id]||{})[todayKey()].length:0;
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
-                  style={{borderRadius:12,padding:"10px 12px",marginBottom:4,cursor:"pointer",background:isSel?ic.light:insight.hasPendingSlot?"#FFF9ED":"transparent",borderLeft:`4px solid ${isSel?ic.bg:insight.hasPendingSlot?"#D97706":"transparent"}`,transition:"all 0.12s"}}>
+                  style={{borderRadius:12,padding:"10px 12px",marginBottom:4,cursor:"pointer",background:isSel?ic.light:"transparent",borderLeft:`4px solid ${isSel?ic.bg:"transparent"}`,transition:"all 0.12s"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <div style={{width:36,height:36,borderRadius:9,background:isSel?ic.bg:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:isSel?"#fff":ic.bg,fontFamily:G.mono}}>{(cls.section||"?").slice(0,2).toUpperCase()}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:700,color:isSel?ic.bg:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                       <div style={{fontSize:12,color:G.textL,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.subject||cls.institute}</div>
-                      {insight.hasPendingSlot&&<div style={{fontSize:10,color:"#B45309",fontWeight:700,marginTop:2}}>Next {fmtSlot(insight.nextPendingSlot.start)}</div>}
                     </div>
                     <div style={{textAlign:"right",flexShrink:0}}>
                       <div style={{fontSize:14,fontWeight:700,color:isSel?ic.bg:G.textM}}>{total}</div>
-                      {insight.hasPendingSlot
-                        ? <div style={{fontSize:10,color:"#B45309",fontWeight:700}}>{insight.pendingSlotCount} due</div>
-                        : todayN>0&&<div style={{fontSize:10,color:G.green,fontWeight:700}}>+{todayN}</div>}
+                      {todayN>0&&<div style={{fontSize:10,color:G.green,fontWeight:700}}>+{todayN}</div>}
                     </div>
                   </div>
                 </div>
