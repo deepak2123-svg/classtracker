@@ -76,12 +76,17 @@ function normaliseName(raw){
   return rest?`${num}${ordSuffix(num)} ${rest}`:`${num}${ordSuffix(num)}`;
 }
 function classNum(name){const m=(name||"").match(/(\d+)/);return m?parseInt(m[1]):0;}
+const ALL_CLASSES_KEY = "__all_classes__";
+const ALL_TEACHERS_KEY = "__all_teachers__";
 const exportTextSorter = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 function exportClassMeta(name){
   const clean = (name || "").trim();
   const grade = classNum(clean);
   const gradeOrder = grade >= 6 && grade <= 12 ? grade : 99;
   return { gradeOrder, clean };
+}
+function sameInstituteName(a,b){
+  return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase();
 }
 function compareExportRows(a,b){
   const aClass = exportClassMeta(a.class);
@@ -97,6 +102,116 @@ function compareExportRows(a,b){
   const subjectCmp = exportTextSorter.compare(a.subject || "", b.subject || "");
   if (subjectCmp !== 0) return subjectCmp;
   return exportTextSorter.compare(a.title || "", b.title || "");
+}
+function compareChronologicalRows(a,b){
+  if ((a.date || "") !== (b.date || "")) return (a.date || "").localeCompare(b.date || "");
+  if ((a.start_time || "") !== (b.start_time || "")) return (a.start_time || "").localeCompare(b.start_time || "");
+  if ((a.end_time || "") !== (b.end_time || "")) return (a.end_time || "").localeCompare(b.end_time || "");
+  const teacherCmp = exportTextSorter.compare(a.teacher || "", b.teacher || "");
+  if (teacherCmp !== 0) return teacherCmp;
+  const subjectCmp = exportTextSorter.compare(a.subject || "", b.subject || "");
+  if (subjectCmp !== 0) return subjectCmp;
+  return exportTextSorter.compare(a.title || "", b.title || "");
+}
+function compareAdminPanelEntries(a,b){
+  if ((a.dateKey || "") !== (b.dateKey || "")) return (a.dateKey || "").localeCompare(b.dateKey || "");
+  if ((a.timeStart || "") !== (b.timeStart || "")) return (a.timeStart || "").localeCompare(b.timeStart || "");
+  if ((a.timeEnd || "") !== (b.timeEnd || "")) return (a.timeEnd || "").localeCompare(b.timeEnd || "");
+  const teacherCmp = exportTextSorter.compare(a.teacherName || "", b.teacherName || "");
+  if (teacherCmp !== 0) return teacherCmp;
+  const subjectCmp = exportTextSorter.compare(a.subject || "", b.subject || "");
+  if (subjectCmp !== 0) return subjectCmp;
+  return exportTextSorter.compare(a.title || "", b.title || "");
+}
+function escapeExportHtml(v){
+  return String(v || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+function exportHtmlWithBreaks(v){
+  return escapeExportHtml(v).replace(/\n/g,"<br/>");
+}
+function formatExportPdfDate(dk){
+  if(!dk) return "";
+  const [y,m,d] = dk.split("-").map(Number);
+  return new Date(y, (m||1)-1, d||1).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
+}
+function formatExportPdfTime(start,end){
+  if(!start && !end) return "";
+  if(start && end) return `${fmt12(start)} - ${fmt12(end)}`;
+  return fmt12(start || end || "");
+}
+function groupAdminPdfRows(rows){
+  const byInstitute = new Map();
+  rows.forEach(row=>{
+    const instName = (row.institute || "No Institute").trim() || "No Institute";
+    const className = (row.class || "Untitled Class").trim() || "Untitled Class";
+    if(!byInstitute.has(instName)){
+      byInstitute.set(instName, { name:instName, classMap:new Map(), entryCount:0 });
+    }
+    const inst = byInstitute.get(instName);
+    if(!inst.classMap.has(className)){
+      inst.classMap.set(className, { className, entries:[], teachers:new Set(), subjects:new Set() });
+    }
+    const group = inst.classMap.get(className);
+    group.entries.push(row);
+    if(row.teacher) group.teachers.add(row.teacher);
+    if(row.subject) group.subjects.add(row.subject);
+    inst.entryCount += 1;
+  });
+
+  return Array.from(byInstitute.values())
+    .sort((a,b)=>exportTextSorter.compare(a.name, b.name))
+    .map(inst=>{
+      const classes = Array.from(inst.classMap.values())
+        .sort((a,b)=>{
+          const aMeta = exportClassMeta(a.className);
+          const bMeta = exportClassMeta(b.className);
+          if (aMeta.gradeOrder !== bMeta.gradeOrder) return aMeta.gradeOrder - bMeta.gradeOrder;
+          return exportTextSorter.compare(aMeta.clean, bMeta.clean);
+        })
+        .map(group=>({
+          ...group,
+          teacherList:Array.from(group.teachers).sort(exportTextSorter.compare),
+          subjectList:Array.from(group.subjects).sort(exportTextSorter.compare),
+          entries:[...group.entries].sort(compareChronologicalRows),
+        }));
+      return {
+        name:inst.name,
+        classes,
+        classCount:classes.length,
+        entryCount:inst.entryCount,
+      };
+    });
+}
+function groupAdminPanelEntries(entries){
+  const classMap = new Map();
+  entries.forEach(entry=>{
+    const className = (entry.className || "Untitled Class").trim() || "Untitled Class";
+    if(!classMap.has(className)){
+      classMap.set(className, { className, entries:[], teachers:new Set(), subjects:new Set() });
+    }
+    const group = classMap.get(className);
+    group.entries.push(entry);
+    if(entry.teacherName) group.teachers.add(entry.teacherName);
+    if(entry.subject) group.subjects.add(entry.subject);
+  });
+
+  return Array.from(classMap.values())
+    .sort((a,b)=>{
+      const aMeta = exportClassMeta(a.className);
+      const bMeta = exportClassMeta(b.className);
+      if (aMeta.gradeOrder !== bMeta.gradeOrder) return aMeta.gradeOrder - bMeta.gradeOrder;
+      return exportTextSorter.compare(aMeta.clean, bMeta.clean);
+    })
+    .map(group=>({
+      ...group,
+      teacherList:Array.from(group.teachers).sort(exportTextSorter.compare),
+      subjectList:Array.from(group.subjects).sort(exportTextSorter.compare),
+      entries:[...group.entries].sort(compareAdminPanelEntries),
+    }));
 }
 function fmt12(t){
   if(!t) return "";
@@ -1135,6 +1250,76 @@ function AdminPanelInner({user}){
     return groupByDate(flat);
   },[selP3,fullData,period]);
 
+  const selectedTeacherName = (uid) => {
+    if(!uid) return "";
+    return fullData[uid]?.profile?.name || teachers.find(t=>t.uid===uid)?.name || uid;
+  };
+  const p2Label = (value = selP2) => {
+    if(!value) return "";
+    if(value===ALL_CLASSES_KEY) return "All Classes";
+    if(value===ALL_TEACHERS_KEY) return "All Teachers";
+    return tab==="teacher" ? selectedTeacherName(value) : normaliseName(value);
+  };
+  const isAllClassesSelected = tab==="class" && selP2===ALL_CLASSES_KEY;
+  const isAllTeachersSelected = tab==="teacher" && selP2===ALL_TEACHERS_KEY;
+  const isAggregateSelection = isAllClassesSelected || isAllTeachersSelected;
+  const aggregateTitle = isAllClassesSelected ? "All Classes" : isAllTeachersSelected ? "All Teachers" : "";
+  const periodDays = period==="today"?1:period==="week"?7:period==="month"?30:null;
+
+  const collectEntriesForTeacherClass = (teacherUid, teacherName, classId, className, subject, instituteName = selInst, days = periodDays) => {
+    const d = fullData[teacherUid];
+    if(!d) return [];
+    return getEntriesInRange((d.notes||{})[classId]||{}, days).map(({dateKey, entry})=>({
+      id: entry.id,
+      dateKey,
+      timeStart: entry.timeStart || "",
+      timeEnd: entry.timeEnd || "",
+      status: entry.status || "",
+      tag: entry.tag || "note",
+      title: entry.title || "",
+      body: entry.body || "",
+      teacherUid,
+      teacherName,
+      classId,
+      className,
+      subject: subject || "",
+      institute: instituteName || selInst,
+    }));
+  };
+
+  const aggregateEntries=useMemo(()=>{
+    if(!isAggregateSelection || !selInst) return [];
+    return teachers
+      .flatMap(t=>{
+        const d = fullData[t.uid];
+        if(!d) return [];
+        const teacherName = d.profile?.name || t.name || "Teacher";
+        return (d.classes||[])
+          .filter(c=>sameInstituteName(c.institute, selInst))
+          .flatMap(c=>collectEntriesForTeacherClass(
+            t.uid,
+            teacherName,
+            c.id,
+            normaliseName(c.section),
+            c.subject,
+            c.institute || selInst,
+            periodDays
+          ));
+      })
+      .sort(compareAdminPanelEntries);
+  },[isAggregateSelection,selInst,teachers,fullData,periodDays]);
+
+  const aggregateGroups=useMemo(()=>{
+    if(!isAggregateSelection) return [];
+    return groupAdminPanelEntries(aggregateEntries);
+  },[isAggregateSelection,aggregateEntries]);
+
+  const aggregateLoadedTeacherCount = useMemo(()=>{
+    if(!selInst) return 0;
+    return instTeachers.filter(t=>!!fullData[t.uid]).length;
+  },[selInst,instTeachers,fullData]);
+  const aggregateLoading = isAggregateSelection && selInst && aggregateLoadedTeacherCount < instTeachers.length;
+
   // ── Role actions ──────────────────────────────────────────────────────────
   // Save a new global institute to Firestore config
   // Save reordered institute list
@@ -1365,8 +1550,6 @@ function AdminPanelInner({user}){
   };
 
   // ── Export helpers ────────────────────────────────────────────────────────
-  const sameInstitute = (a, b) => (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase();
-
   // Collect rows for a specific teacher + classId, filtered by date range, sorted ascending
   const rowsForTeacherClass = (teacherUid, teacherName, classId, className, subject, startKey, endKey, instituteName = selInst) => {
     const d = fullData[teacherUid];
@@ -1401,7 +1584,7 @@ function AdminPanelInner({user}){
         if (!d) return [];
         const teacherName = d.profile?.name || t.name || "Teacher";
         return (d.classes || [])
-          .filter(c => sameInstitute(c.institute, selInst))
+          .filter(c => sameInstituteName(c.institute, selInst))
           .flatMap(c =>
             rowsForTeacherClass(
               t.uid,
@@ -1445,16 +1628,86 @@ function AdminPanelInner({user}){
 
   const triggerPDF = (rows, title, meta) => {
     if (!rows.length) { showAdminToast("No entries to export"); return; }
-    const printCSS = `body{font-family:sans-serif;padding:28px;color:#0E1F18}h1{font-size:20px;margin-bottom:3px}.meta{font-size:12px;color:#5C7268;margin-bottom:20px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1A2F5A;color:#fff;padding:7px 9px;text-align:left}td{padding:7px 9px;border-bottom:1px solid #E2E8F0;vertical-align:top}tr:nth-child(even) td{background:#F7F8FC}.tag{background:#DBEAFE;color:#1D4ED8;border-radius:3px;padding:1px 5px;font-size:10px}`;
-    const w = window.open("","_blank");
-    w.document.write(`<html><head><title>${title}</title><style>${printCSS}</style></head><body>
-      <h1>${title}</h1>
-      <div class="meta">${meta} · Exported ${new Date().toLocaleDateString()}</div>
-      <table><thead><tr><th>Date</th><th>Time</th><th>Teacher</th><th>Class</th><th>Type</th><th>Title</th><th>Notes</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr><td>${r.date}</td><td>${r.start_time}${r.end_time?" → "+r.end_time:""}</td><td>${r.teacher}</td><td>${r.class}</td><td><span class="tag">${r.type}</span></td><td>${r.title}</td><td>${r.notes}</td></tr>`).join("")}</tbody>
-      </table></body></html>`);
-    w.document.close(); w.focus();
-    setTimeout(()=>w.print(),400);
+    const groups = groupAdminPdfRows(rows);
+    const totalClasses = groups.reduce((sum,inst)=>sum+inst.classCount,0);
+    const printCSS = `
+      *{box-sizing:border-box}
+      body{font-family:Arial,sans-serif;padding:28px;color:#0E1F18;background:#fff}
+      h1{font-size:20px;margin:0 0 4px}
+      .meta{font-size:12px;color:#5C7268;margin-bottom:16px}
+      .summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+      .summary-card{border:1px solid #DDE3ED;border-radius:12px;padding:10px 12px;min-width:120px;background:#F7F9FD}
+      .summary-label{font-size:10px;text-transform:uppercase;letter-spacing:0.7px;color:#6B7280;font-weight:700;margin-bottom:4px}
+      .summary-value{font-size:16px;font-weight:700;color:#1A2F5A}
+      .inst-block{margin-top:24px}
+      .inst-block:first-of-type{margin-top:0}
+      .inst-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;border-bottom:2px solid #1A2F5A;padding-bottom:10px;margin-bottom:16px}
+      .inst-title{font-size:17px;font-weight:700;color:#1A2F5A;margin:0}
+      .inst-meta{font-size:11px;color:#5C7268;font-weight:700;white-space:nowrap}
+      .class-block{border:1px solid #DDE3ED;border-radius:14px;overflow:hidden;margin-bottom:14px;page-break-inside:avoid}
+      .class-head{padding:12px 14px;background:#F5F7FA;border-bottom:1px solid #DDE3ED}
+      .class-title{font-size:15px;font-weight:700;color:#111827}
+      .class-sub{font-size:12px;color:#4B5563;margin-top:3px;line-height:1.45}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th{background:#1A2F5A;color:#fff;padding:8px 10px;text-align:left;font-size:11px}
+      td{padding:8px 10px;border-bottom:1px solid #E2E8F0;vertical-align:top}
+      tr:nth-child(even) td{background:#F7F8FC}
+      tr:last-child td{border-bottom:none}
+      .tag{background:#DBEAFE;color:#1D4ED8;border-radius:999px;padding:2px 7px;font-size:10px;font-weight:700;display:inline-block}
+      .title{font-weight:700;color:#111827}
+      .notes{color:#374151;line-height:1.45}
+      .empty{text-align:center;padding:40px;color:#94A3B8;border:1px dashed #DDE3ED;border-radius:16px}
+      @media print{body{padding:0}}
+    `;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escapeExportHtml(title)}</title><style>${printCSS}</style></head><body>
+      <h1>${escapeExportHtml(title)}</h1>
+      <div class="meta">${escapeExportHtml(meta)} · Exported ${escapeExportHtml(new Date().toLocaleDateString())}</div>
+      ${rows.length===0
+        ? '<div class="empty">No entries found for this export.</div>'
+        : `<div class="summary">
+            <div class="summary-card"><div class="summary-label">Institutes</div><div class="summary-value">${groups.length}</div></div>
+            <div class="summary-card"><div class="summary-label">Classes</div><div class="summary-value">${totalClasses}</div></div>
+            <div class="summary-card"><div class="summary-label">Entries</div><div class="summary-value">${rows.length}</div></div>
+          </div>
+          ${groups.map(inst=>`<section class="inst-block">
+            <div class="inst-head">
+              <h2 class="inst-title">${escapeExportHtml(inst.name)}</h2>
+              <div class="inst-meta">${inst.classCount} class${inst.classCount!==1?"es":""} · ${inst.entryCount} entr${inst.entryCount!==1?"ies":"y"}</div>
+            </div>
+            ${inst.classes.map(group=>`<div class="class-block">
+              <div class="class-head">
+                <div class="class-title">${escapeExportHtml(group.className)}</div>
+                <div class="class-sub">
+                  ${group.subjectList.length?`Subjects: ${escapeExportHtml(group.subjectList.join(", "))} · `:""}Teachers: ${escapeExportHtml(group.teacherList.join(", ") || "—")} · ${group.entries.length} entr${group.entries.length!==1?"ies":"y"}
+                </div>
+              </div>
+              <table>
+                <thead><tr><th>Date</th><th>Time</th><th>Teacher</th><th>Subject</th><th>Type</th><th>Title</th><th>Notes</th></tr></thead>
+                <tbody>
+                  ${group.entries.map(r=>`<tr>
+                    <td style="white-space:nowrap">${escapeExportHtml(formatExportPdfDate(r.date))}</td>
+                    <td style="white-space:nowrap">${escapeExportHtml(formatExportPdfTime(r.start_time, r.end_time))}</td>
+                    <td>${escapeExportHtml(r.teacher || "")}</td>
+                    <td>${escapeExportHtml(r.subject || "")}</td>
+                    <td><span class="tag">${escapeExportHtml(r.type || "")}</span></td>
+                    <td class="title">${escapeExportHtml(r.title || "—")}</td>
+                    <td class="notes">${exportHtmlWithBreaks(r.notes || "—")}</td>
+                  </tr>`).join("")}
+                </tbody>
+              </table>
+            </div>`).join("")}
+          </section>`).join("")}`
+      }
+      <script>window.onload=()=>{window.print();}<\/script>
+    </body></html>`;
+    const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
     setExportOpen(false);
   };
 
@@ -1494,7 +1747,7 @@ function AdminPanelInner({user}){
         title: `${tName} — All Classes`,
         meta: `${selInst}`,
         getRows: (sk, ek) => (d.classes||[])
-          .filter(c=>sameInstitute(c.institute, selInst))
+          .filter(c=>sameInstituteName(c.institute, selInst))
           .flatMap(c => rowsForTeacherClass(selP2, tName, c.id, normaliseName(c.section), c.subject, sk, ek, c.institute || selInst))
           .sort(compareExportRows),
         triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
@@ -1535,6 +1788,122 @@ function AdminPanelInner({user}){
 
     return actions;
   })();
+
+  const openTeacherSelection = (uid) => {
+    setSelP2(uid);
+    setSelP3(null);
+    setMobileStep(2);
+    ensureFullData(uid);
+  };
+
+  const openClassSelection = (raw) => {
+    setSelP2(raw);
+    setSelP3(null);
+    setMobileStep(2);
+    instClasses.find(c=>c.raw===raw)?.teachers?.forEach(t=>ensureFullData(t.uid));
+  };
+
+  const openAggregateView = (kind) => {
+    setSelP2(kind==="class" ? ALL_CLASSES_KEY : ALL_TEACHERS_KEY);
+    setSelP3(null);
+    setMobileStep(3);
+    instTeachers.forEach(t=>ensureFullData(t.uid));
+  };
+
+  const renderAggregateEntries = (mobile = false) => {
+    if (aggregateLoading && aggregateEntries.length===0) {
+      return (
+        <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:mobile?"18px 16px":"20px 18px",textAlign:"center"}}>
+          <div style={{width:24,height:24,borderRadius:"50%",border:`2px solid ${G.blueL}`,borderTopColor:G.blue,animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}/>
+          <div style={{fontSize:15,fontWeight:700,color:G.textM,fontFamily:G.display}}>Loading institute entries…</div>
+          <div style={{fontSize:13,color:G.textL,fontFamily:G.sans,marginTop:4}}>
+            Loaded {aggregateLoadedTeacherCount} of {instTeachers.length} teachers for {selInst}
+          </div>
+        </div>
+      );
+    }
+
+    if (!aggregateLoading && aggregateEntries.length===0) {
+      return (
+        <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:mobile?"18px 16px":"20px 18px",textAlign:"center"}}>
+          <div style={{fontSize:15,fontWeight:700,color:G.textM,fontFamily:G.display}}>No entries for this period</div>
+          <div style={{fontSize:13,color:G.textL,fontFamily:G.sans,marginTop:4}}>
+            {aggregateTitle} is ready, but nothing was uploaded in {selInst} for the selected range.
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {aggregateLoading&&(
+          <div style={{background:G.blueL,border:`1px solid ${G.border}`,borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:13,color:G.textS,fontFamily:G.sans}}>
+            Loading remaining teachers… showing {aggregateLoadedTeacherCount} of {instTeachers.length} so far.
+          </div>
+        )}
+        {aggregateGroups.map(group=>(
+          <div key={group.className} style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,marginBottom:mobile?14:16,overflow:"hidden",boxShadow:G.shadowSm}}>
+            <div style={{padding:mobile?"13px 14px":"14px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:mobile?17:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{group.className}</div>
+                  <div style={{fontSize:13,color:G.textM,marginTop:3,lineHeight:1.5}}>
+                    {group.subjectList.length>0 ? `Subjects: ${group.subjectList.join(", ")}` : "Subjects: —"}
+                  </div>
+                  <div style={{fontSize:13,color:G.textL,marginTop:2,lineHeight:1.5}}>
+                    Teachers: {group.teacherList.join(", ") || "—"}
+                  </div>
+                </div>
+                <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
+                  {group.entries.length} {group.entries.length===1?"entry":"entries"}
+                </span>
+              </div>
+            </div>
+            <div style={{padding:mobile?"10px 10px 2px":"10px 12px 4px"}}>
+              {group.entries.map((entry, idx)=>{
+                const tag = TAG_STYLES[entry.tag] || TAG_STYLES.note;
+                const status = STATUS_STYLES[entry.status] || null;
+                const title = entry.title || "Untitled entry";
+                return(
+                  <div key={entry.id || `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`} style={{border:`1px solid ${G.border}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+                    <div style={{height:3,background:tag.bg}}/>
+                    <div style={{padding:mobile?"11px 12px":"11px 13px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                            <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"3px 9px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:600}}>
+                              {formatExportPdfDate(entry.dateKey)}
+                            </span>
+                            {(entry.timeStart || entry.timeEnd)&&(
+                              <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"3px 9px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:600}}>
+                                {formatExportPdfTime(entry.timeStart, entry.timeEnd)}
+                              </span>
+                            )}
+                            {status&&<span style={{background:status.bg,color:status.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontWeight:700}}>{status.label}</span>}
+                            <span style={{background:tag.bg,color:tag.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
+                          </div>
+                          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{title}</div>
+                          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:4}}>
+                            {entry.teacherName} · {entry.subject || "No subject"}
+                          </div>
+                          {entry.body&&<div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:7,whiteSpace:"pre-wrap"}}>{entry.body}</div>}
+                        </div>
+                        <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.classId, entry.dateKey, entry.id, entry.title)}
+                          style={{width:28,height:28,borderRadius:8,background:G.redL,border:"none",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          title="Delete entry">
+                          🗑
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </>
+    );
+  };
 
 
   // Draggable panel resize handle
@@ -2241,9 +2610,9 @@ function AdminPanelInner({user}){
         <div style={{background:G.navyS,padding:"8px 14px",display:"flex",alignItems:"center",gap:5,fontSize:12,fontFamily:G.sans,overflow:"hidden"}}>
           <span onClick={()=>{setMobileStep(0);setSelInst(null);resetNav();}} style={{color:"rgba(255,255,255,0.45)",cursor:"pointer",flexShrink:0}}>Inst.</span>
           {mobileStep>=1&&selInst&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);}} style={{color:mobileStep===1?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===1?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{selInst}</span></>}
-          {mobileStep>=2&&selP2&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{setMobileStep(2);setSelP3(null);}} style={{color:mobileStep===2?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===2?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2).split(" ")[0]:normaliseName(selP2)}</span></>}
-          {mobileStep>=3&&selP3&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span style={{color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{selP3.className}</span></>}
-          <button onClick={()=>setMobileStep(s=>Math.max(0,s-1))} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",borderRadius:7,padding:"5px 12px",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:12,fontFamily:G.sans,fontWeight:600,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>← Back</button>
+          {mobileStep>=2&&selP2&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{if(isAggregateSelection){setMobileStep(1);setSelP3(null);} else {setMobileStep(2);setSelP3(null);}}} style={{color:mobileStep===2?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===2?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>{p2Label(selP2)}</span></>}
+          {mobileStep>=3&&(selP3||isAggregateSelection)&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span style={{color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:95}}>{selP3?selP3.className:"All entries"}</span></>}
+          <button onClick={()=>setMobileStep(s=>isAggregateSelection&&s===3?1:Math.max(0,s-1))} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",borderRadius:7,padding:"5px 12px",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:12,fontFamily:G.sans,fontWeight:600,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>← Back</button>
         </div>
       )}</>
     );
@@ -2392,8 +2761,21 @@ function AdminPanelInner({user}){
               </button>
             ))}
           </div>
+          {tab==="class"&&selInst&&(
+            <div onClick={()=>openAggregateView("class")}
+              style={{background:selP2===ALL_CLASSES_KEY?G.blueL:G.surface,borderRadius:12,border:`1px solid ${selP2===ALL_CLASSES_KEY?G.blue:G.border}`,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:selP2===ALL_CLASSES_KEY?G.blue:G.text}}>All Classes</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:3}}>Combined institute view, grouped like export</div>
+                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:6,display:"inline-block"}}>
+                  {instClasses.length} class{instClasses.length!==1?"es":""} · {instTeachers.length} teacher{instTeachers.length!==1?"s":""}
+                </span>
+              </div>
+              <span style={{fontSize:20,color:G.textL}}>›</span>
+            </div>
+          )}
           {tab==="class"&&instClasses.map(cls=>(
-            <div key={cls.raw} onClick={()=>{setSelP2(cls.raw);setSelP3(null);setMobileStep(2);instClasses.find(c=>c.raw===cls.raw)?.teachers?.forEach(t=>ensureFullData(t.uid));}}
+            <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
               style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div>
                 <div style={{fontSize:16,fontWeight:700,color:G.text}}>{cls.display}</div>
@@ -2407,12 +2789,25 @@ function AdminPanelInner({user}){
               <span style={{fontSize:20,color:G.textL}}>›</span>
             </div>
           ))}
+          {tab==="teacher"&&selInst&&(
+            <div onClick={()=>openAggregateView("teacher")}
+              style={{background:selP2===ALL_TEACHERS_KEY?G.blueL:G.surface,borderRadius:12,border:`1px solid ${selP2===ALL_TEACHERS_KEY?G.blue:G.border}`,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:selP2===ALL_TEACHERS_KEY?G.blue:G.text}}>All Teachers</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:3}}>All institute entries, grouped by class</div>
+                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:6,display:"inline-block"}}>
+                  {instTeachers.length} teacher{instTeachers.length!==1?"s":""} · {instClasses.length} class{instClasses.length!==1?"es":""}
+                </span>
+              </div>
+              <span style={{fontSize:20,color:G.textL}}>›</span>
+            </div>
+          )}
           {tab==="teacher"&&instTeachers.map(t=>{
             const d=fullData[t.uid]||{};
             const name=d.profile?.name||t.name||"?";
             const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
             return(
-              <div key={t.uid} onClick={()=>{setSelP2(t.uid);setSelP3(null);setMobileStep(2);ensureFullData(t.uid);}}
+              <div key={t.uid} onClick={()=>openTeacherSelection(t.uid)}
                 style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <div>
                   <div style={{fontSize:16,fontWeight:700,color:G.text}}>{name}</div>
@@ -2439,7 +2834,7 @@ function AdminPanelInner({user}){
         <div style={{padding:"12px 14px 40px"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:16}}>
             <div>
-              <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}</h2>
+              <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{p2Label(selP2)}</h2>
               <div style={{fontSize:14,color:G.textM}}>{selInst}</div>
             </div>
             {tab==="class"&&selP2&&(()=>{const cls=instClasses.find(c=>c.raw===selP2);return cls?(
@@ -2450,7 +2845,19 @@ function AdminPanelInner({user}){
               </button>
             ):null;})()}
           </div>
-          {p3Items.map(cls=>(
+          {isAggregateSelection&&(
+            <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"16px 18px"}}>
+              <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{aggregateTitle}</div>
+              <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:5}}>
+                This institute-wide view opens every entry together, grouped by class and arranged chronologically like the export layout.
+              </div>
+              <button onClick={()=>setMobileStep(3)}
+                style={{marginTop:14,display:"inline-flex",alignItems:"center",gap:8,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"10px 14px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:G.sans}}>
+                View all entries →
+              </button>
+            </div>
+          )}
+          {!isAggregateSelection&&p3Items.map(cls=>(
             <div key={cls.classId||cls.uid}
               style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,marginBottom:8,overflow:"hidden"}}>
               <div onClick={()=>{
@@ -2481,10 +2888,10 @@ function AdminPanelInner({user}){
     );
 
     // ── STEP 3: Entries ───────────────────────────────────────────────────────
-    if(mobileStep===3&&selP3) {
+    if(mobileStep===3&&(selP3||isAggregateSelection)) {
       const days=period==="today"?1:period==="week"?7:period==="month"?30:null;
-      const classNotes=(fullData[selP3.teacherUid]?.notes||{})[selP3.classId]||{};
-      const entries=groupByDate(getEntriesInRange(classNotes,days));
+      const classNotes=selP3?((fullData[selP3.teacherUid]?.notes||{})[selP3.classId]||{}):{};
+      const entries=selP3?groupByDate(getEntriesInRange(classNotes,days)):[];
       return(
         <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
           {binView&&<AdminBinModal/>}
@@ -2492,8 +2899,12 @@ function AdminPanelInner({user}){
           {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
           <MobileNav/><MobileBreadcrumb/>
           <div style={{padding:"12px 14px 40px"}}>
-            <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>{selP3.teacherName} — {selP3.className}</h2>
-            <div style={{fontSize:14,color:G.textM,marginBottom:16}}>{selP3.institute||selInst} · {selP3.subject}</div>
+            <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>
+              {isAggregateSelection ? aggregateTitle : `${selP3.teacherName} — ${selP3.className}`}
+            </h2>
+            <div style={{fontSize:14,color:G.textM,marginBottom:16}}>
+              {isAggregateSelection ? `${selInst} · grouped by class, chronological inside each class` : `${selP3.institute||selInst} · ${selP3.subject}`}
+            </div>
             {/* Period pills — horizontal scroll, never wraps */}
             <div style={{display:"flex",gap:6,marginBottom:10,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none",paddingBottom:2}}>
               {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
@@ -2506,7 +2917,7 @@ function AdminPanelInner({user}){
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Export
             </button>
-            {entries.length===0?(
+            {isAggregateSelection ? renderAggregateEntries(true) : entries.length===0?(
               <div style={{textAlign:"center",padding:"48px 20px",color:G.textM,fontSize:15}}>No entries for this period.</div>
             ):entries.map(([dk,dayEntries])=>(
               <div key={dk} style={{marginBottom:20}}>
@@ -2691,20 +3102,20 @@ function AdminPanelInner({user}){
           </>}
           {mobileStep>=2&&selP2&&<>
             <span style={{color:"rgba(255,255,255,0.3)",fontSize:12}}>›</span>
-            <span onClick={()=>{setMobileStep(2);setSelP3(null);}}
+            <span onClick={()=>{if(isAggregateSelection){setMobileStep(1);setSelP3(null);} else {setMobileStep(2);setSelP3(null);}}}
               style={{fontSize:13,color:mobileStep===2?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontFamily:G.sans,fontWeight:mobileStep===2?700:400,padding:"3px 0"}}>
-              {tab==="teacher"?(fullData[selP2]?.profile?.name||selP2):normaliseName(selP2)}
+              {p2Label(selP2)}
             </span>
           </>}
-          {mobileStep>=3&&selP3&&<>
+          {mobileStep>=3&&(selP3||isAggregateSelection)&&<>
             <span style={{color:"rgba(255,255,255,0.3)",fontSize:12}}>›</span>
             <span style={{fontSize:13,color:"#fff",fontFamily:G.sans,fontWeight:700,padding:"3px 0"}}>
-              {selP3.className}
+              {selP3?selP3.className:"All entries"}
             </span>
           </>}
           {/* Back button */}
           <div style={{marginLeft:"auto"}}>
-            <span onClick={()=>setMobileStep(s=>Math.max(0,s-1))}
+            <span onClick={()=>setMobileStep(s=>isAggregateSelection&&s===3?1:Math.max(0,s-1))}
               style={{background:"rgba(255,255,255,0.1)",borderRadius:7,padding:"5px 12px",fontSize:13,color:"rgba(255,255,255,0.7)",cursor:"pointer",fontFamily:G.sans}}>
               ← Back
             </span>
@@ -2810,13 +3221,27 @@ function AdminPanelInner({user}){
                 loading teachers…
               </div>
             )}
+            {selInst&&tab==="teacher"&&(
+              <div onClick={()=>openAggregateView("teacher")}
+                style={{...siBase,background:selP2===ALL_TEACHERS_KEY?G.blueL:"transparent",borderLeftColor:selP2===ALL_TEACHERS_KEY?G.blue:"transparent"}}
+                onMouseEnter={e=>{if(selP2!==ALL_TEACHERS_KEY)e.currentTarget.style.background=G.bg;}}
+                onMouseLeave={e=>{if(selP2!==ALL_TEACHERS_KEY)e.currentTarget.style.background="transparent";}}>
+                <div style={{fontSize:15,fontWeight:700,color:selP2===ALL_TEACHERS_KEY?G.blue:G.textS}}>All Teachers</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:3}}>Every teacher in {selInst}, grouped by class</div>
+                <div style={{marginTop:5}}>
+                  <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
+                    {instTeachers.length} teacher{instTeachers.length!==1?"s":""} · {instClasses.length} class{instClasses.length!==1?"es":""}
+                  </span>
+                </div>
+              </div>
+            )}
             {selInst&&tab==="teacher"&&instTeachers.map(t=>{
               const d=fullData[t.uid]||{};
               const name=d.profile?.name||t.name||"?";
               const isLoading=loadingUids.has(t.uid)&&!fullData[t.uid];
               const isSel=selP2===t.uid;
               return(
-                <div key={t.uid} onClick={()=>{setSelP2(t.uid);setSelP3(null);setMobileStep(2);ensureFullData(t.uid);}}
+                <div key={t.uid} onClick={()=>openTeacherSelection(t.uid)}
                   style={{...siBase,display:"flex",alignItems:"center",gap:9,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
@@ -2841,10 +3266,24 @@ function AdminPanelInner({user}){
                 loading classes…
               </div>
             )}
+            {selInst&&tab==="class"&&(
+              <div onClick={()=>openAggregateView("class")}
+                style={{...siBase,background:selP2===ALL_CLASSES_KEY?G.blueL:"transparent",borderLeftColor:selP2===ALL_CLASSES_KEY?G.blue:"transparent"}}
+                onMouseEnter={e=>{if(selP2!==ALL_CLASSES_KEY)e.currentTarget.style.background=G.bg;}}
+                onMouseLeave={e=>{if(selP2!==ALL_CLASSES_KEY)e.currentTarget.style.background="transparent";}}>
+                <div style={{fontSize:15,fontWeight:700,color:selP2===ALL_CLASSES_KEY?G.blue:G.textS}}>All Classes</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:3}}>Combined institute entries, sorted like export</div>
+                <div style={{marginTop:5}}>
+                  <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
+                    {instClasses.length} class{instClasses.length!==1?"es":""} · {instTeachers.length} teacher{instTeachers.length!==1?"s":""}
+                  </span>
+                </div>
+              </div>
+            )}
             {selInst&&tab==="class"&&instClasses.map(cls=>{
               const isSel=selP2===cls.raw;
               return(
-                <div key={cls.raw} onClick={()=>{setSelP2(cls.raw);setSelP3(null);setMobileStep(2);instClasses.find(c=>c.raw===cls.raw)?.teachers?.forEach(t=>ensureFullData(t.uid));}}
+                <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
                   style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
@@ -2870,20 +3309,41 @@ function AdminPanelInner({user}){
         <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:G.bg,borderRight:`1px solid ${G.border}`}}>
           <div style={{padding:"12px 12px 8px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
             <div style={{fontFamily:G.display,fontSize:15,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-              {!selP2?"—":tab==="teacher"?(fullData[selP2]?.profile?.name||"Teacher"):normaliseName(selP2)}
+              {!selP2?"—":p2Label(selP2)}
             </div>
             <div style={{fontSize:12,color:G.textM,fontFamily:G.mono,marginTop:2}}>
-              {tab==="class"?"Teachers in this class":"Their classes at "+selInst}
+              {isAggregateSelection?`${selInst} · combined institute view`:tab==="class"?"Teachers in this class":"Their classes at "+selInst}
             </div>
           </div>
           <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
-            {tab==="teacher"?"Classes":"Teachers"}
+            {isAggregateSelection?"Overview":tab==="teacher"?"Classes":"Teachers"}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
             {!selP2&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>Select from left</div>}
+            {isAggregateSelection&&(
+              <div style={{background:G.surface,borderRadius:10,border:`1px solid ${G.border}`,padding:"14px 13px"}}>
+                <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>{aggregateTitle}</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:5}}>
+                  Right panel now shows the full {selInst} timeline, grouped by class and arranged chronologically within each class.
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:12}}>
+                  <div style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:9,padding:"9px 10px"}}>
+                    <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase"}}>Classes</div>
+                    <div style={{fontSize:18,fontWeight:700,color:G.blue,fontFamily:G.display,marginTop:2}}>{aggregateGroups.length}</div>
+                  </div>
+                  <div style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:9,padding:"9px 10px"}}>
+                    <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase"}}>Entries</div>
+                    <div style={{fontSize:18,fontWeight:700,color:G.blue,fontFamily:G.display,marginTop:2}}>{aggregateEntries.length}</div>
+                  </div>
+                </div>
+                <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:10}}>
+                  Loaded {aggregateLoadedTeacherCount}/{instTeachers.length} teachers
+                </div>
+              </div>
+            )}
 
 
-            {selP2&&tab==="teacher"&&p3Items.map(cls=>{
+            {selP2&&!isAggregateSelection&&tab==="teacher"&&p3Items.map(cls=>{
               const isSel=selP3?.classId===cls.classId;
               const tName=fullData[selP2]?.profile?.name||"";
               return(
@@ -2911,7 +3371,7 @@ function AdminPanelInner({user}){
             })}
 
             {/* Archived / left classes */}
-            {selP2&&tab==="teacher"&&archivedP3Items.length>0&&(()=>{
+            {selP2&&!isAggregateSelection&&tab==="teacher"&&archivedP3Items.length>0&&(()=>{
               return(<>
                 <div style={{fontSize:11,letterSpacing:1.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"12px 6px 4px",borderTop:`1px solid ${G.border}`,marginTop:4}}>
                   Left / Archived ({archivedP3Items.length})
@@ -2945,7 +3405,7 @@ function AdminPanelInner({user}){
               </>);
             })()}
 
-            {selP2&&tab==="class"&&(()=>{
+            {selP2&&!isAggregateSelection&&tab==="class"&&(()=>{
               const withEntries=p3Items.filter(t=>t.entryCount>0).sort((a,b)=>b.entryCount-a.entryCount);
               const noUpload=p3Items.filter(t=>t.entryCount===0);
               return(<>
@@ -3000,13 +3460,22 @@ function AdminPanelInner({user}){
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
                 <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text}}>
-                  {selP3?`${selP3.teacherName} — ${selP3.className}`:"—"}
+                  {isAggregateSelection?aggregateTitle:selP3?`${selP3.teacherName} — ${selP3.className}`:"—"}
                 </div>
                 <div style={{fontSize:14,color:G.textM,marginTop:2}}>
-                  {selP3?`${selInst} · ${selP3.subject}`:"Select institute → teacher or class → drill down"}
+                  {isAggregateSelection?`${selInst} · grouped by class, chronological inside each class`:selP3?`${selInst} · ${selP3.subject}`:"Select institute → teacher or class → drill down"}
                 </div>
               </div>
-              {selP3&&(()=>{
+              {isAggregateSelection?(
+                <div style={{display:"flex",alignItems:"center",gap:5}}>
+                  <div style={{width:7,height:7,borderRadius:"50%",background:aggregateLoading?G.borderM:G.blueV}}/>
+                  <span style={{fontSize:13,color:aggregateLoading?G.textL:G.blue,fontWeight:600,fontFamily:G.mono}}>
+                    {aggregateLoading
+                      ? `Loading ${aggregateLoadedTeacherCount}/${instTeachers.length} teachers`
+                      : `${aggregateGroups.length} class groups · ${aggregateEntries.length} entries`}
+                  </span>
+                </div>
+              ):selP3&&(()=>{
                 const lastTs = lastEntryTs((fullData[selP3.teacherUid]?.notes||{})[selP3.classId]||{});
                 const ago = lastTs ? daysAgo(lastTs) : null;
                 return(
@@ -3033,7 +3502,7 @@ function AdminPanelInner({user}){
               ))}
               {/* Spacer pushes Export right on desktop; on mobile it wraps to new line */}
               <div style={{flex:1,minWidth:8}}/>
-              {selP3&&(
+              {(selP3||isAggregateSelection)&&(
                 <button onClick={()=>setExportOpen(true)}
                   style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:36,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -3044,14 +3513,15 @@ function AdminPanelInner({user}){
           </div>
           {/* Entries body */}
           <div style={{flex:1,overflowY:"auto",padding:"14px 16px 32px"}}>
-            {!selP3&&(
+            {!selP3&&!isAggregateSelection&&(
               <div style={{textAlign:"center",padding:"60px 20px"}}>
                 <div style={{fontSize:30,marginBottom:10}}>👆</div>
                 <div style={{fontSize:16,fontWeight:700,color:G.textM,fontFamily:G.display,marginBottom:3}}>Nothing selected</div>
                 <div style={{fontSize:14,color:G.textL}}>Navigate the panels on the left</div>
               </div>
             )}
-            {selP3&&p4Entries!==null&&p4Entries.length===0&&(
+            {isAggregateSelection&&renderAggregateEntries(false)}
+            {!isAggregateSelection&&selP3&&p4Entries!==null&&p4Entries.length===0&&(
               <div style={{background:G.surface,borderRadius:11,border:`1px solid ${G.border}`,padding:"16px"}}>
                 <div style={{height:3,background:G.border,borderRadius:2,marginBottom:12}}/>
                 <div style={{display:"flex",alignItems:"center",gap:10,background:G.bg,borderRadius:10,padding:"12px 16px",border:`1px solid ${G.border}`}}>
@@ -3060,7 +3530,7 @@ function AdminPanelInner({user}){
                 </div>
               </div>
             )}
-            {selP3&&p4Entries&&p4Entries.map(([dk,entries])=>(
+            {!isAggregateSelection&&selP3&&p4Entries&&p4Entries.map(([dk,entries])=>(
               <div key={dk} style={{marginBottom:22}}>
                 {/* Date label */}
                 <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.mono,marginBottom:9,display:"flex",alignItems:"center",gap:8,textTransform:"uppercase",letterSpacing:0.5}}>
