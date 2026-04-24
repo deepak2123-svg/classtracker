@@ -1645,10 +1645,14 @@ function AdminPanelInner({user}){
         {typePicker&&(
           <InstTypePicker
             inst={typePicker}
-            onSelect={async(type)=>{
-              await saveInstituteType(typePicker,type);
+            onSelect={(type)=>{
+              // Update UI immediately — don't wait for Firestore
               setInstSectionsAll(a=>({...a,[typePicker]:{...(a[typePicker]||{}),type}}));
               setTypePicker(null);
+              // Save in background, silently retry on failure
+              saveInstituteType(typePicker, type).catch(()=>{
+                // Will be saved again next time admin opens manage sections
+              });
             }}
             onClose={()=>setTypePicker(null)}
           />
