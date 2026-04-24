@@ -342,7 +342,16 @@ export async function saveInstituteGradeGroups(instituteName, gradeGroups) {
   const existing = snap.exists() ? snap.data() : {};
   await setDoc(doc(db, "config", "sections"), {
     ...existing,
-    [instituteName]: { gradeGroups }
+    [instituteName]: { ...(existing[instituteName]||{}), gradeGroups }
+  });
+}
+
+export async function saveInstituteType(instituteName, type) {
+  const snap = await getDoc(doc(db, "config", "sections"));
+  const existing = snap.exists() ? snap.data() : {};
+  await setDoc(doc(db, "config", "sections"), {
+    ...existing,
+    [instituteName]: { ...(existing[instituteName]||{}), type }
   });
 }
 

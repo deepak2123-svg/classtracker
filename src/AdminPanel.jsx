@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, Component } from "react";
 import {
   logout, getAllTeachers, getTeacherFullData,
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
-  getAllInstituteSections, saveInstituteGradeGroups, deleteInstituteGradeGroup,
+  getAllInstituteSections, saveInstituteGradeGroups, saveInstituteType, deleteInstituteGradeGroup,
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute,
@@ -370,10 +370,74 @@ function AdminExportModal({ exportActions, onClose }) {
   );
 }
 
-// ── Institute Wizard (step-by-step grade group creator) ─────────────────────
-function GradeGroupModal({ inst, group, onSave, onClose }) {
-  const isEdit = !!group;
-  const TOTAL = 4;
+// ── Institute Type Picker ─────────────────────────────────────────────────────
+function InstTypePicker({ inst, onSelect, onClose }) {
+  const W = { navy:"#1A2F5A",blue:"#1D4ED8",blueL:"#EEF2FF",surface:"#fff",border:"#E2E8F0",text:"#0F172A",textM:"#475569",textL:"#94A3B8",bg:"#F4F6FA",green:"#1B8A4C",greenL:"#ECFDF5",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif" };
+  const types = [
+    { id:"school",       icon:"🏫", title:"School",                  sub:"Classes 6th–12th, sections A/B/C etc.",                          color:"#EEF2FF", border:"#C7D7F5" },
+    { id:"coaching_12",  icon:"📐", title:"Coaching — After 12th",   sub:"JEE, NEET, CLAT, CUET and similar entrance prep batches.",      color:"#ECFDF5", border:"#A7F3D0" },
+    { id:"coaching_grad",icon:"🏛", title:"Coaching — After Graduation", sub:"Banking, SSC, UPSC, CAT and similar competitive exam batches.", color:"#FFFBEB", border:"#FDE68A" },
+  ];
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:960,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)"}}>
+      <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:480,boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
+        <div style={{padding:"22px 20px 16px",borderBottom:`1px solid ${W.border}`}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{fontSize:12,color:W.textL,fontFamily:"'JetBrains Mono',monospace"}}>{inst}</div>
+            <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:W.textL}}>✕</button>
+          </div>
+          <div style={{fontSize:20,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:4}}>What kind of institute is this?</div>
+          <div style={{fontSize:14,color:W.textM,lineHeight:1.5}}>This shapes how you create batches and time slots.</div>
+        </div>
+        <div style={{padding:"16px 20px 22px",display:"flex",flexDirection:"column",gap:10}}>
+          {types.map(t=>(
+            <div key={t.id} onClick={()=>onSelect(t.id)}
+              style={{background:t.color,border:`1.5px solid ${t.border}`,borderRadius:14,padding:"16px 18px",cursor:"pointer",display:"flex",alignItems:"center",gap:14,transition:"transform 0.1s,box-shadow 0.1s",WebkitTapHighlightColor:"transparent"}}
+              onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,0.1)";e.currentTarget.style.transform="translateY(-1px)";}}
+              onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.transform="none";}}>
+              <div style={{fontSize:28,flexShrink:0}}>{t.icon}</div>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:2}}>{t.title}</div>
+                <div style={{fontSize:13,color:W.textM,lineHeight:1.4}}>{t.sub}</div>
+              </div>
+              <div style={{marginLeft:"auto",fontSize:18,color:W.textL,flexShrink:0}}>›</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Duration Stepper (replaces pill grid) ─────────────────────────────────────
+function DurStepper({ value, onChange }) {
+  const W = { navy:"#1A2F5A",border:"#E2E8F0",text:"#0F172A",textM:"#475569",textL:"#94A3B8",surface:"#fff",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace" };
+  const fmt = m => m < 60 ? `${m} min` : m === 60 ? "1 hour" : m % 60 === 0 ? `${m/60} hours` : `${Math.floor(m/60)}h ${m%60}m`;
+  const dec = () => onChange(Math.max(30, value - 5));
+  const inc = () => onChange(Math.min(180, value + 5));
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:0,background:W.surface,border:`2px solid ${W.navy}`,borderRadius:14,overflow:"hidden",width:"fit-content"}}>
+      <button onClick={dec} style={{width:52,height:52,border:"none",background:"transparent",fontSize:22,fontWeight:700,cursor:"pointer",color:W.navy,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent",flexShrink:0}}>−</button>
+      <div style={{width:110,textAlign:"center",padding:"0 4px",borderLeft:`1px solid ${W.border}`,borderRight:`1px solid ${W.border}`}}>
+        <div style={{fontFamily:W.display,fontWeight:800,fontSize:20,color:W.navy,lineHeight:1.2}}>{fmt(value)}</div>
+        <div style={{fontSize:10,color:W.textL,fontFamily:W.mono}}>{value} min</div>
+      </div>
+      <button onClick={inc} style={{width:52,height:52,border:"none",background:"transparent",fontSize:22,fontWeight:700,cursor:"pointer",color:W.navy,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent",flexShrink:0}}>+</button>
+    </div>
+  );
+}
+
+// ── Institute Wizard (school + coaching modes) ────────────────────────────────
+function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
+  const isEdit    = !!group;
+  const isCoaching = instType === "coaching_12" || instType === "coaching_grad";
+  // coaching_12 suggestions, coaching_grad suggestions
+  const BATCH_SUGGESTIONS = {
+    coaching_12:   ["JEE Main","JEE Advanced","NEET","CLAT","CUET","Foundation","NDA","MED","Dropper"],
+    coaching_grad: ["Banking","SSC CGL","SSC CHSL","UPSC","CAT","GATE","RRB","Defence"],
+  };
+  const suggestions = BATCH_SUGGESTIONS[instType] || [];
+
   const W = { navy:"#1A2F5A",blue:"#1D4ED8",blueL:"#EEF2FF",blueV:"#3B82F6",
     bg:"#F4F6FA",surface:"#fff",border:"#E2E8F0",borderM:"#CBD5E1",
     text:"#0F172A",textM:"#475569",textL:"#94A3B8",
@@ -381,46 +445,35 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
     red:"#DC2626",redL:"#FEF2F2",amber:"#D97706",amberL:"#FFFBEB",
     sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace" };
 
+  // TOTAL steps: school=4 (grades, sections, slots, review), coaching=3 (batches, slots, review)
+  const TOTAL = isCoaching ? 3 : 4;
+  const STEP_LABELS = isCoaching
+    ? ["Batches","Time slots","Review"]
+    : ["Grades","Sections","Time slots","Review"];
+
   const overlayRef = React.useRef(null);
-
   React.useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-
-    const el = overlayRef.current;
-    const vv = window.visualViewport;
-
+    const el = overlayRef.current, vv = window.visualViewport;
     const update = () => {
       if (!el) return;
-      if (vv) {
-        el.style.top    = vv.offsetTop  + "px";
-        el.style.left   = vv.offsetLeft + "px";
-        el.style.width  = vv.width      + "px";
-        el.style.height = vv.height     + "px";
-      } else {
-        el.style.top = "0"; el.style.left = "0";
-        el.style.width = "100%"; el.style.height = "100%";
-      }
+      if (vv) { el.style.top=vv.offsetTop+"px";el.style.left=vv.offsetLeft+"px";el.style.width=vv.width+"px";el.style.height=vv.height+"px"; }
+      else { el.style.top="0";el.style.left="0";el.style.width="100%";el.style.height="100%"; }
     };
-
-    if (vv) {
-      vv.addEventListener("resize", update);
-      vv.addEventListener("scroll", update);
-    }
+    if (vv) { vv.addEventListener("resize",update);vv.addEventListener("scroll",update); }
     update();
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      if (vv) {
-        vv.removeEventListener("resize", update);
-        vv.removeEventListener("scroll", update);
-      }
-    };
-  }, []); // runs once — no state, no re-renders
+    return () => { document.body.style.overflow=prev;if(vv){vv.removeEventListener("resize",update);vv.removeEventListener("scroll",update);} };
+  }, []);
 
   const [step,       setStep]       = React.useState(1);
+  // School-only state
   const [gradeNums,  setGradeNums]  = React.useState(group?.gradeNums||[]);
   const [secText,    setSecText]    = React.useState((group?.sections||[]).join("\n"));
+  // Coaching-only state
+  const [batchText,  setBatchText]  = React.useState((group?.sections||[]).join("\n"));
+  const [groupLabel, setGroupLabel] = React.useState(group?.label||"");
+  // Shared state
   const [durMins,    setDurMins]    = React.useState(group?.durMins||60);
   const [startTimes, setStartTimes] = React.useState(group?.slots?.map(s=>s.start)||[""]);
   const [slotDurs,   setSlotDurs]   = React.useState(group?.slots?.map(s=>s.durMins)||[]);
@@ -429,50 +482,55 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
   const [busy,       setBusy]       = React.useState(false);
   const [error,      setError]      = React.useState("");
 
-  const fmtEnd = (t,m)=>{ if(!t) return ""; const[h,mn]=t.split(":").map(Number); const e=new Date(2000,0,1,h,mn+m); return String(e.getHours()).padStart(2,"0")+":"+String(e.getMinutes()).padStart(2,"0"); };
+  const fmtEnd  = (t,m)=>{ if(!t) return ""; const[h,mn]=t.split(":").map(Number); const e=new Date(2000,0,1,h,mn+m); return String(e.getHours()).padStart(2,"0")+":"+String(e.getMinutes()).padStart(2,"0"); };
   const fmtDisp = t=>{ if(!t) return "--"; const[h,m]=t.split(":").map(Number); return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`; };
-  const toMins = t=>{ if(!t) return 0; const[h,m]=t.split(":").map(Number); return h*60+m; };
-  const sections = secText.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
-  // validSlots: sorted array of {start, dur} — dur falls back to global durMins
-  const validSlots = startTimes
-    .map((s,i)=>({start:s, dur: slotDurs[i]||durMins}))
-    .filter(s=>s.start)
-    .sort((a,b)=>toMins(a.start)-toMins(b.start));
-  const STEP_LABELS = ["Grades","Sections","Time slots","Review"];
+  const toMins  = t=>{ if(!t) return 0; const[h,m]=t.split(":").map(Number); return h*60+m; };
 
-  function quickSelect(type) {
+  const sections    = (isCoaching ? batchText : secText).split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+  const validSlots  = startTimes.map((s,i)=>({start:s,dur:slotDurs[i]||durMins})).filter(s=>s.start).sort((a,b)=>toMins(a.start)-toMins(b.start));
+  const inp = { width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${W.border}`,fontSize:15,fontFamily:W.sans,outline:"none",background:W.bg,color:W.text,boxSizing:"border-box" };
+
+  function quickSelectGrades(type) {
     if(type==="junior") setGradeNums([6,7,8,9,10]);
     else if(type==="senior") setGradeNums([11,12]);
     else setGradeNums([6,7,8,9,10,11,12]);
   }
 
+  function addSuggestion(s) {
+    const lines = batchText.split("\n").map(l=>l.trim()).filter(Boolean);
+    if (!lines.includes(s)) setBatchText([...lines, s].join("\n"));
+  }
+
   function handleSave() {
-    if(!gradeNums.length) { setError("Select at least one grade."); setStep(1); return; }
-    if(!sections.length)  { setError("Add at least one section."); setStep(2); return; }
-    if(!validSlots.length){ setError("Add at least one start time."); setStep(4); return; }
+    if (!isCoaching && !gradeNums.length) { setError("Select at least one grade."); setStep(1); return; }
+    if (!sections.length) { setError("Add at least one "+(isCoaching?"batch":"section")+"."); setStep(1); return; }
+    if (!validSlots.length) { setError("Add at least one start time."); setStep(isCoaching?2:3); return; }
     const slots = validSlots.map(s=>({ start:s.start, end:fmtEnd(s.start,s.dur), durMins:s.dur }));
-    const minG=Math.min(...gradeNums), maxG=Math.max(...gradeNums);
-    const label = gradeNums.length===1 ? `${gradeNums[0]}th` : `${minG}th–${maxG}th`;
-    const saved = { id:group?.id||("grp_"+Date.now()), gradeNums, label, sections, slots, durMins, sectionOverrides:overrides };
+    let label, savedGradeNums;
+    if (isCoaching) {
+      label = groupLabel.trim() || sections.slice(0,2).join(" / ");
+      savedGradeNums = [];
+    } else {
+      const minG=Math.min(...gradeNums), maxG=Math.max(...gradeNums);
+      label = gradeNums.length===1 ? `${gradeNums[0]}th` : `${minG}th–${maxG}th`;
+      savedGradeNums = gradeNums;
+    }
+    const saved = { id:group?.id||("grp_"+Date.now()), gradeNums:savedGradeNums, label, sections, slots, durMins, sectionOverrides:overrides, instType };
     setBusy(true);
     onSave(saved).then(()=>{ setBusy(false); onClose(); }).catch(e=>{ setBusy(false); setError(e.message||"Save failed."); });
   }
 
-  const inp = { width:"100%", padding:"10px 12px", borderRadius:10, border:`1px solid ${W.border}`, fontSize:15, fontFamily:W.sans, outline:"none", background:W.bg, color:W.text, boxSizing:"border-box" };
-
-  // ── Step renderers ──────────────────────────────────────────────────────────
-  function Step1() {
+  // ── STEP: School grades ───────────────────────────────────────────────────
+  function StepSchoolGrades() {
     return (<>
       <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>Which grades share this schedule?</div>
-      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>Select one or more. All selected grades will share the same sections and timetable.</div>
-      {/* Quick shortcuts */}
+      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>Select one or more. All selected grades share the same sections and timetable.</div>
       <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
         {[["⚡ Junior (6–10)","junior"],["⚡ Senior (11–12)","senior"],["All grades","all"]].map(([l,t])=>{
-          const isSel=(t==="junior"&&JSON.stringify(gradeNums)==="[6,7,8,9,10]")||(t==="senior"&&JSON.stringify(gradeNums)==="[11,12]")||(t==="all"&&gradeNums.length===7);
-          return <button key={t} onClick={()=>quickSelect(t)} style={{padding:"8px 16px",borderRadius:20,border:`1.5px solid ${isSel?W.navy:W.border}`,background:isSel?W.navy:"transparent",color:isSel?"#fff":W.textM,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:W.sans,transition:"all 0.15s"}}>{l}</button>;
+          const sel=(t==="junior"&&JSON.stringify(gradeNums)==="[6,7,8,9,10]")||(t==="senior"&&JSON.stringify(gradeNums)==="[11,12]")||(t==="all"&&gradeNums.length===7);
+          return <button key={t} onClick={()=>quickSelectGrades(t)} style={{padding:"8px 16px",borderRadius:20,border:`1.5px solid ${sel?W.navy:W.border}`,background:sel?W.navy:"transparent",color:sel?"#fff":W.textM,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:W.sans}}>{l}</button>;
         })}
       </div>
-      {/* Grade chips */}
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
         {[6,7,8,9,10,11,12].map(g=>{
           const sel=gradeNums.includes(g);
@@ -484,97 +542,104 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
           </div>);
         })}
       </div>
-      {gradeNums.length>0&&(
-        <div style={{background:W.blueL,border:"1px solid #C7D7F5",borderRadius:10,padding:"10px 14px",fontSize:13,color:W.blue,fontWeight:600}}>
-          ✓ {gradeNums.length} grade{gradeNums.length>1?"s":""} selected ({gradeNums.map(g=>g+"th").join(", ")}) — these share the same sections and timetable.
-        </div>
-      )}
+      {gradeNums.length>0&&<div style={{background:W.blueL,border:"1px solid #C7D7F5",borderRadius:10,padding:"10px 14px",fontSize:13,color:W.blue,fontWeight:600}}>✓ {gradeNums.length} grade{gradeNums.length>1?"s":""} selected ({gradeNums.map(g=>g+"th").join(", ")}) — same sections &amp; timetable.</div>}
     </>);
   }
 
-  function Step2() {
+  // ── STEP: School sections ─────────────────────────────────────────────────
+  function StepSchoolSections() {
     return (<>
       <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>What are the section names?</div>
-      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>One per line. Teachers will see these exact names in their class dropdown — be consistent. Use "11th NDA" not "XI NDA".</div>
-      <textarea value={secText} onChange={e=>setSecText(e.target.value)} rows={4}
-        placeholder={"11th NDA\n11th IIT Star\n11th IIT Shikhar\n11th MED\n12th NDA\n12th IIT Star"}
+      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>One per line. Teachers see these exact names. Use "11th NDA" not "XI NDA".</div>
+      <textarea value={secText} onChange={e=>setSecText(e.target.value)} rows={5}
+        placeholder={"11th NDA\n11th IIT Star\n11th MED\n12th NDA"}
         style={{...inp,resize:"vertical",lineHeight:1.9,fontFamily:W.mono,fontSize:14}}/>
       <div style={{fontSize:12,color:W.textL,textAlign:"right",marginTop:5}}>{sections.length} section{sections.length!==1?"s":""}</div>
-      {sections.length>0&&(
-        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8}}>
-          {sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}
+      {sections.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>}
+    </>);
+  }
+
+  // ── STEP: Coaching batches ────────────────────────────────────────────────
+  function StepCoachingBatches() {
+    const usedSuggestions = suggestions.filter(s => sections.includes(s));
+    return (<>
+      <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>Name your batches</div>
+      <div style={{fontSize:14,color:W.textM,marginBottom:14,lineHeight:1.6}}>These are the batch names teachers will see. Tap a suggestion or type your own below.</div>
+
+      {/* Quick suggestion chips */}
+      {suggestions.length>0&&(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:8}}>Quick add</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+            {suggestions.map(s=>{
+              const used=sections.includes(s);
+              return (<button key={s} onClick={()=>used ? setBatchText(batchText.split("\n").filter(l=>l.trim()!==s).join("\n")) : addSuggestion(s)}
+                style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${used?W.navy:W.border}`,background:used?W.navy:"transparent",color:used?"#fff":W.textM,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:W.sans,transition:"all 0.15s",display:"flex",alignItems:"center",gap:5,WebkitTapHighlightColor:"transparent"}}>
+                {used&&<span style={{fontSize:11}}>✓</span>} {s}
+              </button>);
+            })}
+          </div>
         </div>
       )}
-    </>);
-  }
 
-  function Step3() {
-    const DURS=[[45,"45m",""],[60,"1 hr","hour"],[75,"1h 15m",""],[90,"1h 30m",""],[105,"1h 45m",""],[120,"2 hrs",""]];
-    const eg=fmtEnd("09:00",durMins);
-    return (<>
-      <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>How long is each class?</div>
-      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>The default duration. End time auto-fills when a teacher picks a start slot. They can still adjust.</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
-        {DURS.map(([m,v])=>{
-          const sel=durMins===m;
-          return (<div key={m} onClick={()=>setDurMins(m)} style={{padding:"14px 8px",borderRadius:12,border:`2px solid ${sel?W.navy:W.border}`,background:sel?W.navy:W.surface,textAlign:"center",cursor:"pointer",transition:"all 0.15s",WebkitTapHighlightColor:"transparent"}}>
-            <div style={{fontFamily:W.display,fontWeight:800,fontSize:20,color:sel?"#fff":W.text,lineHeight:1}}>{v}</div>
-          </div>);
-        })}
-      </div>
-      <div style={{background:W.blueL,border:"1px solid #C7D7F5",borderRadius:10,padding:"11px 14px",fontSize:13,color:W.blue}}>
-        💡 Example: 9:00 AM start → end auto-fills as <strong>{eg?fmtDisp(eg):"--"}</strong>
+      {/* Free text */}
+      <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:6}}>All batch names (one per line)</div>
+      <textarea value={batchText} onChange={e=>setBatchText(e.target.value)} rows={5}
+        placeholder={"Dronacharya\nLakshya\nArjun\nMorning Batch"}
+        style={{...inp,resize:"vertical",lineHeight:1.9,fontFamily:W.mono,fontSize:14}}/>
+      <div style={{fontSize:12,color:W.textL,textAlign:"right",marginTop:5}}>{sections.length} batch{sections.length!==1?"es":""}</div>
+      {sections.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>}
+
+      {/* Optional group label */}
+      <div style={{marginTop:16}}>
+        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:6}}>Group label <span style={{fontWeight:400,color:W.textL,textTransform:"none"}}>(optional — e.g. "JEE Batches")</span></div>
+        <input value={groupLabel} onChange={e=>setGroupLabel(e.target.value)} placeholder="Auto-generated if left empty"
+          style={{...inp}}/>
       </div>
     </>);
   }
 
-  function Step4() {
-    const DUR_OPTIONS = [30,45,60,75,90,120];
-    // Build sorted preview slots with per-slot dur
-    const previewSlots = startTimes
-      .map((t,i)=>({t, dur: slotDurs[i]||durMins, i}))
-      .filter(s=>s.t)
-      .sort((a,b)=>toMins(a.t)-toMins(b.t));
-    const showTimeline = previewSlots.length>0;
-    const allMins = previewSlots.flatMap(s=>[toMins(s.t), toMins(s.t)+s.dur]);
-    const minT = (showTimeline ? Math.min(...allMins) : 0) - 10;
-    const maxT = (showTimeline ? Math.max(...allMins) : 60) + 10;
-    const range = Math.max(maxT - minT, 1);
-
+  // ── STEP: Time slots (shared) ─────────────────────────────────────────────
+  function StepTimeSlots() {
+    const previewSlots = startTimes.map((t,i)=>({t,dur:slotDurs[i]||durMins,i})).filter(s=>s.t).sort((a,b)=>toMins(a.t)-toMins(b.t));
+    const showTL = previewSlots.length>0;
+    const allMins = previewSlots.flatMap(s=>[toMins(s.t),toMins(s.t)+s.dur]);
+    const minT=(showTL?Math.min(...allMins):0)-10, maxT=(showTL?Math.max(...allMins):60)+10;
+    const range = Math.max(maxT-minT,1);
     return (<>
-      <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:4}}>When do classes start?</div>
-      <div style={{fontSize:13,color:W.textM,marginBottom:14,lineHeight:1.5}}>Set start time and duration per slot. Breaks are shown automatically.</div>
+      <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:4}}>Duration &amp; start times</div>
+      <div style={{fontSize:13,color:W.textM,marginBottom:16,lineHeight:1.5}}>Set the default class length, then add each slot's start time.</div>
+
+      {/* Duration stepper */}
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:10}}>Default duration</div>
+        <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          <DurStepper value={durMins} onChange={m=>{setDurMins(m);setSlotDurs(sd=>sd.map((d,i)=>d&&d!==durMins?d:m));}} />
+          <div style={{fontSize:13,color:W.textM}}>
+            💡 9:00 AM start → <strong style={{color:W.navy}}>{fmtDisp(fmtEnd("09:00",durMins))}</strong>
+          </div>
+        </div>
+      </div>
 
       {/* Slot rows */}
+      <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:8}}>Start times</div>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
         {startTimes.map((t,i)=>{
-          const slotDur = slotDurs[i]||durMins;
-          const isCustomDur = slotDurs[i] && slotDurs[i]!==durMins;
+          const slotDur=slotDurs[i]||durMins;
           return (
             <div key={i} style={{borderRadius:12,border:`1.5px solid ${t?W.blueV:W.border}`,background:W.surface,transition:"border-color 0.15s"}}>
-              {/* Main row */}
               <div style={{display:"flex",alignItems:"center"}}>
                 <input type="time" value={t} onChange={e=>{const n=[...startTimes];n[i]=e.target.value;setStartTimes(n);}}
                   style={{flex:1,border:"none",padding:"12px 14px",fontSize:15,fontFamily:W.mono,fontWeight:600,color:W.text,outline:"none",background:"transparent",cursor:"pointer",minWidth:0}}/>
                 <span style={{color:W.textL,fontSize:12,fontFamily:W.mono,padding:"0 2px",flexShrink:0}}>→</span>
                 <span style={{fontSize:13,fontFamily:W.mono,fontWeight:600,color:W.green,padding:"0 8px",flexShrink:0,minWidth:80,textAlign:"center"}}>{t?fmtDisp(fmtEnd(t,slotDur)):"--"}</span>
-                {startTimes.length>1&&(
-                  <button onClick={()=>{
-                    setStartTimes(n=>n.filter((_,j)=>j!==i));
-                    setSlotDurs(n=>n.filter((_,j)=>j!==i));
-                  }} style={{background:"none",borderLeft:`1px solid ${W.border}`,padding:"0 12px",height:46,cursor:"pointer",color:W.textL,fontSize:16,flexShrink:0,display:"flex",alignItems:"center"}}>✕</button>
-                )}
+                {startTimes.length>1&&<button onClick={()=>{setStartTimes(n=>n.filter((_,j)=>j!==i));setSlotDurs(n=>n.filter((_,j)=>j!==i));}} style={{background:"none",borderLeft:`1px solid ${W.border}`,padding:"0 12px",height:46,cursor:"pointer",color:W.textL,fontSize:16,flexShrink:0,display:"flex",alignItems:"center"}}>✕</button>}
               </div>
-              {/* Duration row */}
-              <div style={{borderTop:`1px solid ${W.border}`,padding:"7px 12px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span style={{fontSize:11,color:W.textL,fontFamily:W.sans,flexShrink:0}}>Duration:</span>
-                {DUR_OPTIONS.map(d=>(
-                  <button key={d} onClick={()=>{const n=[...slotDurs];n[i]=d;setSlotDurs(n);}}
-                    style={{padding:"3px 10px",borderRadius:20,border:`1.5px solid ${slotDur===d?W.navy:W.border}`,background:slotDur===d?W.navy:"transparent",color:slotDur===d?"#fff":W.textM,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:W.sans,transition:"all 0.12s"}}>
-                    {d<60?`${d}m`:d===60?"1h":`${Math.floor(d/60)}h${d%60?d%60+"m":""}`}
-                  </button>
-                ))}
-                {isCustomDur&&<span style={{fontSize:11,color:W.blue,fontFamily:W.sans,marginLeft:2}}>✓ custom</span>}
+              {/* Per-slot duration override */}
+              <div style={{borderTop:`1px solid ${W.border}`,padding:"6px 12px",display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:11,color:W.textL,flexShrink:0}}>Duration:</span>
+                <DurStepper value={slotDur} onChange={m=>{const n=[...slotDurs];n[i]=m;setSlotDurs(n);}} />
+                {slotDur!==durMins&&<span style={{fontSize:11,color:W.blue,fontFamily:W.sans}}>custom</span>}
               </div>
             </div>
           );
@@ -585,35 +650,28 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
         </button>
       </div>
 
-      {/* Visual timeline with breaks */}
-      {showTimeline&&(
+      {/* Timeline preview */}
+      {showTL&&(
         <div style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:12,padding:14,marginBottom:14}}>
           <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:W.textL,marginBottom:10}}>📅 Timetable preview</div>
           <div style={{position:"relative",height:40,background:W.bg,borderRadius:8,border:`1px solid ${W.border}`}}>
             {previewSlots.map((s,si)=>{
-              const sm=toMins(s.t);
-              const left=((sm-minT)/range*100).toFixed(1)+"%";
-              const width=(s.dur/range*100).toFixed(1)+"%";
+              const sm=toMins(s.t),left=((sm-minT)/range*100).toFixed(1)+"%",width=(s.dur/range*100).toFixed(1)+"%";
               return (<div key={si} style={{position:"absolute",top:3,bottom:3,left,width,background:W.greenL,border:"1px solid rgba(27,138,76,0.25)",borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
                 <span style={{fontSize:9,fontWeight:700,fontFamily:W.mono,color:W.green,padding:"0 3px",whiteSpace:"nowrap",overflow:"hidden"}}>{fmtDisp(s.t)}</span>
               </div>);
             })}
-            {/* Break indicators */}
             {previewSlots.slice(0,-1).map((s,si)=>{
-              const nextS = previewSlots[si+1];
-              const endM = toMins(s.t)+s.dur;
-              const breakMins = toMins(nextS.t)-endM;
-              if(breakMins<=0) return null;
-              const left=((endM-minT)/range*100).toFixed(1)+"%";
-              const width=(breakMins/range*100).toFixed(1)+"%";
-              return (<div key={"b"+si} style={{position:"absolute",top:"50%",transform:"translateY(-50%)",left,width,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <span style={{fontSize:8,fontFamily:W.mono,color:W.textL,whiteSpace:"nowrap"}}>{breakMins}m</span>
+              const nxt=previewSlots[si+1],endM=toMins(s.t)+s.dur,brk=toMins(nxt.t)-endM;
+              if(brk<=0) return null;
+              return (<div key={"b"+si} style={{position:"absolute",top:"50%",transform:"translateY(-50%)",left:((endM-minT)/range*100).toFixed(1)+"%",width:(brk/range*100).toFixed(1)+"%",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:8,fontFamily:W.mono,color:W.textL,whiteSpace:"nowrap"}}>{brk}m</span>
               </div>);
             })}
           </div>
           <div style={{display:"flex",justifyContent:"space-between",marginTop:5,fontSize:10,color:W.textL,fontFamily:W.mono}}>
             <span>{fmtDisp(previewSlots[0].t)}</span>
-            <span>{fmtDisp(fmtEnd(previewSlots[previewSlots.length-1].t, previewSlots[previewSlots.length-1].dur))}</span>
+            <span>{fmtDisp(fmtEnd(previewSlots[previewSlots.length-1].t,previewSlots[previewSlots.length-1].dur))}</span>
           </div>
         </div>
       )}
@@ -621,23 +679,23 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
       {/* Per-section overrides */}
       <div style={{background:W.bg,border:`1px solid ${W.border}`,borderRadius:12,padding:14}}>
         <button onClick={()=>setShowOv(o=>!o)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,color:W.blue,fontFamily:W.sans,padding:0,display:"flex",alignItems:"center",gap:6,width:"100%"}}>
-          <span>{showOv?"▼":"▶"}</span> Custom slots for a specific section <span style={{fontWeight:400,color:W.textL}}>(optional)</span>
+          <span>{showOv?"▼":"▶"}</span> Custom slots for a specific {isCoaching?"batch":"section"} <span style={{fontWeight:400,color:W.textL}}>(optional)</span>
         </button>
         {showOv&&(<>
-          <div style={{fontSize:13,color:W.textL,margin:"8px 0"}}>Only fill this if one section has different timings from the rest of the group.</div>
+          <div style={{fontSize:13,color:W.textL,margin:"8px 0"}}>Only fill this if one {isCoaching?"batch":"section"} runs at different times from the rest.</div>
           {sections.map(sec=>{
-            const secSlots=overrides[sec]||[];
+            const ss=overrides[sec]||[];
             return(<div key={sec} style={{background:W.surface,borderRadius:10,padding:"12px 14px",border:`1px solid ${W.border}`,marginBottom:8}}>
               <div style={{fontSize:13,fontWeight:700,fontFamily:W.mono,color:W.text,marginBottom:8}}>{sec}</div>
-              {secSlots.map((slot,si)=>(
+              {ss.map((slot,si)=>(
                 <div key={si} style={{display:"flex",gap:8,marginBottom:6,alignItems:"center"}}>
-                  <input type="time" value={slot.start} onChange={e=>{const s=[...secSlots];s[si]={...s[si],start:e.target.value,end:fmtEnd(e.target.value,durMins)};setOverrides(o=>({...o,[sec]:s}));}}
+                  <input type="time" value={slot.start} onChange={e=>{const s=[...ss];s[si]={...s[si],start:e.target.value,end:fmtEnd(e.target.value,durMins)};setOverrides(o=>({...o,[sec]:s}));}}
                     style={{...inp,marginBottom:0,flex:1,fontSize:14}}/>
                   <span style={{fontSize:12,color:W.textL,fontFamily:W.mono,flexShrink:0}}>{slot.end||"--"}</span>
-                  <button onClick={()=>setOverrides(o=>({...o,[sec]:secSlots.filter((_,j)=>j!==si)}))} style={{background:"none",border:"none",cursor:"pointer",color:W.textL,fontSize:16}}>✕</button>
+                  <button onClick={()=>setOverrides(o=>({...o,[sec]:ss.filter((_,j)=>j!==si)}))} style={{background:"none",border:"none",cursor:"pointer",color:W.textL,fontSize:16}}>✕</button>
                 </div>
               ))}
-              <button onClick={()=>setOverrides(o=>({...o,[sec]:[...secSlots,{start:"",end:"",durMins}]}))} style={{background:"none",border:"none",cursor:"pointer",color:W.blue,fontSize:12,fontFamily:W.sans,fontWeight:600,padding:0}}>+ Add time for {sec}</button>
+              <button onClick={()=>setOverrides(o=>({...o,[sec]:[...ss,{start:"",end:"",durMins}]}))} style={{background:"none",border:"none",cursor:"pointer",color:W.blue,fontSize:12,fontFamily:W.sans,fontWeight:600,padding:0}}>+ Add time for {sec}</button>
             </div>);
           })}
         </>)}
@@ -645,15 +703,21 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
     </>);
   }
 
-  function Step5() {
+  // ── STEP: Review (shared) ─────────────────────────────────────────────────
+  function StepReview() {
+    const DURLABELS={30:"30 min",35:"35 min",40:"40 min",45:"45 min",50:"50 min",55:"55 min",60:"1 hour",65:"1h 5m",70:"1h 10m",75:"1h 15m",80:"1h 20m",85:"1h 25m",90:"1h 30m",95:"1h 35m",100:"1h 40m",105:"1h 45m",110:"1h 50m",115:"1h 55m",120:"2 hours"};
+    const rows = isCoaching ? [
+      {icon:"📚",bg:"#EEF2FF",label:"Batches",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>,s:1},
+      {icon:"🕐",bg:W.greenL,label:"Time slots",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{validSlots.map((s,i)=><span key={i} style={{background:W.greenL,color:W.green,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{fmtDisp(s.start)}–{fmtDisp(fmtEnd(s.start,s.dur))}</span>)}</div>,s:2},
+    ] : [
+      {icon:"🎓",bg:"#EEF2FF",label:"Grades",val:<span>{gradeNums.map(g=>g+"th").join(", ")||"None"}</span>,s:1},
+      {icon:"📚",bg:W.greenL,label:"Sections",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>,s:2},
+      {icon:"🕐",bg:W.greenL,label:"Time slots",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{validSlots.map((s,i)=><span key={i} style={{background:W.greenL,color:W.green,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{fmtDisp(s.start)}–{fmtDisp(fmtEnd(s.start,s.dur))}</span>)}</div>,s:3},
+    ];
     return (<>
       <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>Looks good?</div>
-      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>Review everything before saving. Tap Edit to go back to any section.</div>
-      {[
-        {icon:"🎓",bg:"#EEF2FF",label:"Grades",val:<span>{gradeNums.map(g=>g+"th").join(", ")||"None"}</span>,s:1},
-        {icon:"📚",bg:W.greenL,label:"Sections",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>,s:2},
-        {icon:"🕐",bg:W.greenL,label:"Time slots",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{validSlots.map((s,i)=><span key={i} style={{background:W.greenL,color:W.green,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{fmtDisp(s.start)}–{fmtDisp(fmtEnd(s.start,s.dur))}</span>)}</div>,s:3},
-      ].map(({icon,bg,label,val,s})=>(
+      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>Review before saving. Tap Edit to go back to any section.</div>
+      {rows.map(({icon,bg,label,val,s})=>(
         <div key={label} style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:12,marginBottom:8,padding:"14px 16px",display:"flex",alignItems:"flex-start",gap:12}}>
           <div style={{width:36,height:36,borderRadius:10,background:bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{icon}</div>
           <div style={{flex:1,minWidth:0}}>
@@ -663,25 +727,24 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
           <button onClick={()=>setStep(s)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:W.blue,fontWeight:600,fontFamily:W.sans,flexShrink:0,padding:"2px 0"}}>Edit</button>
         </div>
       ))}
-      {isEdit&&<div style={{background:W.amberL,border:"1px solid #FCD34D",borderRadius:10,padding:"10px 14px",fontSize:13,color:W.amber,marginTop:4}}>⚠ Saving will update sections and slots visible to all teachers at this institute.</div>}
+      {isEdit&&<div style={{background:W.amberL,border:"1px solid #FCD34D",borderRadius:10,padding:"10px 14px",fontSize:13,color:W.amber,marginTop:4}}>⚠ Saving updates sections and slots visible to all teachers at this institute.</div>}
     </>);
   }
 
-  const STEPS=[null,Step1,Step2,Step4,Step5];
-  const StepComponent=STEPS[step];
+  // Map step number → component
+  const STEPS_COACHING = [null, StepCoachingBatches, StepTimeSlots, StepReview];
+  const STEPS_SCHOOL   = [null, StepSchoolGrades, StepSchoolSections, StepTimeSlots, StepReview];
+  const STEPS = isCoaching ? STEPS_COACHING : STEPS_SCHOOL;
+  const StepComponent = STEPS[step];
 
   return (
-    <div ref={overlayRef} style={{
-      position:"fixed",
-      /* top/left/width/height intentionally absent — set by visualViewport JS handler */
-      background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"stretch",
-      justifyContent:"center",padding:12,backdropFilter:"blur(6px)",boxSizing:"border-box"}}>
+    <div ref={overlayRef} style={{position:"fixed",background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"stretch",justifyContent:"center",padding:12,backdropFilter:"blur(6px)",boxSizing:"border-box"}}>
       <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:520,height:"100%",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
 
         {/* Header */}
         <div style={{padding:"12px 16px 0",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-            <div style={{fontSize:12,color:W.textL,fontFamily:W.mono}}>{inst}</div>
+            <div style={{fontSize:12,color:W.textL,fontFamily:W.mono}}>{inst} · {isCoaching?"Coaching":"School"}</div>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:W.textL,lineHeight:1}}>✕</button>
           </div>
           {/* Progress dots */}
@@ -708,7 +771,7 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
         {/* Content */}
         <div style={{flex:1,overflowY:"auto",padding:"0 16px 12px",minHeight:0}}>
           {error&&<div style={{background:W.redL,color:W.red,borderRadius:9,padding:"8px 12px",fontSize:13,marginBottom:14}}>{error}</div>}
-          {StepComponent()}
+          {StepComponent&&<StepComponent/>}
         </div>
 
         {/* Nav */}
@@ -718,18 +781,17 @@ function GradeGroupModal({ inst, group, onSave, onClose }) {
             :<button onClick={onClose} style={{padding:"13px 20px",borderRadius:12,border:`1.5px solid ${W.border}`,background:W.surface,fontSize:15,fontWeight:600,cursor:"pointer",color:W.textM,fontFamily:W.sans,flexShrink:0}}>Cancel</button>
           }
           {step<TOTAL
-            ?<button onClick={()=>{setError("");setStep(s=>s+1);}} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:W.navy,fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:W.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                Next <span>→</span>
-              </button>
+            ?<button onClick={()=>{setError("");setStep(s=>s+1);}} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:W.navy,fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:W.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>Next →</button>
             :<button onClick={handleSave} disabled={busy} style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:W.green,fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:W.sans,opacity:busy?0.7:1}}>
-                {busy?"Saving…":isEdit?"Save Changes":"✓ Save Grade Group"}
-              </button>
+              {busy?"Saving…":isEdit?"Save Changes":"✓ Save"}
+            </button>
           }
         </div>
       </div>
     </div>
   );
 }
+
 
 
 function AdminPanelInner({user}){
@@ -774,6 +836,7 @@ function AdminPanelInner({user}){
   const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
   const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
+  const [typePicker, setTypePicker]         = useState(null); // null | instituteName (asking type)
   const [instMenuOpen, setInstMenuOpen]     = useState(null); // inst name whose ⋯ menu is open
 
   useEffect(()=>{
@@ -1566,6 +1629,7 @@ function AdminPanelInner({user}){
         {grpModal&&(
           <GradeGroupModal
             inst={grpModal.inst}
+            instType={instSectionsAll[grpModal.inst]?.type||"school"}
             group={grpModal.mode==="edit"?grpModal.group:null}
             onSave={async(savedGroup)=>{
               const existing=instSectionsAll[grpModal.inst]?.gradeGroups||[];
@@ -1577,19 +1641,53 @@ function AdminPanelInner({user}){
           />
         )}
 
+        {/* Type picker modal */}
+        {typePicker&&(
+          <InstTypePicker
+            inst={typePicker}
+            onSelect={async(type)=>{
+              await saveInstituteType(typePicker,type);
+              setInstSectionsAll(a=>({...a,[typePicker]:{...(a[typePicker]||{}),type}}));
+              setTypePicker(null);
+            }}
+            onClose={()=>setTypePicker(null)}
+          />
+        )}
+
         {/* Institute detail drill-down (replaces tab content when active) */}
         {instDetailView?(()=>{
-          const groups=instSectionsAll[instDetailView]?.gradeGroups||[];
+          const instData=instSectionsAll[instDetailView]||{};
+          const instType=instData.type||null;
+          const groups=instData.gradeGroups||[];
           const fmtSlotPill=s=>{const[h,m]=s.start.split(":").map(Number);const e=s.end?.split(":").map(Number)||[0,0];const f=(hh,mm)=>`${hh%12||12}:${String(mm).padStart(2,"0")} ${hh>=12?"PM":"AM"}`;return`${f(h,m)}–${f(e[0],e[1])}`;};
           return(
             <div>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
                 <button onClick={()=>setInstDetailView(null)} style={{...pill(G.bg,G.textS,G.borderM),fontSize:14}}>← Back</button>
-                <div>
+                <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display}}>{instDetailView}</div>
-                  <div style={{fontSize:13,color:G.textM}}>Sections &amp; timetable management</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:2}}>
+                    {instType
+                      ?<span style={{fontSize:12,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",background:instType==="school"?"#EEF2FF":instType==="coaching_12"?"#ECFDF5":"#FFFBEB",color:instType==="school"?G.blue:instType==="coaching_12"?G.green:"#D97706",borderRadius:20,padding:"3px 10px"}}>
+                        {instType==="school"?"🏫 School":instType==="coaching_12"?"📐 After 12th":"🏛 After Graduation"}
+                      </span>
+                      :<span style={{fontSize:12,color:G.textL}}>No type set</span>
+                    }
+                    <button onClick={()=>setTypePicker(instDetailView)} style={{background:"none",border:"none",fontSize:12,color:G.blue,cursor:"pointer",fontFamily:G.sans,fontWeight:600,padding:0}}>Change →</button>
+                  </div>
                 </div>
               </div>
+              {/* If no type set, prompt admin to set one */}
+              {!instType&&(
+                <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:12,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+                  <span style={{fontSize:22}}>⚠</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:15,fontWeight:700,color:"#92400E",marginBottom:2}}>Institute type not set</div>
+                    <div style={{fontSize:13,color:"#B45309"}}>Please set the type first so the grade/batch wizard shows the right options.</div>
+                  </div>
+                  <button onClick={()=>setTypePicker(instDetailView)} style={{background:"#1A2F5A",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:G.sans,flexShrink:0}}>Set Type</button>
+                </div>
+              )}
               {groups.length===0&&(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"36px 20px",textAlign:"center",marginBottom:16}}>
                   <div style={{fontSize:32,marginBottom:10}}>📚</div>
@@ -1692,6 +1790,12 @@ function AdminPanelInner({user}){
                   <div key={inst}
                     style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`}}>
                     {/* Row 1: Institute name — full width */}
+                    {/* Institute type badge */}
+                    {instSectionsAll[inst]?.type&&(
+                      <span style={{fontSize:11,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",background:instSectionsAll[inst].type==="school"?"#EEF2FF":instSectionsAll[inst].type==="coaching_12"?"#ECFDF5":"#FFFBEB",color:instSectionsAll[inst].type==="school"?G.blue:instSectionsAll[inst].type==="coaching_12"?G.green:"#D97706",borderRadius:20,padding:"2px 9px",marginBottom:6,display:"inline-block"}}>
+                        {instSectionsAll[inst].type==="school"?"🏫 School":instSectionsAll[inst].type==="coaching_12"?"📐 After 12th":"🏛 After Graduation"}
+                      </span>
+                    )}
                     {renamingInst===inst?(
                       <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
                         <input value={renameInstVal} onChange={e=>setRenameInstVal(e.target.value)}
@@ -1720,7 +1824,11 @@ function AdminPanelInner({user}){
                         )}
                       </div>
                       <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center",position:"relative"}}>
-                        <button onClick={()=>setInstDetailView(inst)}
+                        <button onClick={()=>{
+                            setInstDetailView(inst);
+                            // If no type set yet, open the type picker immediately
+                            if(!(instSectionsAll[inst]?.type)) setTypePicker(inst);
+                          }}
                           style={{background:G.blueL,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap"}}>
                           📚 Manage Sections →
                         </button>
