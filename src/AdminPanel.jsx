@@ -992,6 +992,7 @@ function AdminPanelInner({user}){
   const [tab,         setTab]         = useState("class"); // class | teacher
   const [selP2,       setSelP2]       = useState(null); // { type, key } teacher uid OR class raw name
   const [selP3,       setSelP3]       = useState(null); // { teacherUid, classRaw }
+  const [fullView,    setFullView]    = useState(null); // null | {kind:"teacher"|"class", ...}
   const [period,      setPeriod]      = useState("today");
   const [mobileStep,  setMobileStep]  = useState(0);
   const [exportOpen,   setExportOpen]   = useState(false);
@@ -1022,6 +1023,8 @@ function AdminPanelInner({user}){
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
   const [typePicker, setTypePicker]         = useState(null); // null | instituteName (asking type)
   const [instMenuOpen, setInstMenuOpen]     = useState(null); // inst name whose ⋯ menu is open
+  const [instSearch, setInstSearch]         = useState("");
+  const [p2Search, setP2Search]             = useState("");
 
   useEffect(()=>{
     const check=()=>setIsMobile(window.innerWidth<768);
@@ -1191,6 +1194,35 @@ function AdminPanelInner({user}){
     return Object.values(map).map(c=>({...c,subjects:[...c.subjects].sort()})).sort((a,b)=>classNum(b.display)-classNum(a.display));
   },[selInst,teachers,fullData]);
 
+  const instSearchKey = instSearch.trim().toLowerCase();
+  const p2SearchKey = p2Search.trim().toLowerCase();
+
+  const visibleInstitutes = useMemo(()=>{
+    if(!instSearchKey) return institutes;
+    return institutes.filter(inst=>(inst||"").toLowerCase().includes(instSearchKey));
+  },[institutes,instSearchKey]);
+
+  const visibleInstTeachers = useMemo(()=>{
+    if(!p2SearchKey) return instTeachers;
+    return instTeachers.filter(t=>{
+      const name = (fullData[t.uid]?.profile?.name || t.name || "").toLowerCase();
+      const otherInsts = (t.institutes||[]).join(" ").toLowerCase();
+      return name.includes(p2SearchKey) || otherInsts.includes(p2SearchKey);
+    });
+  },[instTeachers,fullData,p2SearchKey]);
+
+  const visibleInstClasses = useMemo(()=>{
+    if(!p2SearchKey) return instClasses;
+    return instClasses.filter(cls=>{
+      const haystack = [
+        cls.display,
+        ...(cls.subjects||[]),
+        ...((cls.teachers||[]).map(t=>t.name||"")),
+      ].join(" ").toLowerCase();
+      return haystack.includes(p2SearchKey);
+    });
+  },[instClasses,p2SearchKey]);
+
   // ── P3 content based on tab + P2 selection ────────────────────────────────
   const p3Items=useMemo(()=>{
     if(!selP2) return [];
@@ -1264,6 +1296,7 @@ function AdminPanelInner({user}){
   const isAllTeachersSelected = tab==="teacher" && selP2===ALL_TEACHERS_KEY;
   const isAggregateSelection = isAllClassesSelected || isAllTeachersSelected;
   const aggregateTitle = isAllClassesSelected ? "All Classes" : isAllTeachersSelected ? "All Teachers" : "";
+  const isScopedFullView = !!fullView;
   const periodDays = period==="today"?1:period==="week"?7:period==="month"?30:null;
 
   const collectEntriesForTeacherClass = (teacherUid, teacherName, classId, className, subject, instituteName = selInst, days = periodDays) => {
@@ -1286,6 +1319,78 @@ function AdminPanelInner({user}){
       institute: instituteName || selInst,
     }));
   };
+
+  const fullViewEntries = useMemo(()=>{
+    if(!fullView || !selInst) return [];
+    if(fullView.kind==="teacher"){
+      const d = fullData[fullView.teacherUid];
+      const teacherName = fullView.teacherName || selectedTeacherName(fullView.teacherUid);
+      if(!d) return [];
+      return (d.classes||[])
+        .filter(c=>sameInstituteName(c.institute, selInst))
+        .flatMap(c=>collectEntriesForTeacherClass(
+          fullView.teacherUid,
+          teacherName,
+          c.id,
+          normaliseName(c.section),
+          c.subject,
+          c.institute || selInst,
+          periodDays
+        ))
+        .sort(compareAdminPanelEntries);
+    }
+    if(fullView.kind==="class"){
+      const cls = instClasses.find(c=>c.raw===fullView.classRaw);
+      if(!cls) return [];
+      return (cls.teachers||[])
+        .flatMap(t=>collectEntriesForTeacherClass(
+          t.uid,
+          t.name,
+          t.classId,
+          cls.display,
+          t.subject || cls.subjects?.[0] || "",
+          selInst,
+          periodDays
+        ))
+        .sort(compareAdminPanelEntries);
+    }
+    return [];
+  },[fullView,selInst,fullData,instClasses,periodDays]);
+
+  const fullViewGroups = useMemo(()=>{
+    if(!fullView) return [];
+    return groupAdminPanelEntries(fullViewEntries);
+  },[fullView,fullViewEntries]);
+
+  const fullViewLoading = useMemo(()=>{
+    if(!fullView) return false;
+    if(fullView.kind==="teacher"){
+      return !fullData[fullView.teacherUid];
+    }
+    if(fullView.kind==="class"){
+      const cls = instClasses.find(c=>c.raw===fullView.classRaw);
+      if(!cls) return false;
+      return (cls.teachers||[]).some(t=>!fullData[t.uid]);
+    }
+    return false;
+  },[fullView,fullData,instClasses]);
+
+  const fullViewTitle = useMemo(()=>{
+    if(!fullView) return "";
+    if(fullView.kind==="teacher") return `${fullView.teacherName || selectedTeacherName(fullView.teacherUid)} — All Classes`;
+    if(fullView.kind==="class"){
+      const cls = instClasses.find(c=>c.raw===fullView.classRaw);
+      return `${cls?.display || normaliseName(fullView.classRaw)} — All Teachers`;
+    }
+    return "";
+  },[fullView,instClasses,fullData,teachers]);
+
+  const fullViewSubtitle = useMemo(()=>{
+    if(!fullView) return "";
+    if(fullView.kind==="teacher") return `${selInst} · grouped by class, chronological inside each class`;
+    if(fullView.kind==="class") return `${selInst} · all teachers merged into one class timeline`;
+    return "";
+  },[fullView,selInst]);
 
   const aggregateEntries=useMemo(()=>{
     if(!isAggregateSelection || !selInst) return [];
@@ -1319,6 +1424,116 @@ function AdminPanelInner({user}){
     return instTeachers.filter(t=>!!fullData[t.uid]).length;
   },[selInst,instTeachers,fullData]);
   const aggregateLoading = isAggregateSelection && selInst && aggregateLoadedTeacherCount < instTeachers.length;
+
+  const selectedInstituteEntryCount = useMemo(()=>{
+    if(!selInst) return 0;
+    return teachers.reduce((sum,t)=>{
+      const d = fullData[t.uid];
+      if(!d) return sum;
+      return sum + (d.classes||[])
+        .filter(c=>sameInstituteName(c.institute, selInst))
+        .reduce((classSum,c)=>classSum + Object.values((d.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
+    },0);
+  },[selInst,teachers,fullData]);
+
+  const selectedInstituteTodayCount = useMemo(()=>{
+    if(!selInst) return 0;
+    const today = todayKey();
+    return teachers.reduce((sum,t)=>{
+      const d = fullData[t.uid];
+      if(!d) return sum;
+      return sum + (d.classes||[])
+        .filter(c=>sameInstituteName(c.institute, selInst))
+        .reduce((classSum,c)=>classSum + (((d.notes||{})[c.id]||{})[today]?.length || 0),0);
+    },0);
+  },[selInst,teachers,fullData]);
+
+  const instituteTopClasses = useMemo(()=>{
+    return instClasses
+      .map(cls=>({
+        ...cls,
+        totalEntries:(cls.teachers||[]).reduce((sum,t)=>sum + (t.entryCount||0),0),
+      }))
+      .sort((a,b)=>b.totalEntries-a.totalEntries || classNum(b.display)-classNum(a.display))
+      .slice(0,4);
+  },[instClasses]);
+
+  const instituteTopTeachers = useMemo(()=>{
+    if(!selInst) return [];
+    return instTeachers
+      .map(t=>{
+        const d = fullData[t.uid];
+        const teacherName = d?.profile?.name || t.name || "Teacher";
+        const classes = (d?.classes||[]).filter(c=>sameInstituteName(c.institute, selInst));
+        const entryCount = classes.reduce((sum,c)=>sum + Object.values((d?.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
+        return { uid:t.uid, name:teacherName, classCount:classes.length, entryCount };
+      })
+      .sort((a,b)=>b.entryCount-a.entryCount || b.classCount-a.classCount || exportTextSorter.compare(a.name,b.name))
+      .slice(0,4);
+  },[selInst,instTeachers,fullData]);
+
+  const overviewRecentEntries = useMemo(()=>{
+    const items = [];
+    teachers.forEach(t=>{
+      const d = fullData[t.uid];
+      if(!d) return;
+      const teacherName = d.profile?.name || t.name || "Teacher";
+      (d.classes||[])
+        .filter(c=>!selInst || sameInstituteName(c.institute, selInst))
+        .forEach(c=>{
+          const className = normaliseName(c.section);
+          Object.entries((d.notes||{})[c.id]||{}).forEach(([dk, arr])=>{
+            if(!Array.isArray(arr)) return;
+            arr.forEach(entry=>{
+              if(!entry) return;
+              items.push({
+                id: entry.id || `${t.uid}_${c.id}_${dk}`,
+                dateKey: dk,
+                timeStart: entry.timeStart || "",
+                title: entry.title || "Untitled entry",
+                teacherName,
+                className,
+                subject: c.subject || "",
+                institute: c.institute || "",
+                status: entry.status || "",
+              });
+            });
+          });
+        });
+    });
+    return items
+      .sort((a,b)=>{
+        if((b.dateKey||"") !== (a.dateKey||"")) return (b.dateKey||"").localeCompare(a.dateKey||"");
+        return (b.timeStart||"").localeCompare(a.timeStart||"");
+      })
+      .slice(0,6);
+  },[teachers,fullData,selInst]);
+
+  const globalInstituteHighlights = useMemo(()=>{
+    return institutes
+      .map(inst=>{
+        const teacherCount = teachers.filter(t=>{
+          const idxInsts=t.institutes||[];
+          if(idxInsts.includes(inst)) return true;
+          return (fullData[t.uid]?.classes||[]).some(c=>sameInstituteName(c.institute,inst));
+        }).length;
+        const classCount = teachers.reduce((sum,t)=>{
+          const d = fullData[t.uid];
+          if(!d) return sum;
+          return sum + (d.classes||[]).filter(c=>sameInstituteName(c.institute,inst)).length;
+        },0);
+        const entryCount = teachers.reduce((sum,t)=>{
+          const d = fullData[t.uid];
+          if(!d) return sum;
+          return sum + (d.classes||[])
+            .filter(c=>sameInstituteName(c.institute,inst))
+            .reduce((classSum,c)=>classSum + Object.values((d.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
+        },0);
+        return { inst, teacherCount, classCount, entryCount };
+      })
+      .sort((a,b)=>b.entryCount-a.entryCount || b.classCount-a.classCount || exportTextSorter.compare(a.inst,b.inst))
+      .slice(0,5);
+  },[institutes,teachers,fullData]);
 
   // ── Role actions ──────────────────────────────────────────────────────────
   // Save a new global institute to Firestore config
@@ -1533,13 +1748,19 @@ function AdminPanelInner({user}){
     });
   };
 
-  const clearDrilldown = () => { setSelP2(null); setSelP3(null); };
-  const resetNav=(newTab)=>{clearDrilldown();if(newTab)setTab(newTab);setMobileStep(s=>Math.min(s,1));};
+  const clearDrilldown = () => { setSelP2(null); setSelP3(null); setFullView(null); };
+  const resetNav=(newTab)=>{
+    clearDrilldown();
+    setP2Search("");
+    if(newTab)setTab(newTab);
+    setMobileStep(s=>Math.min(s,1));
+  };
 
   // When institute is selected, pre-load its teachers in background
   const onSelectInstitute = (inst) => {
     setSelInst(inst);
     clearDrilldown();
+    setP2Search("");
     setMobileStep(1);
     // Case-insensitive — institute names in the teacher index may differ in casing
     const _norm = s => (s || "").trim().toLowerCase();
@@ -1795,6 +2016,7 @@ function AdminPanelInner({user}){
   const openTeacherSelection = (uid) => {
     setSelP2(uid);
     setSelP3(null);
+    setFullView(null);
     setMobileStep(2);
     ensureFullData(uid);
   };
@@ -1802,16 +2024,54 @@ function AdminPanelInner({user}){
   const openClassSelection = (raw) => {
     setSelP2(raw);
     setSelP3(null);
+    setFullView(null);
     setMobileStep(2);
     instClasses.find(c=>c.raw===raw)?.teachers?.forEach(t=>ensureFullData(t.uid));
+  };
+
+  const openScopedFullView = () => {
+    if(!selP2) return;
+    if(tab==="teacher"){
+      setFullView({ kind:"teacher", teacherUid:selP2, teacherName:selectedTeacherName(selP2) });
+      ensureFullData(selP2);
+    } else {
+      setFullView({ kind:"class", classRaw:selP2 });
+      instClasses.find(c=>c.raw===selP2)?.teachers?.forEach(t=>ensureFullData(t.uid));
+    }
+    setSelP3(null);
+    setMobileStep(3);
   };
 
   const openAggregateView = (kind) => {
     setSelP2(kind==="class" ? ALL_CLASSES_KEY : ALL_TEACHERS_KEY);
     setSelP3(null);
+    setFullView(null);
     setMobileStep(3);
     instTeachers.forEach(t=>ensureFullData(t.uid));
   };
+
+  const renderSearchInput = (value, onChange, placeholder, compact = false) => (
+    <div style={{position:"relative",marginTop:compact?0:10}}>
+      <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:12,color:G.textL,pointerEvents:"none"}}>⌕</span>
+      <input
+        value={value}
+        onChange={e=>onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width:"100%",
+          height:compact?36:38,
+          borderRadius:10,
+          border:`1px solid ${G.border}`,
+          background:G.bg,
+          padding:"0 12px 0 32px",
+          fontSize:13,
+          color:G.text,
+          outline:"none",
+          fontFamily:G.sans,
+        }}
+      />
+    </div>
+  );
 
   const renderAggregateEntries = (mobile = false) => {
     if (aggregateLoading && aggregateEntries.length===0) {
@@ -1905,6 +2165,222 @@ function AdminPanelInner({user}){
           </div>
         ))}
       </>
+    );
+  };
+
+  const renderFullViewEntries = (mobile = false) => {
+    if (fullViewLoading && fullViewEntries.length===0) {
+      return (
+        <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:mobile?"18px 16px":"20px 18px",textAlign:"center"}}>
+          <div style={{width:24,height:24,borderRadius:"50%",border:`2px solid ${G.blueL}`,borderTopColor:G.blue,animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}/>
+          <div style={{fontSize:15,fontWeight:700,color:G.textM,fontFamily:G.display}}>Loading full view…</div>
+          <div style={{fontSize:13,color:G.textL,fontFamily:G.sans,marginTop:4}}>
+            Pulling the latest entries for {fullView?.kind==="teacher" ? selectedTeacherName(fullView.teacherUid) : fullViewTitle.replace(" — All Teachers","")}
+          </div>
+        </div>
+      );
+    }
+
+    if (!fullViewLoading && fullViewEntries.length===0) {
+      return (
+        <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:mobile?"18px 16px":"20px 18px",textAlign:"center"}}>
+          <div style={{fontSize:15,fontWeight:700,color:G.textM,fontFamily:G.display}}>No entries for this period</div>
+          <div style={{fontSize:13,color:G.textL,fontFamily:G.sans,marginTop:4}}>
+            {fullViewTitle} is ready, but nothing was uploaded in the selected range.
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {fullViewGroups.map(group=>(
+          <div key={group.className} style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,marginBottom:mobile?14:16,overflow:"hidden",boxShadow:G.shadowSm}}>
+            <div style={{padding:mobile?"13px 14px":"14px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:mobile?17:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{group.className}</div>
+                  <div style={{fontSize:13,color:G.textM,marginTop:3,lineHeight:1.5}}>
+                    {group.subjectList.length?`Subjects: ${group.subjectList.join(", ")}`:"Subjects: —"}
+                  </div>
+                  <div style={{fontSize:13,color:G.textL,marginTop:2,lineHeight:1.5}}>
+                    Teachers: {group.teacherList.join(", ") || "—"}
+                  </div>
+                </div>
+                <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
+                  {group.entries.length} {group.entries.length===1?"entry":"entries"}
+                </span>
+              </div>
+            </div>
+            <div style={{padding:mobile?"10px 10px 2px":"10px 12px 4px"}}>
+              {group.entries.map((entry, idx)=>{
+                const tag = TAG_STYLES[entry.tag] || TAG_STYLES.note;
+                const status = STATUS_STYLES[entry.status] || null;
+                return(
+                  <div key={entry.id || `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`} style={{border:`1px solid ${G.border}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+                    <div style={{height:3,background:tag.bg}}/>
+                    <div style={{padding:mobile?"11px 12px":"11px 13px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                            <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"3px 9px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:600}}>
+                              {formatExportPdfDate(entry.dateKey)}
+                            </span>
+                            {(entry.timeStart || entry.timeEnd)&&(
+                              <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"3px 9px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:600}}>
+                                {formatExportPdfTime(entry.timeStart, entry.timeEnd)}
+                              </span>
+                            )}
+                            {status&&<span style={{background:status.bg,color:status.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontWeight:700}}>{status.label}</span>}
+                            <span style={{background:tag.bg,color:tag.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
+                          </div>
+                          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{entry.title || "Untitled entry"}</div>
+                          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:4}}>
+                            {entry.teacherName} · {entry.subject || "No subject"}
+                          </div>
+                          {entry.body&&<div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:7,whiteSpace:"pre-wrap"}}>{entry.body}</div>}
+                        </div>
+                        <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.classId, entry.dateKey, entry.id, entry.title)}
+                          style={{width:28,height:28,borderRadius:8,background:G.redL,border:"none",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          title="Delete entry">
+                          🗑
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </>
+    );
+  };
+
+  const renderOverviewPanel = () => {
+    const summaryCard = (label, value, accent = G.blue) => (
+      <div key={label} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 14px",boxShadow:G.shadowSm}}>
+        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1.1}}>{label}</div>
+        <div style={{fontSize:24,fontWeight:800,color:accent,fontFamily:G.display,marginTop:4,lineHeight:1}}>{value}</div>
+      </div>
+    );
+
+    if(!selInst){
+      return (
+        <div style={{display:"grid",gap:14}}>
+          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"18px 18px 16px",boxShadow:G.shadowSm}}>
+            <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display}}>Admin Overview</div>
+            <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:6,maxWidth:620}}>
+              Start with an institute on the left. From there, panel 2 narrows by class or teacher, panel 3 lets you either drill down or open a full grouped view, and panel 4 becomes the working space.
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12}}>
+            {[
+              summaryCard("Institutes", institutes.length),
+              summaryCard("Teachers", teachers.length),
+              summaryCard("Classes", totalClasses),
+              summaryCard("Entries", totalEntries),
+            ]}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.3fr) minmax(0,1fr)",gap:14}}>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Most active institutes</div>
+              {globalInstituteHighlights.length===0 ? <div style={{fontSize:14,color:G.textL}}>No activity yet.</div> : globalInstituteHighlights.map(item=>(
+                <div key={item.inst} style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center",padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:G.text}}>{item.inst}</div>
+                    <div style={{fontSize:12,color:G.textL,marginTop:2}}>{item.classCount} classes · {item.teacherCount} teachers</div>
+                  </div>
+                  <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>{item.entryCount} entries</span>
+                </div>
+              ))}
+            </div>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Recent activity</div>
+              {overviewRecentEntries.length===0 ? <div style={{fontSize:14,color:G.textL}}>Recent activity will appear here once entries are uploaded.</div> : overviewRecentEntries.map(item=>(
+                <div key={item.id} style={{padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
+                  <div style={{fontSize:13,fontWeight:700,color:G.text}}>{item.title}</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:3}}>{item.institute} · {item.className} · {item.teacherName}</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:2,fontFamily:G.mono}}>{formatExportPdfDate(item.dateKey)}{item.timeStart?` · ${fmt12(item.timeStart)}`:""}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if(!selP2){
+      return (
+        <div style={{display:"grid",gap:14}}>
+          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"18px",boxShadow:G.shadowSm}}>
+            <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display}}>{selInst}</div>
+            <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:6,maxWidth:680}}>
+              Choose `By Class` or `By Teacher` in the middle column. Once you pick one item, panel 3 will offer a quick `View Full` option and the detailed drilldown list below it.
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12}}>
+            {[
+              summaryCard("Classes", instClasses.length),
+              summaryCard("Teachers", instTeachers.length),
+              summaryCard("Entries", selectedInstituteEntryCount),
+              summaryCard("Today", selectedInstituteTodayCount, "#1B8A4C"),
+            ]}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr)",gap:14}}>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Top classes</div>
+              {instituteTopClasses.length===0 ? <div style={{fontSize:14,color:G.textL}}>No classes loaded yet.</div> : instituteTopClasses.map(item=>(
+                <div key={item.raw} style={{padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
+                  <div style={{fontSize:14,fontWeight:700,color:G.text}}>{item.display}</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:2}}>{item.subjects.join(", ") || "No subjects yet"}</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:2,fontFamily:G.mono}}>{item.totalEntries} entries · {item.teachers.length} teachers</div>
+                </div>
+              ))}
+            </div>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Top teachers</div>
+              {instituteTopTeachers.length===0 ? <div style={{fontSize:14,color:G.textL}}>No teacher activity yet.</div> : instituteTopTeachers.map(item=>(
+                <div key={item.uid} style={{padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
+                  <div style={{fontSize:14,fontWeight:700,color:G.text}}>{item.name}</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:2}}>{item.classCount} classes</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:2,fontFamily:G.mono}}>{item.entryCount} entries</div>
+                </div>
+              ))}
+            </div>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Recent activity</div>
+              {overviewRecentEntries.length===0 ? <div style={{fontSize:14,color:G.textL}}>No recent entries inside this institute yet.</div> : overviewRecentEntries.map(item=>(
+                <div key={item.id} style={{padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
+                  <div style={{fontSize:13,fontWeight:700,color:G.text}}>{item.title}</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:3}}>{item.className} · {item.teacherName}</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:2,fontFamily:G.mono}}>{formatExportPdfDate(item.dateKey)}{item.timeStart?` · ${fmt12(item.timeStart)}`:""}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const selectionStats = tab==="teacher"
+      ? { label1:"Classes", value1:p3Items.length, label2:"Entries", value2:p3Items.reduce((sum,item)=>sum + (item.entryCount||0),0) }
+      : (()=>{ const cls = instClasses.find(c=>c.raw===selP2); return { label1:"Teachers", value1:cls?.teachers?.length || 0, label2:"Entries", value2:p3Items.reduce((sum,item)=>sum + (item.entryCount||0),0) }; })();
+
+    return (
+      <div style={{display:"grid",gap:14}}>
+        <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"18px",boxShadow:G.shadowSm}}>
+          <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display}}>{p2Label(selP2)}</div>
+          <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:6,maxWidth:680}}>
+            Use panel 3 to either open the full grouped view for this {tab==="teacher"?"teacher":"class"} or pick one specific {tab==="teacher"?"class":"teacher"} from the list below it.
+          </div>
+          <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}>
+            <button onClick={openScopedFullView} style={{background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>View Full</button>
+            <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"8px 12px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{selectionStats.value1} {selectionStats.label1.toLowerCase()}</span>
+            <span style={{background:G.bg,color:G.textS,border:`1px solid ${G.border}`,borderRadius:999,padding:"8px 12px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{selectionStats.value2} entries</span>
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -2612,10 +3088,10 @@ function AdminPanelInner({user}){
     const MobileBreadcrumb = ()=>(<>{mobileStep>0&&(
         <div style={{background:G.navyS,padding:"8px 14px",display:"flex",alignItems:"center",gap:5,fontSize:12,fontFamily:G.sans,overflow:"hidden"}}>
           <span onClick={()=>{setMobileStep(0);setSelInst(null);resetNav();}} style={{color:"rgba(255,255,255,0.45)",cursor:"pointer",flexShrink:0}}>Inst.</span>
-          {mobileStep>=1&&selInst&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);}} style={{color:mobileStep===1?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===1?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{selInst}</span></>}
-          {mobileStep>=2&&selP2&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{if(isAggregateSelection){setMobileStep(1);setSelP3(null);} else {setMobileStep(2);setSelP3(null);}}} style={{color:mobileStep===2?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===2?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>{p2Label(selP2)}</span></>}
-          {mobileStep>=3&&(selP3||isAggregateSelection)&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span style={{color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:95}}>{selP3?selP3.className:"All entries"}</span></>}
-          <button onClick={()=>setMobileStep(s=>isAggregateSelection&&s===3?1:Math.max(0,s-1))} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",borderRadius:7,padding:"5px 12px",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:12,fontFamily:G.sans,fontWeight:600,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>← Back</button>
+          {mobileStep>=1&&selInst&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);setFullView(null);}} style={{color:mobileStep===1?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===1?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{selInst}</span></>}
+          {mobileStep>=2&&selP2&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{if(isAggregateSelection){setMobileStep(1);setSelP3(null);} else {setMobileStep(2);setSelP3(null);setFullView(null);}}} style={{color:mobileStep===2?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===2?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>{p2Label(selP2)}</span></>}
+          {mobileStep>=3&&(selP3||isAggregateSelection||isScopedFullView)&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span style={{color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>{isScopedFullView?"View Full":selP3?selP3.className:"All entries"}</span></>}
+          <button onClick={()=>setMobileStep(s=>isAggregateSelection&&s===3?1:isScopedFullView&&s===3?2:Math.max(0,s-1))} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",borderRadius:7,padding:"5px 12px",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:12,fontFamily:G.sans,fontWeight:600,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>← Back</button>
         </div>
       )}</>
     );
@@ -2642,7 +3118,9 @@ function AdminPanelInner({user}){
         <MobileStats/>
         <div style={{padding:"12px 14px 40px"}}>
           <div style={{fontSize:11,fontWeight:700,color:G.textL,letterSpacing:1.5,fontFamily:G.sans,textTransform:"uppercase",marginBottom:12}}>Institutes</div>
-          {institutes.map((inst,idx)=>{
+          {renderSearchInput(instSearch,setInstSearch,"Search institutes",true)}
+          <div style={{fontSize:12,color:G.textL,margin:"10px 2px 12px"}}>{visibleInstitutes.length} of {institutes.length} institutes</div>
+          {visibleInstitutes.map((inst,idx)=>{
             const tCount=teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())||(fullData[t.uid]?.classes||[]).some(c=>(c.institute||"").trim()===inst.trim())).length;
             const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())).length;
             const isDragging=dragInst===inst;
@@ -2737,6 +3215,11 @@ function AdminPanelInner({user}){
               </div>
             );
           })}
+          {visibleInstitutes.length===0&&(
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"18px 16px",textAlign:"center",color:G.textM}}>
+              No institutes match your search.
+            </div>
+          )}
         </div>
         <MobileFooter/>
       </div>
@@ -2764,7 +3247,13 @@ function AdminPanelInner({user}){
               </button>
             ))}
           </div>
-          {tab==="class"&&instClasses.map(cls=>(
+          {renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers",true)}
+          <div style={{fontSize:12,color:G.textL,margin:"10px 2px 12px"}}>
+            {tab==="class"
+              ? `${visibleInstClasses.length} of ${instClasses.length} classes`
+              : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
+          </div>
+          {tab==="class"&&visibleInstClasses.map(cls=>(
             <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
               style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div>
@@ -2779,7 +3268,7 @@ function AdminPanelInner({user}){
               <span style={{fontSize:20,color:G.textL}}>›</span>
             </div>
           ))}
-          {tab==="teacher"&&instTeachers.map(t=>{
+          {tab==="teacher"&&visibleInstTeachers.map(t=>{
             const d=fullData[t.uid]||{};
             const name=d.profile?.name||t.name||"?";
             const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
@@ -2796,6 +3285,11 @@ function AdminPanelInner({user}){
           })}
           {instTeachers.length===0&&tab==="teacher"&&loadingUids.size>0&&(
             <div style={{textAlign:"center",padding:"40px 0",color:G.textM}}>Loading teachers…</div>
+          )}
+          {((tab==="class"&&visibleInstClasses.length===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"18px 16px",textAlign:"center",color:G.textM}}>
+              No {tab==="class"?"classes":"teachers"} match your search.
+            </div>
           )}
         </div>
       </div>
@@ -2822,15 +3316,17 @@ function AdminPanelInner({user}){
               </button>
             ):null;})()}
           </div>
-          {isAggregateSelection&&(
-            <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"16px 18px"}}>
-              <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{aggregateTitle}</div>
-              <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:5}}>
-                This institute-wide view opens every entry together, grouped by class and arranged chronologically like the export layout.
+          {selP2&&!isAggregateSelection&&(
+            <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",borderRadius:12,border:`1px solid ${G.border}`,padding:"16px 18px",marginBottom:12}}>
+              <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>
+                {tab==="teacher"?"View all classes together":"View all teachers together"}
               </div>
-              <button onClick={()=>setMobileStep(3)}
-                style={{marginTop:14,display:"inline-flex",alignItems:"center",gap:8,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"10px 14px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:G.sans}}>
-                View all entries →
+              <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:5}}>
+                Open the full grouped view first, or continue below for one specific {tab==="teacher"?"class":"teacher"}.
+              </div>
+              <button onClick={openScopedFullView}
+                style={{marginTop:14,display:"inline-flex",alignItems:"center",gap:8,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"10px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
+                View Full →
               </button>
             </div>
           )}
@@ -2838,6 +3334,7 @@ function AdminPanelInner({user}){
             <div key={cls.classId||cls.uid}
               style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,marginBottom:8,overflow:"hidden"}}>
               <div onClick={()=>{
+                setFullView(null);
                 if(tab==="teacher") setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute||selInst});
                 else { const clsObj=instClasses.find(c=>c.raw===selP2); setSelP3({teacherUid:cls.uid,classId:cls.classId,teacherName:cls.name,className:normaliseName(selP2),subject:clsObj?.subject}); ensureFullData(cls.uid); }
                 setMobileStep(3);
@@ -2865,7 +3362,7 @@ function AdminPanelInner({user}){
     );
 
     // ── STEP 3: Entries ───────────────────────────────────────────────────────
-    if(mobileStep===3&&(selP3||isAggregateSelection)) {
+    if(mobileStep===3&&(selP3||isAggregateSelection||isScopedFullView)) {
       const days=period==="today"?1:period==="week"?7:period==="month"?30:null;
       const classNotes=selP3?((fullData[selP3.teacherUid]?.notes||{})[selP3.classId]||{}):{};
       const entries=selP3?groupByDate(getEntriesInRange(classNotes,days)):[];
@@ -2877,10 +3374,10 @@ function AdminPanelInner({user}){
           <MobileNav/><MobileBreadcrumb/>
           <div style={{padding:"12px 14px 40px"}}>
             <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>
-              {isAggregateSelection ? aggregateTitle : `${selP3.teacherName} — ${selP3.className}`}
+              {isScopedFullView ? fullViewTitle : isAggregateSelection ? aggregateTitle : `${selP3.teacherName} — ${selP3.className}`}
             </h2>
             <div style={{fontSize:14,color:G.textM,marginBottom:16}}>
-              {isAggregateSelection ? `${selInst} · grouped by class, chronological inside each class` : `${selP3.institute||selInst} · ${selP3.subject}`}
+              {isScopedFullView ? fullViewSubtitle : isAggregateSelection ? `${selInst} · grouped by class, chronological inside each class` : `${selP3.institute||selInst} · ${selP3.subject}`}
             </div>
             {/* Period pills — horizontal scroll, never wraps */}
             <div style={{display:"flex",gap:6,marginBottom:10,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none",paddingBottom:2}}>
@@ -2894,7 +3391,7 @@ function AdminPanelInner({user}){
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Export
             </button>
-            {isAggregateSelection ? renderAggregateEntries(true) : entries.length===0?(
+            {isScopedFullView ? renderFullViewEntries(true) : isAggregateSelection ? renderAggregateEntries(true) : entries.length===0?(
               <div style={{textAlign:"center",padding:"48px 20px",color:G.textM,fontSize:15}}>No entries for this period.</div>
             ):entries.map(([dk,dayEntries])=>(
               <div key={dk} style={{marginBottom:20}}>
@@ -3047,19 +3544,19 @@ function AdminPanelInner({user}){
       </div>
 
       {/* Stats strip */}
-      <div className="admin-stats" style={{background:G.navyS,padding:"5px 18px",display:"flex",gap:22,alignItems:"center",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+      <div className="admin-stats" style={{background:G.navyS,padding:"9px 18px",display:"flex",gap:10,alignItems:"center",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.05)",overflowX:"auto"}}>
         {[
           {n:institutes.length,   l:"institutes"},
           {n:teachers.length,     l:"teachers"},
           {n:totalClasses, l:"classes"},
           {n:totalEntries,        l:"total entries"},
         ].map(({n,l})=>(
-          <div key={l} style={{display:"flex",alignItems:"baseline",gap:4}}>
-            <span style={{fontSize:18,fontWeight:700,color:G.blueV,fontFamily:G.display}}>{n}</span>
-            <span style={{fontSize:12,color:"rgba(255,255,255,0.55)",fontFamily:G.mono}}>{l}</span>
+          <div key={l} style={{display:"flex",alignItems:"baseline",gap:6,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"8px 12px",flexShrink:0}}>
+            <span style={{fontSize:20,fontWeight:700,color:G.blueV,fontFamily:G.display,lineHeight:1}}>{n}</span>
+            <span style={{fontSize:12,color:"rgba(255,255,255,0.58)",fontFamily:G.mono}}>{l}</span>
           </div>
         ))}
-        {loadingUids.size>0&&<div style={{marginLeft:"auto",fontSize:12,color:"rgba(255,255,255,0.5)",fontFamily:G.mono}}>syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…</div>}
+        {loadingUids.size>0&&<div style={{marginLeft:"auto",fontSize:12,color:"rgba(255,255,255,0.6)",fontFamily:G.mono,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:999,padding:"7px 12px",flexShrink:0}}>syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…</div>}
       </div>
 
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
@@ -3072,27 +3569,27 @@ function AdminPanelInner({user}){
           </span>
           {mobileStep>=1&&selInst&&<>
             <span style={{color:"rgba(255,255,255,0.3)",fontSize:12}}>›</span>
-            <span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);}}
+            <span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);setFullView(null);}}
               style={{fontSize:13,color:mobileStep===1?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontFamily:G.sans,fontWeight:mobileStep===1?700:400,padding:"3px 0"}}>
               {selInst}
             </span>
           </>}
           {mobileStep>=2&&selP2&&<>
             <span style={{color:"rgba(255,255,255,0.3)",fontSize:12}}>›</span>
-            <span onClick={()=>{if(isAggregateSelection){setMobileStep(1);setSelP3(null);} else {setMobileStep(2);setSelP3(null);}}}
+            <span onClick={()=>{if(isAggregateSelection){setMobileStep(1);setSelP3(null);} else {setMobileStep(2);setSelP3(null);setFullView(null);}}}
               style={{fontSize:13,color:mobileStep===2?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontFamily:G.sans,fontWeight:mobileStep===2?700:400,padding:"3px 0"}}>
               {p2Label(selP2)}
             </span>
           </>}
-          {mobileStep>=3&&(selP3||isAggregateSelection)&&<>
+          {mobileStep>=3&&(selP3||isAggregateSelection||isScopedFullView)&&<>
             <span style={{color:"rgba(255,255,255,0.3)",fontSize:12}}>›</span>
             <span style={{fontSize:13,color:"#fff",fontFamily:G.sans,fontWeight:700,padding:"3px 0"}}>
-              {selP3?selP3.className:"All entries"}
+              {isScopedFullView?"View Full":selP3?selP3.className:"All entries"}
             </span>
           </>}
           {/* Back button */}
           <div style={{marginLeft:"auto"}}>
-            <span onClick={()=>setMobileStep(s=>isAggregateSelection&&s===3?1:Math.max(0,s-1))}
+            <span onClick={()=>setMobileStep(s=>isAggregateSelection&&s===3?1:isScopedFullView&&s===3?2:Math.max(0,s-1))}
               style={{background:"rgba(255,255,255,0.1)",borderRadius:7,padding:"5px 12px",fontSize:13,color:"rgba(255,255,255,0.7)",cursor:"pointer",fontFamily:G.sans}}>
               ← Back
             </span>
@@ -3126,12 +3623,18 @@ function AdminPanelInner({user}){
 
         {/* ── P1: Institutes ── */}
         <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:G.bg,borderRight:`1px solid ${G.border}`}}>
-          <div style={panelLabel}>Institutes</div>
+          <div style={{...panelLabel,paddingBottom:4}}>Step 1 · Institutes</div>
+          <div style={{padding:"0 10px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
+            {renderSearchInput(instSearch,setInstSearch,"Search institutes",true)}
+            <div style={{fontSize:12,color:G.textL,marginTop:8}}>{visibleInstitutes.length} of {institutes.length} institutes</div>
+          </div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
-            {institutes.length===0&&(
-              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>No institutes yet</div>
+            {visibleInstitutes.length===0&&(
+              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>
+                {institutes.length===0 ? "No institutes yet" : "No institutes match your search"}
+              </div>
             )}
-            {institutes.map(inst=>{
+            {visibleInstitutes.map(inst=>{
               const isSel=inst===selInst;
               // Use index data first (available immediately), supplement with fullData
               const tCount=teachers.filter(t=>{
@@ -3168,7 +3671,10 @@ function AdminPanelInner({user}){
         <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:G.surface,borderRight:`1px solid ${G.border}`}}>
           <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10}}>
-              <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selInst||"—"}</div>
+              <div style={{minWidth:0}}>
+                <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selInst||"—"}</div>
+                {selInst&&<div style={{fontSize:12,color:G.textL,marginTop:3}}>{instClasses.length} classes · {instTeachers.length} teachers</div>}
+              </div>
               {selInst&&(
                 <button onClick={()=>setExportOpen(true)}
                   style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
@@ -3186,6 +3692,12 @@ function AdminPanelInner({user}){
                 </button>
               ))}
             </div>
+            {selInst&&renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers",true)}
+            {selInst&&<div style={{fontSize:12,color:G.textL,marginTop:8}}>
+              {tab==="class"
+                ? `${visibleInstClasses.length} of ${instClasses.length} classes`
+                : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
+            </div>}
           </div>
           <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
             {tab==="class"?"Classes ↓ (12th first)":"Teachers"}
@@ -3198,7 +3710,7 @@ function AdminPanelInner({user}){
                 loading teachers…
               </div>
             )}
-            {selInst&&tab==="teacher"&&instTeachers.map(t=>{
+            {selInst&&tab==="teacher"&&visibleInstTeachers.map(t=>{
               const d=fullData[t.uid]||{};
               const name=d.profile?.name||t.name||"?";
               const isLoading=loadingUids.has(t.uid)&&!fullData[t.uid];
@@ -3229,7 +3741,7 @@ function AdminPanelInner({user}){
                 loading classes…
               </div>
             )}
-            {selInst&&tab==="class"&&instClasses.map(cls=>{
+            {selInst&&tab==="class"&&visibleInstClasses.map(cls=>{
               const isSel=selP2===cls.raw;
               return(
                 <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
@@ -3250,6 +3762,9 @@ function AdminPanelInner({user}){
                 </div>
               );
             })}
+            {selInst&&((tab==="class"&&visibleInstClasses.length===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
+              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>No {tab==="class"?"classes":"teachers"} match your search</div>
+            )}
           </div>
         </div>
         <PanelDivider onDrag={dx=>setPanelW(w=>({...w,p2:Math.max(150,Math.min(320,w.p2+dx))}))}/>
@@ -3265,10 +3780,26 @@ function AdminPanelInner({user}){
             </div>
           </div>
           <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
-            {isAggregateSelection?"Overview":tab==="teacher"?"Classes":"Teachers"}
+            {isAggregateSelection?"Overview":"Step 3 · "+(tab==="teacher"?"Classes":"Teachers")}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
             {!selP2&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>Select from left</div>}
+            {selP2&&!isAggregateSelection&&(
+              <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:12,padding:"14px 13px",marginBottom:10,boxShadow:G.shadowSm}}>
+                <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>
+                  {tab==="teacher"?"Open all classes together":"Open all teachers together"}
+                </div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:5}}>
+                  {tab==="teacher"
+                    ? "See this teacher’s full institute timeline, grouped by class like the export view."
+                    : "See every teacher who taught this class in one grouped timeline."}
+                </div>
+                <button onClick={openScopedFullView}
+                  style={{marginTop:12,width:"100%",padding:"9px 10px",background:fullView?G.blueL:G.navy,color:fullView?G.blue:"#fff",border:fullView?`1px solid ${G.blue}`:"none",borderRadius:9,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
+                  View Full
+                </button>
+              </div>
+            )}
             {isAggregateSelection&&(
               <div style={{background:G.surface,borderRadius:10,border:`1px solid ${G.border}`,padding:"14px 13px"}}>
                 <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>{aggregateTitle}</div>
@@ -3300,7 +3831,7 @@ function AdminPanelInner({user}){
                   style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent",paddingRight:8}}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div onClick={()=>{setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
+                  <div onClick={()=>{setFullView(null);setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
                     style={{cursor:"pointer"}}>
                     <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
                     <div style={{fontSize:14,color:G.textM,marginTop:3}}>{cls.subject}</div>
@@ -3365,6 +3896,7 @@ function AdminPanelInner({user}){
                     <div key={t.uid} onClick={()=>{
                         const cls=instClasses.find(c=>c.raw===selP2);
                         const clsObj=cls?.teachers.find(tc=>tc.uid===t.uid);
+                        setFullView(null);
                         setSelP3({teacherUid:t.uid,classId:clsObj?.classId,teacherName:t.name,className:normaliseName(selP2),subject:cls?.subject});
                         setMobileStep(3);
                       }}
@@ -3409,13 +3941,40 @@ function AdminPanelInner({user}){
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
                 <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text}}>
-                  {isAggregateSelection?aggregateTitle:selP3?`${selP3.teacherName} — ${selP3.className}`:"—"}
+                  {isScopedFullView
+                    ? fullViewTitle
+                    : isAggregateSelection
+                      ? aggregateTitle
+                      : selP3
+                        ? `${selP3.teacherName} — ${selP3.className}`
+                        : selP2
+                          ? `${p2Label(selP2)} Overview`
+                          : selInst
+                            ? `${selInst} Overview`
+                            : "Admin Overview"}
                 </div>
                 <div style={{fontSize:14,color:G.textM,marginTop:2}}>
-                  {isAggregateSelection?`${selInst} · grouped by class, chronological inside each class`:selP3?`${selInst} · ${selP3.subject}`:"Select institute → teacher or class → drill down"}
+                  {isScopedFullView
+                    ? fullViewSubtitle
+                    : isAggregateSelection
+                      ? `${selInst} · grouped by class, chronological inside each class`
+                      : selP3
+                        ? `${selInst} · ${selP3.subject}`
+                        : selP2
+                          ? `Use panel 3 to open the full grouped view or choose one specific ${tab==="teacher"?"class":"teacher"}`
+                          : selInst
+                            ? "Choose a class or teacher to drill down, or use the full view action in panel 3"
+                            : "Select an institute to start navigating"}
                 </div>
               </div>
-              {isAggregateSelection?(
+              {isScopedFullView?(
+                <div style={{display:"flex",alignItems:"center",gap:5}}>
+                  <div style={{width:7,height:7,borderRadius:"50%",background:fullViewLoading?G.borderM:G.blueV}}/>
+                  <span style={{fontSize:13,color:fullViewLoading?G.textL:G.blue,fontWeight:600,fontFamily:G.mono}}>
+                    {fullViewLoading ? "Loading full view" : `${fullViewGroups.length} class groups · ${fullViewEntries.length} entries`}
+                  </span>
+                </div>
+              ):isAggregateSelection?(
                 <div style={{display:"flex",alignItems:"center",gap:5}}>
                   <div style={{width:7,height:7,borderRadius:"50%",background:aggregateLoading?G.borderM:G.blueV}}/>
                   <span style={{fontSize:13,color:aggregateLoading?G.textL:G.blue,fontWeight:600,fontFamily:G.mono}}>
@@ -3451,7 +4010,7 @@ function AdminPanelInner({user}){
               ))}
               {/* Spacer pushes Export right on desktop; on mobile it wraps to new line */}
               <div style={{flex:1,minWidth:8}}/>
-              {(selP3||isAggregateSelection)&&(
+              {(selP3||isAggregateSelection||isScopedFullView)&&(
                 <button onClick={()=>setExportOpen(true)}
                   style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:36,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -3462,13 +4021,8 @@ function AdminPanelInner({user}){
           </div>
           {/* Entries body */}
           <div style={{flex:1,overflowY:"auto",padding:"14px 16px 32px"}}>
-            {!selP3&&!isAggregateSelection&&(
-              <div style={{textAlign:"center",padding:"60px 20px"}}>
-                <div style={{fontSize:30,marginBottom:10}}>👆</div>
-                <div style={{fontSize:16,fontWeight:700,color:G.textM,fontFamily:G.display,marginBottom:3}}>Nothing selected</div>
-                <div style={{fontSize:14,color:G.textL}}>Navigate the panels on the left</div>
-              </div>
-            )}
+            {!selP3&&!isAggregateSelection&&!isScopedFullView&&renderOverviewPanel()}
+            {isScopedFullView&&renderFullViewEntries(false)}
             {isAggregateSelection&&renderAggregateEntries(false)}
             {!isAggregateSelection&&selP3&&p4Entries!==null&&p4Entries.length===0&&(
               <div style={{background:G.surface,borderRadius:11,border:`1px solid ${G.border}`,padding:"16px"}}>
