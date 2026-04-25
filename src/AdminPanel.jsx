@@ -218,6 +218,39 @@ function fmt12(t){
   const[h,m]=t.split(":").map(Number);
   return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`;
 }
+function parseClockMins(t){
+  if(!t || !/^\d{1,2}:\d{2}$/.test(t)) return null;
+  const [h,m] = t.split(":").map(Number);
+  if(Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h*60 + m;
+}
+function entryDurationMinutes(entry){
+  const start = parseClockMins(entry?.timeStart);
+  const end = parseClockMins(entry?.timeEnd);
+  if(start===null || end===null || end<=start) return 0;
+  return end - start;
+}
+function formatDurationShort(totalMins){
+  const mins = Math.max(0, Math.round(totalMins || 0));
+  const h = Math.floor(mins/60);
+  const m = mins%60;
+  if(h && m) return `${h}h ${m}m`;
+  if(h) return `${h}h`;
+  return `${m}m`;
+}
+function adminPeriodLabel(period){
+  if(period==="today") return "Today";
+  if(period==="week") return "This Week";
+  if(period==="month") return "This Month";
+  return "All Time";
+}
+const SUBJECT_COLOR_PALETTE = ["#1D4ED8","#16A34A","#EA580C","#7C3AED","#0891B2","#DC2626","#CA8A04","#4F46E5"];
+function subjectColor(name){
+  const text = String(name || "");
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) - hash) + text.charCodeAt(i);
+  return SUBJECT_COLOR_PALETTE[Math.abs(hash) % SUBJECT_COLOR_PALETTE.length];
+}
 function daysAgo(ts){
   if(!ts) return null;
   const d=Math.floor((Date.now()-ts)/(1000*60*60*24));
@@ -1424,6 +1457,7 @@ function AdminPanelInner({user}){
     return instTeachers.filter(t=>!!fullData[t.uid]).length;
   },[selInst,instTeachers,fullData]);
   const aggregateLoading = isAggregateSelection && selInst && aggregateLoadedTeacherCount < instTeachers.length;
+  const overviewPeriodText = adminPeriodLabel(period);
 
   const selectedInstituteEntryCount = useMemo(()=>{
     if(!selInst) return 0;
@@ -1436,41 +1470,126 @@ function AdminPanelInner({user}){
     },0);
   },[selInst,teachers,fullData]);
 
-  const selectedInstituteTodayCount = useMemo(()=>{
+  const selectedInstitutePeriodCount = useMemo(()=>{
     if(!selInst) return 0;
-    const today = todayKey();
     return teachers.reduce((sum,t)=>{
       const d = fullData[t.uid];
       if(!d) return sum;
       return sum + (d.classes||[])
         .filter(c=>sameInstituteName(c.institute, selInst))
-        .reduce((classSum,c)=>classSum + (((d.notes||{})[c.id]||{})[today]?.length || 0),0);
+        .reduce((classSum,c)=>classSum + getEntriesInRange((d.notes||{})[c.id]||{}, periodDays).length,0);
     },0);
-  },[selInst,teachers,fullData]);
+  },[selInst,teachers,fullData,periodDays]);
 
-  const instituteTopClasses = useMemo(()=>{
-    return instClasses
-      .map(cls=>({
-        ...cls,
-        totalEntries:(cls.teachers||[]).reduce((sum,t)=>sum + (t.entryCount||0),0),
-      }))
-      .sort((a,b)=>b.totalEntries-a.totalEntries || classNum(b.display)-classNum(a.display))
-      .slice(0,4);
-  },[instClasses]);
-
-  const instituteTopTeachers = useMemo(()=>{
+  const teacherEntryStatus = useMemo(()=>{
     if(!selInst) return [];
     return instTeachers
       .map(t=>{
         const d = fullData[t.uid];
         const teacherName = d?.profile?.name || t.name || "Teacher";
-        const classes = (d?.classes||[]).filter(c=>sameInstituteName(c.institute, selInst));
-        const entryCount = classes.reduce((sum,c)=>sum + Object.values((d?.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
-        return { uid:t.uid, name:teacherName, classCount:classes.length, entryCount };
+        if(!d){
+          return {
+            uid:t.uid,
+            name:teacherName,
+            loaded:false,
+            classCount:null,
+            todayEntries:0,
+            weekEntries:0,
+            monthEntries:0,
+            todayUpdated:false,
+          };
+        }
+        const classes = (d.classes||[]).filter(c=>sameInstituteName(c.institute, selInst));
+        const stats = classes.reduce((acc,c)=>{
+          const classNotes = (d.notes||{})[c.id]||{};
+          acc.todayEntries += getEntriesInRange(classNotes, 1).length;
+          acc.weekEntries += getEntriesInRange(classNotes, 7).length;
+          acc.monthEntries += getEntriesInRange(classNotes, 30).length;
+          return acc;
+        },{todayEntries:0,weekEntries:0,monthEntries:0});
+        return {
+          uid:t.uid,
+          name:teacherName,
+          loaded:true,
+          classCount:classes.length,
+          todayEntries:stats.todayEntries,
+          weekEntries:stats.weekEntries,
+          monthEntries:stats.monthEntries,
+          todayUpdated:stats.todayEntries>0,
+        };
       })
-      .sort((a,b)=>b.entryCount-a.entryCount || b.classCount-a.classCount || exportTextSorter.compare(a.name,b.name))
-      .slice(0,4);
+      .sort((a,b)=>{
+        if(a.loaded !== b.loaded) return a.loaded ? -1 : 1;
+        if(a.todayUpdated !== b.todayUpdated) return a.todayUpdated ? 1 : -1;
+        if(b.weekEntries !== a.weekEntries) return b.weekEntries - a.weekEntries;
+        if(b.monthEntries !== a.monthEntries) return b.monthEntries - a.monthEntries;
+        return exportTextSorter.compare(a.name,b.name);
+      });
   },[selInst,instTeachers,fullData]);
+
+  const teacherEntrySummary = useMemo(()=>{
+    const loaded = teacherEntryStatus.filter(item=>item.loaded);
+    return {
+      updatedToday: loaded.filter(item=>item.todayUpdated).length,
+      todayEntries: loaded.reduce((sum,item)=>sum + item.todayEntries,0),
+      weekEntries: loaded.reduce((sum,item)=>sum + item.weekEntries,0),
+      monthEntries: loaded.reduce((sum,item)=>sum + item.monthEntries,0),
+      loadedCount: loaded.length,
+    };
+  },[teacherEntryStatus]);
+
+  const classSubjectTime = useMemo(()=>{
+    if(!selInst) return [];
+    return instClasses
+      .map(cls=>{
+        const activeTeachers = new Set();
+        const subjectTotals = new Map();
+        let entryCount = 0;
+        let totalMinutes = 0;
+        let untimedEntries = 0;
+        (cls.teachers||[]).forEach(t=>{
+          const d = fullData[t.uid];
+          if(!d) return;
+          const entries = getEntriesInRange((d.notes||{})[t.classId]||{}, periodDays);
+          if(entries.length) activeTeachers.add(t.uid);
+          entries.forEach(({entry})=>{
+            entryCount += 1;
+            const duration = entryDurationMinutes(entry);
+            const subject = (t.subject || cls.subjects?.[0] || "No subject").trim() || "No subject";
+            if(duration>0){
+              totalMinutes += duration;
+              subjectTotals.set(subject, (subjectTotals.get(subject) || 0) + duration);
+            } else {
+              untimedEntries += 1;
+            }
+          });
+        });
+        return {
+          raw:cls.raw,
+          display:cls.display,
+          entryCount,
+          totalMinutes,
+          untimedEntries,
+          teacherCount:cls.teachers.length,
+          activeTeacherCount:activeTeachers.size,
+          subjects:Array.from(subjectTotals.entries())
+            .sort((a,b)=>b[1]-a[1] || exportTextSorter.compare(a[0],b[0]))
+            .map(([subject, minutes])=>({subject, minutes, color:subjectColor(subject)})),
+        };
+      })
+      .filter(item=>item.entryCount>0)
+      .sort((a,b)=>classNum(b.display)-classNum(a.display) || exportTextSorter.compare(a.display,b.display));
+  },[selInst,instClasses,fullData,periodDays]);
+
+  const classSubjectSummary = useMemo(()=>{
+    return classSubjectTime.reduce((acc,item)=>{
+      acc.classCount += 1;
+      acc.entryCount += item.entryCount;
+      acc.totalMinutes += item.totalMinutes;
+      acc.untimedEntries += item.untimedEntries;
+      return acc;
+    },{classCount:0,entryCount:0,totalMinutes:0,untimedEntries:0});
+  },[classSubjectTime]);
 
   const overviewRecentEntries = useMemo(()=>{
     const items = [];
@@ -2274,7 +2393,7 @@ function AdminPanelInner({user}){
               Start with an institute on the left. From there, panel 2 narrows by class or teacher, panel 3 lets you either drill down or open a full grouped view, and panel 4 becomes the working space.
             </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:12}}>
             {[
               summaryCard("Institutes", institutes.length),
               summaryCard("Teachers", teachers.length),
@@ -2282,7 +2401,7 @@ function AdminPanelInner({user}){
               summaryCard("Entries", totalEntries),
             ]}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.3fr) minmax(0,1fr)",gap:14}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.3fr) minmax(0,1fr)",gap:14}}>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
               <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Most active institutes</div>
               {globalInstituteHighlights.length===0 ? <div style={{fontSize:14,color:G.textL}}>No activity yet.</div> : globalInstituteHighlights.map(item=>(
@@ -2316,40 +2435,138 @@ function AdminPanelInner({user}){
           <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"18px",boxShadow:G.shadowSm}}>
             <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display}}>{selInst}</div>
             <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:6,maxWidth:680}}>
-              Choose `By Class` or `By Teacher` in the middle column. Once you pick one item, panel 3 will offer a quick `View Full` option and the detailed drilldown list below it.
+              Choose `By Class` or `By Teacher` in the middle column. This overview now focuses on two things: who has updated logs today, and how the logged teaching time is split subject-wise across classes for the selected period.
             </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:12}}>
             {[
               summaryCard("Classes", instClasses.length),
               summaryCard("Teachers", instTeachers.length),
               summaryCard("Entries", selectedInstituteEntryCount),
-              summaryCard("Today", selectedInstituteTodayCount, "#1B8A4C"),
+              summaryCard(overviewPeriodText, selectedInstitutePeriodCount, "#1B8A4C"),
             ]}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr)",gap:14}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr)",gap:14}}>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
-              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Top classes</div>
-              {instituteTopClasses.length===0 ? <div style={{fontSize:14,color:G.textL}}>No classes loaded yet.</div> : instituteTopClasses.map(item=>(
-                <div key={item.raw} style={{padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
-                  <div style={{fontSize:14,fontWeight:700,color:G.text}}>{item.display}</div>
-                  <div style={{fontSize:12,color:G.textL,marginTop:2}}>{item.subjects.join(", ") || "No subjects yet"}</div>
-                  <div style={{fontSize:12,color:G.textL,marginTop:2,fontFamily:G.mono}}>{item.totalEntries} entries · {item.teachers.length} teachers</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>Class teaching time</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:4,lineHeight:1.55}}>
+                    Subject-wise split of logged teaching time in {overviewPeriodText.toLowerCase()}.
+                  </div>
+                </div>
+                <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>
+                  {overviewPeriodText}
+                </span>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+                <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                  {classSubjectSummary.classCount} active {classSubjectSummary.classCount===1?"class":"classes"}
+                </span>
+                <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                  {formatDurationShort(classSubjectSummary.totalMinutes)} logged
+                </span>
+                {classSubjectSummary.untimedEntries>0&&(
+                  <span style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:999,padding:"5px 10px",fontSize:12,color:G.amber,fontFamily:G.mono,fontWeight:700}}>
+                    {classSubjectSummary.untimedEntries} untimed {classSubjectSummary.untimedEntries===1?"log":"logs"}
+                  </span>
+                )}
+              </div>
+              {aggregateLoadedTeacherCount < instTeachers.length&&(
+                <div style={{fontSize:12,color:G.textL,marginTop:10,fontFamily:G.mono}}>
+                  Loading {aggregateLoadedTeacherCount}/{instTeachers.length} teacher profiles for the latest time split.
+                </div>
+              )}
+              {classSubjectTime.length===0 ? (
+                <div style={{fontSize:14,color:G.textL,marginTop:14}}>
+                  {aggregateLoadedTeacherCount < instTeachers.length
+                    ? "Loading logged time for this institute…"
+                    : `No class logs found for ${overviewPeriodText.toLowerCase()}.`}
+                </div>
+              ) : classSubjectTime.map(item=>(
+                <div key={item.raw} style={{padding:"12px 0",borderTop:`1px solid ${G.border}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start",flexWrap:"wrap"}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:G.text}}>{item.display}</div>
+                      <div style={{fontSize:12,color:G.textL,marginTop:3}}>
+                        {item.entryCount} {item.entryCount===1?"log":"logs"} · {item.activeTeacherCount}/{item.teacherCount} teachers active
+                      </div>
+                    </div>
+                    <span style={{background:item.totalMinutes>0?"#DCFCE7":"#FFF7ED",color:item.totalMinutes>0?"#166534":G.amber,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
+                      {item.totalMinutes>0 ? formatDurationShort(item.totalMinutes) : "Untimed only"}
+                    </span>
+                  </div>
+                  <div style={{height:12,borderRadius:999,background:"#EEF2F7",overflow:"hidden",display:"flex",marginTop:10,border:`1px solid ${G.border}`}}>
+                    {item.totalMinutes>0 ? item.subjects.map(seg=>(
+                      <div
+                        key={`${item.raw}_${seg.subject}`}
+                        title={`${seg.subject}: ${formatDurationShort(seg.minutes)}`}
+                        style={{width:`${(seg.minutes/item.totalMinutes)*100}%`,background:seg.color,minWidth:seg.minutes===item.totalMinutes?undefined:6}}
+                      />
+                    )) : <div style={{flex:1,background:"repeating-linear-gradient(135deg,#F8FAFC 0,#F8FAFC 8px,#E5E7EB 8px,#E5E7EB 16px)"}}/>}
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                    {item.subjects.map(seg=>(
+                      <span key={`${item.raw}_${seg.subject}_legend`} style={{display:"inline-flex",alignItems:"center",gap:6,background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:12,color:G.textS,fontWeight:600}}>
+                        <span style={{width:8,height:8,borderRadius:"50%",background:seg.color,flexShrink:0}}/>
+                        {seg.subject} · {formatDurationShort(seg.minutes)}
+                      </span>
+                    ))}
+                    {item.untimedEntries>0&&(
+                      <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:999,padding:"5px 9px",fontSize:12,color:G.amber,fontWeight:600}}>
+                        {item.untimedEntries} untimed {item.untimedEntries===1?"log":"logs"}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
-              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Top teachers</div>
-              {instituteTopTeachers.length===0 ? <div style={{fontSize:14,color:G.textL}}>No teacher activity yet.</div> : instituteTopTeachers.map(item=>(
-                <div key={item.uid} style={{padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
-                  <div style={{fontSize:14,fontWeight:700,color:G.text}}>{item.name}</div>
-                  <div style={{fontSize:12,color:G.textL,marginTop:2}}>{item.classCount} classes</div>
-                  <div style={{fontSize:12,color:G.textL,marginTop:2,fontFamily:G.mono}}>{item.entryCount} entries</div>
+              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>Teacher entry status</div>
+              <div style={{fontSize:12,color:G.textL,marginTop:4,lineHeight:1.55}}>
+                Who has updated class logs today, plus week and month entry counts.
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+                <span style={{background:"#DCFCE7",border:"1px solid #BBF7D0",borderRadius:999,padding:"5px 10px",fontSize:12,color:"#166534",fontFamily:G.mono,fontWeight:700}}>
+                  {teacherEntrySummary.updatedToday}/{instTeachers.length} updated today
+                </span>
+                <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                  {teacherEntrySummary.weekEntries} this week
+                </span>
+                <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                  {teacherEntrySummary.monthEntries} this month
+                </span>
+              </div>
+              {teacherEntrySummary.loadedCount < instTeachers.length&&(
+                <div style={{fontSize:12,color:G.textL,marginTop:10,fontFamily:G.mono}}>
+                  Loading {teacherEntrySummary.loadedCount}/{instTeachers.length} teachers for status details.
+                </div>
+              )}
+              {teacherEntryStatus.length===0 ? <div style={{fontSize:14,color:G.textL,marginTop:14}}>No teacher activity yet.</div> : teacherEntryStatus.map(item=>(
+                <div key={item.uid} style={{padding:"12px 0",borderTop:`1px solid ${G.border}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start",flexWrap:"wrap"}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:G.text}}>{item.name}</div>
+                      <div style={{fontSize:12,color:G.textL,marginTop:3}}>
+                        {item.loaded
+                          ? `${item.classCount} ${item.classCount===1?"class":"classes"} in this institute`
+                          : "Loading classes in this institute…"}
+                      </div>
+                    </div>
+                    <span style={{background:item.loaded && item.todayUpdated ? "#DCFCE7" : item.loaded ? G.bg : "#EFF6FF",color:item.loaded && item.todayUpdated ? "#166534" : item.loaded ? G.textS : G.blue,border:`1px solid ${item.loaded && item.todayUpdated ? "#BBF7D0" : item.loaded ? G.border : "#BFDBFE"}`,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
+                      {item.loaded ? (item.todayUpdated ? "Updated today" : "No update today") : "Loading"}
+                    </span>
+                  </div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:7,fontFamily:G.mono}}>
+                    {item.loaded
+                      ? `Today ${item.todayEntries} · Week ${item.weekEntries} · Month ${item.monthEntries}`
+                      : "Status details will appear once this teacher profile finishes loading."}
+                  </div>
                 </div>
               ))}
             </div>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
-              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Recent activity</div>
+              <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Recent log activity</div>
               {overviewRecentEntries.length===0 ? <div style={{fontSize:14,color:G.textL}}>No recent entries inside this institute yet.</div> : overviewRecentEntries.map(item=>(
                 <div key={item.id} style={{padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
                   <div style={{fontSize:13,fontWeight:700,color:G.text}}>{item.title}</div>
