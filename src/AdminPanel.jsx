@@ -1533,11 +1533,14 @@ function AdminPanelInner({user}){
     });
   };
 
-  const resetNav=(newTab)=>{setSelP2(null);setSelP3(null);if(newTab)setTab(newTab);setMobileStep(s=>Math.min(s,1));};
+  const clearDrilldown = () => { setSelP2(null); setSelP3(null); };
+  const resetNav=(newTab)=>{clearDrilldown();if(newTab)setTab(newTab);setMobileStep(s=>Math.min(s,1));};
 
   // When institute is selected, pre-load its teachers in background
   const onSelectInstitute = (inst) => {
-    setSelInst(inst); resetNav();
+    setSelInst(inst);
+    clearDrilldown();
+    setMobileStep(1);
     // Case-insensitive — institute names in the teacher index may differ in casing
     const _norm = s => (s || "").trim().toLowerCase();
     teachers
@@ -2694,7 +2697,7 @@ function AdminPanelInner({user}){
                       saveInstOrder(reordered);
                     }
                   } else if(!dragInstRef.current){
-                    onSelectInstitute(inst);setMobileStep(1);
+                    onSelectInstitute(inst);
                   }
                   e.currentTarget.style.boxShadow="";
                   e.currentTarget.style.transform="";
@@ -2761,19 +2764,6 @@ function AdminPanelInner({user}){
               </button>
             ))}
           </div>
-          {tab==="class"&&selInst&&(
-            <div onClick={()=>openAggregateView("class")}
-              style={{background:selP2===ALL_CLASSES_KEY?G.blueL:G.surface,borderRadius:12,border:`1px solid ${selP2===ALL_CLASSES_KEY?G.blue:G.border}`,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-              <div>
-                <div style={{fontSize:16,fontWeight:700,color:selP2===ALL_CLASSES_KEY?G.blue:G.text}}>All Classes</div>
-                <div style={{fontSize:13,color:G.textM,marginTop:3}}>Combined institute view, grouped like export</div>
-                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:6,display:"inline-block"}}>
-                  {instClasses.length} class{instClasses.length!==1?"es":""} · {instTeachers.length} teacher{instTeachers.length!==1?"s":""}
-                </span>
-              </div>
-              <span style={{fontSize:20,color:G.textL}}>›</span>
-            </div>
-          )}
           {tab==="class"&&instClasses.map(cls=>(
             <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
               style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
@@ -2789,19 +2779,6 @@ function AdminPanelInner({user}){
               <span style={{fontSize:20,color:G.textL}}>›</span>
             </div>
           ))}
-          {tab==="teacher"&&selInst&&(
-            <div onClick={()=>openAggregateView("teacher")}
-              style={{background:selP2===ALL_TEACHERS_KEY?G.blueL:G.surface,borderRadius:12,border:`1px solid ${selP2===ALL_TEACHERS_KEY?G.blue:G.border}`,padding:"14px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-              <div>
-                <div style={{fontSize:16,fontWeight:700,color:selP2===ALL_TEACHERS_KEY?G.blue:G.text}}>All Teachers</div>
-                <div style={{fontSize:13,color:G.textM,marginTop:3}}>All institute entries, grouped by class</div>
-                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:6,display:"inline-block"}}>
-                  {instTeachers.length} teacher{instTeachers.length!==1?"s":""} · {instClasses.length} class{instClasses.length!==1?"es":""}
-                </span>
-              </div>
-              <span style={{fontSize:20,color:G.textL}}>›</span>
-            </div>
-          )}
           {tab==="teacher"&&instTeachers.map(t=>{
             const d=fullData[t.uid]||{};
             const name=d.profile?.name||t.name||"?";
@@ -3169,7 +3146,7 @@ function AdminPanelInner({user}){
                   },0) || teachers.filter(t=>(t.institutes||[]).includes(inst)).length;
               return(
                 <div key={inst} style={{position:"relative",display:"flex",alignItems:"center",gap:4}}>
-                  <div onClick={()=>{onSelectInstitute(inst);setMobileStep(1);}}
+                  <div onClick={()=>onSelectInstitute(inst)}
                     style={{...siBase,flex:1,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                     onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                     onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
@@ -3221,20 +3198,6 @@ function AdminPanelInner({user}){
                 loading teachers…
               </div>
             )}
-            {selInst&&tab==="teacher"&&(
-              <div onClick={()=>openAggregateView("teacher")}
-                style={{...siBase,background:selP2===ALL_TEACHERS_KEY?G.blueL:"transparent",borderLeftColor:selP2===ALL_TEACHERS_KEY?G.blue:"transparent"}}
-                onMouseEnter={e=>{if(selP2!==ALL_TEACHERS_KEY)e.currentTarget.style.background=G.bg;}}
-                onMouseLeave={e=>{if(selP2!==ALL_TEACHERS_KEY)e.currentTarget.style.background="transparent";}}>
-                <div style={{fontSize:15,fontWeight:700,color:selP2===ALL_TEACHERS_KEY?G.blue:G.textS}}>All Teachers</div>
-                <div style={{fontSize:13,color:G.textM,marginTop:3}}>Every teacher in {selInst}, grouped by class</div>
-                <div style={{marginTop:5}}>
-                  <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
-                    {instTeachers.length} teacher{instTeachers.length!==1?"s":""} · {instClasses.length} class{instClasses.length!==1?"es":""}
-                  </span>
-                </div>
-              </div>
-            )}
             {selInst&&tab==="teacher"&&instTeachers.map(t=>{
               const d=fullData[t.uid]||{};
               const name=d.profile?.name||t.name||"?";
@@ -3264,20 +3227,6 @@ function AdminPanelInner({user}){
               <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:13,fontFamily:G.mono}}>
                 <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${G.blueL}`,borderTopColor:G.blue,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
                 loading classes…
-              </div>
-            )}
-            {selInst&&tab==="class"&&(
-              <div onClick={()=>openAggregateView("class")}
-                style={{...siBase,background:selP2===ALL_CLASSES_KEY?G.blueL:"transparent",borderLeftColor:selP2===ALL_CLASSES_KEY?G.blue:"transparent"}}
-                onMouseEnter={e=>{if(selP2!==ALL_CLASSES_KEY)e.currentTarget.style.background=G.bg;}}
-                onMouseLeave={e=>{if(selP2!==ALL_CLASSES_KEY)e.currentTarget.style.background="transparent";}}>
-                <div style={{fontSize:15,fontWeight:700,color:selP2===ALL_CLASSES_KEY?G.blue:G.textS}}>All Classes</div>
-                <div style={{fontSize:13,color:G.textM,marginTop:3}}>Combined institute entries, sorted like export</div>
-                <div style={{marginTop:5}}>
-                  <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
-                    {instClasses.length} class{instClasses.length!==1?"es":""} · {instTeachers.length} teacher{instTeachers.length!==1?"s":""}
-                  </span>
-                </div>
               </div>
             )}
             {selInst&&tab==="class"&&instClasses.map(cls=>{
