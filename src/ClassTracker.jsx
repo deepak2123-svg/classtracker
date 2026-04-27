@@ -3343,12 +3343,6 @@ function ClassTrackerInner({user}){
               <span>👤</span><span>Logged as: <strong>{teacherName}</strong></span>
             </div>
           <div className="form-card" style={{...card,padding:"24px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexWrap:"wrap"}}>
-              <div>
-                <div style={{fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:0.7,color:G.textL,marginBottom:4}}>Quick log</div>
-                <div style={{fontSize:14,color:G.textM,lineHeight:1.5}}>Save with status and time first. Topic and notes stay optional.</div>
-              </div>
-            </div>
             <div style={{marginBottom:18}}>
               <label style={lbl}>Topic Status</label>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
