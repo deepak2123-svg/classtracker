@@ -392,6 +392,76 @@ function buildInstituteClassification(instType, groups) {
       return exportTextSorter.compare(a.title, b.title);
     });
 }
+function fallbackAdminClassGroupMeta(instType, sectionName = "") {
+  if (instType === "school") {
+    const grade = classNum(sectionName);
+    if (grade) {
+      return { key: `grade_${grade}`, title: `${grade}${ordSuffix(grade)}`, sortOrder: grade };
+    }
+    const label = normaliseName(sectionName || "Ungrouped");
+    return { key: `section_${label}`, title: label, sortOrder: 0 };
+  }
+  const category = coachingClassificationLabel(instType, sectionName, "") || normaliseName(sectionName || "Other");
+  const order = COACHING_CATEGORY_ORDER[instType] || [];
+  const idx = order.indexOf(category);
+  return {
+    key: `${instType || "group"}_${category}`,
+    title: category,
+    sortOrder: idx === -1 ? 999 : idx,
+  };
+}
+function buildAdminClassGroups(instType, instConfig, classes) {
+  const configuredBuckets = buildInstituteClassification(instType, instConfig?.gradeGroups || []);
+  const sectionToBucket = new Map();
+  configuredBuckets.forEach(bucket => {
+    (bucket.sections || []).forEach(section => {
+      sectionToBucket.set(section, {
+        key: bucket.key,
+        title: bucket.title,
+        sortOrder: bucket.sortOrder,
+      });
+    });
+  });
+
+  const groupMap = new Map();
+  (classes || []).forEach(cls => {
+    const meta = sectionToBucket.get(cls.raw) || fallbackAdminClassGroupMeta(instType, cls.raw);
+    if (!groupMap.has(meta.key)) {
+      groupMap.set(meta.key, {
+        raw: meta.key,
+        display: meta.title,
+        sortOrder: meta.sortOrder,
+        subjects: new Set(),
+        teacherIds: new Set(),
+        teachers: [],
+        classItems: [],
+        sectionNames: [],
+      });
+    }
+    const group = groupMap.get(meta.key);
+    (cls.subjects || []).forEach(subject => subject && group.subjects.add(subject));
+    (cls.teachers || []).forEach(teacher => {
+      group.teacherIds.add(teacher.uid);
+      group.teachers.push({ ...teacher, sectionRaw: cls.raw, sectionDisplay: cls.display });
+    });
+    group.classItems.push(cls);
+    group.sectionNames.push(cls.display);
+  });
+
+  return Array.from(groupMap.values())
+    .map(group => ({
+      ...group,
+      subjects: [...group.subjects].sort(exportTextSorter.compare),
+      teacherCount: group.teacherIds.size,
+      classItems: [...group.classItems].sort((a, b) => classNum(b.display) - classNum(a.display) || exportTextSorter.compare(a.display, b.display)),
+      sectionNames: [...new Set(group.sectionNames)].sort(exportTextSorter.compare),
+    }))
+    .sort((a, b) => {
+      if (instType === "school" && a.sortOrder !== b.sortOrder) return b.sortOrder - a.sortOrder;
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return exportTextSorter.compare(a.display, b.display);
+    });
+}
 function SubjectSplitDonut({ segments, totalMinutes, size = 104, strokeWidth = 16 }) {
   const safeTotal = Math.max(0, totalMinutes || 0);
   const radius = (size - strokeWidth) / 2;
@@ -1256,6 +1326,7 @@ function AdminPanelInner({user}){
   const [p2Search, setP2Search]             = useState("");
   const [repairingTeacherUid, setRepairingTeacherUid] = useState(null);
   const [instClassificationOpen, setInstClassificationOpen] = useState({});
+  const [instClassGroupOpen, setInstClassGroupOpen] = useState({});
 
   useEffect(()=>{
     const check=()=>setIsMobile(window.innerWidth<768);
@@ -1269,6 +1340,10 @@ function AdminPanelInner({user}){
       getAllInstituteSections().then(s=>setInstSectionsAll(s||{})).catch(()=>{});
     }
   },[view]);
+
+  useEffect(()=>{
+    setInstClassGroupOpen({});
+  },[selInst, tab]);
 
   useEffect(()=>{
     (async()=>{
@@ -1427,6 +1502,20 @@ function AdminPanelInner({user}){
 
   const instSearchKey = instSearch.trim().toLowerCase();
   const p2SearchKey = p2Search.trim().toLowerCase();
+  const selectedInstConfig = selInst ? (instSectionsAll[selInst] || {}) : {};
+  const selectedInstituteType = useMemo(()=>{
+    const explicitType = selectedInstConfig?.type;
+    if (explicitType) return explicitType;
+    return instClasses.some(cls=>classNum(cls.raw)) ? "school" : "coaching_12";
+  },[selectedInstConfig,instClasses]);
+  const instClassGroups = useMemo(()=>{
+    if(!selInst) return [];
+    return buildAdminClassGroups(selectedInstituteType, selectedInstConfig, instClasses);
+  },[selInst,selectedInstituteType,selectedInstConfig,instClasses]);
+  const selectedClassGroupKey = useMemo(()=>{
+    if(tab!=="class" || !selP2) return null;
+    return instClassGroups.find(group=>(group.classItems||[]).some(item=>item.raw===selP2))?.raw || null;
+  },[tab,selP2,instClassGroups]);
 
   const visibleInstitutes = useMemo(()=>{
     if(!instSearchKey) return institutes;
@@ -1443,16 +1532,20 @@ function AdminPanelInner({user}){
   },[instTeachers,fullData,p2SearchKey]);
 
   const visibleInstClasses = useMemo(()=>{
-    if(!p2SearchKey) return instClasses;
-    return instClasses.filter(cls=>{
+    if(!p2SearchKey) return instClassGroups;
+    return instClassGroups.filter(group=>{
       const haystack = [
-        cls.display,
-        ...(cls.subjects||[]),
-        ...((cls.teachers||[]).map(t=>t.name||"")),
+        group.display,
+        ...(group.subjects||[]),
+        ...(group.sectionNames||[]),
+        ...((group.teachers||[]).map(t=>t.name||"")),
       ].join(" ").toLowerCase();
       return haystack.includes(p2SearchKey);
     });
-  },[instClasses,p2SearchKey]);
+  },[instClassGroups,p2SearchKey]);
+  const classGroupingLabel = selectedInstituteType === "school" ? "Class groups" : "Coaching groups";
+  const classChildLabel = selectedInstituteType === "school" ? "sections" : "batches";
+  const classChildSingular = selectedInstituteType === "school" ? "section" : "batch";
 
   // ── P3 content based on tab + P2 selection ────────────────────────────────
   const p3Items=useMemo(()=>{
@@ -1738,55 +1831,65 @@ function AdminPanelInner({user}){
 
   const classSubjectTime = useMemo(()=>{
     if(!selInst) return [];
-    return instClasses
-      .map(cls=>{
+    return instClassGroups
+      .map(group=>{
         const activeTeachers = new Set();
         const subjectTotals = new Map();
         let entryCount = 0;
         let totalMinutes = 0;
         let untimedEntries = 0;
-        (cls.teachers||[]).forEach(t=>{
-          const d = fullData[t.uid];
-          if(!d) return;
-          const entries = getEntriesInRange((d.notes||{})[t.classId]||{}, periodDays);
-          if(entries.length) activeTeachers.add(t.uid);
-          entries.forEach(({entry})=>{
-            entryCount += 1;
-            const duration = entryDurationMinutes(entry);
-            const subject = (t.subject || cls.subjects?.[0] || "No subject").trim() || "No subject";
-            if(duration>0){
-              totalMinutes += duration;
-              subjectTotals.set(subject, (subjectTotals.get(subject) || 0) + duration);
-            } else {
-              untimedEntries += 1;
-            }
+        (group.classItems||[]).forEach(cls=>{
+          (cls.teachers||[]).forEach(t=>{
+            const d = fullData[t.uid];
+            if(!d) return;
+            const entries = getEntriesInRange((d.notes||{})[t.classId]||{}, periodDays);
+            if(entries.length) activeTeachers.add(t.uid);
+            entries.forEach(({entry})=>{
+              entryCount += 1;
+              const duration = entryDurationMinutes(entry);
+              const subject = (t.subject || cls.subjects?.[0] || "No subject").trim() || "No subject";
+              if(duration>0){
+                totalMinutes += duration;
+                subjectTotals.set(subject, (subjectTotals.get(subject) || 0) + duration);
+              } else {
+                untimedEntries += 1;
+              }
+            });
           });
         });
         return {
-          raw:cls.raw,
-          display:cls.display,
+          raw:group.raw,
+          display:group.display,
+          sectionCount:group.classItems.length,
+          sectionNames:group.sectionNames,
           entryCount,
           totalMinutes,
           untimedEntries,
-          teacherCount:cls.teachers.length,
+          teacherCount:group.teacherCount,
           activeTeacherCount:activeTeachers.size,
           subjects:Array.from(subjectTotals.entries())
             .sort((a,b)=>b[1]-a[1] || exportTextSorter.compare(a[0],b[0]))
             .map(([subject, minutes])=>({subject, minutes, color:subjectColor(subject)})),
+          sortOrder:group.sortOrder,
         };
       })
       .filter(item=>item.entryCount>0)
-      .sort((a,b)=>classNum(b.display)-classNum(a.display) || exportTextSorter.compare(a.display,b.display));
-  },[selInst,instClasses,fullData,periodDays]);
+      .sort((a,b)=>{
+        if(selectedInstituteType==="school" && a.sortOrder!==b.sortOrder) return b.sortOrder - a.sortOrder;
+        if(a.sortOrder!==b.sortOrder) return a.sortOrder - b.sortOrder;
+        return exportTextSorter.compare(a.display,b.display);
+      });
+  },[selInst,instClassGroups,fullData,periodDays,selectedInstituteType]);
 
   const classSubjectSummary = useMemo(()=>{
     return classSubjectTime.reduce((acc,item)=>{
-      acc.classCount += 1;
+      acc.groupCount += 1;
+      acc.sectionCount += item.sectionCount || 0;
       acc.entryCount += item.entryCount;
       acc.totalMinutes += item.totalMinutes;
       acc.untimedEntries += item.untimedEntries;
       return acc;
-    },{classCount:0,entryCount:0,totalMinutes:0,untimedEntries:0});
+    },{groupCount:0,sectionCount:0,entryCount:0,totalMinutes:0,untimedEntries:0});
   },[classSubjectTime]);
 
   const overviewRecentEntries = useMemo(()=>{
@@ -2389,6 +2492,118 @@ function AdminPanelInner({user}){
     instTeachers.forEach(t=>ensureFullData(t.uid));
   };
 
+  const toggleClassGroup = (groupKey) => {
+    setInstClassGroupOpen(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
+  };
+
+  const renderClassGroupCard = (group, mobile = false) => {
+    const expanded = !!p2SearchKey || !!instClassGroupOpen[group.raw] || selectedClassGroupKey===group.raw;
+    const headerSelected = selectedClassGroupKey===group.raw;
+    const subjectPreview = (group.subjects || []).slice(0, mobile ? 2 : 3);
+    const hiddenSubjectCount = Math.max(0, (group.subjects || []).length - subjectPreview.length);
+    const childPadding = mobile ? "12px 14px" : "10px 12px";
+
+    return (
+      <div
+        key={group.raw}
+        style={{
+          background: mobile ? G.surface : headerSelected ? G.blueL : "transparent",
+          borderRadius: 12,
+          border: `1px solid ${G.border}`,
+          marginBottom: 8,
+          overflow: "hidden",
+          boxShadow: mobile ? G.shadowSm : "none",
+        }}
+      >
+        <div
+          onClick={()=>toggleClassGroup(group.raw)}
+          style={{
+            padding: mobile ? "14px 16px" : "12px 13px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 10,
+            cursor: "pointer",
+            background: headerSelected && !mobile ? G.blueL : "transparent",
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: mobile ? 16 : 15, fontWeight: 700, color: headerSelected && !mobile ? G.blue : G.text, fontFamily: G.display }}>
+              {group.display}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={{ background: G.blueL, color: G.blue, borderRadius: 999, padding: "2px 9px", fontSize: 11, fontFamily: G.mono, fontWeight: 700 }}>
+                {group.classItems.length} {group.classItems.length===1 ? classChildSingular : classChildLabel}
+              </span>
+              <span style={{ background: G.bg, border: `1px solid ${G.border}`, borderRadius: 999, padding: "2px 9px", fontSize: 11, color: G.textS, fontFamily: G.mono, fontWeight: 700 }}>
+                {group.teacherCount} teacher{group.teacherCount!==1 ? "s" : ""}
+              </span>
+            </div>
+            {subjectPreview.length>0 && (
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 7 }}>
+                {subjectPreview.map(subject=>(
+                  <span key={`${group.raw}_${subject}`} style={{ background: mobile ? G.bg : "#fff", border: `1px solid ${G.border}`, borderRadius: 999, padding: "2px 8px", fontSize: 11, color: G.textS }}>
+                    {subject}
+                  </span>
+                ))}
+                {hiddenSubjectCount>0 && (
+                  <span style={{ fontSize: 11, color: G.textL, alignSelf: "center" }}>+{hiddenSubjectCount} more</span>
+                )}
+              </div>
+            )}
+          </div>
+          <span style={{ fontSize: 18, color: G.textL, lineHeight: 1, paddingTop: 3 }}>{expanded ? "▾" : "▸"}</span>
+        </div>
+        {expanded && (
+          <div style={{ borderTop: `1px solid ${G.border}`, background: mobile ? "#F8FAFD" : G.bg, padding: mobile ? "0 10px 10px" : "0 8px 8px" }}>
+            {(group.classItems || []).map(cls=>{
+              const isSel = selP2===cls.raw;
+              return (
+                <div
+                  key={cls.raw}
+                  onClick={(e)=>{ e.stopPropagation(); openClassSelection(cls.raw); }}
+                  style={{
+                    marginTop: 8,
+                    padding: childPadding,
+                    borderRadius: 11,
+                    border: `1px solid ${isSel ? G.blue : G.border}`,
+                    background: isSel ? "#EFF6FF" : "#FFFFFF",
+                    cursor: "pointer",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: isSel ? G.blue : G.text }}>
+                      {cls.display}
+                    </div>
+                    {cls.subjects.length>0 && (
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5 }}>
+                        {cls.subjects.map(subject=>(
+                          <span key={`${cls.raw}_${subject}`} style={{ background: G.bg, border: `1px solid ${G.border}`, borderRadius: 999, padding: "2px 8px", fontSize: 11, color: G.textS }}>
+                            {subject}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 6 }}>
+                      <span style={{ background: G.blueL, color: G.blue, borderRadius: 999, padding: "2px 9px", fontSize: 11, fontFamily: G.mono, fontWeight: 700 }}>
+                        {cls.teachers.length} teacher{cls.teachers.length!==1 ? "s" : ""}
+                      </span>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 18, color: G.textL, lineHeight: 1, paddingTop: 2 }}>›</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderSearchInput = (value, onChange, placeholder, compact = false) => (
     <div style={{position:"relative",marginTop:compact?0:10}}>
       <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:12,color:G.textL,pointerEvents:"none"}}>⌕</span>
@@ -2682,7 +2897,7 @@ function AdminPanelInner({user}){
                 <div>
                   <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>Class teaching time</div>
                   <div style={{fontSize:12,color:G.textL,marginTop:4,lineHeight:1.55}}>
-                    For each class, see how the logged teaching time splits subject-wise in {overviewPeriodText.toLowerCase()}.
+                    For each {selectedInstituteType==="school" ? "grade" : "class group"}, see how the logged teaching time splits subject-wise in {overviewPeriodText.toLowerCase()}.
                   </div>
                 </div>
                 <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>
@@ -2691,7 +2906,10 @@ function AdminPanelInner({user}){
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
                 <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
-                  {classSubjectSummary.classCount} active {classSubjectSummary.classCount===1?"class":"classes"}
+                  {classSubjectSummary.groupCount} active {classSubjectSummary.groupCount===1 ? "group" : "groups"}
+                </span>
+                <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                  {classSubjectSummary.sectionCount} {classSubjectSummary.sectionCount===1 ? classChildSingular : classChildLabel}
                 </span>
                 <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
                   {formatDurationShort(classSubjectSummary.totalMinutes)} logged
@@ -2721,8 +2939,13 @@ function AdminPanelInner({user}){
                         <div style={{minWidth:0}}>
                           <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display}}>{item.display}</div>
                           <div style={{fontSize:12,color:G.textL,marginTop:4,lineHeight:1.55}}>
-                            {item.entryCount} {item.entryCount===1?"log":"logs"} · {item.activeTeacherCount}/{item.teacherCount} teachers active
+                            {item.sectionCount} {item.sectionCount===1 ? classChildSingular : classChildLabel} · {item.entryCount} {item.entryCount===1?"log":"logs"} · {item.activeTeacherCount}/{item.teacherCount} teachers active
                           </div>
+                          {item.sectionNames?.length>0&&(
+                            <div style={{fontSize:12,color:G.textM,marginTop:5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                              {item.sectionNames.join(" · ")}
+                            </div>
+                          )}
                         </div>
                         <span style={{background:item.totalMinutes>0?"#DCFCE7":"#FFF7ED",color:item.totalMinutes>0?"#166534":G.amber,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
                           {item.totalMinutes>0 ? formatDurationShort(item.totalMinutes) : "Untimed only"}
@@ -3779,27 +4002,13 @@ function AdminPanelInner({user}){
               </button>
             ))}
           </div>
-          {renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers",true)}
+          {renderSearchInput(p2Search,setP2Search,tab==="class"?"Search class groups, sections, subjects":"Search teachers",true)}
           <div style={{fontSize:12,color:G.textL,margin:"10px 2px 12px"}}>
             {tab==="class"
-              ? `${visibleInstClasses.length} of ${instClasses.length} classes`
+              ? `${visibleInstClasses.length} of ${instClassGroups.length} ${classGroupingLabel.toLowerCase()}`
               : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
           </div>
-          {tab==="class"&&visibleInstClasses.map(cls=>(
-            <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
-              style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-              <div>
-                <div style={{fontSize:16,fontWeight:700,color:G.text}}>{cls.display}</div>
-                {cls.subjects.length>0&&(
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
-                    {cls.subjects.map(s=><span key={s} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"2px 9px",fontSize:12,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
-                  </div>
-                )}
-                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:6,display:"inline-block"}}>{cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}</span>
-              </div>
-              <span style={{fontSize:20,color:G.textL}}>›</span>
-            </div>
-          ))}
+          {tab==="class"&&visibleInstClasses.map(group=>renderClassGroupCard(group,true))}
           {tab==="teacher"&&visibleInstTeachers.map(t=>{
             const d=fullData[t.uid]||{};
             const name=d.profile?.name||t.name||"?";
@@ -3818,9 +4027,9 @@ function AdminPanelInner({user}){
           {instTeachers.length===0&&tab==="teacher"&&loadingUids.size>0&&(
             <div style={{textAlign:"center",padding:"40px 0",color:G.textM}}>Loading teachers…</div>
           )}
-          {((tab==="class"&&visibleInstClasses.length===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
+          {((tab==="class"&&visibleInstClasses.length===0&&instClassGroups.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"18px 16px",textAlign:"center",color:G.textM}}>
-              No {tab==="class"?"classes":"teachers"} match your search.
+              No {tab==="class"?"class groups":"teachers"} match your search.
             </div>
           )}
         </div>
@@ -4224,15 +4433,15 @@ function AdminPanelInner({user}){
                 </button>
               ))}
             </div>
-            {selInst&&renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers",true)}
+            {selInst&&renderSearchInput(p2Search,setP2Search,tab==="class"?"Search class groups, sections, subjects":"Search teachers",true)}
             {selInst&&<div style={{fontSize:12,color:G.textL,marginTop:8}}>
               {tab==="class"
-                ? `${visibleInstClasses.length} of ${instClasses.length} classes`
+                ? `${visibleInstClasses.length} of ${instClassGroups.length} ${classGroupingLabel.toLowerCase()}`
                 : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
             </div>}
           </div>
           <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
-            {tab==="class"?"Classes ↓ (12th first)":"Teachers"}
+            {tab==="class"?`${classGroupingLabel} ↓`: "Teachers"}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
             {!selInst&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>Select an institute</div>}
@@ -4267,35 +4476,15 @@ function AdminPanelInner({user}){
                 </div>
               );
             })}
-            {selInst&&tab==="class"&&instClasses.length===0&&loadingUids.size>0&&(
+            {selInst&&tab==="class"&&instClassGroups.length===0&&loadingUids.size>0&&(
               <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:13,fontFamily:G.mono}}>
                 <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${G.blueL}`,borderTopColor:G.blue,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
-                loading classes…
+                loading class groups…
               </div>
             )}
-            {selInst&&tab==="class"&&visibleInstClasses.map(cls=>{
-              const isSel=selP2===cls.raw;
-              return(
-                <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
-                  style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
-                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
-                  onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
-                  {cls.subjects.length>0&&(
-                    <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
-                      {cls.subjects.map(s=><span key={s} style={{background:isSel?G.surface:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"1px 8px",fontSize:11,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
-                    </div>
-                  )}
-                  <div style={{marginTop:4}}>
-                    <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
-                      {cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-            {selInst&&((tab==="class"&&visibleInstClasses.length===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
-              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>No {tab==="class"?"classes":"teachers"} match your search</div>
+            {selInst&&tab==="class"&&visibleInstClasses.map(group=>renderClassGroupCard(group,false))}
+            {selInst&&((tab==="class"&&visibleInstClasses.length===0&&instClassGroups.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
+              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>No {tab==="class"?"class groups":"teachers"} match your search</div>
             )}
           </div>
         </div>
