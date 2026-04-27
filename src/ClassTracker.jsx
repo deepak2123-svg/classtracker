@@ -44,6 +44,29 @@ function instColor(name) {
 
 const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:{name:""},trash:{classes:[],notes:[]}};
 
+function readClientProfile(){
+  if(typeof window==="undefined"){
+    return { isMobile:false, reduceMotion:false, weakDevice:false, mobileLite:false };
+  }
+  const nav = window.navigator || {};
+  const ua = String(nav.userAgent || "").toLowerCase();
+  const width = window.innerWidth || 1024;
+  const isMobile = width < 768;
+  const isAndroid = /android/.test(ua);
+  const deviceMemory = Number(nav.deviceMemory || 0);
+  const hardwareConcurrency = Number(nav.hardwareConcurrency || 0);
+  const reduceMotion = !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  const weakMemory = deviceMemory > 0 && deviceMemory <= 4;
+  const weakCpu = hardwareConcurrency > 0 && hardwareConcurrency <= 4;
+  const weakDevice = reduceMotion || (isAndroid && (weakMemory || weakCpu || width <= 412)) || (isMobile && weakMemory && weakCpu);
+  return {
+    isMobile,
+    reduceMotion,
+    weakDevice,
+    mobileLite:isMobile && (weakDevice || width <= 430),
+  };
+}
+
 // ── Error Boundary ────────────────────────────────────────────────────────────
 class CTErrorBoundary extends Component {
   constructor(props){ super(props); this.state={error:null}; }
@@ -1664,6 +1687,8 @@ function ClassTrackerInner({user}){
   const [confirmModal,setConfirmModal]   = useState(null);
   const [savingGuard,setSavingGuard]     = useState(null); // {onLeave} — shown mid-save
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
+  const [isWeakDevice,setIsWeakDevice]   = useState(false);
+  const [reduceEffects,setReduceEffects] = useState(false);
   const [loadIssue,setLoadIssue]         = useState(null);
   const [dataWarning,setDataWarning]     = useState(null);
   const [allowCloudSync,setAllowCloudSync] = useState(false);
@@ -1680,6 +1705,9 @@ function ClassTrackerInner({user}){
   // Use sessionStorage so "Remind later" hides for this session only — shows again on next app open
   const [linkingDone,       setLinkingDone]        = useState(()=>sessionStorage.getItem("linkDismissed")==="1");
   const pendingSaveKey = `classlog_pending_${user.uid}`;
+  const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
+  const mobileBatchSize = mobileLiteMode ? 8 : 14;
+  const [mobileClassLimit, setMobileClassLimit] = useState(mobileBatchSize);
 
   const normaliseLoadedData = React.useCallback((incoming, { forceProfileBlank = false } = {}) => {
     const base = incoming
@@ -1709,6 +1737,25 @@ function ClassTrackerInner({user}){
     // Load admin-created institutes list and section definitions
     getGlobalInstitutes().then(list => setGlobalInstitutes(list)).catch(()=>{});
     getAllInstituteSections().then(secs => setInstituteSections(secs||{})).catch(()=>{});
+  },[]);
+
+  useEffect(()=>{
+    const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    const check = ()=>{
+      const profile = readClientProfile();
+      setIsMobile(profile.isMobile);
+      setIsWeakDevice(profile.weakDevice);
+      setReduceEffects(profile.reduceMotion);
+    };
+    check();
+    window.addEventListener("resize",check);
+    if(media?.addEventListener) media.addEventListener("change",check);
+    else if(media?.addListener) media.addListener(check);
+    return ()=>{
+      window.removeEventListener("resize",check);
+      if(media?.removeEventListener) media.removeEventListener("change",check);
+      else if(media?.removeListener) media.removeListener(check);
+    };
   },[]);
 
   useEffect(()=>{
@@ -1943,13 +1990,6 @@ function ClassTrackerInner({user}){
   };
 
   useEffect(()=>{if((view==="addNote"||view==="editNote")&&noteRef.current)noteRef.current.blur();},[view]);
-  useEffect(()=>{
-    const onResize=()=>setIsMobile(window.innerWidth<768);
-    window.addEventListener("resize",onResize);
-    return ()=>window.removeEventListener("resize",onResize);
-  },[]);
-
-
 
   useEffect(()=>{
     const goOffline=()=>setIsOffline(true);
@@ -1996,6 +2036,9 @@ function ClassTrackerInner({user}){
       window.removeEventListener("online",goOnline);
     };
   },[saveErr,data,user.uid,allowCloudSync,pendingSaveKey,cloudRevision,storePendingDraft]);
+  useEffect(()=>{
+    if(view==="home") setMobileClassLimit(mobileBatchSize);
+  },[instFilter, view, data.classes.length, mobileBatchSize]);
 
   // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
   // After both data and sections load, find classes that don't match admin sections
@@ -2289,6 +2332,20 @@ function ClassTrackerInner({user}){
     const institutesFromStore=(data.institutes||[]).filter(Boolean);
     const institutes=[...new Set([...institutesFromAllClasses,...institutesFromStore])].filter(Boolean);
     const filtered=instFilter==="all"?activeClasses:activeClasses.filter(c=>c.institute===instFilter);
+    const visibleMobileClasses=filtered.slice(0,mobileClassLimit);
+    const hasMoreMobileClasses=filtered.length>visibleMobileClasses.length;
+    const quickHomeSummary=(()=>{
+      const now=new Date();
+      const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+      let loggedToday=0, monthEntries=0;
+      activeClasses.forEach(cls=>{
+        const classNotes=data.notes?.[cls.id]||{};
+        const todayEntries=Array.isArray(classNotes[todayKey()])?classNotes[todayKey()].length:0;
+        if(todayEntries>0) loggedToday+=1;
+        monthEntries+=Object.entries(classNotes).reduce((sum,[dk,arr])=>sum+(dk.startsWith(monthKey)&&Array.isArray(arr)?arr.length:0),0);
+      });
+      return { active:activeClasses.length, loggedToday, monthEntries };
+    })();
 
     // For tablet/desktop split view
     const selCls=activeClasses.find(c=>c.id===activeClass?.id)||activeClasses[0]||null;
@@ -2308,7 +2365,7 @@ function ClassTrackerInner({user}){
     </>;
 
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
-    const ClassCard = ({cls, onClick}) => {
+    const ClassCard = ({cls, onClick, compact = false}) => {
       const ic=instColor(cls.institute);
       const total=Object.values(data.notes?.[cls.id]||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
       // This-month entries
@@ -2323,28 +2380,52 @@ function ClassTrackerInner({user}){
       // Truncate long institute names with ellipsis
       const instFull=cls.institute||"";
       const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
+      const StatChip = ({label,value,active=false})=>(
+        <span style={{
+          display:"inline-flex",
+          alignItems:"center",
+          gap:5,
+          borderRadius:999,
+          padding:"4px 9px",
+          fontSize:11,
+          fontFamily:G.mono,
+          fontWeight:700,
+          background:active?G.greenL:"rgba(0,0,0,0.05)",
+          color:active?G.green:G.textM,
+          border:`1px solid ${active?"rgba(27,138,76,0.16)":"rgba(0,0,0,0.06)"}`,
+        }}>
+          <span style={{fontFamily:G.sans,fontWeight:600,color:G.textL}}>{label}</span>
+          <span>{value}</span>
+        </span>
+      );
       return(
         <div onClick={onClick}
-          style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"transform 0.1s,box-shadow 0.1s"}}
-          onPointerDown={e=>{e.currentTarget.style.transform="scale(0.98)";e.currentTarget.style.boxShadow="none";}}
-          onPointerUp={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}
-          onPointerCancel={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}>
-          <div style={{height:6,background:ic.bg}}/>
-          <div style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
-            <div style={{width:46,height:46,borderRadius:12,background:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,borderLeft:`4px solid ${ic.bg}`}}>
+          style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:compact||reduceEffects?"none":G.shadowSm,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:compact||reduceEffects?"none":"transform 0.1s,box-shadow 0.1s"}}
+          onPointerDown={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="scale(0.98)";e.currentTarget.style.boxShadow="none";})}
+          onPointerUp={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;})}
+          onPointerCancel={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;})}>
+          <div style={{height:compact?5:6,background:ic.bg}}/>
+          <div style={{padding:compact?"12px 13px":"14px 16px",display:"flex",alignItems:"center",gap:compact?10:12}}>
+            <div style={{width:compact?40:46,height:compact?40:46,borderRadius:compact?10:12,background:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:compact?13:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,borderLeft:`4px solid ${ic.bg}`}}>
               {(cls.section||"?").slice(0,2).toUpperCase()}
             </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,marginBottom:5}}>{cls.section}</div>
+              <div style={{fontSize:compact?16:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,marginBottom:5}}>{cls.section}</div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 <span title={instFull} style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}44`,flexShrink:0,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                   {instShort}
                 </span>
                 {cls.subject&&<span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>· {cls.subject}</span>}
               </div>
+              {compact&&(
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                  <StatChip label="Today" value={todayN} active={todayN>0}/>
+                  <StatChip label={monthLabel} value={monthN} active={monthN>0}/>
+                  <StatChip label="Total" value={total}/>
+                </div>
+              )}
             </div>
-            {/* Right: clearly labelled stats */}
-            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
+            {!compact&&<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
               {/* Today */}
               <div style={{display:"flex",alignItems:"center",gap:5}}>
                 <span style={{fontSize:11,color:G.textL,fontFamily:G.sans}}>Today</span>
@@ -2360,7 +2441,7 @@ function ClassTrackerInner({user}){
                 <span style={{fontSize:11,color:G.textL,fontFamily:G.sans}}>Total</span>
                 <span style={{minWidth:26,height:22,borderRadius:20,background:"rgba(0,0,0,0.06)",color:G.textM,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 7px",fontFamily:G.mono}}>{total}</span>
               </div>
-            </div>
+            </div>}
             <div style={{color:G.textL,fontSize:20,flexShrink:0,paddingLeft:2}}>›</div>
           </div>
         </div>
@@ -2389,14 +2470,33 @@ function ClassTrackerInner({user}){
     const MobileHome = () => (
       <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
         {/* Greeting */}
-        <div style={{padding:"18px 16px 12px"}}>
-          <h1 style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,marginBottom:6}}>{teacherName} 👋</h1>
-          <span style={{background:G.greenL,borderRadius:20,padding:"4px 12px",fontSize:13,color:G.green,fontWeight:700}}>📅 {currentSession()}</span>
+        <div style={{padding:mobileLiteMode?"16px 14px 10px":"18px 16px 12px"}}>
+          <h1 style={{fontSize:mobileLiteMode?22:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,marginBottom:6}}>{teacherName} 👋</h1>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <span style={{background:G.greenL,borderRadius:20,padding:"4px 12px",fontSize:13,color:G.green,fontWeight:700}}>📅 {currentSession()}</span>
+            <span style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:20,padding:"4px 12px",fontSize:13,color:G.textS,fontWeight:700}}>
+              {quickHomeSummary.active} active classes
+            </span>
+          </div>
         </div>
         {/* Filter */}
-        {institutes.length>1&&<div style={{padding:"0 16px 14px"}}><InstFilter/></div>}
+        {institutes.length>1&&<div style={{padding:mobileLiteMode?"0 14px 12px":"0 16px 14px"}}><InstFilter/></div>}
+        <div style={{padding:mobileLiteMode?"0 14px 12px":"0 16px 14px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8}}>
+            {[
+              {label:"Logged today",value:quickHomeSummary.loggedToday,color:G.forest,bg:G.greenL},
+              {label:"This month",value:quickHomeSummary.monthEntries,color:G.green,bg:"#EEFDF4"},
+              {label:"Showing",value:`${Math.min(filtered.length, visibleMobileClasses.length)}/${filtered.length}`,color:G.textS,bg:G.surface,border:`1px solid ${G.border}`},
+            ].map(item=>(
+              <div key={item.label} style={{background:item.bg,border:item.border||"none",borderRadius:12,padding:"10px 10px 9px"}}>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>{item.label}</div>
+                <div style={{fontSize:mobileLiteMode?18:19,fontWeight:800,color:item.color,fontFamily:G.display,marginTop:4,lineHeight:1}}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
         {/* Class list */}
-        <div style={{flex:1,overflowY:"auto",padding:"0 14px 100px",WebkitOverflowScrolling:"touch"}}>
+        <div style={{flex:1,overflowY:"auto",padding:mobileLiteMode?"0 12px 100px":"0 14px 100px",WebkitOverflowScrolling:"touch"}}>
           {activeClasses.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
               <div style={{fontSize:52,marginBottom:16}}>📚</div>
@@ -2405,10 +2505,16 @@ function ClassTrackerInner({user}){
               <PrimaryBtn onClick={()=>setView("addClass")} style={{padding:"13px 32px",fontSize:16}}>+ Add First Class</PrimaryBtn>
             </div>
           ):(
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              {filtered.map(cls=>(
-                <ClassCard key={cls.id} cls={cls} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}}/>
+            <div style={{display:"flex",flexDirection:"column",gap:mobileLiteMode?10:12}}>
+              {visibleMobileClasses.map(cls=>(
+                <ClassCard key={cls.id} cls={cls} compact={mobileLiteMode} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}}/>
               ))}
+              {hasMoreMobileClasses&&(
+                <button onClick={()=>setMobileClassLimit(limit=>Math.min(filtered.length, limit + mobileBatchSize))}
+                  style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"13px 16px",fontSize:14,fontWeight:700,color:G.textS,fontFamily:G.sans,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  Load {Math.min(mobileBatchSize, filtered.length - visibleMobileClasses.length)} more classes
+                </button>
+              )}
               <div onClick={()=>setView("addClass")}
                 style={{borderRadius:16,border:`2px dashed ${G.border}`,padding:"20px",display:"flex",alignItems:"center",justifyContent:"center",gap:10,cursor:"pointer",background:"transparent",WebkitTapHighlightColor:"transparent"}}
                 onPointerDown={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.borderColor=G.green;}}
@@ -2598,7 +2704,7 @@ function ClassTrackerInner({user}){
                     </div>
                   )}
                   {selDateNotes.map(note=>{const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;return(
-                    <div key={note.id} style={{background:G.surface,borderRadius:13,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
+                    <div key={note.id} style={{background:G.surface,borderRadius:13,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowSm}}>
                       <div style={{height:3,background:tag.bg}}/>
                       <div style={{padding:"12px 14px"}}>
                         <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
@@ -2731,7 +2837,7 @@ function ClassTrackerInner({user}){
               {dateNotes.map(note=>{
                 const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
                 return(
-                  <div key={note.id} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
+                  <div key={note.id} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowSm}}>
                     <div style={{height:4,background:tag.bg}}/>
                     <div style={{padding:"13px 15px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>

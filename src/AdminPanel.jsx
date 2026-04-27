@@ -35,6 +35,28 @@ function currentSession(){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;
   return m>=4?`${y}-${String(y+1).slice(2)}`:`${y-1}-${String(y).slice(2)}`;
 }
+function readClientProfile(){
+  if(typeof window==="undefined"){
+    return { isMobile:false, reduceMotion:false, weakDevice:false, mobileLite:false };
+  }
+  const nav = window.navigator || {};
+  const ua = String(nav.userAgent || "").toLowerCase();
+  const width = window.innerWidth || 1024;
+  const isMobile = width < 768;
+  const isAndroid = /android/.test(ua);
+  const deviceMemory = Number(nav.deviceMemory || 0);
+  const hardwareConcurrency = Number(nav.hardwareConcurrency || 0);
+  const reduceMotion = !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  const weakMemory = deviceMemory > 0 && deviceMemory <= 4;
+  const weakCpu = hardwareConcurrency > 0 && hardwareConcurrency <= 4;
+  const weakDevice = reduceMotion || (isAndroid && (weakMemory || weakCpu || width <= 412)) || (isMobile && weakMemory && weakCpu);
+  return {
+    isMobile,
+    reduceMotion,
+    weakDevice,
+    mobileLite:isMobile && (weakDevice || width <= 430),
+  };
+}
 function ordSuffix(n){const s=["th","st","nd","rd"];const v=n%100;return s[(v-20)%10]||s[v]||s[0];}
 const LEAVE_REASON_MAP = {
   completed:  { icon:"✅", label:"Completed",  desc:"Syllabus is done, this class has ended" },
@@ -1229,6 +1251,9 @@ function AdminPanelInner({user}){
   const [exportOpen,   setExportOpen]   = useState(false);
   const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
   const [isMobile,     setIsMobile]     = useState(false);
+  const [isWeakDevice, setIsWeakDevice] = useState(false);
+  const [reduceEffects,setReduceEffects]= useState(false);
+  const [mobileLiteMode,setMobileLiteMode] = useState(false);
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | admins | institutes
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
@@ -1258,12 +1283,28 @@ function AdminPanelInner({user}){
   const [p2Search, setP2Search]             = useState("");
   const [repairingTeacherUid, setRepairingTeacherUid] = useState(null);
   const [instClassificationOpen, setInstClassificationOpen] = useState({});
+  const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
+  const fullDataRequestRef = React.useRef({});
+  const warmupJobRef = React.useRef(0);
 
   useEffect(()=>{
-    const check=()=>setIsMobile(window.innerWidth<768);
+    const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    const check=()=>{
+      const profile = readClientProfile();
+      setIsMobile(profile.isMobile);
+      setIsWeakDevice(profile.weakDevice);
+      setReduceEffects(profile.reduceMotion);
+      setMobileLiteMode(profile.mobileLite);
+    };
     check();
     window.addEventListener("resize",check);
-    return ()=>window.removeEventListener("resize",check);
+    if(media?.addEventListener) media.addEventListener("change",check);
+    else if(media?.addListener) media.addListener(check);
+    return ()=>{
+      window.removeEventListener("resize",check);
+      if(media?.removeEventListener) media.removeEventListener("change",check);
+      else if(media?.removeListener) media.removeListener(check);
+    };
   },[]);
 
   React.useEffect(()=>{
@@ -1338,13 +1379,70 @@ function AdminPanelInner({user}){
   }, []);
 
   // Lazy-load full data for a teacher only when needed
-  const ensureFullData = async (uid) => {
-    if (fullData[uid] || loadingUids.has(uid)) return; // already loaded or loading
-    setLoadingUids(s=>new Set([...s,uid]));
-    const d = await getTeacherFullData(uid);
-    if (d) setFullData(prev=>({...prev,[uid]:d}));
-    setLoadingUids(s=>{const n=new Set(s);n.delete(uid);return n;});
-  };
+  const ensureFullData = React.useCallback(async (uid) => {
+    if(!uid) return null;
+    if (fullData[uid]) return fullData[uid];
+    if (fullDataRequestRef.current[uid]) return fullDataRequestRef.current[uid];
+    setLoadingUids(s=>s.has(uid)?s:new Set([...s,uid]));
+    const pending = getTeacherFullData(uid)
+      .then(d=>{
+        if (d) setFullData(prev=>prev[uid]?prev:{...prev,[uid]:d});
+        return d || null;
+      })
+      .finally(()=>{
+        delete fullDataRequestRef.current[uid];
+        setLoadingUids(s=>{
+          if(!s.has(uid)) return s;
+          const n=new Set(s);
+          n.delete(uid);
+          return n;
+        });
+      });
+    fullDataRequestRef.current[uid] = pending;
+    return pending;
+  },[fullData]);
+
+  const getInstituteTeacherUids = React.useCallback((inst) => {
+    const norm = s => (s || "").trim().toLowerCase();
+    return teachers
+      .filter(t => {
+        const d = fullData[t.uid];
+        if (d) return (d.classes || []).some(c => norm(c.institute) === norm(inst));
+        return (t.institutes || []).some(i => norm(i) === norm(inst));
+      })
+      .map(t => t.uid);
+  }, [teachers, fullData]);
+
+  const warmTeacherUids = React.useCallback(async (uids, instLabel = null) => {
+    const requestId = ++warmupJobRef.current;
+    const unique = [...new Set((uids || []).filter(Boolean))];
+    const missing = unique.filter(uid => !fullData[uid]);
+
+    if(instLabel){
+      setInstWarmup({ inst:instLabel, total:missing.length, loaded:0 });
+    }
+    if(!missing.length){
+      if(instLabel) setInstWarmup({ inst:instLabel, total:0, loaded:0 });
+      return;
+    }
+
+    for(let i=0;i<missing.length;i+=1){
+      if(requestId!==warmupJobRef.current) return;
+      await ensureFullData(missing[i]);
+      if(requestId!==warmupJobRef.current) return;
+      if(instLabel){
+        const loaded = i + 1;
+        setInstWarmup(prev=>prev.inst===instLabel?{...prev,loaded}:prev);
+      }
+      if((isWeakDevice || mobileLiteMode) && i < missing.length - 1){
+        await new Promise(resolve=>window.setTimeout(resolve, 40));
+      }
+    }
+  }, [ensureFullData, fullData, isWeakDevice, mobileLiteMode]);
+
+  const warmInstitute = React.useCallback((inst) => {
+    warmTeacherUids(getInstituteTeacherUids(inst), inst);
+  }, [getInstituteTeacherUids, warmTeacherUids]);
 
   // ── Derived: institutes ───────────────────────────────────────────────────
   const institutes=useMemo(()=>{
@@ -1455,6 +1553,11 @@ function AdminPanelInner({user}){
       return haystack.includes(p2SearchKey);
     });
   },[instClasses,p2SearchKey]);
+
+  const instWarmupActive = !!(selInst && instWarmup.inst===selInst && instWarmup.total>0 && instWarmup.loaded<instWarmup.total);
+  const instWarmupLabel = instWarmupActive
+    ? `${Math.min(instWarmup.loaded, instWarmup.total)}/${instWarmup.total} teacher${instWarmup.total===1?"":"s"} loaded`
+    : "";
 
   // ── P3 content based on tab + P2 selection ────────────────────────────────
   const p3Items=useMemo(()=>{
@@ -2147,21 +2250,15 @@ function AdminPanelInner({user}){
     setMobileStep(s=>Math.min(s,1));
   };
 
-  // When institute is selected, pre-load its teachers in background
+  // When institute is selected, warm its teachers sequentially in the background.
+  // This avoids the old "fan out dozens of reads at once" behavior that hurts
+  // older Android devices.
   const onSelectInstitute = (inst) => {
     setSelInst(inst);
     clearDrilldown();
     setP2Search("");
     setMobileStep(1);
-    // Case-insensitive — institute names in the teacher index may differ in casing
-    const _norm = s => (s || "").trim().toLowerCase();
-    teachers
-      .filter(t => {
-        const d = fullData[t.uid];
-        if (d) return (d.classes || []).some(c => _norm(c.institute) === _norm(inst));
-        return (t.institutes || []).some(i => _norm(i) === _norm(inst));
-      })
-      .forEach(t => ensureFullData(t.uid));
+    warmInstitute(inst);
   };
 
   // ── Export helpers ────────────────────────────────────────────────────────
@@ -2417,7 +2514,7 @@ function AdminPanelInner({user}){
     setSelP3(null);
     setFullView(null);
     setMobileStep(2);
-    instClasses.find(c=>c.raw===raw)?.teachers?.forEach(t=>ensureFullData(t.uid));
+    warmTeacherUids(instClasses.find(c=>c.raw===raw)?.teachers?.map(t=>t.uid) || []);
   };
 
   const openScopedFullView = () => {
@@ -2427,7 +2524,7 @@ function AdminPanelInner({user}){
       ensureFullData(selP2);
     } else {
       setFullView({ kind:"class", classRaw:selP2 });
-      instClasses.find(c=>c.raw===selP2)?.teachers?.forEach(t=>ensureFullData(t.uid));
+      warmTeacherUids(instClasses.find(c=>c.raw===selP2)?.teachers?.map(t=>t.uid) || []);
     }
     setSelP3(null);
     setMobileStep(3);
@@ -2438,7 +2535,7 @@ function AdminPanelInner({user}){
     setSelP3(null);
     setFullView(null);
     setMobileStep(3);
-    instTeachers.forEach(t=>ensureFullData(t.uid));
+    if(selInst) warmInstitute(selInst);
   };
 
   const renderSearchInput = (value, onChange, placeholder, compact = false) => (
@@ -2463,6 +2560,31 @@ function AdminPanelInner({user}){
       />
     </div>
   );
+
+  const renderWarmupBanner = (mobile = false) => {
+    if(!instWarmupActive) return null;
+    return (
+      <div style={{
+        background:mobile ? "#EEF2FF" : G.bg,
+        border:`1px solid ${mobile ? "#C7D2FE" : G.border}`,
+        borderRadius:10,
+        padding:mobile ? "10px 12px" : "9px 11px",
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"space-between",
+        gap:10,
+        flexWrap:"wrap",
+        marginTop:mobile ? 0 : 10,
+      }}>
+        <div style={{fontSize:13,color:G.textS,fontFamily:G.sans,fontWeight:600}}>
+          Loading institute data progressively for a smoother phone experience.
+        </div>
+        <span style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:12,color:G.blue,fontFamily:G.mono,fontWeight:700}}>
+          {instWarmupLabel}
+        </span>
+      </div>
+    );
+  };
 
   const renderAggregateEntries = (mobile = false) => {
     if (aggregateLoading && aggregateEntries.length===0) {
@@ -2670,7 +2792,7 @@ function AdminPanelInner({user}){
 
     return (
       <>
-        <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:mobile?"14px 14px 13px":"16px 18px",boxShadow:G.shadowSm,marginBottom:16}}>
+        <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:mobile?"14px 14px 13px":"16px 18px",boxShadow:reduceEffects?"none":G.shadowSm,marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
             <div>
               <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>Selection summary</div>
@@ -2733,7 +2855,7 @@ function AdminPanelInner({user}){
         {p4Entries&&p4Entries.map(([dk,entries])=>{
           const dayMinutes = entries.reduce((sum,note)=>sum + entryDurationMinutes(note),0);
           return(
-            <div key={dk} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,marginBottom:16,overflow:"hidden",boxShadow:G.shadowSm}}>
+            <div key={dk} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,marginBottom:16,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowSm}}>
               <div style={{padding:mobile?"12px 14px":"13px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>
                   {formatDateLabel(dk)}
@@ -2796,7 +2918,7 @@ function AdminPanelInner({user}){
 
   const renderOverviewPanel = () => {
     const summaryCard = (label, value, accent = G.blue) => (
-      <div key={label} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 14px",boxShadow:G.shadowSm}}>
+      <div key={label} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 14px",boxShadow:reduceEffects?"none":G.shadowSm}}>
         <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1.1}}>{label}</div>
         <div style={{fontSize:24,fontWeight:800,color:accent,fontFamily:G.display,marginTop:4,lineHeight:1}}>{value}</div>
       </div>
@@ -2805,7 +2927,7 @@ function AdminPanelInner({user}){
     if(!selInst){
       return (
         <div style={{display:"grid",gap:14}}>
-          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"18px 18px 16px",boxShadow:G.shadowSm}}>
+          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"18px 18px 16px",boxShadow:reduceEffects?"none":G.shadowSm}}>
             <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display}}>Admin Overview</div>
             <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:6,maxWidth:620}}>
               Start with an institute on the left. From there, panel 2 narrows by class or teacher, panel 3 lets you either drill down or open a full grouped view, and panel 4 becomes the working space.
@@ -2820,7 +2942,7 @@ function AdminPanelInner({user}){
             ]}
           </div>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.3fr) minmax(0,1fr)",gap:14}}>
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:reduceEffects?"none":G.shadowSm}}>
               <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Most active institutes</div>
               {globalInstituteHighlights.length===0 ? <div style={{fontSize:14,color:G.textL}}>No activity yet.</div> : globalInstituteHighlights.map(item=>(
                 <div key={item.inst} style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center",padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
@@ -2832,7 +2954,7 @@ function AdminPanelInner({user}){
                 </div>
               ))}
             </div>
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:reduceEffects?"none":G.shadowSm}}>
               <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Recent activity</div>
               {overviewRecentEntries.length===0 ? <div style={{fontSize:14,color:G.textL}}>Recent activity will appear here once entries are uploaded.</div> : overviewRecentEntries.map(item=>(
                 <div key={item.id} style={{padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
@@ -3983,6 +4105,7 @@ function AdminPanelInner({user}){
               ? `${visibleInstClasses.length} of ${instClasses.length} classes`
               : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
           </div>
+          {renderWarmupBanner(true)}
           {tab==="class"&&visibleInstClasses.map(cls=>(
             <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
               style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
@@ -4409,6 +4532,7 @@ function AdminPanelInner({user}){
                 ? `${visibleInstClasses.length} of ${instClasses.length} classes`
                 : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
             </div>}
+            {selInst&&renderWarmupBanner(false)}
           </div>
           <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
             {tab==="class"?"Classes ↓ (12th first)":"Teachers"}
