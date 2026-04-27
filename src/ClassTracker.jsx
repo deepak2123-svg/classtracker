@@ -3001,8 +3001,8 @@ function ClassTrackerInner({user}){
     const daysLeft=ts=>Math.max(0,30-Math.floor((Date.now()-ts)/(1000*60*60*24)));
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
-        <SaveBadge/>
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} trashCount={trashCount} right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
+        {sharedModals}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>safeNav("stats")} onViewTrash={()=>setView("trash")} trashCount={trashCount} right={<GhostBtn onClick={()=>safeNav("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>

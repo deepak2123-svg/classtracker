@@ -252,6 +252,146 @@ function subjectColor(name){
   for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) - hash) + text.charCodeAt(i);
   return SUBJECT_COLOR_PALETTE[Math.abs(hash) % SUBJECT_COLOR_PALETTE.length];
 }
+const COACHING_CATEGORY_ORDER = {
+  coaching_12: ["JEE","NEET","NDA","CLAT","CUET","Foundation","Dropper","Other"],
+  coaching_grad: ["Banking","SSC","UPSC","CAT","GATE","RRB","Defence","Other"],
+};
+function coachingClassificationLabel(instType, sectionName = "", groupLabel = "") {
+  const text = `${sectionName} ${groupLabel}`.toLowerCase();
+  const fallback = (groupLabel || "").trim() || "Other";
+  if (instType === "coaching_12") {
+    if (text.includes("jee")) return "JEE";
+    if (text.includes("neet") || text.includes("medical") || /\bmed\b/.test(text)) return "NEET";
+    if (text.includes("nda")) return "NDA";
+    if (text.includes("clat")) return "CLAT";
+    if (text.includes("cuet")) return "CUET";
+    if (text.includes("foundation")) return "Foundation";
+    if (text.includes("dropper")) return "Dropper";
+    return fallback;
+  }
+  if (instType === "coaching_grad") {
+    if (text.includes("bank")) return "Banking";
+    if (text.includes("ssc")) return "SSC";
+    if (text.includes("upsc")) return "UPSC";
+    if (text.includes("cat")) return "CAT";
+    if (text.includes("gate")) return "GATE";
+    if (text.includes("rrb") || text.includes("rail")) return "RRB";
+    if (text.includes("defence") || text.includes("defense")) return "Defence";
+    return fallback;
+  }
+  return fallback;
+}
+function buildInstituteClassification(instType, groups) {
+  const bucketMap = new Map();
+  const addToBucket = ({ key, title, sectionLabel, sections, slots, overrideSections, group, sortOrder }) => {
+    if (!bucketMap.has(key)) {
+      bucketMap.set(key, {
+        key,
+        title,
+        sectionLabel,
+        sortOrder,
+        sections: new Set(),
+        slotMap: new Map(),
+        overrideSections: new Set(),
+        sourceGroups: [],
+      });
+    }
+    const bucket = bucketMap.get(key);
+    (sections || []).forEach(section => section && bucket.sections.add(section));
+    (slots || []).forEach(slot => {
+      const slotKey = `${slot?.start || ""}|${slot?.end || ""}|${slot?.durMins || ""}`;
+      if (slot?.start) bucket.slotMap.set(slotKey, slot);
+    });
+    (overrideSections || []).forEach(section => section && bucket.overrideSections.add(section));
+    if (!bucket.sourceGroups.some(item => item.id === group.id)) {
+      bucket.sourceGroups.push(group);
+    }
+  };
+
+  (groups || []).forEach(group => {
+    const sections = Array.isArray(group?.sections) ? group.sections.filter(Boolean) : [];
+    const slots = Array.isArray(group?.slots) ? group.slots : [];
+    const overrides = Object.keys(group?.sectionOverrides || {}).filter(key => (group.sectionOverrides?.[key] || []).length > 0);
+
+    if (instType === "school") {
+      const grades = Array.isArray(group?.gradeNums) && group.gradeNums.length
+        ? [...group.gradeNums].sort((a, b) => b - a)
+        : [...new Set(sections.map(section => classNum(section)).filter(Boolean))].sort((a, b) => b - a);
+      if (!grades.length) {
+        addToBucket({
+          key: `group_${group.id}`,
+          title: group?.label || "Ungrouped",
+          sectionLabel: "sections",
+          sections,
+          slots,
+          overrideSections: overrides,
+          group,
+          sortOrder: 0,
+        });
+        return;
+      }
+      grades.forEach(grade => {
+        let gradeSections = sections.filter(section => classNum(section) === grade);
+        if (!gradeSections.length && grades.length === 1) {
+          gradeSections = sections;
+        }
+        const gradeOverrides = overrides.filter(section => classNum(section) === grade || (!classNum(section) && grades.length === 1));
+        addToBucket({
+          key: `grade_${grade}`,
+          title: `${grade}th`,
+          sectionLabel: "sections",
+          sections: gradeSections,
+          slots,
+          overrideSections: gradeOverrides,
+          group,
+          sortOrder: grade,
+        });
+      });
+      return;
+    }
+
+    const categoryMap = new Map();
+    if (sections.length) {
+      sections.forEach(section => {
+        const category = coachingClassificationLabel(instType, section, group?.label || "");
+        if (!categoryMap.has(category)) categoryMap.set(category, []);
+        categoryMap.get(category).push(section);
+      });
+    } else {
+      categoryMap.set(coachingClassificationLabel(instType, "", group?.label || ""), []);
+    }
+
+    categoryMap.forEach((categorySections, category) => {
+      const categoryOverrides = overrides.filter(section => coachingClassificationLabel(instType, section, group?.label || "") === category);
+      const order = COACHING_CATEGORY_ORDER[instType] || [];
+      const idx = order.indexOf(category);
+      addToBucket({
+        key: `${instType}_${category}`,
+        title: category,
+        sectionLabel: "batches",
+        sections: categorySections,
+        slots,
+        overrideSections: categoryOverrides,
+        group,
+        sortOrder: idx === -1 ? 999 : idx,
+      });
+    });
+  });
+
+  return Array.from(bucketMap.values())
+    .map(bucket => ({
+      ...bucket,
+      sections: [...bucket.sections].sort(exportTextSorter.compare),
+      slots: [...bucket.slotMap.values()].sort((a, b) => (a?.start || "").localeCompare(b?.start || "")),
+      overrideSections: [...bucket.overrideSections].sort(exportTextSorter.compare),
+      sourceGroups: [...bucket.sourceGroups].sort((a, b) => exportTextSorter.compare(a?.label || "", b?.label || "")),
+    }))
+    .sort((a, b) => {
+      if (instType === "school" && a.sortOrder !== b.sortOrder) return b.sortOrder - a.sortOrder;
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return exportTextSorter.compare(a.title, b.title);
+    });
+}
 function SubjectSplitDonut({ segments, totalMinutes, size = 104, strokeWidth = 16 }) {
   const safeTotal = Math.max(0, totalMinutes || 0);
   const radius = (size - strokeWidth) / 2;
@@ -1115,6 +1255,7 @@ function AdminPanelInner({user}){
   const [instSearch, setInstSearch]         = useState("");
   const [p2Search, setP2Search]             = useState("");
   const [repairingTeacherUid, setRepairingTeacherUid] = useState(null);
+  const [instClassificationOpen, setInstClassificationOpen] = useState({});
 
   useEffect(()=>{
     const check=()=>setIsMobile(window.innerWidth<768);
@@ -2511,12 +2652,9 @@ function AdminPanelInner({user}){
     if(!selP2){
       return (
         <div style={{display:"grid",gap:14}}>
-          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"18px",boxShadow:G.shadowSm,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
-            <div>
-              <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display}}>{selInst}</div>
-              <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1.1,marginTop:6}}>
-                Institute overview
-              </div>
+          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"16px 18px",boxShadow:G.shadowSm,display:"flex",justifyContent:"space-between",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+            <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1.1}}>
+              Institute overview
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"6px 11px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>
@@ -2903,6 +3041,15 @@ function AdminPanelInner({user}){
           const instData=instSectionsAll[instDetailView]||{};
           const instType=instData.type||null;
           const groups=instData.gradeGroups||[];
+          const classificationCards = buildInstituteClassification(instType, groups);
+          const classificationTitle = instType==="school"
+            ? "School classification"
+            : instType==="coaching_12"
+              ? "Coaching classification"
+              : instType==="coaching_grad"
+                ? "Coaching classification"
+                : "Classification";
+          const addButtonLabel = instType==="school" ? "+ Add Grade Group" : "+ Add Batch Group";
           const fmtSlotPill=s=>{const[h,m]=s.start.split(":").map(Number);const e=s.end?.split(":").map(Number)||[0,0];const f=(hh,mm)=>`${hh%12||12}:${String(mm).padStart(2,"0")} ${hh>=12?"PM":"AM"}`;return`${f(h,m)}–${f(e[0],e[1])}`;};
           return(
             <div>
@@ -2935,40 +3082,96 @@ function AdminPanelInner({user}){
               {groups.length===0&&(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"36px 20px",textAlign:"center",marginBottom:16}}>
                   <div style={{fontSize:32,marginBottom:10}}>📚</div>
-                  <div style={{fontSize:16,fontWeight:600,color:G.textM,marginBottom:6}}>No grade groups yet</div>
-                  <div style={{fontSize:14,color:G.textL}}>Add a grade group to define sections and timetable slots for this institute.</div>
+                  <div style={{fontSize:16,fontWeight:600,color:G.textM,marginBottom:6}}>No classification yet</div>
+                  <div style={{fontSize:14,color:G.textL}}>{instType==="school" ? "Add a grade group to define sections and timetable slots for this institute." : "Add a batch group to define sections and timetable slots for this institute."}</div>
                 </div>
               )}
-              {groups.map(grp=>(
-                <div key={grp.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
-                  <div style={{padding:"16px 18px"}}>
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:12}}>
+              {classificationCards.length>0&&(
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8,fontFamily:G.mono}}>{classificationTitle}</div>
+                  <div style={{fontSize:13,color:G.textL,marginBottom:12}}>Tap any {instType==="school"?"grade":"category"} to expand its {instType==="school"?"sections":"batches"}.</div>
+                </div>
+              )}
+              {classificationCards.map(card=>{
+                const cardStateKey = `${instDetailView}::${card.key}`;
+                const isOpen = !!instClassificationOpen[cardStateKey];
+                const singleSource = card.sourceGroups.length===1 ? card.sourceGroups[0] : null;
+                return(
+                  <div key={card.key} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+                    <button
+                      onClick={()=>setInstClassificationOpen(prev=>({...prev,[cardStateKey]:!prev[cardStateKey]}))}
+                      style={{width:"100%",padding:"16px 18px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}
+                    >
                       <div>
-                        <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{grp.label}</div>
-                        <div style={{fontSize:13,color:G.textM,marginTop:2}}>{grp.sections?.length||0} sections · {grp.slots?.length||0} time slots</div>
+                        <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{card.title}</div>
+                        <div style={{fontSize:13,color:G.textM,marginTop:2}}>
+                          {card.sections.length} {card.sectionLabel} · {card.slots.length} time slots{card.sourceGroups.length>1?` · ${card.sourceGroups.length} setups`:""}
+                        </div>
                       </div>
-                      <div style={{display:"flex",gap:6,flexShrink:0}}>
-                        <button onClick={()=>setGrpModal({mode:"edit",inst:instDetailView,group:grp})} style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>Edit</button>
-                        <button onClick={async()=>{if(!window.confirm(`Delete "${grp.label}"?`))return;await deleteInstituteGradeGroup(instDetailView,grp.id);setInstSectionsAll(a=>({...a,[instDetailView]:{gradeGroups:(a[instDetailView]?.gradeGroups||[]).filter(g=>g.id!==grp.id)}}));}} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>Delete</button>
+                      <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                        {card.overrideSections.length>0&&(
+                          <span style={{background:"#FFF7ED",color:G.amber,border:`1px solid #FED7AA`,borderRadius:999,padding:"4px 9px",fontSize:11,fontFamily:G.mono,fontWeight:700}}>
+                            {card.overrideSections.length} custom
+                          </span>
+                        )}
+                        <span style={{fontSize:18,color:G.textL,transform:isOpen?"rotate(90deg)":"none",transition:"transform 0.18s"}}>›</span>
                       </div>
-                    </div>
-                    <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Sections</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
-                      {(grp.sections||[]).map(s=>(<span key={s} style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 11px",fontSize:12,fontFamily:G.mono,fontWeight:600}}>{s}</span>))}
-                    </div>
-                    <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Time slots</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                      {(grp.slots||[]).map((s,si)=>(<span key={si} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"3px 11px",fontSize:12,fontFamily:G.mono,color:G.text}}>{fmtSlotPill(s)}</span>))}
-                    </div>
-                    {Object.keys(grp.sectionOverrides||{}).filter(k=>(grp.sectionOverrides[k]||[]).length>0).length>0&&(
-                      <div style={{fontSize:12,color:G.textL,marginTop:8}}>+ Custom slots for: {Object.keys(grp.sectionOverrides).filter(k=>(grp.sectionOverrides[k]||[]).length>0).join(", ")}</div>
+                    </button>
+                    {isOpen&&(
+                      <div style={{padding:"0 18px 16px",borderTop:`1px solid ${G.border}`}}>
+                        <div style={{paddingTop:14}}>
+                          <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>
+                            {card.sectionLabel==="sections"?"Sections":"Batches"}
+                          </div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
+                            {card.sections.map(section=>(
+                              <span key={section} style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 11px",fontSize:12,fontFamily:G.mono,fontWeight:600}}>{section}</span>
+                            ))}
+                          </div>
+                          <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Time slots</div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                            {card.slots.map((slot, idx)=>(
+                              <span key={`${card.key}_${idx}`} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"3px 11px",fontSize:12,fontFamily:G.mono,color:G.text}}>{fmtSlotPill(slot)}</span>
+                            ))}
+                          </div>
+                          {card.overrideSections.length>0&&(
+                            <div style={{fontSize:12,color:G.textL,marginTop:8}}>+ Custom slots for: {card.overrideSections.join(", ")}</div>
+                          )}
+                        </div>
+                        {singleSource ? (
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:14}}>
+                            <button onClick={()=>setGrpModal({mode:"edit",inst:instDetailView,group:singleSource})} style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>Edit</button>
+                            <button onClick={async()=>{if(!window.confirm(`Delete "${singleSource.label}"?`))return;await deleteInstituteGradeGroup(instDetailView,singleSource.id);setInstSectionsAll(a=>({...a,[instDetailView]:{...(a[instDetailView]||{}),gradeGroups:(a[instDetailView]?.gradeGroups||[]).filter(g=>g.id!==singleSource.id)}}));}} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>Delete</button>
+                          </div>
+                        ) : (
+                          <div style={{marginTop:14}}>
+                            <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Underlying setups</div>
+                            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                              {card.sourceGroups.map(group=>(
+                                <div key={group.id} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 14px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
+                                  <div>
+                                    <div style={{fontSize:14,fontWeight:700,color:G.text}}>{group.label}</div>
+                                    <div style={{fontSize:12,color:G.textL,marginTop:3}}>
+                                      {group.sections?.length||0} sections · {group.slots?.length||0} time slots
+                                    </div>
+                                  </div>
+                                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                                    <button onClick={()=>setGrpModal({mode:"edit",inst:instDetailView,group})} style={{...pill(G.surface,G.textS,G.borderM),fontSize:12}}>Edit</button>
+                                    <button onClick={async()=>{if(!window.confirm(`Delete "${group.label}"?`))return;await deleteInstituteGradeGroup(instDetailView,group.id);setInstSectionsAll(a=>({...a,[instDetailView]:{...(a[instDetailView]||{}),gradeGroups:(a[instDetailView]?.gradeGroups||[]).filter(g=>g.id!==group.id)}}));}} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:12}}>Delete</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <button onClick={()=>setGrpModal({mode:"add",inst:instDetailView})}
                 style={{width:"100%",padding:"13px",borderRadius:12,border:`2px dashed ${G.blue}`,background:G.blueL,color:G.blue,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
-                + Add Grade Group
+                {addButtonLabel}
               </button>
             </div>
           );
