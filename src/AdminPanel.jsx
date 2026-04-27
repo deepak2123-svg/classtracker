@@ -37,7 +37,7 @@ function currentSession(){
 }
 function readClientProfile(){
   if(typeof window==="undefined"){
-    return { isMobile:false, reduceMotion:false, weakDevice:false, mobileLite:false };
+    return { isMobile:false, reduceMotion:false, weakDevice:false, mobileLite:false, coarsePointer:false };
   }
   const nav = window.navigator || {};
   const ua = String(nav.userAgent || "").toLowerCase();
@@ -47,6 +47,7 @@ function readClientProfile(){
   const deviceMemory = Number(nav.deviceMemory || 0);
   const hardwareConcurrency = Number(nav.hardwareConcurrency || 0);
   const reduceMotion = !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  const coarsePointer = !!window.matchMedia?.("(pointer: coarse)")?.matches || !!window.matchMedia?.("(any-pointer: coarse)")?.matches || "ontouchstart" in window;
   const weakMemory = deviceMemory > 0 && deviceMemory <= 4;
   const weakCpu = hardwareConcurrency > 0 && hardwareConcurrency <= 4;
   const weakDevice = reduceMotion || (isAndroid && (weakMemory || weakCpu || width <= 412)) || (isMobile && weakMemory && weakCpu);
@@ -55,6 +56,7 @@ function readClientProfile(){
     reduceMotion,
     weakDevice,
     mobileLite:isMobile && (weakDevice || width <= 430),
+    coarsePointer,
   };
 }
 function ordSuffix(n){const s=["th","st","nd","rd"];const v=n%100;return s[(v-20)%10]||s[v]||s[0];}
@@ -1234,7 +1236,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 function AdminPanelInner({user}){
   const PANEL_LIMITS = React.useMemo(()=>({
     p1:{ min:96, max:340, collapsed:58, default:175 },
-    p2:{ min:160, max:380, default:205 },
+    p2:{ min:160, max:380, collapsed:58, default:205 },
     p3:{ min:110, max:360, collapsed:58, default:200 },
   }),[]);
   const [teachers,    setTeachers]    = useState([]);
@@ -1255,11 +1257,12 @@ function AdminPanelInner({user}){
   const [mobileStep,  setMobileStep]  = useState(0);
   const [exportOpen,   setExportOpen]   = useState(false);
   const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
-  const [panelCollapsed, setPanelCollapsed] = useState({p1:false, p3:false});
+  const [panelCollapsed, setPanelCollapsed] = useState({p1:false, p2:false, p3:false});
   const [isMobile,     setIsMobile]     = useState(false);
   const [isWeakDevice, setIsWeakDevice] = useState(false);
   const [reduceEffects,setReduceEffects]= useState(false);
   const [mobileLiteMode,setMobileLiteMode] = useState(false);
+  const [coarsePointer, setCoarsePointer] = useState(false);
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | admins | institutes
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
@@ -1292,7 +1295,7 @@ function AdminPanelInner({user}){
   const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
   const fullDataRequestRef = React.useRef({});
   const warmupJobRef = React.useRef(0);
-  const expandedPanelWidthsRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p3:PANEL_LIMITS.p3.default });
+  const expandedPanelWidthsRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelsBodyRef = React.useRef(null);
 
   useEffect(()=>{
@@ -1303,6 +1306,7 @@ function AdminPanelInner({user}){
       setIsWeakDevice(profile.weakDevice);
       setReduceEffects(profile.reduceMotion);
       setMobileLiteMode(profile.mobileLite);
+      setCoarsePointer(profile.coarsePointer);
     };
     check();
     window.addEventListener("resize",check);
@@ -1464,7 +1468,6 @@ function AdminPanelInner({user}){
     if(!limits) return;
     const clamped = clampPanelWidth(key, nextWidth);
     setPanelW(prev=>prev[key]===clamped?prev:{...prev,[key]:clamped});
-    if(key==="p2") return;
     if(clamped <= limits.collapsed + 6){
       setPanelCollapsed(prev=>prev[key]?prev:{...prev,[key]:true});
       return;
@@ -1475,7 +1478,7 @@ function AdminPanelInner({user}){
 
   const togglePanelCollapse = React.useCallback((key) => {
     const limits = PANEL_LIMITS[key];
-    if(!limits || key==="p2") return;
+    if(!limits) return;
     const willCollapse = !panelCollapsed[key];
     if(willCollapse){
       expandedPanelWidthsRef.current[key] = Math.max(limits.min, panelW[key]);
@@ -3253,46 +3256,86 @@ function AdminPanelInner({user}){
     const drag = React.useRef(false);
     const startX = React.useRef(0);
     const pointerIdRef = React.useRef(null);
+    const touchFriendly = coarsePointer || isWeakDevice;
+    const hitWidth = touchFriendly ? 28 : 18;
+    const railWidth = touchFriendly ? 14 : 10;
+    const railHeight = touchFriendly ? 64 : 52;
+    const barHeight = touchFriendly ? 54 : 46;
+    const handleHeight = touchFriendly ? 32 : 26;
+    const cleanupRef = React.useRef(() => {});
+    const beginDrag = clientX => {
+      if(drag.current) return;
+      drag.current = true;
+      startX.current = clientX;
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+      if(ref.current) ref.current.style.background = G.blueL;
+    };
+    const continueDrag = clientX => {
+      if(!drag.current) return;
+      onDrag(clientX - startX.current);
+      startX.current = clientX;
+    };
+    const endDrag = () => {
+      drag.current = false;
+      pointerIdRef.current = null;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      if(ref.current) ref.current.style.background = "transparent";
+      cleanupRef.current();
+      cleanupRef.current = () => {};
+    };
     return(
       <div ref={ref}
-        style={{width:18,flexShrink:0,cursor:"col-resize",background:"transparent",position:"relative",zIndex:10,transition:"background 0.15s",touchAction:"none",display:"flex",alignItems:"center",justifyContent:"center"}}
+        style={{width:hitWidth,flexShrink:0,cursor:"col-resize",background:"transparent",position:"relative",zIndex:10,transition:"background 0.15s",touchAction:"none",display:"flex",alignItems:"center",justifyContent:"center"}}
         onMouseEnter={e=>e.currentTarget.style.background=G.blueL}
         onMouseLeave={e=>{if(!drag.current)e.currentTarget.style.background="transparent";}}
         onDoubleClick={() => onToggleCollapse?.()}
         onPointerDown={e=>{
-          drag.current=true;
-          startX.current=e.clientX;
+          beginDrag(e.clientX);
           pointerIdRef.current = e.pointerId;
           ref.current?.setPointerCapture?.(e.pointerId);
           e.preventDefault();
-          document.body.style.userSelect="none";
-          document.body.style.cursor="col-resize";
-          ref.current && (ref.current.style.background=G.blueL);
           const move = ev=>{
-            if(!drag.current) return;
-            onDrag(ev.clientX-startX.current);
-            startX.current=ev.clientX;
+            continueDrag(ev.clientX);
           };
-          const up   = ev=>{
+          const up = ()=>{
             if(pointerIdRef.current!==null){
               ref.current?.releasePointerCapture?.(pointerIdRef.current);
             }
-            drag.current=false;
-            pointerIdRef.current = null;
-            document.body.style.userSelect="";
-            document.body.style.cursor="";
+            endDrag();
+          };
+          cleanupRef.current = () => {
             window.removeEventListener("pointermove",move);
             window.removeEventListener("pointerup",up);
             window.removeEventListener("pointercancel",up);
-            ref.current&&(ref.current.style.background="transparent");
           };
           window.addEventListener("pointermove",move);
           window.addEventListener("pointerup",up);
           window.addEventListener("pointercancel",up);
+        }}
+        onTouchStart={e=>{
+          if(window.PointerEvent || !e.touches?.length) return;
+          beginDrag(e.touches[0].clientX);
+          e.preventDefault();
+          const move = ev=>{
+            if(!ev.touches?.length) return;
+            continueDrag(ev.touches[0].clientX);
+            ev.preventDefault();
+          };
+          const up = () => endDrag();
+          cleanupRef.current = () => {
+            window.removeEventListener("touchmove",move);
+            window.removeEventListener("touchend",up);
+            window.removeEventListener("touchcancel",up);
+          };
+          window.addEventListener("touchmove",move,{ passive:false });
+          window.addEventListener("touchend",up);
+          window.addEventListener("touchcancel",up);
         }}>
-        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:2,height:46,borderRadius:2,background:G.borderM,opacity:0.6}}/>
-        <div style={{position:"relative",width:10,height:52,borderRadius:999,background:"rgba(255,255,255,0.7)",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div style={{width:3,height:26,borderRadius:999,background:G.borderM}}/>
+        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:2,height:barHeight,borderRadius:2,background:G.borderM,opacity:0.6}}/>
+        <div style={{position:"relative",width:railWidth,height:railHeight,borderRadius:999,background:"rgba(255,255,255,0.82)",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:touchFriendly?G.shadowSm:"none"}}>
+          <div style={{width:4,height:handleHeight,borderRadius:999,background:G.borderM}}/>
         </div>
       </div>
     );
@@ -4627,106 +4670,120 @@ function AdminPanelInner({user}){
 
         {/* ── P2: Toggle + Teacher or Class list ── */}
         <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:G.surface,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
-          <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10}}>
-              <div style={{minWidth:0}}>
-                <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selInst||"—"}</div>
-                {selInst&&<div style={{fontSize:12,color:G.textL,marginTop:3}}>{instClasses.length} classes · {instTeachers.length} teachers</div>}
-              </div>
-              {selInst&&(
-                <button onClick={()=>setExportOpen(true)}
-                  style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Export
-                </button>
-              )}
-            </div>
-            {/* Toggle */}
-            <div style={{display:"flex",gap:0,background:G.bg,borderRadius:8,padding:3,border:`1px solid ${G.border}`}}>
-              {["class","teacher"].map(t=>(
-                <button key={t} onClick={()=>{resetNav(t);}}
-                  style={{flex:1,padding:"6px 0",borderRadius:6,border:"none",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,textAlign:"center",transition:"all 0.15s",background:tab===t?G.navy:"none",color:tab===t?"#fff":G.textM}}>
-                  {t==="class"?"By Class":"By Teacher"}
-                </button>
-              ))}
-            </div>
-            {selInst&&renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers",true)}
-            {selInst&&<div style={{fontSize:12,color:G.textL,marginTop:8}}>
-              {tab==="class"
-                ? `${visibleInstClasses.length} of ${instClasses.length} classes`
-                : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
-            </div>}
-            {selInst&&renderWarmupBanner(false)}
-          </div>
-          <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
-            {tab==="class"?"Classes ↓ (12th first)":"Teachers"}
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
-            {!selInst&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>Select an institute</div>}
-            {selInst&&tab==="teacher"&&instTeachers.length===0&&loadingUids.size>0&&(
-              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:13,fontFamily:G.mono}}>
-                <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${G.blueL}`,borderTopColor:G.blue,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
-                loading teachers…
-              </div>
-            )}
-            {selInst&&tab==="teacher"&&visibleInstTeachers.map(t=>{
-              const d=fullData[t.uid]||{};
-              const name=d.profile?.name||t.name||"?";
-              const isLoading=loadingUids.has(t.uid)&&!fullData[t.uid];
-              const isSel=selP2===t.uid;
-              return(
-                <div key={t.uid} onClick={()=>openTeacherSelection(t.uid)}
-                  style={{...siBase,display:"flex",alignItems:"center",gap:9,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
-                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
-                  onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{width:28,height:28,borderRadius:7,background:isSel?G.blue:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:isSel?"#fff":G.blue,fontFamily:G.mono,flexShrink:0}}>
-                    {(name[0]||"?").toUpperCase()}
-                  </div>
+          {panelCollapsed.p2 ? (
+            <CollapsedPanelRail
+              step="Step 2"
+              label={tab==="class" ? "Classes" : "Teachers"}
+              badge={selInst ? (tab==="class" ? instClasses.length : instTeachers.length) : 0}
+              direction="right"
+              onExpand={()=>togglePanelCollapse("p2")}
+            />
+          ) : (
+            <>
+              <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10}}>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
-
-                    {(()=>{
-                      const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
-                      if(!otherInsts.length) return null;
-                      return <div style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginTop:3,fontStyle:"italic"}}>also at {otherInsts.join(", ")}</div>;
-                    })()}
+                    <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selInst||"—"}</div>
+                    {selInst&&<div style={{fontSize:12,color:G.textL,marginTop:3}}>{instClasses.length} classes · {instTeachers.length} teachers</div>}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                    {selInst&&(
+                      <button onClick={()=>setExportOpen(true)}
+                        style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Export
+                      </button>
+                    )}
+                    <CollapseButton direction="right" onClick={()=>togglePanelCollapse("p2")} title="Collapse step 2 panel" />
                   </div>
                 </div>
-              );
-            })}
-            {selInst&&tab==="class"&&instClasses.length===0&&loadingUids.size>0&&(
-              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:13,fontFamily:G.mono}}>
-                <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${G.blueL}`,borderTopColor:G.blue,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
-                loading classes…
+                {/* Toggle */}
+                <div style={{display:"flex",gap:0,background:G.bg,borderRadius:8,padding:3,border:`1px solid ${G.border}`}}>
+                  {["class","teacher"].map(t=>(
+                    <button key={t} onClick={()=>{resetNav(t);}}
+                      style={{flex:1,padding:"6px 0",borderRadius:6,border:"none",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,textAlign:"center",transition:"all 0.15s",background:tab===t?G.navy:"none",color:tab===t?"#fff":G.textM}}>
+                      {t==="class"?"By Class":"By Teacher"}
+                    </button>
+                  ))}
+                </div>
+                {selInst&&renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers",true)}
+                {selInst&&<div style={{fontSize:12,color:G.textL,marginTop:8}}>
+                  {tab==="class"
+                    ? `${visibleInstClasses.length} of ${instClasses.length} classes`
+                    : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
+                </div>}
+                {selInst&&renderWarmupBanner(false)}
               </div>
-            )}
-            {selInst&&tab==="class"&&visibleInstClasses.map(cls=>{
-              const isSel=selP2===cls.raw;
-              return(
-                <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
-                  style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
-                  onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
-                  onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
-                  {cls.subjects.length>0&&(
-                    <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
-                      {cls.subjects.map(s=><span key={s} style={{background:isSel?G.surface:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"1px 8px",fontSize:11,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
-                    </div>
-                  )}
-                  <div style={{marginTop:4}}>
-                    <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
-                      {cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}
-                    </span>
+              <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
+                {tab==="class"?"Classes ↓ (12th first)":"Teachers"}
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
+                {!selInst&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>Select an institute</div>}
+                {selInst&&tab==="teacher"&&instTeachers.length===0&&loadingUids.size>0&&(
+                  <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:13,fontFamily:G.mono}}>
+                    <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${G.blueL}`,borderTopColor:G.blue,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
+                    loading teachers…
                   </div>
-                </div>
-              );
-            })}
-            {selInst&&((tab==="class"&&visibleInstClasses.length===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
-              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>No {tab==="class"?"classes":"teachers"} match your search</div>
-            )}
-          </div>
+                )}
+                {selInst&&tab==="teacher"&&visibleInstTeachers.map(t=>{
+                  const d=fullData[t.uid]||{};
+                  const name=d.profile?.name||t.name||"?";
+                  const isSel=selP2===t.uid;
+                  return(
+                    <div key={t.uid} onClick={()=>openTeacherSelection(t.uid)}
+                      style={{...siBase,display:"flex",alignItems:"center",gap:9,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
+                      onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
+                      onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                      <div style={{width:28,height:28,borderRadius:7,background:isSel?G.blue:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:isSel?"#fff":G.blue,fontFamily:G.mono,flexShrink:0}}>
+                        {(name[0]||"?").toUpperCase()}
+                      </div>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
+
+                        {(()=>{
+                          const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
+                          if(!otherInsts.length) return null;
+                          return <div style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginTop:3,fontStyle:"italic"}}>also at {otherInsts.join(", ")}</div>;
+                        })()}
+                      </div>
+                    </div>
+                  );
+                })}
+                {selInst&&tab==="class"&&instClasses.length===0&&loadingUids.size>0&&(
+                  <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:13,fontFamily:G.mono}}>
+                    <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${G.blueL}`,borderTopColor:G.blue,animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
+                    loading classes…
+                  </div>
+                )}
+                {selInst&&tab==="class"&&visibleInstClasses.map(cls=>{
+                  const isSel=selP2===cls.raw;
+                  return(
+                    <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
+                      style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
+                      onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
+                      onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                      <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
+                      {cls.subjects.length>0&&(
+                        <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
+                          {cls.subjects.map(s=><span key={s} style={{background:isSel?G.surface:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"1px 8px",fontSize:11,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
+                        </div>
+                      )}
+                      <div style={{marginTop:4}}>
+                        <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
+                          {cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {selInst&&((tab==="class"&&visibleInstClasses.length===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
+                  <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>No {tab==="class"?"classes":"teachers"} match your search</div>
+                )}
+              </div>
+            </>
+          )}
         </div>
-        <PanelDivider onDrag={dx=>setDesktopPanelWidth("p2", panelW.p2 + dx)}/>
+        <PanelDivider onDrag={dx=>setDesktopPanelWidth("p2", panelW.p2 + dx)} onToggleCollapse={()=>togglePanelCollapse("p2")} />
 
         {/* ── P3: Sub-list ── */}
         <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:G.bg,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
