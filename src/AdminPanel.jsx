@@ -1232,6 +1232,11 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
 
 function AdminPanelInner({user}){
+  const PANEL_LIMITS = React.useMemo(()=>({
+    p1:{ min:96, max:340, collapsed:58, default:175 },
+    p2:{ min:160, max:380, default:205 },
+    p3:{ min:110, max:360, collapsed:58, default:200 },
+  }),[]);
   const [teachers,    setTeachers]    = useState([]);
   const [fullData,    setFullData]    = useState({});
   const [roles,       setRoles]       = useState({});
@@ -1250,6 +1255,7 @@ function AdminPanelInner({user}){
   const [mobileStep,  setMobileStep]  = useState(0);
   const [exportOpen,   setExportOpen]   = useState(false);
   const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
+  const [panelCollapsed, setPanelCollapsed] = useState({p1:false, p3:false});
   const [isMobile,     setIsMobile]     = useState(false);
   const [isWeakDevice, setIsWeakDevice] = useState(false);
   const [reduceEffects,setReduceEffects]= useState(false);
@@ -1286,6 +1292,8 @@ function AdminPanelInner({user}){
   const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
   const fullDataRequestRef = React.useRef({});
   const warmupJobRef = React.useRef(0);
+  const expandedPanelWidthsRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p3:PANEL_LIMITS.p3.default });
+  const panelsBodyRef = React.useRef(null);
 
   useEffect(()=>{
     const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -1443,6 +1451,41 @@ function AdminPanelInner({user}){
   const warmInstitute = React.useCallback((inst) => {
     warmTeacherUids(getInstituteTeacherUids(inst), inst);
   }, [getInstituteTeacherUids, warmTeacherUids]);
+
+  const clampPanelWidth = React.useCallback((key, nextWidth) => {
+    const limits = PANEL_LIMITS[key];
+    if(!limits) return nextWidth;
+    const min = key==="p2" ? limits.min : limits.collapsed;
+    return Math.max(min, Math.min(limits.max, nextWidth));
+  }, [PANEL_LIMITS]);
+
+  const setDesktopPanelWidth = React.useCallback((key, nextWidth) => {
+    const limits = PANEL_LIMITS[key];
+    if(!limits) return;
+    const clamped = clampPanelWidth(key, nextWidth);
+    setPanelW(prev=>prev[key]===clamped?prev:{...prev,[key]:clamped});
+    if(key==="p2") return;
+    if(clamped <= limits.collapsed + 6){
+      setPanelCollapsed(prev=>prev[key]?prev:{...prev,[key]:true});
+      return;
+    }
+    expandedPanelWidthsRef.current[key] = Math.max(limits.min, clamped);
+    setPanelCollapsed(prev=>prev[key]?{...prev,[key]:false}:prev);
+  }, [PANEL_LIMITS, clampPanelWidth]);
+
+  const togglePanelCollapse = React.useCallback((key) => {
+    const limits = PANEL_LIMITS[key];
+    if(!limits || key==="p2") return;
+    const willCollapse = !panelCollapsed[key];
+    if(willCollapse){
+      expandedPanelWidthsRef.current[key] = Math.max(limits.min, panelW[key]);
+      setPanelW(widths=>({...widths,[key]:limits.collapsed}));
+    } else {
+      const restored = clampPanelWidth(key, expandedPanelWidthsRef.current[key] || limits.default);
+      setPanelW(widths=>({...widths,[key]:restored}));
+    }
+    setPanelCollapsed(prev=>({...prev,[key]:willCollapse}));
+  }, [PANEL_LIMITS, panelCollapsed, panelW, clampPanelWidth]);
 
   // ── Derived: institutes ───────────────────────────────────────────────────
   const institutes=useMemo(()=>{
@@ -3167,24 +3210,90 @@ function AdminPanelInner({user}){
 
 
   // Draggable panel resize handle
-  const PanelDivider = ({onDrag}) => {
+  const CollapseButton = ({collapsed, direction="left", onClick, title}) => (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      style={{
+        width:26,
+        height:26,
+        borderRadius:8,
+        border:`1px solid ${G.border}`,
+        background:G.surface,
+        color:G.textM,
+        cursor:"pointer",
+        fontSize:14,
+        fontWeight:700,
+        flexShrink:0,
+        WebkitTapHighlightColor:"transparent",
+      }}>
+      {collapsed ? (direction==="right" ? "›" : "‹") : (direction==="right" ? "‹" : "›")}
+    </button>
+  );
+
+  const CollapsedPanelRail = ({ step, label, onExpand, badge, direction="right" }) => (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",height:"100%",padding:"10px 6px",gap:12}}>
+      <CollapseButton collapsed direction={direction} onClick={onExpand} title={`Expand ${label}`} />
+      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:10,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",textAlign:"center"}}>
+          {step} · {label}
+        </div>
+      </div>
+      {badge!==undefined && (
+        <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 8px",fontSize:10,fontFamily:G.mono,fontWeight:700}}>
+          {badge}
+        </span>
+      )}
+    </div>
+  );
+
+  const PanelDivider = ({onDrag, onToggleCollapse}) => {
     const ref = React.useRef(null);
     const drag = React.useRef(false);
     const startX = React.useRef(0);
+    const pointerIdRef = React.useRef(null);
     return(
       <div ref={ref}
-        style={{width:6,flexShrink:0,cursor:"col-resize",background:"transparent",position:"relative",zIndex:10,transition:"background 0.15s"}}
+        style={{width:18,flexShrink:0,cursor:"col-resize",background:"transparent",position:"relative",zIndex:10,transition:"background 0.15s",touchAction:"none",display:"flex",alignItems:"center",justifyContent:"center"}}
         onMouseEnter={e=>e.currentTarget.style.background=G.blueL}
         onMouseLeave={e=>{if(!drag.current)e.currentTarget.style.background="transparent";}}
-        onMouseDown={e=>{
-          drag.current=true; startX.current=e.clientX;
+        onDoubleClick={() => onToggleCollapse?.()}
+        onPointerDown={e=>{
+          drag.current=true;
+          startX.current=e.clientX;
+          pointerIdRef.current = e.pointerId;
+          ref.current?.setPointerCapture?.(e.pointerId);
           e.preventDefault();
-          const move = ev=>{if(drag.current)onDrag(ev.clientX-startX.current);startX.current=ev.clientX;};
-          const up   = ()=>{drag.current=false;document.removeEventListener("mousemove",move);document.removeEventListener("mouseup",up);ref.current&&(ref.current.style.background="transparent");};
-          document.addEventListener("mousemove",move);
-          document.addEventListener("mouseup",up);
+          document.body.style.userSelect="none";
+          document.body.style.cursor="col-resize";
+          ref.current && (ref.current.style.background=G.blueL);
+          const move = ev=>{
+            if(!drag.current) return;
+            onDrag(ev.clientX-startX.current);
+            startX.current=ev.clientX;
+          };
+          const up   = ev=>{
+            if(pointerIdRef.current!==null){
+              ref.current?.releasePointerCapture?.(pointerIdRef.current);
+            }
+            drag.current=false;
+            pointerIdRef.current = null;
+            document.body.style.userSelect="";
+            document.body.style.cursor="";
+            window.removeEventListener("pointermove",move);
+            window.removeEventListener("pointerup",up);
+            window.removeEventListener("pointercancel",up);
+            ref.current&&(ref.current.style.background="transparent");
+          };
+          window.addEventListener("pointermove",move);
+          window.addEventListener("pointerup",up);
+          window.addEventListener("pointercancel",up);
         }}>
-        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:2,height:40,borderRadius:2,background:G.borderM,opacity:0.6}}/>
+        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:2,height:46,borderRadius:2,background:G.borderM,opacity:0.6}}/>
+        <div style={{position:"relative",width:10,height:52,borderRadius:999,background:"rgba(255,255,255,0.7)",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{width:3,height:26,borderRadius:999,background:G.borderM}}/>
+        </div>
       </div>
     );
   };
@@ -4433,11 +4542,20 @@ function AdminPanelInner({user}){
       {/* 4-panel body */}
       <div className={`admin-panels admin-mobile-step-${mobileStep}`} style={{display:"flex",flex:1,overflow:"hidden",userSelect:"none"}}
         ref={el=>{
+          panelsBodyRef.current = el;
           if(!el) return;
+          if(!isMobile){
+            el.onmousedown = null;
+            el.onmouseleave = null;
+            el.onmouseup = null;
+            el.onmousemove = null;
+            el.ontouchstart = null;
+            el.ontouchmove = null;
+            return;
+          }
           let isDown=false, startX=0, scrollLeft=0;
           // Only enable drag-scroll on the panels container itself (not inside scrollable lists)
           el.onmousedown = e=>{
-            // Only drag if clicking on a panel background, not buttons/text
             if(e.target!==el) return;
             isDown=true; startX=e.pageX-el.offsetLeft; scrollLeft=el.scrollLeft;
             el.style.cursor="grabbing";
@@ -4449,60 +4567,66 @@ function AdminPanelInner({user}){
             e.preventDefault();
             el.scrollLeft=scrollLeft-(e.pageX-el.offsetLeft-startX)*1.2;
           };
-          // Touch support
           let touchStartX=0, touchScrollLeft=0;
           el.ontouchstart=e=>{touchStartX=e.touches[0].pageX;touchScrollLeft=el.scrollLeft;};
           el.ontouchmove=e=>{el.scrollLeft=touchScrollLeft-(e.touches[0].pageX-touchStartX);};
         }}>
 
         {/* ── P1: Institutes ── */}
-        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:G.bg,borderRight:`1px solid ${G.border}`}}>
-          <div style={{...panelLabel,paddingBottom:4}}>Step 1 · Institutes</div>
-          <div style={{padding:"0 10px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-            {renderSearchInput(instSearch,setInstSearch,"Search institutes",true)}
-            <div style={{fontSize:12,color:G.textL,marginTop:8}}>{visibleInstitutes.length} of {institutes.length} institutes</div>
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
-            {visibleInstitutes.length===0&&(
-              <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>
-                {institutes.length===0 ? "No institutes yet" : "No institutes match your search"}
+        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:G.bg,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
+          {panelCollapsed.p1 ? (
+            <CollapsedPanelRail step="Step 1" label="Institutes" badge={institutes.length} direction="right" onExpand={()=>togglePanelCollapse("p1")} />
+          ) : (
+            <>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"10px 10px 4px",flexShrink:0}}>
+                <div style={{...panelLabel,padding:0}}>Step 1 · Institutes</div>
+                <CollapseButton direction="right" onClick={()=>togglePanelCollapse("p1")} title="Collapse institutes panel" />
               </div>
-            )}
-            {visibleInstitutes.map(inst=>{
-              const isSel=inst===selInst;
-              // Use index data first (available immediately), supplement with fullData
-              const tCount=teachers.filter(t=>{
-                const idxInsts=t.institutes||[];
-                if(idxInsts.includes(inst)) return true;
-                return (fullData[t.uid]?.classes||[]).some(c=>c.institute===inst);
-              }).length;
-              const clsCount=instClasses.length > 0 && inst===selInst
-                ? instClasses.length
-                : Object.values(fullData).reduce((s,d)=>{
-                    return s+(d.classes||[]).filter(c=>c.institute===inst).length;
-                  },0) || teachers.filter(t=>(t.institutes||[]).includes(inst)).length;
-              return(
-                <div key={inst} style={{position:"relative",display:"flex",alignItems:"center",gap:4}}>
-                  <div onClick={()=>onSelectInstitute(inst)}
-                    style={{...siBase,flex:1,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
-                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
-                    onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                    <div style={{fontSize:16,fontWeight:isSel?700:600,color:isSel?G.blue:G.text}}>{inst}</div>
-                    <div style={{display:"flex",gap:5,marginTop:4}}>
-                      <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>{clsCount} class{clsCount!==1?"es":""}</span>
-                      <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{tCount} teacher{tCount!==1?"s":""}</span>
-                    </div>
+              <div style={{padding:"0 10px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
+                {renderSearchInput(instSearch,setInstSearch,"Search institutes",true)}
+                <div style={{fontSize:12,color:G.textL,marginTop:8}}>{visibleInstitutes.length} of {institutes.length} institutes</div>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
+                {visibleInstitutes.length===0&&(
+                  <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>
+                    {institutes.length===0 ? "No institutes yet" : "No institutes match your search"}
                   </div>
-
-                </div>
-              );
-            })}
-          </div>
+                )}
+                {visibleInstitutes.map(inst=>{
+                  const isSel=inst===selInst;
+                  const tCount=teachers.filter(t=>{
+                    const idxInsts=t.institutes||[];
+                    if(idxInsts.includes(inst)) return true;
+                    return (fullData[t.uid]?.classes||[]).some(c=>c.institute===inst);
+                  }).length;
+                  const clsCount=instClasses.length > 0 && inst===selInst
+                    ? instClasses.length
+                    : Object.values(fullData).reduce((s,d)=>{
+                        return s+(d.classes||[]).filter(c=>c.institute===inst).length;
+                      },0) || teachers.filter(t=>(t.institutes||[]).includes(inst)).length;
+                  return(
+                    <div key={inst} style={{position:"relative",display:"flex",alignItems:"center",gap:4}}>
+                      <div onClick={()=>onSelectInstitute(inst)}
+                        style={{...siBase,flex:1,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
+                        onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
+                        onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                        <div style={{fontSize:16,fontWeight:isSel?700:600,color:isSel?G.blue:G.text}}>{inst}</div>
+                        <div style={{display:"flex",gap:5,marginTop:4}}>
+                          <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>{clsCount} class{clsCount!==1?"es":""}</span>
+                          <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>{tCount} teacher{tCount!==1?"s":""}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
-        <PanelDivider onDrag={dx=>setPanelW(w=>({...w,p1:Math.max(120,Math.min(280,w.p1+dx))}))}/>
+        <PanelDivider onDrag={dx=>setDesktopPanelWidth("p1", panelW.p1 + dx)} onToggleCollapse={()=>togglePanelCollapse("p1")} />
 
         {/* ── P2: Toggle + Teacher or Class list ── */}
-        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:G.surface,borderRight:`1px solid ${G.border}`}}>
+        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:G.surface,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
           <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10}}>
               <div style={{minWidth:0}}>
@@ -4602,22 +4726,37 @@ function AdminPanelInner({user}){
             )}
           </div>
         </div>
-        <PanelDivider onDrag={dx=>setPanelW(w=>({...w,p2:Math.max(150,Math.min(320,w.p2+dx))}))}/>
+        <PanelDivider onDrag={dx=>setDesktopPanelWidth("p2", panelW.p2 + dx)}/>
 
         {/* ── P3: Sub-list ── */}
-        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:G.bg,borderRight:`1px solid ${G.border}`}}>
-          <div style={{padding:"12px 12px 8px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-            <div style={{fontFamily:G.display,fontSize:15,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-              {!selP2?"—":p2Label(selP2)}
-            </div>
-            <div style={{fontSize:12,color:G.textM,fontFamily:G.mono,marginTop:2}}>
-              {isAggregateSelection?`${selInst} · combined institute view`:tab==="class"?"Teachers in this class":"Their classes at "+selInst}
-            </div>
-          </div>
-          <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
-            {isAggregateSelection?"Overview":"Step 3 · "+(tab==="teacher"?"Classes":"Teachers")}
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
+        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:G.bg,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
+          {panelCollapsed.p3 ? (
+            <CollapsedPanelRail
+              step="Step 3"
+              label={tab==="teacher"?"Classes":"Teachers"}
+              badge={selP2 ? p3Items.length : 0}
+              direction="left"
+              onExpand={()=>togglePanelCollapse("p3")}
+            />
+          ) : (
+            <>
+              <div style={{padding:"10px 12px 8px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontFamily:G.display,fontSize:15,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      {!selP2?"—":p2Label(selP2)}
+                    </div>
+                    <div style={{fontSize:12,color:G.textM,fontFamily:G.mono,marginTop:2}}>
+                      {isAggregateSelection?`${selInst} · combined institute view`:tab==="class"?"Teachers in this class":"Their classes at "+selInst}
+                    </div>
+                  </div>
+                  <CollapseButton direction="left" onClick={()=>togglePanelCollapse("p3")} title="Collapse step 3 panel" />
+                </div>
+              </div>
+              <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
+                {isAggregateSelection?"Overview":"Step 3 · "+(tab==="teacher"?"Classes":"Teachers")}
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
             {!selP2&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>Select from left</div>}
             {selP2&&!isAggregateSelection&&(
               <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:12,padding:"14px 13px",marginBottom:10,boxShadow:G.shadowSm}}>
@@ -4771,9 +4910,11 @@ function AdminPanelInner({user}){
                 </>}
               </>);
             })()}
-          </div>
+              </div>
+            </>
+          )}
         </div>
-        <PanelDivider onDrag={dx=>setPanelW(w=>({...w,p3:Math.max(140,Math.min(300,w.p3+dx))}))}/>
+        <PanelDivider onDrag={dx=>setDesktopPanelWidth("p3", panelW.p3 + dx)} onToggleCollapse={()=>togglePanelCollapse("p3")} />
 
         {/* ── P4: Entries ── */}
         <div className="admin-p4" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:G.bg,minWidth:0}}>
