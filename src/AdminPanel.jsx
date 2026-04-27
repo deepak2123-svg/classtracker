@@ -459,13 +459,15 @@ function daysAgo(ts){
 function lastEntryTs(notes={}){
   let latest=0;
   try {
-    Object.values(notes||{}).forEach(byDate=>{
-      if(!byDate||typeof byDate!=="object") return;
-      Object.values(byDate).forEach(arr=>{
-        if(!Array.isArray(arr)) return;
-        arr.forEach(n=>{if(n&&n.created>latest)latest=n.created;});
-      });
-    });
+    const scan = (value) => {
+      if (Array.isArray(value)) {
+        value.forEach(n=>{ if(n && n.created>latest) latest=n.created; });
+        return;
+      }
+      if (!value || typeof value !== "object") return;
+      Object.values(value).forEach(scan);
+    };
+    scan(notes || {});
   } catch(e){}
   return latest||null;
 }
@@ -1529,6 +1531,56 @@ function AdminPanelInner({user}){
   const aggregateTitle = isAllClassesSelected ? "All Classes" : isAllTeachersSelected ? "All Teachers" : "";
   const isScopedFullView = !!fullView;
   const periodDays = period==="today"?1:period==="week"?7:period==="month"?30:null;
+  const selectedClassMeta = useMemo(()=>{
+    if(!selP3) return null;
+    const d = fullData[selP3.teacherUid];
+    if(!d) return null;
+    return (d.classes||[]).find(c=>c.id===selP3.classId) || null;
+  },[selP3,fullData]);
+  const selectedSubjectLabel = useMemo(()=>{
+    const text = selectedClassMeta?.subject || selP3?.subject || "";
+    return text && text !== "undefined" ? text : "";
+  },[selectedClassMeta,selP3]);
+  const selectedTimelineSummary = useMemo(()=>{
+    if(!selP3) return null;
+    const d = fullData[selP3.teacherUid];
+    const classNotes = (d?.notes||{})[selP3.classId] || {};
+    const flat = getEntriesInRange(classNotes, periodDays);
+    const statusMap = {};
+    const daySet = new Set();
+    let totalMinutes = 0;
+    let timedEntries = 0;
+    let untimedEntries = 0;
+    flat.forEach(({dateKey, entry})=>{
+      daySet.add(dateKey);
+      const statusKey = String(entry?.status || "").toLowerCase();
+      if(statusKey) statusMap[statusKey] = (statusMap[statusKey] || 0) + 1;
+      const mins = entryDurationMinutes(entry);
+      if(mins>0){
+        totalMinutes += mins;
+        timedEntries += 1;
+      } else {
+        untimedEntries += 1;
+      }
+    });
+    const lastTs = lastEntryTs(classNotes);
+    return {
+      entryCount: flat.length,
+      totalMinutes,
+      timedEntries,
+      untimedEntries,
+      activeDays: daySet.size,
+      lastTs,
+      lastAgo: daysAgo(lastTs),
+      statusBreakdown: Object.entries(statusMap)
+        .sort((a,b)=>b[1]-a[1])
+        .map(([key,count])=>({
+          key,
+          count,
+          ...(STATUS_STYLES[key] || { bg:G.bg, text:G.textS, label:key }),
+        })),
+    };
+  },[selP3,fullData,periodDays]);
 
   const collectEntriesForTeacherClass = (teacherUid, teacherName, classId, className, subject, instituteName = selInst, days = periodDays) => {
     const d = fullData[teacherUid];
@@ -2592,6 +2644,152 @@ function AdminPanelInner({user}){
             </div>
           </div>
         ))}
+      </>
+    );
+  };
+
+  const renderSelectedTimelineEntries = (mobile = false) => {
+    if(!selP3) return null;
+
+    const summary = selectedTimelineSummary || {
+      entryCount: 0,
+      totalMinutes: 0,
+      timedEntries: 0,
+      untimedEntries: 0,
+      activeDays: 0,
+      lastAgo: null,
+      statusBreakdown: [],
+    };
+    const instituteText = selectedClassMeta?.institute || selP3.institute || selInst || "";
+    const statCard = (label, value, accent = G.blue) => (
+      <div style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:mobile?"10px 12px":"11px 13px"}}>
+        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8}}>{label}</div>
+        <div style={{fontSize:mobile?18:20,fontWeight:800,color:accent,fontFamily:G.display,marginTop:4,lineHeight:1.1}}>{value}</div>
+      </div>
+    );
+
+    return (
+      <>
+        <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:mobile?"14px 14px 13px":"16px 18px",boxShadow:G.shadowSm,marginBottom:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>Selection summary</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>
+                  {selP3.teacherName}
+                </span>
+                <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                  {selP3.className}
+                </span>
+                {selectedSubjectLabel&&(
+                  <span style={{background:"#EEF2FF",border:"1px solid #C7D2FE",borderRadius:999,padding:"5px 10px",fontSize:12,color:G.blue,fontFamily:G.mono,fontWeight:700}}>
+                    {selectedSubjectLabel}
+                  </span>
+                )}
+                {instituteText&&(
+                  <span style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textM,fontFamily:G.mono,fontWeight:700}}>
+                    {instituteText}
+                  </span>
+                )}
+              </div>
+            </div>
+            <span style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+              {overviewPeriodText}
+            </span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:mobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:10,marginTop:14}}>
+            {statCard("Entries", summary.entryCount)}
+            {statCard("Taught time", summary.totalMinutes>0 ? formatDurationShort(summary.totalMinutes) : "—", summary.totalMinutes>0 ? "#1B8A4C" : G.textM)}
+            {statCard("Active days", summary.activeDays || "—")}
+            {statCard("Last update", summary.lastAgo || "No uploads", summary.lastAgo ? G.blue : G.textM)}
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+            {summary.statusBreakdown.length>0 ? summary.statusBreakdown.map(status=>(
+              <span key={status.key} style={{background:status.bg,color:status.text,borderRadius:999,padding:"5px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>
+                {status.count} {status.label.replace(/^[^\s]+\s/,"")}
+              </span>
+            )) : (
+              <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                No status updates in this period
+              </span>
+            )}
+            {summary.untimedEntries>0&&(
+              <span style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:999,padding:"5px 10px",fontSize:12,color:G.amber,fontFamily:G.mono,fontWeight:700}}>
+                {summary.untimedEntries} untimed {summary.untimedEntries===1?"entry":"entries"}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {p4Entries!==null&&p4Entries.length===0&&(
+          <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:mobile?"18px 16px":"20px 18px",textAlign:"center"}}>
+            <div style={{fontSize:15,fontWeight:700,color:G.textM,fontFamily:G.display}}>No entries for this period</div>
+            <div style={{fontSize:13,color:G.textL,fontFamily:G.sans,marginTop:5}}>
+              {selP3.teacherName} has not uploaded anything for {selP3.className} in {overviewPeriodText.toLowerCase()}.
+            </div>
+          </div>
+        )}
+
+        {p4Entries&&p4Entries.map(([dk,entries])=>{
+          const dayMinutes = entries.reduce((sum,note)=>sum + entryDurationMinutes(note),0);
+          return(
+            <div key={dk} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,marginBottom:16,overflow:"hidden",boxShadow:G.shadowSm}}>
+              <div style={{padding:mobile?"12px 14px":"13px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>
+                  {formatDateLabel(dk)}
+                </div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  <span style={{fontSize:12,background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 9px",fontWeight:700,fontFamily:G.mono}}>
+                    {entries.length} {entries.length===1?"entry":"entries"}
+                  </span>
+                  <span style={{fontSize:12,background:G.surface,border:`1px solid ${G.border}`,color:G.textS,borderRadius:999,padding:"4px 9px",fontWeight:700,fontFamily:G.mono}}>
+                    {dayMinutes>0 ? formatDurationShort(dayMinutes) : "Untimed"}
+                  </span>
+                </div>
+              </div>
+              <div style={{padding:mobile?"6px 10px":"6px 12px"}}>
+                {entries.map((note,i)=>{
+                  const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
+                  const status=note.status&&STATUS_STYLES[note.status]?STATUS_STYLES[note.status]:null;
+                  return(
+                    <div key={note.id||i} style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:12,margin:"8px 0",overflow:"hidden"}}>
+                      <div style={{height:3,background:status?.dot || tag.bg}}/>
+                      <div style={{padding:mobile?"11px 12px":"12px 14px",display:"grid",gridTemplateColumns:mobile?"1fr":"120px minmax(0,1fr) auto",gap:12,alignItems:"center"}}>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontFamily:G.display,fontSize:mobile?16:17,fontWeight:700,color:G.text,lineHeight:1}}>
+                            {note.timeStart?fmt12(note.timeStart):"No time"}
+                          </div>
+                          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:4}}>
+                            {note.timeEnd ? `→ ${fmt12(note.timeEnd)}` : "No end time"}
+                          </div>
+                        </div>
+                        <div style={{minWidth:0}}>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                            {status&&<span style={{background:status.bg,color:status.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{status.label}</span>}
+                            <span style={{background:tag.bg,color:tag.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
+                          </div>
+                          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>
+                            {note.title || "Untitled entry"}
+                          </div>
+                          {note.body&&(
+                            <div style={{fontSize:13,color:G.textM,marginTop:5,lineHeight:1.6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
+                              {note.body}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={()=>handleDeleteEntry(selP3.teacherUid,selP3.classId,dk,note.id,note.title)}
+                          style={{width:30,height:30,borderRadius:9,background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          title="Delete entry">
+                          🗑
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </>
     );
   };
@@ -3868,7 +4066,12 @@ function AdminPanelInner({user}){
               <div onClick={()=>{
                 setFullView(null);
                 if(tab==="teacher") setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute||selInst});
-                else { const clsObj=instClasses.find(c=>c.raw===selP2); setSelP3({teacherUid:cls.uid,classId:cls.classId,teacherName:cls.name,className:normaliseName(selP2),subject:clsObj?.subject}); ensureFullData(cls.uid); }
+                else {
+                  const clsObj=instClasses.find(c=>c.raw===selP2);
+                  const subjectText = cls.subject || clsObj?.subjects?.join(", ") || "";
+                  setSelP3({teacherUid:cls.uid,classId:cls.classId,teacherName:cls.name,className:normaliseName(selP2),subject:subjectText});
+                  ensureFullData(cls.uid);
+                }
                 setMobileStep(3);
               }}
                 style={{padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
@@ -3909,7 +4112,7 @@ function AdminPanelInner({user}){
               {isScopedFullView ? fullViewTitle : isAggregateSelection ? aggregateTitle : `${selP3.teacherName} — ${selP3.className}`}
             </h2>
             <div style={{fontSize:14,color:G.textM,marginBottom:16}}>
-              {isScopedFullView ? fullViewSubtitle : isAggregateSelection ? `${selInst} · grouped by class, chronological inside each class` : `${selP3.institute||selInst} · ${selP3.subject}`}
+              {isScopedFullView ? fullViewSubtitle : isAggregateSelection ? `${selInst} · grouped by class, chronological inside each class` : [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")}
             </div>
             {/* Period pills — horizontal scroll, never wraps */}
             <div style={{display:"flex",gap:6,marginBottom:10,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none",paddingBottom:2}}>
@@ -3923,31 +4126,7 @@ function AdminPanelInner({user}){
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Export
             </button>
-            {isScopedFullView ? renderFullViewEntries(true) : isAggregateSelection ? renderAggregateEntries(true) : entries.length===0?(
-              <div style={{textAlign:"center",padding:"48px 20px",color:G.textM,fontSize:15}}>No entries for this period.</div>
-            ):entries.map(([dk,dayEntries])=>(
-              <div key={dk} style={{marginBottom:20}}>
-                <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${G.border}`}}>{formatDateLabel(dk)}</div>
-                {dayEntries.map((note,i)=>{
-                  const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
-                  return(
-                    <div key={note.id||i} style={{background:G.surface,borderRadius:11,border:`1px solid ${G.border}`,marginBottom:8,overflow:"hidden"}}>
-                      <div style={{height:3,background:tag.bg}}/>
-                      <div style={{padding:"11px 14px"}}>
-                        <div style={{display:"flex",gap:6,marginBottom:note.title?6:0,flexWrap:"wrap"}}>
-                          <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"2px 9px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
-                          {note.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600}}>🕐 {formatPeriod(note.timeStart,note.timeEnd)}</span>}
-                        </div>
-                        {note.title&&<div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display}}>{note.title}</div>}
-                        {note.body&&<p style={{margin:"6px 0 0",fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
-                        <button onClick={()=>handleDeleteEntry(selP3.teacherUid,selP3.classId,dk,note.id,note.title)}
-                          style={{marginTop:10,background:G.redL,border:"1px solid #F5CACA",borderRadius:7,padding:"5px 12px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans}}>Delete Entry</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+            {isScopedFullView ? renderFullViewEntries(true) : isAggregateSelection ? renderAggregateEntries(true) : renderSelectedTimelineEntries(true)}
           </div>
         </div>
       );
@@ -4429,7 +4608,13 @@ function AdminPanelInner({user}){
                         const cls=instClasses.find(c=>c.raw===selP2);
                         const clsObj=cls?.teachers.find(tc=>tc.uid===t.uid);
                         setFullView(null);
-                        setSelP3({teacherUid:t.uid,classId:clsObj?.classId,teacherName:t.name,className:normaliseName(selP2),subject:cls?.subject});
+                        setSelP3({
+                          teacherUid:t.uid,
+                          classId:clsObj?.classId,
+                          teacherName:t.name,
+                          className:normaliseName(selP2),
+                          subject:clsObj?.subject || cls?.subjects?.join(", ") || "",
+                        });
                         setMobileStep(3);
                       }}
                       style={{...siBase,display:"flex",alignItems:"center",gap:9,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
@@ -4491,7 +4676,7 @@ function AdminPanelInner({user}){
                     : isAggregateSelection
                       ? `${selInst} · grouped by class, chronological inside each class`
                       : selP3
-                        ? `${selInst} · ${selP3.subject}`
+                        ? [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")
                         : selP2
                           ? `Use panel 3 to open the full grouped view or choose one specific ${tab==="teacher"?"class":"teacher"}`
                           : selInst
@@ -4516,13 +4701,13 @@ function AdminPanelInner({user}){
                   </span>
                 </div>
               ):selP3&&(()=>{
-                const lastTs = lastEntryTs((fullData[selP3.teacherUid]?.notes||{})[selP3.classId]||{});
-                const ago = lastTs ? daysAgo(lastTs) : null;
+                const count = selectedTimelineSummary?.entryCount || 0;
+                const ago = selectedTimelineSummary?.lastAgo || null;
                 return(
                   <div style={{display:"flex",alignItems:"center",gap:5}}>
-                    <div style={{width:7,height:7,borderRadius:"50%",background:ago==="Today"?G.blueV:G.borderM}}/>
-                    <span style={{fontSize:13,color:ago==="Today"?G.blue:G.textL,fontWeight:600,fontFamily:G.mono}}>
-                      {ago ? `Last entry: ${ago}` : "No entries yet"}
+                    <div style={{width:7,height:7,borderRadius:"50%",background:count>0?G.blueV:G.borderM}}/>
+                    <span style={{fontSize:13,color:count>0?G.blue:G.textL,fontWeight:600,fontFamily:G.mono}}>
+                      {count>0 ? `${count} entries${ago?` · last ${ago}`:""}` : `No entries in ${overviewPeriodText.toLowerCase()}`}
                     </span>
                   </div>
                 );
@@ -4556,56 +4741,7 @@ function AdminPanelInner({user}){
             {!selP3&&!isAggregateSelection&&!isScopedFullView&&renderOverviewPanel()}
             {isScopedFullView&&renderFullViewEntries(false)}
             {isAggregateSelection&&renderAggregateEntries(false)}
-            {!isAggregateSelection&&selP3&&p4Entries!==null&&p4Entries.length===0&&(
-              <div style={{background:G.surface,borderRadius:11,border:`1px solid ${G.border}`,padding:"16px"}}>
-                <div style={{height:3,background:G.border,borderRadius:2,marginBottom:12}}/>
-                <div style={{display:"flex",alignItems:"center",gap:10,background:G.bg,borderRadius:10,padding:"12px 16px",border:`1px solid ${G.border}`}}>
-                  <span style={{fontSize:19}}>⚠</span>
-                  <span style={{fontSize:15,fontWeight:700,color:G.textM,fontFamily:G.sans}}>No Entry Uploaded — {selP3.teacherName} has no entries for this period.</span>
-                </div>
-              </div>
-            )}
-            {!isAggregateSelection&&selP3&&p4Entries&&p4Entries.map(([dk,entries])=>(
-              <div key={dk} style={{marginBottom:22}}>
-                {/* Date label */}
-                <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.mono,marginBottom:9,display:"flex",alignItems:"center",gap:8,textTransform:"uppercase",letterSpacing:0.5}}>
-                  {formatDateLabel(dk)}
-                  <span style={{fontSize:12,background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontWeight:600,textTransform:"none",letterSpacing:0}}>
-                    {entries.length} {entries.length===1?"entry":"entries"}
-                  </span>
-                  <div style={{flex:1,height:1,background:G.border}}/>
-                </div>
-                {entries.map((note,i)=>{
-                  const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
-                  return(
-                    <div key={note.id||i} style={{background:G.surface,borderRadius:11,border:`1px solid ${G.border}`,marginBottom:7,overflow:"hidden",boxShadow:G.shadowSm}}>
-                      <div style={{height:3,background:tag.bg}}/>
-                      <div style={{padding:"10px 12px",display:"grid",gridTemplateColumns:"80px 1fr 90px 28px",alignItems:"center",gap:10}}>
-                        <div>
-                          <div style={{fontFamily:G.display,fontSize:16,fontWeight:700,color:G.text,lineHeight:1}}>
-                            {note.timeStart?fmt12(note.timeStart):"—"}
-                          </div>
-                          {note.timeEnd&&<div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:3}}>→ {fmt12(note.timeEnd)}</div>}
-                        </div>
-                        <div>
-                          {note.status&&STATUS_STYLES[note.status]&&<span style={{background:STATUS_STYLES[note.status].bg,color:STATUS_STYLES[note.status].text,fontSize:11,borderRadius:8,padding:"2px 8px",fontFamily:"'Inter',sans-serif",fontWeight:600,display:"inline-block",marginBottom:4}}>{STATUS_STYLES[note.status].label}</span>}
-                          {note.title&&<div style={{fontSize:15,fontWeight:600,color:G.text,fontFamily:G.display}}>{note.title}</div>}
-                          {note.body&&<div style={{fontSize:13,color:G.textM,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{note.body}</div>}
-                        </div>
-                        <div style={{display:"inline-flex",alignItems:"center",gap:4,borderRadius:20,padding:"4px 11px",fontSize:12,fontWeight:600,fontFamily:G.mono,whiteSpace:"nowrap",background:tag.bg,color:tag.text,justifySelf:"end"}}>
-                          {tag.label}
-                        </div>
-                        <button onClick={()=>handleDeleteEntry(selP3.teacherUid,selP3.classId,dk,note.id,note.title)}
-                          style={{width:26,height:26,borderRadius:7,background:G.redL,border:"none",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-                          title="Delete entry">
-                          🗑
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+            {!isAggregateSelection&&selP3&&renderSelectedTimelineEntries(false)}
           </div>
         </div>
       </div>
