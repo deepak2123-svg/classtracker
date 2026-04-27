@@ -13,7 +13,7 @@ service cloud.firestore {
 
     match /users/{uid}/appdata/{doc} {
       allow read:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
-      allow write: if isSignedIn() && request.auth.uid == uid;
+      allow write: if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
     match /roles/{uid} {
