@@ -2416,32 +2416,32 @@ function ClassTrackerInner({user}){
           onPointerUp={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}
           onPointerCancel={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}>
           <div style={{height:compact?5:6,background:`linear-gradient(90deg, ${ic.bg} 0%, ${ic.bg}BB 65%, ${ic.bg}66 100%)`}}/>
-          <div style={{padding:compact?"12px 13px 13px":"16px 16px 15px"}}>
-            <div style={{display:"flex",alignItems:"flex-start",gap:compact?10:12}}>
-            <div style={{width:compact?42:48,height:compact?42:48,borderRadius:compact?12:14,background:`linear-gradient(180deg, ${ic.light} 0%, #FFFFFF 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:compact?13:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,border:`1px solid ${ic.bg}22`,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.7)"}}>
+          <div style={{padding:compact?"10px 12px 11px":"16px 16px 15px"}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:compact?9:12}}>
+            <div style={{width:compact?38:48,height:compact?38:48,borderRadius:compact?11:14,background:`linear-gradient(180deg, ${ic.light} 0%, #FFFFFF 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:compact?12:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,border:`1px solid ${ic.bg}22`,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.7)"}}>
               {(cls.section||"?").slice(0,2).toUpperCase()}
             </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:5}}>
-                <div style={{fontSize:compact?16:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,lineHeight:1.2}}>{cls.section}</div>
-                {compact&&<span style={{display:"inline-flex",alignItems:"center",gap:5,background:todayN>0?G.greenL:"rgba(15,23,42,0.05)",border:todayN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.08)`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:todayN>0?G.green:G.textL,whiteSpace:"nowrap"}}>{todayN} today</span>}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:compact?4:5}}>
+                <div style={{fontSize:compact?15:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,lineHeight:1.2}}>{cls.section}</div>
+                {compact&&<span style={{display:"inline-flex",alignItems:"center",gap:5,background:todayN>0?G.greenL:"rgba(15,23,42,0.05)",border:todayN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.08)`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,color:todayN>0?G.green:G.textL,whiteSpace:"nowrap"}}>{todayN} today</span>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span title={instFull} style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}33`,flexShrink:0,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                <span title={instFull} style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"2px 9px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}33`,flexShrink:0,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                   {instShort}
                 </span>
-                <span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{classSubject}</span>
+                <span style={{fontSize:compact?11.5:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{classSubject}</span>
               </div>
               {compact&&(
                 <>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:7}}>
                   <StatChip label="Today" value={todayN} active={todayN>0}/>
                   <StatChip label={monthLabel} value={monthN} active={monthN>0}/>
                   <StatChip label="Total" value={total}/>
                 </div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:9}}>
-                  <span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{lastLoggedKey?`Last log ${formatDateLabel(lastLoggedKey)}`:"No logs yet"}</span>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:5,background:`${ic.bg}10`,color:ic.bg,border:`1px solid ${ic.bg}1F`,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>Open ↗</span>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:7}}>
+                  <span style={{fontSize:11.5,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{lastLoggedKey?`Last log ${formatDateLabel(lastLoggedKey)}`:"No logs yet"}</span>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:5,background:`${ic.bg}10`,color:ic.bg,border:`1px solid ${ic.bg}1F`,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>Open ↗</span>
                 </div>
                 </>
               )}
@@ -2486,7 +2486,7 @@ function ClassTrackerInner({user}){
           const ic=inst==="all"?null:instColor(inst);
           return(
             <button key={inst} onClick={()=>setInstFilter(inst)}
-              style={{flexShrink:0,padding:"7px 16px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:13,fontWeight:isSel?700:500,minHeight:36,WebkitTapHighlightColor:"transparent",transition:"all 0.15s",
+              style={{flexShrink:0,padding:"6px 14px",borderRadius:18,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:12.5,fontWeight:isSel?700:500,minHeight:32,WebkitTapHighlightColor:"transparent",transition:"all 0.15s",
                 background:isSel?(inst==="all"?G.forest:ic.bg):"rgba(0,0,0,0.07)",
                 color:isSel?"#fff":G.textM}}>
               {inst==="all"?"All Classes":inst}
@@ -2499,53 +2499,53 @@ function ClassTrackerInner({user}){
     // ── MOBILE VIEW: full-page class list ────────────────────────────────────
     const MobileHome = () => (
       <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-        <div style={{padding:mobileLiteMode?"16px 14px 10px":"18px 16px 12px"}}>
-          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 58%, #24533F 100%)`,borderRadius:24,padding:mobileLiteMode?"16px 15px 14px":"18px 18px 16px",boxShadow:reduceEffects?"none":"0 14px 30px rgba(17,34,27,0.18)"}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+        <div style={{padding:mobileLiteMode?"10px 12px 8px":"12px 14px 10px"}}>
+          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 58%, #24533F 100%)`,borderRadius:20,padding:mobileLiteMode?"12px 13px 11px":"14px 15px 13px",boxShadow:reduceEffects?"none":"0 10px 22px rgba(17,34,27,0.16)"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
               <div>
-                <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.82)",fontFamily:G.mono,letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Teacher workspace</div>
-                <h1 style={{fontSize:mobileLiteMode?24:26,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.6,marginBottom:5,lineHeight:1.1}}>{teacherName}</h1>
-                <p style={{fontSize:13.5,color:"rgba(255,255,255,0.72)",lineHeight:1.5,maxWidth:260}}>
+                <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.82)",fontFamily:G.mono,letterSpacing:0.45,textTransform:"uppercase",marginBottom:8}}>Teacher workspace</div>
+                <h1 style={{fontSize:mobileLiteMode?21:23,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.55,marginBottom:4,lineHeight:1.08}}>{teacherName}</h1>
+                <p style={{fontSize:12.5,color:"rgba(255,255,255,0.72)",lineHeight:1.45,maxWidth:250}}>
                   {currentSession()} session with {quickHomeSummary.active} active classes across {quickHomeSummary.instituteCount} institute{quickHomeSummary.instituteCount===1?"":"s"}.
                 </p>
               </div>
-              <div style={{width:48,height:48,borderRadius:16,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.12)"}}>📘</div>
+              <div style={{width:42,height:42,borderRadius:14,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.12)"}}>📘</div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:14}}>
+            <div style={{display:"flex",gap:6,overflowX:"auto",paddingTop:10}} className="hide-scrollbar">
               {[
                 {label:"Logged today",value:quickHomeSummary.loggedToday,accent:"#BDF5D0"},
                 {label:"This month",value:quickHomeSummary.monthEntries,accent:"#FFFFFF"},
                 {label:"Classes",value:quickHomeSummary.active,accent:"#D8E7FF"},
               ].map(item=>(
-                <div key={item.label} style={{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:16,padding:"10px 10px 9px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
-                  <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>{item.label}</div>
-                  <div style={{fontSize:mobileLiteMode?18:20,fontWeight:800,color:item.accent,fontFamily:G.display,marginTop:5,lineHeight:1}}>{item.value}</div>
+                <div key={item.label} style={{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"8px 10px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)",minWidth:mobileLiteMode?100:108,flexShrink:0}}>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.45}}>{item.label}</div>
+                  <div style={{fontSize:mobileLiteMode?17:18,fontWeight:800,color:item.accent,fontFamily:G.display,marginTop:4,lineHeight:1}}>{item.value}</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
         {institutes.length>1&&(
-          <div style={{padding:mobileLiteMode?"0 14px 12px":"0 16px 14px"}}>
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"10px 10px 8px",boxShadow:G.shadowSm}}>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:8,padding:"0 4px"}}>Institute filter</div>
+          <div style={{padding:mobileLiteMode?"0 12px 8px":"0 14px 10px"}}>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"8px 8px 6px",boxShadow:G.shadowSm}}>
+              <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6,padding:"0 4px"}}>Institute filter</div>
               <InstFilter/>
             </div>
           </div>
         )}
-        <div style={{padding:mobileLiteMode?"0 14px 12px":"0 16px 14px"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+        <div style={{padding:mobileLiteMode?"0 12px 8px":"0 14px 10px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
             <div>
-              <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6}}>Your classes</div>
-              <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3,marginTop:3}}>{filtered.length} visible right now</div>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55}}>Your classes</div>
+              <div style={{fontSize:16.5,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.25,marginTop:2}}>{filtered.length} visible right now</div>
             </div>
-            <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"7px 11px",fontSize:12,fontWeight:700,color:G.textS,fontFamily:G.mono}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,color:G.textS,fontFamily:G.mono}}>
               {Math.min(filtered.length, visibleMobileClasses.length)}/{filtered.length} shown
             </span>
           </div>
         </div>
         {/* Class list */}
-        <div style={{flex:1,overflowY:"auto",padding:mobileLiteMode?"0 12px 100px":"0 14px 100px",WebkitOverflowScrolling:"touch"}}>
+        <div style={{flex:1,overflowY:"auto",padding:mobileLiteMode?"0 12px 96px":"0 14px 96px",WebkitOverflowScrolling:"touch"}}>
           {activeClasses.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
               <div style={{fontSize:52,marginBottom:16}}>📚</div>
@@ -2554,7 +2554,7 @@ function ClassTrackerInner({user}){
               <PrimaryBtn onClick={()=>setView("addClass")} style={{padding:"13px 32px",fontSize:16}}>+ Add First Class</PrimaryBtn>
             </div>
           ):(
-            <div style={{display:"flex",flexDirection:"column",gap:mobileLiteMode?10:12}}>
+            <div style={{display:"flex",flexDirection:"column",gap:mobileLiteMode?8:10}}>
               {visibleMobileClasses.map(cls=>(
                 <ClassCard key={cls.id} cls={cls} compact={mobileLiteMode} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}}/>
               ))}
@@ -3343,14 +3343,11 @@ function ClassTrackerInner({user}){
               <span>👤</span><span>Logged as: <strong>{teacherName}</strong></span>
             </div>
           <div className="form-card" style={{...card,padding:"24px"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexWrap:"wrap"}}>
               <div>
                 <div style={{fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:0.7,color:G.textL,marginBottom:4}}>Quick log</div>
                 <div style={{fontSize:14,color:G.textM,lineHeight:1.5}}>Save with status and time first. Topic and notes stay optional.</div>
               </div>
-              <span style={{fontSize:12,fontWeight:700,color:hasExtraDetails?G.green:G.textL,background:hasExtraDetails?G.greenL:G.bg,border:`1px solid ${hasExtraDetails?G.green:G.border}`,borderRadius:999,padding:"6px 10px"}}>
-                {hasExtraDetails?"Details added":"Minimal entry"}
-              </span>
             </div>
             <div style={{marginBottom:18}}>
               <label style={lbl}>Topic Status</label>
