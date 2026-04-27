@@ -6,6 +6,7 @@ import {
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute,
+  repairTeacherIndex, saveProfileName,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES } from "./shared.jsx";
 
@@ -1058,6 +1059,7 @@ function AdminPanelInner({user}){
   const [instMenuOpen, setInstMenuOpen]     = useState(null); // inst name whose ⋯ menu is open
   const [instSearch, setInstSearch]         = useState("");
   const [p2Search, setP2Search]             = useState("");
+  const [repairingTeacherUid, setRepairingTeacherUid] = useState(null);
 
   useEffect(()=>{
     const check=()=>setIsMobile(window.innerWidth<768);
@@ -1704,14 +1706,7 @@ function AdminPanelInner({user}){
   const handleRenameTeacher = async (uid, newName) => {
     if (!newName.trim()) return;
     try {
-      const { doc, setDoc, getDoc } = await import("firebase/firestore");
-      const { db: firebaseDb } = await import("./firebase");
-      await setDoc(doc(firebaseDb, "teachers", uid), { name: newName.trim() }, { merge: true });
-      const dataRef = doc(firebaseDb, "users", uid, "appdata", "main");
-      const snap = await getDoc(dataRef);
-      if (snap.exists()) {
-        await setDoc(dataRef, { ...snap.data(), profile: { ...snap.data().profile, name: newName.trim() } });
-      }
+      await saveProfileName(uid, newName.trim());
       setTeachers(ts => ts.map(t => t.uid === uid ? { ...t, name: newName.trim() } : t));
       setFullData(fd => {
         if (!fd[uid]) return fd;
@@ -1719,6 +1714,35 @@ function AdminPanelInner({user}){
       });
       setRenamingTeacher(null);
     } catch(e) { showAdminToast("Could not rename: " + e.message); }
+  };
+
+  const handleRepairTeacherIndex = async (uid) => {
+    setRepairingTeacherUid(uid);
+    try {
+      const repaired = await repairTeacherIndex(uid);
+      if (!repaired?.ok) {
+        showAdminToast(repaired?.reason==="missing-profile"
+          ? "Repair blocked: teacher profile name is missing."
+          : "Repair could not find recoverable teacher data.");
+        return;
+      }
+      const fresh = await getTeacherFullData(uid);
+      if (fresh) {
+        setFullData(prev => ({ ...prev, [uid]: fresh }));
+      }
+      setTeachers(prev => {
+        const next = repaired.summary;
+        const found = prev.some(t => t.uid === uid);
+        return found
+          ? prev.map(t => t.uid === uid ? { ...t, ...next } : t)
+          : [{ ...next }, ...prev];
+      });
+      showAdminToast(`Teacher index repaired for ${repaired.summary.name || uid}.`);
+    } catch (e) {
+      showAdminToast("Repair failed: " + e.message);
+    } finally {
+      setRepairingTeacherUid(null);
+    }
   };
 
   // Fully remove a teacher from the system
@@ -3173,6 +3197,12 @@ function AdminPanelInner({user}){
                       {/* View in main panel */}
                       <button onClick={()=>{setView("main");setSelP2(t.uid);setTab("teacher");setMobileStep(2);}}
                         style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>📋 View Entries</button>
+
+                      <button onClick={()=>handleRepairTeacherIndex(t.uid)}
+                        disabled={repairingTeacherUid===t.uid}
+                        style={{...pill("#EEF2FF",G.blue,"#BFDBFE"),fontSize:13,opacity:repairingTeacherUid===t.uid?0.7:1,cursor:repairingTeacherUid===t.uid?"not-allowed":"pointer"}}>
+                        {repairingTeacherUid===t.uid ? "🛠 Repairing…" : "🛠 Repair Index"}
+                      </button>
 
                       {/* Remove teacher from system */}
                       {!isMe&&(

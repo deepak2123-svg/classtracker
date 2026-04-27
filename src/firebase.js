@@ -1,7 +1,8 @@
 import { initializeApp } from "firebase/app";
 import {
   getFirestore, doc, getDoc, setDoc, collection,
-  getDocs, query, where, deleteDoc,
+  getDocs, query, where, deleteDoc, runTransaction,
+  collectionGroup, documentId,
 } from "firebase/firestore";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup,
@@ -22,6 +23,17 @@ const app = initializeApp(firebaseConfig);
 export const db   = getFirestore(app);
 export const auth = getAuth(app);
 const gProvider   = new GoogleAuthProvider();
+const MAIN_SCHEMA_VERSION = 3;
+const BACKUP_HISTORY_LIMIT = 12;
+
+class RevisionConflictError extends Error {
+  constructor(details = {}) {
+    super("Newer cloud data exists for this teacher.");
+    this.name = "RevisionConflictError";
+    this.code = "revision-conflict";
+    Object.assign(this, details);
+  }
+}
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export async function loginWithGoogle() {
@@ -45,49 +57,218 @@ export function onAuth(cb) { return onAuthStateChanged(auth, cb); }
 
 export function userDocRef(uid)         { return doc(db, "users", uid, "appdata", "main"); }
 export function notesDocRef(uid, cid)   { return doc(db, "users", uid, "appdata", `notes_${cid}`); }
+export function mainBackupDocRef(uid)   { return doc(db, "users", uid, "appdata", "main_backup_latest"); }
+export function backupHistoryDocRef(uid, backupId) { return doc(db, "users", uid, "appdata", `main_backup_${backupId}`); }
+
+function safeRevision(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function uniqueTrimmed(values) {
+  return [...new Set((values || []).map(v => (v || "").trim()).filter(Boolean))];
+}
+
+function buildTeacherIndexPayload(uid, data) {
+  const classes = Array.isArray(data?.classes) ? data.classes : [];
+  return {
+    uid,
+    name: data?.profile?.name || "",
+    institutes: uniqueTrimmed(classes.map(c => c?.institute)),
+    classCount: classes.length,
+    mainRevision: safeRevision(data?._meta?.revision),
+    lastActive: Date.now(),
+  };
+}
+
+function buildBackupPayload(meta, savedAt, source, backupId) {
+  const classes = Array.isArray(meta?.classes) ? meta.classes : [];
+  return {
+    data: meta,
+    savedAt,
+    revision: safeRevision(meta?._meta?.revision),
+    classCount: classes.length,
+    instituteCount: uniqueTrimmed(classes.map(c => c?.institute)).length,
+    source,
+    backupId,
+  };
+}
+
+async function listBackupSnapshots(uid) {
+  try {
+    const snap = await getDocs(collection(db, "users", uid, "appdata"));
+    return snap.docs
+      .filter(d => d.id === "main_backup_latest" || (d.id.startsWith("main_backup_") && d.id !== "main"))
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(item => item?.data);
+  } catch {
+    return [];
+  }
+}
+
+function latestBackupSnapshot(backups) {
+  return [...(backups || [])]
+    .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0) || safeRevision(b.revision) - safeRevision(a.revision))[0] || null;
+}
+
+async function pruneBackupHistory(uid) {
+  const backups = await listBackupSnapshots(uid);
+  const stale = backups
+    .filter(item => item.id !== "main_backup_latest")
+    .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0) || safeRevision(b.revision) - safeRevision(a.revision))
+    .slice(BACKUP_HISTORY_LIMIT);
+  await Promise.all(
+    stale.map(item => deleteDoc(doc(db, "users", uid, "appdata", item.id)).catch(() => {}))
+  );
+}
+
+async function hydrateUserDataFromMain(uid, main) {
+  const classes = Array.isArray(main?.classes) ? main.classes : [];
+  const notesList = await Promise.all(
+    classes.map(async cls => {
+      try {
+        const ns = await getDoc(notesDocRef(uid, cls.id));
+        return [cls.id, ns.exists() ? ns.data() : {}];
+      } catch {
+        return [cls.id, {}];
+      }
+    })
+  );
+  const notes = Object.fromEntries(notesList);
+  return { ...main, notes: Object.keys(notes).length ? notes : (main?.notes || {}) };
+}
+
+async function listAppdataNoteDocIds(uid) {
+  try {
+    const snap = await getDocs(collection(db, "users", uid, "appdata"));
+    return snap.docs
+      .map(d => d.id)
+      .filter(id => id.startsWith("notes_"))
+      .map(id => id.slice(6));
+  } catch {
+    return [];
+  }
+}
 
 export async function loadUserData(uid) {
   try {
-    // 1. Load main metadata doc
     const snap = await getDoc(userDocRef(uid));
     if (!snap.exists()) return null;
-    const main = snap.data();
-
-    // 2. Load notes for each class in parallel
-    const classes = main.classes || [];
-    const notesList = await Promise.all(
-      classes.map(async cls => {
-        try {
-          const ns = await getDoc(notesDocRef(uid, cls.id));
-          return [cls.id, ns.exists() ? ns.data() : {}];
-        } catch { return [cls.id, {}]; }
-      })
-    );
-
-    // 3. Merge into the shape the app expects: { notes: { [cid]: { [dk]: [...] } } }
-    const notes = Object.fromEntries(notesList);
-
-    // Back-compat: if notes were stored in the old main doc, use those
-    return { ...main, notes: Object.keys(notes).length ? notes : (main.notes || {}) };
+    return hydrateUserDataFromMain(uid, snap.data());
   } catch { return null; }
 }
 
-export async function saveUserData(uid, data) {
-  // Split: save metadata without notes to main doc
-  const { notes, ...meta } = data;
-  await setDoc(userDocRef(uid), meta);
+export async function loadUserDataState(uid) {
+  const noteDocIds = await listAppdataNoteDocIds(uid);
 
-  // Save each class notes to its own doc (only if changed)
-  if (notes) {
-    await Promise.all(
-      Object.entries(notes).map(([cid, dateMap]) =>
-        setDoc(notesDocRef(uid, cid), dateMap || {}).catch(() => {})
-      )
-    );
+  let mainSnap;
+  try {
+    mainSnap = await getDoc(userDocRef(uid));
+  } catch (error) {
+    return { status: "error", data: null, noteDocIds, orphanedNoteDocIds: [], error };
   }
 
-  // Keep teacher index fresh
-  await syncTeacherIndex(uid, data);
+  const backupMeta = latestBackupSnapshot(await listBackupSnapshots(uid));
+
+  if (!mainSnap.exists()) {
+    if (backupMeta?.data) {
+      const backupData = await hydrateUserDataFromMain(uid, backupMeta.data);
+      const backupClassIds = new Set(
+        (backupMeta.data.classes || []).map(cls => String(cls?.id || "")).filter(Boolean)
+      );
+      return {
+        status: "backup",
+        data: backupData,
+        noteDocIds,
+        orphanedNoteDocIds: noteDocIds.filter(id => !backupClassIds.has(String(id))),
+        backupSavedAt: backupMeta.savedAt || 0,
+      };
+    }
+    return {
+      status: noteDocIds.length ? "orphaned" : "missing",
+      data: null,
+      noteDocIds,
+      orphanedNoteDocIds: [...noteDocIds],
+      backupSavedAt: 0,
+    };
+  }
+
+  const data = await hydrateUserDataFromMain(uid, mainSnap.data());
+  const classIds = new Set(
+    (data.classes || []).map(cls => String(cls?.id || "")).filter(Boolean)
+  );
+  return {
+    status: "ok",
+    data,
+    noteDocIds,
+    orphanedNoteDocIds: noteDocIds.filter(id => !classIds.has(String(id))),
+    backupSavedAt: backupMeta?.savedAt || 0,
+  };
+}
+
+export async function saveUserData(uid, data, options = {}) {
+  const { expectedRevision = safeRevision(data?._meta?.revision), source = "saveUserData" } = options;
+  const { notes = {}, ...meta } = data || {};
+  const shouldRefreshBackup =
+    (meta.classes || []).length > 0 ||
+    Object.keys(notes || {}).length > 0 ||
+    (meta.trash?.classes || []).length > 0 ||
+    (meta.trash?.notes || []).length > 0;
+
+  const result = await runTransaction(db, async tx => {
+    const mainRef = userDocRef(uid);
+    const currentSnap = await tx.get(mainRef);
+    const currentMain = currentSnap.exists() ? currentSnap.data() : null;
+    const currentRevision = safeRevision(currentMain?._meta?.revision);
+
+    if (currentSnap.exists()) {
+      if (expectedRevision !== currentRevision) {
+        throw new RevisionConflictError({
+          expectedRevision,
+          actualRevision: currentRevision,
+          updatedAt: currentMain?._meta?.updatedAt || 0,
+        });
+      }
+    } else if (expectedRevision > 0) {
+      throw new RevisionConflictError({
+        expectedRevision,
+        actualRevision: 0,
+        updatedAt: 0,
+      });
+    }
+
+    const updatedAt = Date.now();
+    const nextRevision = currentRevision + 1;
+    const safeMeta = {
+      ...meta,
+      _meta: {
+        ...(meta._meta || {}),
+        updatedAt,
+        schemaVersion: MAIN_SCHEMA_VERSION,
+        revision: nextRevision,
+        previousRevision: currentRevision,
+        source,
+      },
+    };
+
+    tx.set(mainRef, safeMeta);
+
+    if (shouldRefreshBackup) {
+      const backupId = `${String(nextRevision).padStart(6, "0")}_${updatedAt}`;
+      tx.set(mainBackupDocRef(uid), buildBackupPayload(safeMeta, updatedAt, source, backupId));
+      tx.set(backupHistoryDocRef(uid, backupId), buildBackupPayload(safeMeta, updatedAt, source, backupId));
+    }
+
+    Object.entries(notes || {}).forEach(([cid, dateMap]) => {
+      tx.set(notesDocRef(uid, cid), dateMap || {});
+    });
+
+    return { data: { ...safeMeta, notes }, revision: nextRevision, updatedAt };
+  });
+
+  await pruneBackupHistory(uid);
+  await syncTeacherIndex(uid, result.data);
+  return result;
 }
 
 // Delete notes doc when a class is permanently deleted
@@ -125,16 +306,10 @@ export async function demoteToTeacher(uid) {
 // teachers/{uid} = { uid, name, email, photoURL, institutes[], lastActive }
 export async function syncTeacherIndex(uid, data) {
   if (!data?.profile?.name) return;
-  const institutes = [...new Set(
-    (data.classes || []).map(c => (c.institute||"").trim()).filter(Boolean)
-  )];
   try {
     await setDoc(doc(db, "teachers", uid), {
-      uid,
+      ...buildTeacherIndexPayload(uid, data),
       name: data.profile.name,
-      institutes,
-      classCount: (data.classes || []).length,
-      lastActive: Date.now(),
     }, { merge: true });
   } catch { /* silent fail — admin feature optional */ }
 }
@@ -145,18 +320,36 @@ export async function getAllTeachers() {
     // Primary: teacher index (has institute/class summary)
     const snap = await getDocs(collection(db, "teachers"));
     const indexed = snap.docs.map(d => d.data());
-    const indexedUids = new Set(indexed.map(t => t.uid));
+    const merged = new Map(indexed.map(t => [t.uid, t]));
 
     // Supplement: roles collection catches teachers not yet in index
     const rolesSnap = await getDocs(collection(db, "roles"));
-    const extras = [];
     rolesSnap.docs.forEach(d => {
-      if (!indexedUids.has(d.id)) {
-        extras.push({ uid: d.id, name: "", institutes: [], classCount: 0 });
+      if (!merged.has(d.id)) {
+        merged.set(d.id, { uid: d.id, name: "", institutes: [], classCount: 0 });
       }
     });
 
-    return [...indexed, ...extras];
+    try {
+      const appdataSnap = await getDocs(query(collectionGroup(db, "appdata"), where(documentId(), "==", "main")));
+      appdataSnap.docs.forEach(snap => {
+        const uid = snap.ref.parent.parent?.id;
+        if (!uid) return;
+        const data = snap.data();
+        const summary = buildTeacherIndexPayload(uid, data);
+        if (!summary.name && summary.classCount === 0) return;
+        const existing = merged.get(uid) || { uid, name: "", institutes: [], classCount: 0 };
+        merged.set(uid, {
+          ...existing,
+          ...summary,
+          name: summary.name || existing.name,
+          institutes: summary.institutes.length ? summary.institutes : (existing.institutes || []),
+          classCount: Math.max(summary.classCount || 0, existing.classCount || 0),
+        });
+      });
+    } catch {}
+
+    return Array.from(merged.values());
   } catch { return []; }
 }
 
@@ -245,10 +438,39 @@ export async function saveProfileName(uid, name) {
     const ref = userDocRef(uid);
     const snap = await getDoc(ref);
     const existing = snap.exists() ? snap.data() : {};
-    await setDoc(ref, { ...existing, profile: { ...(existing.profile || {}), name: name.trim() } });
+    const currentRevision = safeRevision(existing?._meta?.revision);
+    const updatedAt = Date.now();
+    await setDoc(ref, {
+      ...existing,
+      profile: { ...(existing.profile || {}), name: name.trim() },
+      _meta: {
+        ...(existing._meta || {}),
+        updatedAt,
+        schemaVersion: MAIN_SCHEMA_VERSION,
+        revision: currentRevision + 1,
+        previousRevision: currentRevision,
+        source: "saveProfileName",
+      },
+    });
     // Also update the teacher index entry
     await setDoc(doc(db, "teachers", uid), { name: name.trim() }, { merge: true });
   } catch (e) { console.error("saveProfileName", e); }
+}
+
+export async function repairTeacherIndex(uid) {
+  const state = await loadUserDataState(uid);
+  if (!state?.data) {
+    return { ok: false, reason: state?.status || "missing" };
+  }
+  if (!state.data.profile?.name) {
+    return { ok: false, reason: "missing-profile" };
+  }
+  await syncTeacherIndex(uid, state.data);
+  return {
+    ok: true,
+    sourceStatus: state.status,
+    summary: buildTeacherIndexPayload(uid, state.data),
+  };
 }
 
 // ── Remove institute ──────────────────────────────────────────────────────────

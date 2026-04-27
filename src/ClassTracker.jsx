@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, Component } from "react";
-import { loadUserData, saveUserData, logout, syncTeacherIndex, deleteClassNotes, db, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
+import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
@@ -702,6 +702,106 @@ function ProfileSetup({user,onSave}){
             style={{width:"100%",padding:"13px",background:name.trim()?G.greenV:"rgba(255,255,255,0.1)",color:name.trim()?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:name.trim()?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:name.trim()?`0 4px 16px rgba(52,208,119,0.3)`:"none"}}>
             Get Started →
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function fmtRecoveryStamp(ts){
+  if(!ts) return "";
+  return new Date(ts).toLocaleString("en-IN",{
+    day:"numeric",
+    month:"short",
+    year:"numeric",
+    hour:"numeric",
+    minute:"2-digit",
+  });
+}
+
+function dataFingerprint(payload){
+  try{
+    const meta = payload?._meta || {};
+    return JSON.stringify({
+      ...payload,
+      _meta: {
+        ...meta,
+        updatedAt: 0,
+        revision: 0,
+        previousRevision: 0,
+        source: "",
+      },
+    });
+  }catch{
+    return "";
+  }
+}
+
+function DataIntegrityScreen({issue,onRetry,onRestore,onSignOut,restoring}){
+  const metaText = issue?.kind==="backup" && issue.backupSavedAt
+    ? `Last safe snapshot: ${fmtRecoveryStamp(issue.backupSavedAt)}`
+    : issue?.kind==="orphaned"
+      ? `${issue.orphanedCount || 0} note files are still present in Firestore`
+      : issue?.kind==="conflict" && issue?.updatedAt
+        ? `Another device saved newer data on ${fmtRecoveryStamp(issue.updatedAt)}`
+      : issue?.hasLocalDraft
+        ? "A local browser draft was found, but cloud saving is blocked until the load succeeds"
+        : "Cloud saving is disabled right now to protect existing class data";
+  const retryLabel = issue?.kind==="conflict" ? "Load latest cloud data" : "Retry cloud load";
+  const iconBg = issue?.kind==="backup" ? "#FEF3C7" : issue?.kind==="conflict" ? "#DBEAFE" : "#FEE2E2";
+  const icon = issue?.kind==="backup" ? "🛟" : issue?.kind==="orphaned" ? "🧩" : issue?.kind==="conflict" ? "🔄" : "⚠️";
+
+  return(
+    <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
+      <div style={{width:"100%",maxWidth:520}}>
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <div style={{width:72,height:72,borderRadius:22,background:iconBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 18px",boxShadow:"0 8px 24px rgba(0,0,0,0.22)"}}>
+            {icon}
+          </div>
+          <h1 style={{fontSize:30,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:10,letterSpacing:-0.5}}>
+            {issue?.kind==="backup"
+              ? "We found a safe class list backup"
+              : issue?.kind==="conflict"
+                ? "A newer class list is already in the cloud"
+              : issue?.kind==="orphaned"
+                ? "Your class list needs recovery"
+                : "We could not safely load your classes"}
+          </h1>
+          <p style={{fontSize:16,color:"rgba(255,255,255,0.58)",lineHeight:1.7}}>
+            {issue?.kind==="backup"
+              ? "The live class metadata is missing or damaged, but your last safe snapshot is ready to restore. Do not create new classes until this is fixed."
+              : issue?.kind==="conflict"
+                ? "This device tried to save an older class list after a newer cloud update already happened. Sync is paused so nothing gets overwritten."
+              : issue?.kind==="orphaned"
+                ? "We found class entry files but could not find the class list metadata that links them into the teacher panel. Creating new classes now can make recovery harder."
+                : "A Firestore load error happened before the teacher panel could verify your classes. Saving stays blocked so we do not overwrite working data with a blank account."}
+          </p>
+        </div>
+
+        <div style={{background:"rgba(255,255,255,0.07)",borderRadius:20,padding:"24px 22px",border:"1px solid rgba(255,255,255,0.12)",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+          <div style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,padding:"14px 16px",marginBottom:18}}>
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>
+              Data Protection
+            </div>
+            <div style={{fontSize:15,color:"#fff",lineHeight:1.6}}>
+              {metaText}
+            </div>
+          </div>
+
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <PrimaryBtn onClick={onRetry} onPointerDown={e=>rpl(e,true)} style={{width:"100%",padding:"13px",fontSize:16}}>
+              {retryLabel}
+            </PrimaryBtn>
+            {issue?.kind==="backup"&&(
+              <button onClick={onRestore} disabled={restoring} onPointerDown={e=>rpl(e,true)}
+                style={{width:"100%",padding:"13px",borderRadius:11,border:"none",background:restoring?"rgba(255,255,255,0.1)":G.greenV,color:restoring?"rgba(255,255,255,0.4)":G.forest,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:restoring?"not-allowed":"pointer",position:"relative",overflow:"hidden"}}>
+                {restoring ? "Restoring backup…" : "Restore last safe snapshot"}
+              </button>
+            )}
+            <GhostBtn onClick={onSignOut} style={{width:"100%",padding:"12px 16px",color:"rgba(255,255,255,0.78)",borderColor:"rgba(255,255,255,0.16)"}}>
+              Sign out for now
+            </GhostBtn>
+          </div>
         </div>
       </div>
     </div>
@@ -1564,14 +1664,46 @@ function ClassTrackerInner({user}){
   const [confirmModal,setConfirmModal]   = useState(null);
   const [savingGuard,setSavingGuard]     = useState(null); // {onLeave} — shown mid-save
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
+  const [loadIssue,setLoadIssue]         = useState(null);
+  const [dataWarning,setDataWarning]     = useState(null);
+  const [allowCloudSync,setAllowCloudSync] = useState(false);
+  const [loadAttempt,setLoadAttempt]     = useState(0);
+  const [restoringBackup,setRestoringBackup] = useState(false);
+  const [cloudRevision,setCloudRevision] = useState(0);
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
+  const lastSyncedFingerprint = useRef("");
 
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups}}
   const [unlinkedClasses,   setUnlinkedClasses]   = useState([]);  // classes needing link
   // Use sessionStorage so "Remind later" hides for this session only — shows again on next app open
   const [linkingDone,       setLinkingDone]        = useState(()=>sessionStorage.getItem("linkDismissed")==="1");
+  const pendingSaveKey = `classlog_pending_${user.uid}`;
+
+  const normaliseLoadedData = React.useCallback((incoming, { forceProfileBlank = false } = {}) => {
+    const base = incoming
+      ? { ...DEFAULT_DATA, ...incoming, profile: incoming.profile || { name:"" }, trash: incoming.trash || { classes:[], notes:[] } }
+      : { ...DEFAULT_DATA };
+    const purged = purgeExpiredTrash(base);
+    if (forceProfileBlank) {
+      purged.profile = { name:"" };
+    } else if (!purged.profile?.name && user.displayName) {
+      purged.profile = { name:user.displayName.trim() };
+    }
+    return purged;
+  }, [user.displayName]);
+
+  const storePendingDraft = React.useCallback((payload, reason = "save-failed") => {
+    try{
+      localStorage.setItem(pendingSaveKey, JSON.stringify({
+        data: payload,
+        savedAt: Date.now(),
+        baseRevision: cloudRevision,
+        reason,
+      }));
+    }catch(e){}
+  }, [pendingSaveKey, cloudRevision]);
 
   useEffect(()=>{
     // Load admin-created institutes list and section definitions
@@ -1580,87 +1712,157 @@ function ClassTrackerInner({user}){
   },[]);
 
   useEffect(()=>{
-    loadUserData(user.uid).then(d=>{
-      const base = d ? {...DEFAULT_DATA,...d,profile:d.profile||{name:""},trash:d.trash||{classes:[],notes:[]}} : DEFAULT_DATA;
-      // Purge trash items older than 30 days before they reach the UI
-      const purged = purgeExpiredTrash(base);
-      // For brand-new users (no Firestore doc yet), always ask for name
-      // even if Google provided a displayName — let them confirm/correct it
-      if (!d) {
-        purged.profile = { name: "" }; // force ProfileSetup screen
-      } else if (!purged.profile?.name && user.displayName) {
-        purged.profile = { name: user.displayName.trim() };
+    let cancelled = false;
+    setLoading(true);
+    setSaveErr(false);
+    setLoadIssue(null);
+    setDataWarning(null);
+    setAllowCloudSync(false);
+    setCloudRevision(0);
+
+    loadUserDataState(user.uid).then(result=>{
+      if(cancelled) return;
+      const status = result?.status || "error";
+
+      if(status==="ok"){
+        const purged = normaliseLoadedData(result.data);
+        const liveRevision = Number(purged?._meta?.revision || 0);
+        let nextWarning = result.orphanedNoteDocIds?.length
+          ? {kind:"orphaned",count:result.orphanedNoteDocIds.length}
+          : null;
+        try{
+          const pending=localStorage.getItem(pendingSaveKey);
+          if(pending){
+            const {data:localData,savedAt,baseRevision}=JSON.parse(pending);
+            const ageHrs=(Date.now()-savedAt)/(1000*60*60);
+            if(ageHrs<24 && localData){
+              if(Number(baseRevision ?? 0) === liveRevision){
+                const merged={...purged,...localData,profile:purged.profile,trash:localData.trash||purged.trash};
+                lastSyncedFingerprint.current = dataFingerprint(purged);
+                setCloudRevision(liveRevision);
+                setData(merged);
+                setAllowCloudSync(true);
+                if(merged.profile?.name) syncTeacherIndex(user.uid,merged).catch(()=>{});
+                if(nextWarning) setDataWarning(nextWarning);
+                setLoading(false);
+                return;
+              }
+              nextWarning = {
+                kind:"staleDraft",
+                savedAt:savedAt||0,
+                cloudUpdatedAt:purged?._meta?.updatedAt||0,
+              };
+            }
+            if(ageHrs>=24) localStorage.removeItem(pendingSaveKey);
+          }
+        }catch(e){}
+
+        lastSyncedFingerprint.current = dataFingerprint(purged);
+        setCloudRevision(liveRevision);
+        setData(purged);
+        setAllowCloudSync(true);
+        if(purged.profile?.name) syncTeacherIndex(user.uid,purged).catch(()=>{});
+        if(nextWarning) setDataWarning(nextWarning);
+        setLoading(false);
+        return;
       }
 
-      // Check localStorage for a pending save that may be newer than Firebase
-      try{
-        const pending=localStorage.getItem("classlog_pending_"+user.uid);
-        if(pending){
-          const {data:localData,savedAt}=JSON.parse(pending);
-          const ageHrs=(Date.now()-savedAt)/(1000*60*60);
-          if(ageHrs<24 && localData){
-            setData({...purged,...localData,profile:purged.profile});
-            saveUserData(user.uid,{...purged,...localData,profile:purged.profile})
-              .then(()=>{
-                localStorage.removeItem("classlog_pending_"+user.uid);
-                setSaveErr(false);
-              })
-              .catch(()=>setSaveErr(true));
-            if(purged.profile?.name) syncTeacherIndex(user.uid,purged).catch(()=>{});
-            setLoading(false);
-            return;
-          } else {
-            localStorage.removeItem("classlog_pending_"+user.uid);
-          }
-        }
-      }catch(e){}
+      if(status==="missing"){
+        const blank = normaliseLoadedData(null,{forceProfileBlank:true});
+        lastSyncedFingerprint.current = dataFingerprint(blank);
+        setCloudRevision(0);
+        setData(blank);
+        setAllowCloudSync(true);
+        setLoading(false);
+        return;
+      }
 
-      setData(purged);
-      if(purged.profile?.name) syncTeacherIndex(user.uid,purged).catch(()=>{});
-      setLoading(false);
-    }).catch(err=>{
-      console.error("Failed to load data:",err);
-      // Offline — try to restore from localStorage
+      if(status==="backup"){
+        setCloudRevision(Number(result.data?._meta?.revision || 0));
+        setData(normaliseLoadedData(result.data));
+        setLoadIssue({
+          kind:"backup",
+          backupSavedAt:result.backupSavedAt||0,
+          orphanedCount:result.orphanedNoteDocIds?.length||result.noteDocIds?.length||0,
+        });
+        setSaveErr(true);
+        setLoading(false);
+        return;
+      }
+
+      if(status==="orphaned"){
+        const blank = normaliseLoadedData(null);
+        lastSyncedFingerprint.current = dataFingerprint(blank);
+        setData(blank);
+        setLoadIssue({kind:"orphaned",orphanedCount:result.noteDocIds?.length||0});
+        setSaveErr(true);
+        setLoading(false);
+        return;
+      }
+
+      let hasLocalDraft=false;
       try{
-        const pending=localStorage.getItem("classlog_pending_"+user.uid);
+        const pending=localStorage.getItem(pendingSaveKey);
         if(pending){
           const {data:localData}=JSON.parse(pending);
-          if(localData){
-            setData({...DEFAULT_DATA,...localData,profile:{name:user.displayName||""}});
-            setLoading(false);
-            setSaveErr(true);
-            return;
-          }
+          hasLocalDraft=!!localData;
         }
       }catch(e){}
-      setData({...DEFAULT_DATA,profile:{name:user.displayName||""}});
-      setLoading(false);
+      const blank = normaliseLoadedData(null);
+      lastSyncedFingerprint.current = dataFingerprint(blank);
+      setData(blank);
+      setLoadIssue({kind:"error",hasLocalDraft});
       setSaveErr(true);
+      setLoading(false);
+    }).catch(err=>{
+      if(cancelled) return;
+      console.error("Failed to load data:",err);
+      const blank = normaliseLoadedData(null);
+      lastSyncedFingerprint.current = dataFingerprint(blank);
+      setData(blank);
+      setLoadIssue({kind:"error",hasLocalDraft:false});
+      setSaveErr(true);
+      setLoading(false);
     });
-  },[user.uid]);
+
+    return ()=>{ cancelled = true; };
+  },[user.uid,loadAttempt,normaliseLoadedData,pendingSaveKey]);
   useEffect(()=>{
-    if(loading)return;
+    if(loading||!allowCloudSync)return;
+    const nextFingerprint = dataFingerprint(data);
+    if(nextFingerprint===lastSyncedFingerprint.current) return;
     setSaving(true);setSaveErr(false);
     clearTimeout(saveTimer.current);
     saveTimer.current=setTimeout(()=>{
-      saveUserData(user.uid,data)
-        .then(()=>{
+      saveUserData(user.uid,data,{ expectedRevision: cloudRevision, source:"autosave" })
+        .then(result=>{
+          setCloudRevision(result?.revision || cloudRevision);
+          lastSyncedFingerprint.current = nextFingerprint;
           setSaving(false);
           setSaveErr(false);
           // Clear any pending offline save since we saved successfully
           try{localStorage.removeItem("classlog_pending_"+user.uid);}catch(e){}
         })
-        .catch(()=>{
+        .catch(err=>{
           setSaving(false);
           setSaveErr(true);
+          if(err?.code==="revision-conflict"){
+            storePendingDraft(data,"conflict");
+            setAllowCloudSync(false);
+            setLoadIssue({
+              kind:"conflict",
+              hasLocalDraft:true,
+              updatedAt:err.updatedAt||0,
+              actualRevision:err.actualRevision||0,
+            });
+            return;
+          }
           // Store to localStorage so data survives offline
-          try{
-            localStorage.setItem("classlog_pending_"+user.uid, JSON.stringify({data,savedAt:Date.now()}));
-          }catch(e){}
+          storePendingDraft(data,isOffline?"offline":"save-failed");
         });
     },1000);
     return()=>clearTimeout(saveTimer.current);
-  },[data]);
+  },[data,loading,allowCloudSync,user.uid,pendingSaveKey,cloudRevision,storePendingDraft,isOffline]);
   // Safe navigation — shows in-app warning if save is in flight
   // ── Browser history integration — enables Android back gesture ──────────────
   // On mount: seed the base history entry so back never exits the app accidentally
@@ -1708,6 +1910,38 @@ function ClassTrackerInner({user}){
     inlineToastTimer.current=setTimeout(()=>setInlineToast(null),3000);
   }
 
+  const retryCloudLoad = React.useCallback(()=>{
+    setRestoringBackup(false);
+    setLoadIssue(null);
+    setDataWarning(null);
+    setAllowCloudSync(false);
+    setLoading(true);
+    setLoadAttempt(n=>n+1);
+  },[]);
+
+  const restoreBackup = async () => {
+    if(loadIssue?.kind!=="backup") return;
+    setRestoringBackup(true);
+    setSaveErr(false);
+    try{
+      const restored = await saveUserData(user.uid,data,{ expectedRevision: 0, source:"restoreBackup" });
+      try{localStorage.removeItem(pendingSaveKey);}catch(e){}
+      setCloudRevision(restored?.revision || 0);
+      lastSyncedFingerprint.current = dataFingerprint(data);
+      setRestoringBackup(false);
+      setLoadIssue(null);
+      setDataWarning(null);
+      setAllowCloudSync(false);
+      setLoading(true);
+      setLoadAttempt(n=>n+1);
+    }catch(err){
+      console.error("Failed to restore class backup:",err);
+      setRestoringBackup(false);
+      setSaveErr(true);
+      showInlineToast("Backup restore failed. Please retry.");
+    }
+  };
+
   useEffect(()=>{if((view==="addNote"||view==="editNote")&&noteRef.current)noteRef.current.blur();},[view]);
   useEffect(()=>{
     const onResize=()=>setIsMobile(window.innerWidth<768);
@@ -1721,16 +1955,38 @@ function ClassTrackerInner({user}){
     const goOffline=()=>setIsOffline(true);
     const goOnline=()=>{
       setIsOffline(false);
-      if(saveErr){
+      if(saveErr&&allowCloudSync){
+        const nextFingerprint = dataFingerprint(data);
+        if(nextFingerprint===lastSyncedFingerprint.current){
+          setSaveErr(false);
+          return;
+        }
         setSaving(true);
-        saveUserData(user.uid,data)
-          .then(()=>{
+        saveUserData(user.uid,data,{ expectedRevision: cloudRevision, source:"online-retry" })
+          .then(result=>{
+            setCloudRevision(result?.revision || cloudRevision);
+            lastSyncedFingerprint.current = nextFingerprint;
             setSaving(false);
             setSaveErr(false);
-            try{localStorage.removeItem("classlog_pending_"+user.uid);}catch(e){}
+            try{localStorage.removeItem(pendingSaveKey);}catch(e){}
             showInlineToast("Back online — changes saved successfully");
           })
-          .catch(()=>{setSaving(false);setSaveErr(true);});
+          .catch(err=>{
+            setSaving(false);
+            setSaveErr(true);
+            if(err?.code==="revision-conflict"){
+              storePendingDraft(data,"conflict");
+              setAllowCloudSync(false);
+              setLoadIssue({
+                kind:"conflict",
+                hasLocalDraft:true,
+                updatedAt:err.updatedAt||0,
+                actualRevision:err.actualRevision||0,
+              });
+              return;
+            }
+            storePendingDraft(data,"online-retry");
+          });
       }
     };
     window.addEventListener("offline",goOffline);
@@ -1739,7 +1995,7 @@ function ClassTrackerInner({user}){
       window.removeEventListener("offline",goOffline);
       window.removeEventListener("online",goOnline);
     };
-  },[saveErr,data,user.uid]);
+  },[saveErr,data,user.uid,allowCloudSync,pendingSaveKey,cloudRevision,storePendingDraft]);
 
   // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
   // After both data and sections load, find classes that don't match admin sections
@@ -1832,7 +2088,18 @@ function ClassTrackerInner({user}){
     if(view==="addNote") setShowNoteDetails(false);
   },[view,activeClass?.id,selectedDate]);
 
-    if(loading)return<Spinner text="Loading…"/>;
+    if(loading)return<Spinner text={restoringBackup?"Restoring class list…":"Loading…"} />;
+  if(loadIssue){
+    return(
+      <DataIntegrityScreen
+        issue={loadIssue}
+        restoring={restoringBackup}
+        onRetry={retryCloudLoad}
+        onRestore={restoreBackup}
+        onSignOut={()=>logout()}
+      />
+    );
+  }
   if(!data.profile?.name)return<ProfileSetup user={user} onSave={name=>setData(d=>({...d,profile:{name}}))} />;
 
   const teacherName=data.profile.name;
@@ -1971,6 +2238,13 @@ function ClassTrackerInner({user}){
       {isOffline&&(
         <div style={{position:"fixed",top:58,left:0,right:0,zIndex:9998,background:"#B45309",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:600,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
           <span>📡</span> No internet connection — changes will save when reconnected
+        </div>
+      )}
+      {dataWarning&&(
+        <div style={{position:"fixed",top:isOffline?96:58,left:0,right:0,zIndex:9997,background:dataWarning.kind==="staleDraft"?"#7C2D12":"#92400E",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:600,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          {dataWarning.kind==="staleDraft"
+            ? <><span>🗂</span> We found an older unsynced browser draft from {fmtRecoveryStamp(dataWarning.savedAt)}. The latest cloud classes are showing so nothing newer gets overwritten.</>
+            : <><span>🧩</span> We found {dataWarning.count} unattached class note file{dataWarning.count===1?"":"s"}. If anything looks missing, do not create duplicate classes — contact admin first.</>}
         </div>
       )}
       {/* In-app toast — replaces alert() */}
