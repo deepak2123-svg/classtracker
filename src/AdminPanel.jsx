@@ -32,25 +32,25 @@ const G = {
 
 const PANEL_RAIL_THEMES = {
   p1: {
-    bg: "#EEF4FF",
-    edge: "#C9D9FF",
-    tab: "#DCE9FF",
+    bg: "#E4EEFF",
+    edge: "#B8CCF7",
+    tab: "#CFE0FF",
     accent: "#1D4ED8",
-    text: "#244170",
+    text: "#1E3A6D",
   },
   p2: {
-    bg: "#FFF7E8",
-    edge: "#F3D7A3",
-    tab: "#FDE8C2",
+    bg: "#FFF1D9",
+    edge: "#EBC886",
+    tab: "#F9DDAB",
     accent: "#B9770E",
-    text: "#6C4A0F",
+    text: "#6A4708",
   },
   p3: {
-    bg: "#ECFBF4",
-    edge: "#BFE7D0",
-    tab: "#D6F4E3",
+    bg: "#E3F7EC",
+    edge: "#AFDCC1",
+    tab: "#C9EDD9",
     accent: "#198754",
-    text: "#1F5E43",
+    text: "#1A5A3E",
   },
 };
 
@@ -3359,17 +3359,17 @@ function AdminPanelInner({user}){
       onClick={onClick}
       title={title}
       style={{
-        width:26,
-        height:26,
-        borderRadius:8,
+        width:28,
+        height:28,
+        borderRadius:10,
         border:`1px solid ${tone?.edge || G.border}`,
         background:collapsed && tone ? tone.tab : G.surface,
         color:collapsed && tone ? tone.accent : G.textM,
         cursor:"pointer",
-        fontSize:14,
-        fontWeight:700,
+        fontSize:16,
+        fontWeight:800,
         flexShrink:0,
-        boxShadow:collapsed && tone ? "0 1px 3px rgba(15,23,42,0.06)" : "none",
+        boxShadow:collapsed && tone ? "0 6px 14px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.38)" : "none",
         WebkitTapHighlightColor:"transparent",
       }}>
       {collapsed ? (direction==="right" ? "›" : "‹") : (direction==="right" ? "‹" : "›")}
@@ -3386,24 +3386,24 @@ function AdminPanelInner({user}){
           display:"flex",
           flexDirection:"column",
           alignItems:"center",
-          gap:12,
-          padding:"10px 6px",
+          gap:14,
+          padding:"14px 6px 10px",
           borderRadius:22,
-          background:`linear-gradient(180deg, ${tone.bg} 0%, #FFFFFF 80%)`,
+          background:`linear-gradient(180deg, ${tone.bg} 0%, #FFFFFF 84%)`,
           border:`1px solid ${tone.edge}`,
           boxShadow:G.shadowSm,
           position:"relative",
           overflow:"hidden",
         }}>
-          <div style={{position:"absolute",top:0,left:0,right:0,height:12,background:tone.tab}} />
+          <div style={{position:"absolute",top:0,left:0,right:0,height:10,background:`linear-gradient(180deg, ${tone.tab} 0%, ${tone.bg} 100%)`}} />
           <CollapseButton collapsed direction={direction} tone={tone} onClick={onExpand} title={`Expand ${label}`} />
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <div style={{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:10,letterSpacing:2,color:tone.text,fontFamily:G.mono,textTransform:"uppercase",textAlign:"center"}}>
+            <div style={{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:12,letterSpacing:1.8,color:tone.text,fontFamily:G.display,fontWeight:800,textTransform:"uppercase",textAlign:"center",textShadow:"0 1px 0 rgba(255,255,255,0.65)"}}>
               {step} · {label}
             </div>
           </div>
           {badge!==undefined && (
-            <span style={{background:tone.tab,color:tone.accent,border:`1px solid ${tone.edge}`,borderRadius:999,padding:"4px 8px",fontSize:10,fontFamily:G.mono,fontWeight:700}}>
+            <span style={{background:tone.tab,color:tone.accent,border:`1px solid ${tone.edge}`,borderRadius:999,padding:"4px 8px",fontSize:10,fontFamily:G.mono,fontWeight:800,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.45)"}}>
               {badge}
             </span>
           )}
