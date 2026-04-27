@@ -1296,6 +1296,7 @@ function AdminPanelInner({user}){
   const fullDataRequestRef = React.useRef({});
   const warmupJobRef = React.useRef(0);
   const expandedPanelWidthsRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
+  const panelWRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelsBodyRef = React.useRef(null);
 
   useEffect(()=>{
@@ -1324,6 +1325,10 @@ function AdminPanelInner({user}){
       getAllInstituteSections().then(s=>setInstSectionsAll(s||{})).catch(()=>{});
     }
   },[view]);
+
+  React.useEffect(()=>{
+    panelWRef.current = panelW;
+  },[panelW]);
 
   useEffect(()=>{
     (async()=>{
@@ -1467,6 +1472,7 @@ function AdminPanelInner({user}){
     const limits = PANEL_LIMITS[key];
     if(!limits) return;
     const clamped = clampPanelWidth(key, nextWidth);
+    panelWRef.current = { ...panelWRef.current, [key]:clamped };
     setPanelW(prev=>prev[key]===clamped?prev:{...prev,[key]:clamped});
     if(clamped <= limits.collapsed + 6){
       setPanelCollapsed(prev=>prev[key]?prev:{...prev,[key]:true});
@@ -1476,15 +1482,24 @@ function AdminPanelInner({user}){
     setPanelCollapsed(prev=>prev[key]?{...prev,[key]:false}:prev);
   }, [PANEL_LIMITS, clampPanelWidth]);
 
+  const nudgeDesktopPanelWidth = React.useCallback((key, delta) => {
+    if(!delta) return;
+    const currentWidth = panelWRef.current[key];
+    if(typeof currentWidth!=="number") return;
+    setDesktopPanelWidth(key, currentWidth + delta);
+  }, [setDesktopPanelWidth]);
+
   const togglePanelCollapse = React.useCallback((key) => {
     const limits = PANEL_LIMITS[key];
     if(!limits) return;
     const willCollapse = !panelCollapsed[key];
     if(willCollapse){
       expandedPanelWidthsRef.current[key] = Math.max(limits.min, panelW[key]);
+      panelWRef.current = { ...panelWRef.current, [key]:limits.collapsed };
       setPanelW(widths=>({...widths,[key]:limits.collapsed}));
     } else {
       const restored = clampPanelWidth(key, expandedPanelWidthsRef.current[key] || limits.default);
+      panelWRef.current = { ...panelWRef.current, [key]:restored };
       setPanelW(widths=>({...widths,[key]:restored}));
     }
     setPanelCollapsed(prev=>({...prev,[key]:willCollapse}));
@@ -4666,7 +4681,7 @@ function AdminPanelInner({user}){
             </>
           )}
         </div>
-        <PanelDivider onDrag={dx=>setDesktopPanelWidth("p1", panelW.p1 + dx)} onToggleCollapse={()=>togglePanelCollapse("p1")} />
+        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p1", dx)} onToggleCollapse={()=>togglePanelCollapse("p1")} />
 
         {/* ── P2: Toggle + Teacher or Class list ── */}
         <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:G.surface,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
@@ -4783,7 +4798,7 @@ function AdminPanelInner({user}){
             </>
           )}
         </div>
-        <PanelDivider onDrag={dx=>setDesktopPanelWidth("p2", panelW.p2 + dx)} onToggleCollapse={()=>togglePanelCollapse("p2")} />
+        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p2", dx)} onToggleCollapse={()=>togglePanelCollapse("p2")} />
 
         {/* ── P3: Sub-list ── */}
         <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:G.bg,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
@@ -4971,7 +4986,7 @@ function AdminPanelInner({user}){
             </>
           )}
         </div>
-        <PanelDivider onDrag={dx=>setDesktopPanelWidth("p3", panelW.p3 + dx)} onToggleCollapse={()=>togglePanelCollapse("p3")} />
+        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p3", dx)} onToggleCollapse={()=>togglePanelCollapse("p3")} />
 
         {/* ── P4: Entries ── */}
         <div className="admin-p4" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:G.bg,minWidth:0}}>
