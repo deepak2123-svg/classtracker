@@ -300,6 +300,27 @@ function subjectColor(name){
   for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) - hash) + text.charCodeAt(i);
   return SUBJECT_COLOR_PALETTE[Math.abs(hash) % SUBJECT_COLOR_PALETTE.length];
 }
+function hexToRgb(hex){
+  const clean = String(hex || "").replace("#","").trim();
+  if(clean.length !== 6) return { r:29, g:78, b:216 };
+  return {
+    r: parseInt(clean.slice(0,2), 16),
+    g: parseInt(clean.slice(2,4), 16),
+    b: parseInt(clean.slice(4,6), 16),
+  };
+}
+function mixHex(baseHex, mixHexValue = "#FFFFFF", weight = 0.5){
+  const base = hexToRgb(baseHex);
+  const mix = hexToRgb(mixHexValue);
+  const ratio = Math.max(0, Math.min(1, weight));
+  const toHex = value => Math.round(value).toString(16).padStart(2, "0");
+  return `#${toHex(base.r + (mix.r - base.r) * ratio)}${toHex(base.g + (mix.g - base.g) * ratio)}${toHex(base.b + (mix.b - base.b) * ratio)}`;
+}
+function alphaHex(baseHex, alpha = 1){
+  const { r, g, b } = hexToRgb(baseHex);
+  const safeAlpha = Math.max(0, Math.min(1, alpha));
+  return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
+}
 const COACHING_CATEGORY_ORDER = {
   coaching_12: ["JEE","NEET","NDA","CLAT","CUET","Foundation","Dropper","Other"],
   coaching_grad: ["Banking","SSC","UPSC","CAT","GATE","RRB","Defence","Other"],
@@ -440,24 +461,50 @@ function buildInstituteClassification(instType, groups) {
       return exportTextSorter.compare(a.title, b.title);
     });
 }
-function SubjectSplitDonut({ segments, totalMinutes, size = 104, strokeWidth = 16 }) {
+function SubjectSplitDonut({ segments, totalMinutes, size = 120, strokeWidth = 18 }) {
   const safeTotal = Math.max(0, totalMinutes || 0);
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
+  const chartId = React.useId ? React.useId().replace(/[:]/g,"") : `chart_${size}_${strokeWidth}`;
+  const sortedSegments = [...(segments || [])].sort((a,b)=>(b.minutes || 0) - (a.minutes || 0));
+  const primaryColor = sortedSegments[0]?.color || "#1D4ED8";
+  const ringGap = sortedSegments.length > 1 ? Math.min(5, circumference * 0.014) : 0;
+  const innerRadius = Math.max(radius - strokeWidth / 2 - 5, 18);
+  const totalLabel = safeTotal > 0 ? formatDurationShort(safeTotal) : "Untimed";
+  const totalFontSize = totalLabel.length >= 7 ? 13 : totalLabel.length >= 5 ? 15 : 17;
   let offset = 0;
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true" style={{overflow:"visible"}}>
+      <defs>
+        {sortedSegments.map((seg, index)=>(
+          <linearGradient key={`${seg.subject}_${index}_grad`} id={`${chartId}_grad_${index}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={mixHex(seg.color, "#FFFFFF", 0.2)} />
+            <stop offset="100%" stopColor={mixHex(seg.color, "#0F172A", 0.08)} />
+          </linearGradient>
+        ))}
+        <filter id={`${chartId}_shadow`} x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor={alphaHex(primaryColor, 0.16)} />
+        </filter>
+      </defs>
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius + 5}
+        fill={alphaHex(primaryColor, 0.06)}
+      />
       <circle
         cx={size / 2}
         cy={size / 2}
         r={radius}
         fill="none"
-        stroke="#E5EAF3"
+        stroke="#E7EDF6"
         strokeWidth={strokeWidth}
       />
-      {safeTotal > 0 && segments.map(seg => {
-        const segmentLength = (seg.minutes / safeTotal) * circumference;
+      {safeTotal > 0 && sortedSegments.map((seg, index) => {
+        const rawLength = (seg.minutes / safeTotal) * circumference;
+        const segmentLength = Math.max(rawLength - ringGap, 0);
+        const segmentOffset = offset + ringGap / 2;
         const circle = (
           <circle
             key={`${seg.subject}_${seg.minutes}`}
@@ -465,32 +512,47 @@ function SubjectSplitDonut({ segments, totalMinutes, size = 104, strokeWidth = 1
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke={seg.color}
+            stroke={`url(#${chartId}_grad_${index})`}
             strokeWidth={strokeWidth}
             strokeDasharray={`${segmentLength} ${Math.max(circumference - segmentLength, 0)}`}
-            strokeDashoffset={-offset}
-            strokeLinecap="butt"
+            strokeDashoffset={-segmentOffset}
+            strokeLinecap="round"
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            filter={`url(#${chartId}_shadow)`}
           />
         );
-        offset += segmentLength;
+        offset += rawLength;
         return circle;
       })}
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={innerRadius}
+        fill="#FFFFFF"
+        stroke="#EEF2F7"
+        strokeWidth="1.5"
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={Math.max(innerRadius - 4, 10)}
+        fill={safeTotal > 0 ? alphaHex(primaryColor, 0.06) : "#F8FAFC"}
+      />
       <text
         x="50%"
         y={safeTotal > 0 ? "47%" : "44%"}
         textAnchor="middle"
-        style={{ fill: "#111827", fontSize: safeTotal > 0 ? 15 : 12, fontWeight: 800, fontFamily: "'Poppins',sans-serif" }}
+        style={{ fill: "#111827", fontSize: safeTotal > 0 ? totalFontSize : 12, fontWeight: 800, fontFamily: "'Poppins',sans-serif" }}
       >
-        {safeTotal > 0 ? formatDurationShort(safeTotal) : "Untimed"}
+        {totalLabel}
       </text>
       <text
         x="50%"
-        y={safeTotal > 0 ? "62%" : "60%"}
+        y={safeTotal > 0 ? "61%" : "60%"}
         textAnchor="middle"
-        style={{ fill: "#6B7280", fontSize: 10, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", textTransform: "uppercase", letterSpacing: 0.8 }}
+        style={{ fill: "#6B7280", fontSize: 10, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", textTransform: "uppercase", letterSpacing: 0.9 }}
       >
-        {safeTotal > 0 ? `${segments.length} ${segments.length===1?"subject":"subjects"}` : "logs only"}
+        {safeTotal > 0 ? `${sortedSegments.length} ${sortedSegments.length===1?"subject":"subjects"}` : "logs only"}
       </text>
     </svg>
   );
@@ -1282,6 +1344,7 @@ function AdminPanelInner({user}){
   const [exportOpen,   setExportOpen]   = useState(false);
   const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
   const [panelCollapsed, setPanelCollapsed] = useState({p1:false, p2:false, p3:false});
+  const [panelDragging, setPanelDragging] = useState(false);
   const [isMobile,     setIsMobile]     = useState(false);
   const [isWeakDevice, setIsWeakDevice] = useState(false);
   const [reduceEffects,setReduceEffects]= useState(false);
@@ -1321,6 +1384,7 @@ function AdminPanelInner({user}){
   const warmupJobRef = React.useRef(0);
   const expandedPanelWidthsRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelWRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
+  const panelResizeFrameRef = React.useRef(null);
   const panelsBodyRef = React.useRef(null);
 
   useEffect(()=>{
@@ -1353,6 +1417,14 @@ function AdminPanelInner({user}){
   React.useEffect(()=>{
     panelWRef.current = panelW;
   },[panelW]);
+
+  React.useEffect(()=>{
+    return ()=>{
+      if(panelResizeFrameRef.current!==null){
+        window.cancelAnimationFrame(panelResizeFrameRef.current);
+      }
+    };
+  },[]);
 
   useEffect(()=>{
     (async()=>{
@@ -1497,7 +1569,13 @@ function AdminPanelInner({user}){
     if(!limits) return;
     const clamped = clampPanelWidth(key, nextWidth);
     panelWRef.current = { ...panelWRef.current, [key]:clamped };
-    setPanelW(prev=>prev[key]===clamped?prev:{...prev,[key]:clamped});
+    if(panelResizeFrameRef.current===null){
+      panelResizeFrameRef.current = window.requestAnimationFrame(()=>{
+        panelResizeFrameRef.current = null;
+        const next = panelWRef.current;
+        setPanelW(prev=>(prev.p1===next.p1 && prev.p2===next.p2 && prev.p3===next.p3)?prev:next);
+      });
+    }
     if(clamped <= limits.collapsed + 6){
       setPanelCollapsed(prev=>prev[key]?prev:{...prev,[key]:true});
       return;
@@ -1512,6 +1590,10 @@ function AdminPanelInner({user}){
     if(typeof currentWidth!=="number") return;
     setDesktopPanelWidth(key, currentWidth + delta);
   }, [setDesktopPanelWidth]);
+
+  const panelWidthTransition = panelDragging || reduceEffects
+    ? "width 0s linear"
+    : "width 0.2s cubic-bezier(0.22, 1, 0.36, 1)";
 
   const togglePanelCollapse = React.useCallback((key) => {
     const limits = PANEL_LIMITS[key];
@@ -3121,7 +3203,7 @@ function AdminPanelInner({user}){
               ) : (
                 <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(270px,1fr))",gap:12,marginTop:14}}>
                   {classSubjectTime.map(item=>(
-                    <div key={item.raw} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 14px 13px"}}>
+                    <div key={item.raw} style={{background:"linear-gradient(180deg,#FFFFFF 0%,#F8FBFF 100%)",border:`1px solid ${G.border}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:reduceEffects?"none":"0 8px 22px rgba(15,23,42,0.06)"}}>
                       <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start",flexWrap:"wrap"}}>
                         <div style={{minWidth:0}}>
                           <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display}}>{item.display}</div>
@@ -3129,34 +3211,53 @@ function AdminPanelInner({user}){
                             {item.entryCount} {item.entryCount===1?"log":"logs"} · {item.activeTeacherCount}/{item.teacherCount} teachers active
                           </div>
                         </div>
-                        <span style={{background:item.totalMinutes>0?"#DCFCE7":"#FFF7ED",color:item.totalMinutes>0?"#166534":G.amber,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
+                        <span style={{background:item.totalMinutes>0?"#DCFCE7":"#FFF7ED",color:item.totalMinutes>0?"#166534":G.amber,borderRadius:999,padding:"5px 11px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}}>
                           {item.totalMinutes>0 ? formatDurationShort(item.totalMinutes) : "Untimed only"}
                         </span>
                       </div>
-                      <div style={{display:"flex",gap:14,alignItems:"center",marginTop:14,flexWrap:"wrap"}}>
-                        <div style={{flexShrink:0}}>
+                      <div style={{display:"flex",gap:16,alignItems:"stretch",marginTop:16,flexWrap:"wrap"}}>
+                        <div style={{flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(180deg,#FDFEFF 0%,#F4F8FD 100%)",border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 10px",minWidth:160}}>
                           <SubjectSplitDonut segments={item.subjects} totalMinutes={item.totalMinutes} />
                         </div>
-                        <div style={{flex:1,minWidth:150}}>
-                          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.9,marginBottom:8}}>
-                            Subject split
+                        <div style={{flex:1,minWidth:180,background:"linear-gradient(180deg,#FFFFFF 0%,#F9FBFD 100%)",border:`1px solid ${G.border}`,borderRadius:18,padding:"14px 14px 12px"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+                            <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>
+                              Subject split
+                            </div>
+                            {item.subjects.length>0&&(
+                              <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                                {item.subjects.length} tracked
+                              </span>
+                            )}
                           </div>
-                          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                          <div style={{display:"grid",gap:10}}>
                             {item.subjects.length>0 ? item.subjects.map(seg=>{
                               const pct = item.totalMinutes>0 ? Math.round((seg.minutes / item.totalMinutes) * 100) : 0;
                               return(
-                                <span key={`${item.raw}_${seg.subject}_legend`} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#fff",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:12,color:G.textS,fontWeight:600}}>
-                                  <span style={{width:8,height:8,borderRadius:"50%",background:seg.color,flexShrink:0}}/>
-                                  {seg.subject} · {formatDurationShort(seg.minutes)}{pct>0?` · ${pct}%`:""}
-                                </span>
+                                <div key={`${item.raw}_${seg.subject}_legend`} style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
+                                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                                    <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                                      <span style={{width:10,height:10,borderRadius:"50%",background:`linear-gradient(135deg, ${mixHex(seg.color, "#FFFFFF", 0.18)} 0%, ${mixHex(seg.color, "#0F172A", 0.08)} 100%)`,boxShadow:`0 0 0 3px ${alphaHex(seg.color, 0.12)}`,flexShrink:0}}/>
+                                      <span style={{fontSize:13,color:G.text,fontWeight:700,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{seg.subject}</span>
+                                    </div>
+                                    <span style={{fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>{formatDurationShort(seg.minutes)}</span>
+                                  </div>
+                                  <div style={{marginTop:8,height:8,borderRadius:999,background:alphaHex(seg.color, 0.14),overflow:"hidden"}}>
+                                    <div style={{width:`${Math.max(pct, seg.minutes>0 ? 6 : 0)}%`,height:"100%",borderRadius:999,background:`linear-gradient(90deg, ${mixHex(seg.color, "#FFFFFF", 0.18)} 0%, ${mixHex(seg.color, "#0F172A", 0.05)} 100%)`}}/>
+                                  </div>
+                                  <div style={{display:"flex",justifyContent:"space-between",gap:10,marginTop:7,fontSize:11,color:G.textL,fontFamily:G.mono}}>
+                                    <span>{pct}% of timed logs</span>
+                                    <span>{seg.minutes>0 ? `${seg.minutes} min` : "0 min"}</span>
+                                  </div>
+                                </div>
                               );
                             }) : (
-                              <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"#fff",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:12,color:G.textS,fontWeight:600}}>
+                              <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"#fff",border:`1px solid ${G.border}`,borderRadius:999,padding:"7px 10px",fontSize:12,color:G.textS,fontWeight:600}}>
                                 No timed subject split yet
                               </span>
                             )}
                             {item.untimedEntries>0&&(
-                              <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:999,padding:"5px 9px",fontSize:12,color:G.amber,fontWeight:600}}>
+                              <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:999,padding:"7px 10px",fontSize:12,color:G.amber,fontWeight:600}}>
                                 {item.untimedEntries} untimed {item.untimedEntries===1?"log":"logs"}
                               </span>
                             )}
@@ -3311,7 +3412,7 @@ function AdminPanelInner({user}){
     );
   };
 
-  const PanelDivider = ({onDrag, onToggleCollapse}) => {
+  const PanelDivider = ({onDrag, onToggleCollapse, onDragStart, onDragEnd}) => {
     const ref = React.useRef(null);
     const drag = React.useRef(false);
     const startX = React.useRef(0);
@@ -3327,6 +3428,7 @@ function AdminPanelInner({user}){
       if(drag.current) return;
       drag.current = true;
       startX.current = clientX;
+      onDragStart?.();
       document.body.style.userSelect = "none";
       document.body.style.cursor = "col-resize";
       if(ref.current) ref.current.style.background = G.blueL;
@@ -3339,6 +3441,7 @@ function AdminPanelInner({user}){
     const endDrag = () => {
       drag.current = false;
       pointerIdRef.current = null;
+      onDragEnd?.();
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
       if(ref.current) ref.current.style.background = "transparent";
@@ -4468,6 +4571,90 @@ function AdminPanelInner({user}){
     }
   }
 
+  const p4HeaderTitle = isScopedFullView
+    ? fullViewTitle
+    : isAggregateSelection
+      ? aggregateTitle
+      : selP3
+        ? `${selP3.teacherName} — ${selP3.className}`
+        : selP2
+          ? `${p2Label(selP2)} Overview`
+          : selInst
+            ? `${selInst} Overview`
+            : "Admin Overview";
+
+  const p4HeaderSubtitle = isScopedFullView
+    ? fullViewSubtitle
+    : isAggregateSelection
+      ? `${selInst} · grouped by class, chronological inside each class`
+      : selP3
+        ? [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")
+        : selP2
+          ? `Use panel 3 to open the full grouped view or choose one specific ${tab==="teacher"?"class":"teacher"}`
+          : selInst
+            ? "Choose a class or teacher to drill down, or use the full view action in panel 3"
+            : "Select an institute to start navigating";
+
+  const p4HeaderEyebrow = isScopedFullView
+    ? "Grouped Full View"
+    : isAggregateSelection
+      ? "Combined Timeline"
+      : selP3
+        ? "Teacher Timeline"
+        : selP2
+          ? "Selection Overview"
+          : selInst
+            ? "Institute Overview"
+            : "Admin Workspace";
+
+  const p4HeaderTone = isScopedFullView
+    ? { bg1:"#F7F2FF", bg2:"#FFFFFF", edge:"#DDD6FE", accent:"#6D28D9", chipBg:"#EDE9FE", chipText:"#6D28D9", wash:"rgba(109,40,217,0.10)" }
+    : isAggregateSelection
+      ? { bg1:"#EFFCF4", bg2:"#FFFFFF", edge:"#BBF7D0", accent:"#198754", chipBg:"#DCFCE7", chipText:"#166534", wash:"rgba(25,135,84,0.10)" }
+      : selP3
+        ? { bg1:"#EEF4FF", bg2:"#FFFFFF", edge:"#C7D2FE", accent:"#1D4ED8", chipBg:"#DBEAFE", chipText:"#1D4ED8", wash:"rgba(29,78,216,0.10)" }
+        : selP2
+          ? { bg1:"#FFF8ED", bg2:"#FFFFFF", edge:"#FED7AA", accent:"#C2410C", chipBg:"#FFEDD5", chipText:"#C2410C", wash:"rgba(234,88,12,0.10)" }
+          : selInst
+            ? { bg1:"#EEF4FF", bg2:"#FFFFFF", edge:"#BFDBFE", accent:"#1D4ED8", chipBg:"#DBEAFE", chipText:"#1D4ED8", wash:"rgba(59,130,246,0.10)" }
+            : { bg1:"#F8FAFC", bg2:"#FFFFFF", edge:G.border, accent:G.navy, chipBg:"#E5EDF9", chipText:G.navy, wash:"rgba(26,47,90,0.08)" };
+
+  const p4HeaderStatusNode = isScopedFullView ? (
+    <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#FFFFFF",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:999,padding:"8px 12px",boxShadow:reduceEffects?"none":"0 8px 18px rgba(15,23,42,0.05)"}}>
+      <div style={{width:8,height:8,borderRadius:"50%",background:fullViewLoading?G.borderM:p4HeaderTone.accent}}/>
+      <span style={{fontSize:12,color:fullViewLoading?G.textL:p4HeaderTone.accent,fontWeight:700,fontFamily:G.mono}}>
+        {fullViewLoading ? "Loading full view" : `${fullViewGroups.length} groups · ${fullViewEntries.length} entries`}
+      </span>
+    </div>
+  ) : isAggregateSelection ? (
+    <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#FFFFFF",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:999,padding:"8px 12px",boxShadow:reduceEffects?"none":"0 8px 18px rgba(15,23,42,0.05)"}}>
+      <div style={{width:8,height:8,borderRadius:"50%",background:aggregateLoading?G.borderM:p4HeaderTone.accent}}/>
+      <span style={{fontSize:12,color:aggregateLoading?G.textL:p4HeaderTone.accent,fontWeight:700,fontFamily:G.mono}}>
+        {aggregateLoading
+          ? `Loading ${aggregateLoadedTeacherCount}/${instTeachers.length} teachers`
+          : `${aggregateGroups.length} groups · ${aggregateEntries.length} entries`}
+      </span>
+    </div>
+  ) : selP3 ? (() => {
+      const count = selectedTimelineSummary?.entryCount || 0;
+      const ago = selectedTimelineSummary?.lastAgo || null;
+      return (
+        <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#FFFFFF",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:999,padding:"8px 12px",boxShadow:reduceEffects?"none":"0 8px 18px rgba(15,23,42,0.05)"}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:count>0?p4HeaderTone.accent:G.borderM}}/>
+          <span style={{fontSize:12,color:count>0?p4HeaderTone.accent:G.textL,fontWeight:700,fontFamily:G.mono}}>
+            {count>0 ? `${count} entries${ago?` · last ${ago}`:""}` : `No entries in ${overviewPeriodText.toLowerCase()}`}
+          </span>
+        </div>
+      );
+    })() : (
+      <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#FFFFFF",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:999,padding:"8px 12px",boxShadow:reduceEffects?"none":"0 8px 18px rgba(15,23,42,0.05)"}}>
+        <div style={{width:8,height:8,borderRadius:"50%",background:p4HeaderTone.accent}}/>
+        <span style={{fontSize:12,color:p4HeaderTone.accent,fontWeight:700,fontFamily:G.mono}}>
+          {selInst ? "Ready for drilldown" : "Pick an institute"}
+        </span>
+      </div>
+    );
+
   // ── DESKTOP: original 4-panel layout ─────────────────────────────────────
   return(
     <div style={{minHeight:"100svh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
@@ -4680,7 +4867,7 @@ function AdminPanelInner({user}){
         }}>
 
         {/* ── P1: Institutes ── */}
-        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:panelCollapsed.p1?PANEL_RAIL_THEMES.p1.bg:G.bg,borderRight:`1px solid ${panelCollapsed.p1?PANEL_RAIL_THEMES.p1.edge:G.border}`,transition:"width 0.18s ease"}}>
+        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:panelCollapsed.p1?PANEL_RAIL_THEMES.p1.bg:G.bg,borderRight:`1px solid ${panelCollapsed.p1?PANEL_RAIL_THEMES.p1.edge:G.border}`,transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
           {panelCollapsed.p1 ? (
             <CollapsedPanelRail step="Step 1" label="Institutes" badge={institutes.length} direction="right" themeKey="p1" onExpand={()=>togglePanelCollapse("p1")} />
           ) : (
@@ -4730,10 +4917,10 @@ function AdminPanelInner({user}){
             </>
           )}
         </div>
-        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p1", dx)} onToggleCollapse={()=>togglePanelCollapse("p1")} />
+        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p1", dx)} onToggleCollapse={()=>togglePanelCollapse("p1")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
 
         {/* ── P2: Toggle + Teacher or Class list ── */}
-        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:panelCollapsed.p2?PANEL_RAIL_THEMES.p2.bg:G.surface,borderRight:`1px solid ${panelCollapsed.p2?PANEL_RAIL_THEMES.p2.edge:G.border}`,transition:"width 0.18s ease"}}>
+        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:panelCollapsed.p2?PANEL_RAIL_THEMES.p2.bg:G.surface,borderRight:`1px solid ${panelCollapsed.p2?PANEL_RAIL_THEMES.p2.edge:G.border}`,transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
           {panelCollapsed.p2 ? (
             <CollapsedPanelRail
               step="Step 2"
@@ -4848,10 +5035,10 @@ function AdminPanelInner({user}){
             </>
           )}
         </div>
-        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p2", dx)} onToggleCollapse={()=>togglePanelCollapse("p2")} />
+        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p2", dx)} onToggleCollapse={()=>togglePanelCollapse("p2")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
 
         {/* ── P3: Sub-list ── */}
-        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:panelCollapsed.p3?PANEL_RAIL_THEMES.p3.bg:G.bg,borderRight:`1px solid ${panelCollapsed.p3?PANEL_RAIL_THEMES.p3.edge:G.border}`,transition:"width 0.18s ease"}}>
+        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:panelCollapsed.p3?PANEL_RAIL_THEMES.p3.bg:G.bg,borderRight:`1px solid ${panelCollapsed.p3?PANEL_RAIL_THEMES.p3.edge:G.border}`,transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
           {panelCollapsed.p3 ? (
             <CollapsedPanelRail
               step="Step 3"
@@ -5037,91 +5224,74 @@ function AdminPanelInner({user}){
             </>
           )}
         </div>
-        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p3", dx)} onToggleCollapse={()=>togglePanelCollapse("p3")} />
+        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p3", dx)} onToggleCollapse={()=>togglePanelCollapse("p3")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
 
         {/* ── P4: Entries ── */}
         <div className="admin-p4" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:G.bg,minWidth:0}}>
           {/* P4 header */}
-          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"12px 16px",flexShrink:0}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div>
-                <div style={{fontFamily:G.display,fontSize:17,fontWeight:700,color:G.text}}>
-                  {isScopedFullView
-                    ? fullViewTitle
-                    : isAggregateSelection
-                      ? aggregateTitle
-                      : selP3
-                        ? `${selP3.teacherName} — ${selP3.className}`
-                        : selP2
-                          ? `${p2Label(selP2)} Overview`
-                          : selInst
-                            ? `${selInst} Overview`
-                            : "Admin Overview"}
-                </div>
-                <div style={{fontSize:14,color:G.textM,marginTop:2}}>
-                  {isScopedFullView
-                    ? fullViewSubtitle
-                    : isAggregateSelection
-                      ? `${selInst} · grouped by class, chronological inside each class`
-                      : selP3
-                        ? [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")
-                        : selP2
-                          ? `Use panel 3 to open the full grouped view or choose one specific ${tab==="teacher"?"class":"teacher"}`
-                          : selInst
-                            ? "Choose a class or teacher to drill down, or use the full view action in panel 3"
-                            : "Select an institute to start navigating"}
-                </div>
-              </div>
-              {isScopedFullView?(
-                <div style={{display:"flex",alignItems:"center",gap:5}}>
-                  <div style={{width:7,height:7,borderRadius:"50%",background:fullViewLoading?G.borderM:G.blueV}}/>
-                  <span style={{fontSize:13,color:fullViewLoading?G.textL:G.blue,fontWeight:600,fontFamily:G.mono}}>
-                    {fullViewLoading ? "Loading full view" : `${fullViewGroups.length} class groups · ${fullViewEntries.length} entries`}
+          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"14px 16px 16px",flexShrink:0}}>
+            <div style={{
+              background:`linear-gradient(135deg, ${p4HeaderTone.bg1} 0%, ${p4HeaderTone.bg2} 74%)`,
+              border:`1px solid ${p4HeaderTone.edge}`,
+              borderRadius:22,
+              padding:"18px 18px 16px",
+              boxShadow:reduceEffects?"none":"0 12px 26px rgba(15,23,42,0.06)",
+              position:"relative",
+              overflow:"hidden",
+            }}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:14,background:p4HeaderTone.wash}} />
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap",position:"relative"}}>
+                <div style={{minWidth:0,maxWidth:"min(820px,100%)"}}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:8,background:p4HeaderTone.chipBg,border:`1px solid ${p4HeaderTone.edge}`,borderRadius:999,padding:"6px 11px",fontSize:12,color:p4HeaderTone.chipText,fontFamily:G.mono,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8}}>
+                    {p4HeaderEyebrow}
                   </span>
-                </div>
-              ):isAggregateSelection?(
-                <div style={{display:"flex",alignItems:"center",gap:5}}>
-                  <div style={{width:7,height:7,borderRadius:"50%",background:aggregateLoading?G.borderM:G.blueV}}/>
-                  <span style={{fontSize:13,color:aggregateLoading?G.textL:G.blue,fontWeight:600,fontFamily:G.mono}}>
-                    {aggregateLoading
-                      ? `Loading ${aggregateLoadedTeacherCount}/${instTeachers.length} teachers`
-                      : `${aggregateGroups.length} class groups · ${aggregateEntries.length} entries`}
-                  </span>
-                </div>
-              ):selP3&&(()=>{
-                const count = selectedTimelineSummary?.entryCount || 0;
-                const ago = selectedTimelineSummary?.lastAgo || null;
-                return(
-                  <div style={{display:"flex",alignItems:"center",gap:5}}>
-                    <div style={{width:7,height:7,borderRadius:"50%",background:count>0?G.blueV:G.borderM}}/>
-                    <span style={{fontSize:13,color:count>0?G.blue:G.textL,fontWeight:600,fontFamily:G.mono}}>
-                      {count>0 ? `${count} entries${ago?` · last ${ago}`:""}` : `No entries in ${overviewPeriodText.toLowerCase()}`}
-                    </span>
+                  <div style={{fontFamily:G.display,fontSize:selInst?18:17,fontWeight:800,color:G.text,marginTop:10,lineHeight:1.2}}>
+                    {p4HeaderTitle}
                   </div>
-                );
-              })()}
-            </div>
-          </div>
-          {/* Period filter + Export — stacks cleanly on all screen sizes */}
-          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"8px 14px",flexShrink:0}}>
-            {/* Row 1: period pills + export button side by side, both wrap if needed */}
-            <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap",rowGap:6}}>
-              <span style={{fontSize:13,color:G.textL,fontFamily:G.mono,flexShrink:0}}>Period:</span>
-              {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
-                <button key={k} onClick={()=>setPeriod(k)}
-                  style={{padding:"6px 14px",borderRadius:16,fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,transition:"all 0.12s",background:period===k?G.navy:G.surface,color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`,flexShrink:0,minHeight:36,WebkitTapHighlightColor:"transparent"}}>
-                  {l}
-                </button>
-              ))}
-              {/* Spacer pushes Export right on desktop; on mobile it wraps to new line */}
-              <div style={{flex:1,minWidth:8}}/>
-              {(selP3||isAggregateSelection||isScopedFullView)&&(
-                <button onClick={()=>setExportOpen(true)}
-                  style={{display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:36,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Export
-                </button>
-              )}
+                  <div style={{fontSize:14,color:G.textM,marginTop:7,lineHeight:1.6,maxWidth:760}}>
+                    {p4HeaderSubtitle}
+                  </div>
+                </div>
+                {p4HeaderStatusNode}
+              </div>
+
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:14,flexWrap:"wrap",marginTop:18,position:"relative"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                  <span style={{background:"#FFFFFF",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:999,padding:"7px 11px",fontSize:12,color:p4HeaderTone.chipText,fontFamily:G.mono,fontWeight:700,flexShrink:0}}>
+                    Period
+                  </span>
+                  <div style={{display:"flex",gap:6,alignItems:"center",background:"rgba(255,255,255,0.78)",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:18,padding:4,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.75)"}}>
+                    {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
+                      <button key={k} onClick={()=>setPeriod(k)}
+                        style={{
+                          padding:"7px 15px",
+                          borderRadius:14,
+                          fontSize:14,
+                          cursor:"pointer",
+                          fontFamily:G.sans,
+                          fontWeight:period===k?700:500,
+                          transition:"all 0.14s",
+                          background:period===k?p4HeaderTone.accent:"transparent",
+                          color:period===k?"#fff":G.textS,
+                          border:`1px solid ${period===k?p4HeaderTone.accent:"transparent"}`,
+                          boxShadow:period===k?`0 8px 18px ${alphaHex(p4HeaderTone.accent,0.18)}`:"none",
+                          flexShrink:0,
+                          minHeight:38,
+                          WebkitTapHighlightColor:"transparent",
+                        }}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {(selP3||isAggregateSelection||isScopedFullView)&&(
+                  <button onClick={()=>setExportOpen(true)}
+                    style={{display:"flex",alignItems:"center",gap:7,background:`linear-gradient(135deg, ${p4HeaderTone.accent} 0%, ${mixHex(p4HeaderTone.accent, "#0F172A", 0.16)} 100%)`,color:"#fff",border:"none",borderRadius:12,padding:"10px 18px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,minHeight:40,WebkitTapHighlightColor:"transparent",flexShrink:0,boxShadow:`0 12px 22px ${alphaHex(p4HeaderTone.accent,0.18)}`}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Export
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           {/* Entries body */}
