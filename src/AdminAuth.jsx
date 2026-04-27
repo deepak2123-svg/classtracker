@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { loginWithGoogle, loginWithEmail, signupWithEmail, verifyInviteToken, useInviteToken, db, saveProfileName } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { friendlyError } from "./shared.jsx";
@@ -51,13 +51,15 @@ function NameSetup({ user, onDone }) {
   );
 }
 
-export default function AdminAuth({ onVerified }) {
+export default function AdminAuth({ onVerified, currentUser = null }) {
   const [mode,    setMode]    = useState("choose");
   const [email,   setEmail]   = useState("");
   const [pass,    setPass]    = useState("");
   const [error,   setError]   = useState("");
   const [loading, setLoading] = useState(false);
   const [pendingUser, setPendingUser] = useState(null); // waiting for name setup
+  const inviteProcessingRef = useRef(false);
+  const inviteResolvedKeyRef = useRef("");
 
   const [inviteToken] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -108,6 +110,20 @@ export default function AdminAuth({ onVerified }) {
       setError("Something went wrong. Please try again.");
     }
   }
+
+  useEffect(() => {
+    const inviteKey = currentUser && inviteToken ? `${currentUser.uid}:${inviteToken}` : "";
+    if (!currentUser || !inviteToken || pendingUser || loading || inviteProcessingRef.current || inviteResolvedKeyRef.current === inviteKey) return;
+    inviteProcessingRef.current = true;
+    inviteResolvedKeyRef.current = inviteKey;
+    setError("");
+    setLoading(true);
+
+    afterLogin(currentUser).finally(() => {
+      inviteProcessingRef.current = false;
+      setLoading(false);
+    });
+  }, [currentUser, inviteToken, pendingUser, loading]);
 
   async function handleGoogle() {
     setError(""); setLoading(true);

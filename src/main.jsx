@@ -9,6 +9,7 @@ import AdminPanel from "./AdminPanel";
 
 // VITE_APP_MODE = "admin" on ctadmin.vercel.app, unset on teacherct.vercel.app
 const IS_ADMIN_APP = import.meta.env.VITE_APP_MODE === "admin";
+const HAS_ADMIN_INVITE = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("invite");
 
 function App() {
   const [user,        setUser]        = useState(undefined); // undefined = loading
@@ -42,9 +43,7 @@ function App() {
   const handleAdminVerified = async (u) => {
     adminVerifiedRef.current = true;
     setUser(u);
-    setRoleLoading(true);
-    const r = await getUserRole(u.uid);
-    setRole(r);
+    setRole("admin");
     setRoleLoading(false);
   };
 
@@ -57,6 +56,10 @@ function App() {
 
     // Logged in and confirmed admin → panel
     if (role === "admin") return <AdminPanel user={user} />;
+
+    // Invite-based admin activation can briefly sign the user in before the role handoff
+    // completes. Keep the invite-aware auth screen mounted so it can finish promotion.
+    if (HAS_ADMIN_INVITE) return <AdminAuth onVerified={handleAdminVerified} currentUser={user} />;
 
     // Signed in but role not admin — show denied
     return <AccessDenied />;
