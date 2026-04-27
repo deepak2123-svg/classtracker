@@ -30,6 +30,30 @@ const G = {
   shadowMd:"0 4px 14px rgba(15,23,42,0.10),0 2px 4px rgba(15,23,42,0.05)",
 };
 
+const PANEL_RAIL_THEMES = {
+  p1: {
+    bg: "#EEF4FF",
+    edge: "#C9D9FF",
+    tab: "#DCE9FF",
+    accent: "#1D4ED8",
+    text: "#244170",
+  },
+  p2: {
+    bg: "#FFF7E8",
+    edge: "#F3D7A3",
+    tab: "#FDE8C2",
+    accent: "#B9770E",
+    text: "#6C4A0F",
+  },
+  p3: {
+    bg: "#ECFBF4",
+    edge: "#BFE7D0",
+    tab: "#D6F4E3",
+    accent: "#198754",
+    text: "#1F5E43",
+  },
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function currentSession(){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;
@@ -3228,7 +3252,7 @@ function AdminPanelInner({user}){
 
 
   // Draggable panel resize handle
-  const CollapseButton = ({collapsed, direction="left", onClick, title}) => (
+  const CollapseButton = ({collapsed, direction="left", onClick, title, tone}) => (
     <button
       type="button"
       onClick={onClick}
@@ -3237,34 +3261,55 @@ function AdminPanelInner({user}){
         width:26,
         height:26,
         borderRadius:8,
-        border:`1px solid ${G.border}`,
-        background:G.surface,
-        color:G.textM,
+        border:`1px solid ${tone?.edge || G.border}`,
+        background:collapsed && tone ? tone.tab : G.surface,
+        color:collapsed && tone ? tone.accent : G.textM,
         cursor:"pointer",
         fontSize:14,
         fontWeight:700,
         flexShrink:0,
+        boxShadow:collapsed && tone ? "0 1px 3px rgba(15,23,42,0.06)" : "none",
         WebkitTapHighlightColor:"transparent",
       }}>
       {collapsed ? (direction==="right" ? "›" : "‹") : (direction==="right" ? "‹" : "›")}
     </button>
   );
 
-  const CollapsedPanelRail = ({ step, label, onExpand, badge, direction="right" }) => (
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",height:"100%",padding:"10px 6px",gap:12}}>
-      <CollapseButton collapsed direction={direction} onClick={onExpand} title={`Expand ${label}`} />
-      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <div style={{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:10,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",textAlign:"center"}}>
-          {step} · {label}
+  const CollapsedPanelRail = ({ step, label, onExpand, badge, direction="right", themeKey="p1" }) => {
+    const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
+    return (
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",height:"100%",padding:"8px 5px"}}>
+        <div style={{
+          width:"100%",
+          height:"100%",
+          display:"flex",
+          flexDirection:"column",
+          alignItems:"center",
+          gap:12,
+          padding:"10px 6px",
+          borderRadius:22,
+          background:`linear-gradient(180deg, ${tone.bg} 0%, #FFFFFF 80%)`,
+          border:`1px solid ${tone.edge}`,
+          boxShadow:G.shadowSm,
+          position:"relative",
+          overflow:"hidden",
+        }}>
+          <div style={{position:"absolute",top:0,left:0,right:0,height:12,background:tone.tab}} />
+          <CollapseButton collapsed direction={direction} tone={tone} onClick={onExpand} title={`Expand ${label}`} />
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:10,letterSpacing:2,color:tone.text,fontFamily:G.mono,textTransform:"uppercase",textAlign:"center"}}>
+              {step} · {label}
+            </div>
+          </div>
+          {badge!==undefined && (
+            <span style={{background:tone.tab,color:tone.accent,border:`1px solid ${tone.edge}`,borderRadius:999,padding:"4px 8px",fontSize:10,fontFamily:G.mono,fontWeight:700}}>
+              {badge}
+            </span>
+          )}
         </div>
       </div>
-      {badge!==undefined && (
-        <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 8px",fontSize:10,fontFamily:G.mono,fontWeight:700}}>
-          {badge}
-        </span>
-      )}
-    </div>
-  );
+    );
+  };
 
   const PanelDivider = ({onDrag, onToggleCollapse}) => {
     const ref = React.useRef(null);
@@ -4447,7 +4492,7 @@ function AdminPanelInner({user}){
       `}</style>
 
       {/* Nav */}
-      <div style={{background:G.navy,minHeight:64,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 18px",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.08)",gap:12}}>
+      <div style={{background:G.navy,minHeight:64,display:"grid",gridTemplateColumns:"auto minmax(0,1fr) auto",alignItems:"center",padding:"0 18px",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.08)",gap:14}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <div style={{width:36,height:36,background:G.blueV,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <svg width="19" height="19" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
@@ -4455,6 +4500,26 @@ function AdminPanelInner({user}){
           <div>
             <div style={{fontFamily:G.display,fontSize:20,fontWeight:800,color:"#fff",lineHeight:1.2,letterSpacing:-0.5}}>Ledgr</div>
             <div style={{fontSize:11,letterSpacing:2,color:"rgba(255,255,255,0.45)",fontFamily:G.mono,textTransform:"uppercase",marginTop:2}}>Admin Panel</div>
+          </div>
+        </div>
+        <div style={{minWidth:0,display:"flex",justifyContent:"center",overflow:"hidden"}}>
+          <div className="admin-header-metrics" style={{display:"flex",alignItems:"center",gap:8,overflowX:"auto",padding:"4px 0",scrollbarWidth:"none",msOverflowStyle:"none"}}>
+            {[
+              {n:institutes.length, l:"institutes"},
+              {n:teachers.length, l:"teachers"},
+              {n:totalClasses, l:"classes"},
+              {n:totalEntries, l:"entries"},
+            ].map(({n,l})=>(
+              <div key={l} style={{display:"flex",alignItems:"baseline",gap:6,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:999,padding:"7px 12px",flexShrink:0}}>
+                <span style={{fontSize:18,fontWeight:700,color:G.blueV,fontFamily:G.display,lineHeight:1}}>{n}</span>
+                <span style={{fontSize:12,color:"rgba(255,255,255,0.58)",fontFamily:G.mono}}>{l}</span>
+              </div>
+            ))}
+            {loadingUids.size>0&&(
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.72)",fontFamily:G.mono,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:999,padding:"7px 12px",flexShrink:0}}>
+                syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…
+              </div>
+            )}
           </div>
         </div>
         <div className="admin-nav-r" style={{display:"flex",alignItems:"center",gap:8}}>
@@ -4544,22 +4609,6 @@ function AdminPanelInner({user}){
         </div>
       </div>
 
-      {/* Stats strip */}
-      <div className="admin-stats" style={{background:G.navyS,padding:"9px 18px",display:"flex",gap:10,alignItems:"center",flexShrink:0,borderBottom:"1px solid rgba(255,255,255,0.05)",overflowX:"auto"}}>
-        {[
-          {n:institutes.length,   l:"institutes"},
-          {n:teachers.length,     l:"teachers"},
-          {n:totalClasses, l:"classes"},
-          {n:totalEntries,        l:"total entries"},
-        ].map(({n,l})=>(
-          <div key={l} style={{display:"flex",alignItems:"baseline",gap:6,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"8px 12px",flexShrink:0}}>
-            <span style={{fontSize:20,fontWeight:700,color:G.blueV,fontFamily:G.display,lineHeight:1}}>{n}</span>
-            <span style={{fontSize:12,color:"rgba(255,255,255,0.58)",fontFamily:G.mono}}>{l}</span>
-          </div>
-        ))}
-        {loadingUids.size>0&&<div style={{marginLeft:"auto",fontSize:12,color:"rgba(255,255,255,0.6)",fontFamily:G.mono,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:999,padding:"7px 12px",flexShrink:0}}>syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…</div>}
-      </div>
-
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
       {mobileStep>0&&(
         <div className="admin-mobile-back" style={{background:G.navyS,borderBottom:`1px solid rgba(255,255,255,0.08)`,padding:"8px 14px",flexShrink:0,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -4631,9 +4680,9 @@ function AdminPanelInner({user}){
         }}>
 
         {/* ── P1: Institutes ── */}
-        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:G.bg,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
+        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:panelCollapsed.p1?PANEL_RAIL_THEMES.p1.bg:G.bg,borderRight:`1px solid ${panelCollapsed.p1?PANEL_RAIL_THEMES.p1.edge:G.border}`,transition:"width 0.18s ease"}}>
           {panelCollapsed.p1 ? (
-            <CollapsedPanelRail step="Step 1" label="Institutes" badge={institutes.length} direction="right" onExpand={()=>togglePanelCollapse("p1")} />
+            <CollapsedPanelRail step="Step 1" label="Institutes" badge={institutes.length} direction="right" themeKey="p1" onExpand={()=>togglePanelCollapse("p1")} />
           ) : (
             <>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"10px 10px 4px",flexShrink:0}}>
@@ -4684,13 +4733,14 @@ function AdminPanelInner({user}){
         <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p1", dx)} onToggleCollapse={()=>togglePanelCollapse("p1")} />
 
         {/* ── P2: Toggle + Teacher or Class list ── */}
-        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:G.surface,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
+        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:panelCollapsed.p2?PANEL_RAIL_THEMES.p2.bg:G.surface,borderRight:`1px solid ${panelCollapsed.p2?PANEL_RAIL_THEMES.p2.edge:G.border}`,transition:"width 0.18s ease"}}>
           {panelCollapsed.p2 ? (
             <CollapsedPanelRail
               step="Step 2"
               label={tab==="class" ? "Classes" : "Teachers"}
               badge={selInst ? (tab==="class" ? instClasses.length : instTeachers.length) : 0}
               direction="right"
+              themeKey="p2"
               onExpand={()=>togglePanelCollapse("p2")}
             />
           ) : (
@@ -4801,13 +4851,14 @@ function AdminPanelInner({user}){
         <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p2", dx)} onToggleCollapse={()=>togglePanelCollapse("p2")} />
 
         {/* ── P3: Sub-list ── */}
-        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:G.bg,borderRight:`1px solid ${G.border}`,transition:"width 0.18s ease"}}>
+        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:panelCollapsed.p3?PANEL_RAIL_THEMES.p3.bg:G.bg,borderRight:`1px solid ${panelCollapsed.p3?PANEL_RAIL_THEMES.p3.edge:G.border}`,transition:"width 0.18s ease"}}>
           {panelCollapsed.p3 ? (
             <CollapsedPanelRail
               step="Step 3"
               label={tab==="teacher"?"Classes":"Teachers"}
               badge={selP2 ? p3Items.length : 0}
-              direction="left"
+              direction="right"
+              themeKey="p3"
               onExpand={()=>togglePanelCollapse("p3")}
             />
           ) : (
@@ -4822,7 +4873,7 @@ function AdminPanelInner({user}){
                       {isAggregateSelection?`${selInst} · combined institute view`:tab==="class"?"Teachers in this class":"Their classes at "+selInst}
                     </div>
                   </div>
-                  <CollapseButton direction="left" onClick={()=>togglePanelCollapse("p3")} title="Collapse step 3 panel" />
+                  <CollapseButton direction="right" onClick={()=>togglePanelCollapse("p3")} title="Collapse step 3 panel" />
                 </div>
               </div>
               <div style={{fontSize:11,letterSpacing:2,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",padding:"8px 13px 4px",flexShrink:0}}>
