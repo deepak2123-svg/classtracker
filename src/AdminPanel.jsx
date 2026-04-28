@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, Component } from "react";
 import {
   logout, getAllTeachers, getTeacherFullData,
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
-  getAllInstituteSections, saveInstituteGradeGroups, saveInstituteType, deleteInstituteGradeGroup,
+  getAllInstituteSections, saveInstituteGradeGroups, deleteInstituteGradeGroup,
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute,
@@ -1258,11 +1258,8 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
     red:"#DC2626",redL:"#FEF2F2",amber:"#D97706",amberL:"#FFFBEB",
     sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace" };
 
-  // TOTAL steps: school=4 (grades, sections, slots, review), coaching=3 (batches, slots, review)
-  const TOTAL = isCoaching ? 3 : 4;
-  const STEP_LABELS = isCoaching
-    ? ["Batches","Time slots","Review"]
-    : ["Grades","Sections","Time slots","Review"];
+  const TOTAL = 3;
+  const STEP_LABELS = ["Group","Time slots","Review"];
 
   // Lock body scroll while modal is open
   React.useEffect(() => {
@@ -1294,8 +1291,8 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
   const fmtEnd  = (t,m)=>{ if(!t) return ""; const[h,mn]=t.split(":").map(Number); const e=new Date(2000,0,1,h,mn+m); return String(e.getHours()).padStart(2,"0")+":"+String(e.getMinutes()).padStart(2,"0"); };
   const fmtDisp = t=>{ if(!t) return "--"; const[h,m]=t.split(":").map(Number); return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`; };
   const toMins  = t=>{ if(!t) return 0; const[h,m]=t.split(":").map(Number); return h*60+m; };
-  const sectionTerm = isCoaching ? "batch" : "section";
-  const sectionText = isCoaching ? batchText : secText;
+  const sectionTerm = "section";
+  const sectionText = secText;
 
   const sections    = uniqueSectionNames(sectionText.split(/[\n,]/).map(s=>s.trim()).filter(Boolean));
   const validSlots  = startTimes.map((s,i)=>({start:s,dur:slotDurs[i]||durMins})).filter(s=>s.start).sort((a,b)=>toMins(a.start)-toMins(b.start));
@@ -1313,8 +1310,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
   }
   function setSectionLines(nextSections) {
     const nextText = uniqueSectionNames(nextSections).join("\n");
-    if (isCoaching) setBatchText(nextText);
-    else setSecText(nextText);
+    setSecText(nextText);
   }
   function updateSectionName(oldName, newName) {
     const oldKey = normaliseSectionKey(oldName);
@@ -1397,15 +1393,8 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
   function buildSavedGroup() {
     const slots = validSlots.map(s=>({ start:s.start, end:fmtEnd(s.start,s.dur), durMins:s.dur }));
-    let label, savedGradeNums;
-    if (isCoaching) {
-      label = groupLabel.trim() || sections.slice(0,2).join(" / ");
-      savedGradeNums = [];
-    } else {
-      const minG=Math.min(...gradeNums), maxG=Math.max(...gradeNums);
-      label = gradeNums.length===1 ? `${gradeNums[0]}th` : `${minG}th–${maxG}th`;
-      savedGradeNums = gradeNums;
-    }
+    const label = groupLabel.trim();
+    const savedGradeNums = Array.isArray(group?.gradeNums) ? group.gradeNums : [];
     return { id:group?.id||("grp_"+Date.now()), gradeNums:savedGradeNums, label, sections, slots, durMins, sectionOverrides:overrides, instType };
   }
 
@@ -1415,9 +1404,9 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
   }
 
   function handleSave() {
-    if (!isCoaching && !gradeNums.length) { setError("Select at least one grade."); setStep(1); return; }
-    if (!sections.length) { setError("Add at least one "+(isCoaching?"batch":"section")+"."); setStep(1); return; }
-    if (!validSlots.length) { setError("Add at least one start time."); setStep(isCoaching?2:3); return; }
+    if (!groupLabel.trim()) { setError("Enter a group name."); setStep(1); return; }
+    if (!sections.length) { setError("Add at least one section."); setStep(1); return; }
+    if (!validSlots.length) { setError("Add at least one start time."); setStep(2); return; }
     const saved = buildSavedGroup();
     if(isEdit){
       const draft = buildSectionChangeDraft(group, saved);
@@ -1485,13 +1474,21 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
   // ── STEP: School sections ─────────────────────────────────────────────────
   function StepSchoolSections() {
     return (<>
-      <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>What are the section names?</div>
-      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>One per line. Teachers see these exact names. Use "11th NDA" not "XI NDA".</div>
+      <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>Create a timetable group</div>
+      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>Give this group a name, then add all sections that should share the same time slots.</div>
+      <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:6}}>Group name</div>
+      <input
+        value={groupLabel}
+        onChange={e=>setGroupLabel(e.target.value)}
+        placeholder="e.g. Senior Science Morning"
+        style={{...inp,marginBottom:14}}
+      />
+      <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL,marginBottom:6}}>Sections in this group</div>
       <textarea value={secText} onChange={e=>setSecText(e.target.value)} rows={5}
         placeholder={"11th NDA\n11th IIT Star\n11th MED\n12th NDA"}
         style={{...inp,resize:"vertical",lineHeight:1.9,fontFamily:W.mono,fontSize:14}}/>
       <div style={{fontSize:12,color:W.textL,textAlign:"right",marginTop:5}}>{sections.length} section{sections.length!==1?"s":""}</div>
-      {sections.length>0&&<div style={{fontSize:12,color:W.textM,marginTop:10,lineHeight:1.55}}>Use Rename for simple name changes so teachers get the right update automatically after you save.</div>}
+      {sections.length>0&&<div style={{fontSize:12,color:W.textM,marginTop:10,lineHeight:1.55}}>These sections will all inherit the same time-slot setup in the next step. Use Rename for simple name changes so teachers get the right update automatically after you save.</div>}
       {renderSectionActionList()}
     </>);
   }
@@ -1684,12 +1681,12 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
         <button onClick={()=>setShowOv(o=>!o)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,fontWeight:700,color:W.blue,fontFamily:W.sans,padding:0,display:"flex",alignItems:"center",gap:8,width:"100%",justifyContent:"space-between"}}>
           <span style={{display:"flex",alignItems:"center",gap:8}}>
             <span>{showOv?"▼":"▶"}</span>
-            Optional exceptions for a specific {isCoaching?"batch":"section"}
+            Optional exceptions for a specific {sectionTerm}
           </span>
           <span style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6,color:W.textL}}>Advanced</span>
         </button>
         {showOv&&(<>
-          <div style={{fontSize:13,color:W.textL,margin:"10px 0 12px",lineHeight:1.55}}>Only use this when one {isCoaching?"batch":"section"} should break away from the shared pattern above. If not, leave everything blank here.</div>
+          <div style={{fontSize:13,color:W.textL,margin:"10px 0 12px",lineHeight:1.55}}>Only use this when one {sectionTerm} should break away from the shared pattern above. If not, leave everything blank here.</div>
           {sections.map(sec=>{
             const ss=overrides[sec]||[];
             return(<div key={sec} style={{background:W.surface,borderRadius:12,padding:"12px 14px",border:`1px solid ${W.border}`,marginBottom:10}}>
@@ -1715,18 +1712,14 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
   // ── STEP: Review (shared) ─────────────────────────────────────────────────
   function StepReview() {
-    const DURLABELS={30:"30 min",35:"35 min",40:"40 min",45:"45 min",50:"50 min",55:"55 min",60:"1 hour",65:"1h 5m",70:"1h 10m",75:"1h 15m",80:"1h 20m",85:"1h 25m",90:"1h 30m",95:"1h 35m",100:"1h 40m",105:"1h 45m",110:"1h 50m",115:"1h 55m",120:"2 hours"};
-    const rows = isCoaching ? [
-      {icon:"📚",bg:"#EEF2FF",label:"Batches",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>,s:1},
+    const rows = [
+      {icon:"🗂",bg:"#EEF2FF",label:"Group name",val:<span>{groupLabel.trim()||"Not set"}</span>,s:1},
+      {icon:"📚",bg:W.greenL,label:"Sections",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>,s:1},
       {icon:"🕐",bg:W.greenL,label:"Time slots",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{validSlots.map((s,i)=><span key={i} style={{background:W.greenL,color:W.green,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{fmtDisp(s.start)}–{fmtDisp(fmtEnd(s.start,s.dur))}</span>)}</div>,s:2},
-    ] : [
-      {icon:"🎓",bg:"#EEF2FF",label:"Grades",val:<span>{gradeNums.map(g=>g+"th").join(", ")||"None"}</span>,s:1},
-      {icon:"📚",bg:W.greenL,label:"Sections",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>,s:2},
-      {icon:"🕐",bg:W.greenL,label:"Time slots",val:<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{validSlots.map((s,i)=><span key={i} style={{background:W.greenL,color:W.green,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{fmtDisp(s.start)}–{fmtDisp(fmtEnd(s.start,s.dur))}</span>)}</div>,s:3},
     ];
     return (<>
       <div style={{fontSize:19,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:6}}>Looks good?</div>
-      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>Review before saving. Tap Edit to go back to any section.</div>
+      <div style={{fontSize:14,color:W.textM,marginBottom:16,lineHeight:1.6}}>Review the group before saving. Every section here will share the timetable below.</div>
       {rows.map(({icon,bg,label,val,s})=>(
         <div key={label} style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:12,marginBottom:8,padding:"14px 16px",display:"flex",alignItems:"flex-start",gap:12}}>
           <div style={{width:36,height:36,borderRadius:10,background:bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{icon}</div>
@@ -1737,14 +1730,12 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
           <button onClick={()=>setStep(s)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:W.blue,fontWeight:600,fontFamily:W.sans,flexShrink:0,padding:"2px 0"}}>Edit</button>
         </div>
       ))}
-      {isEdit&&<div style={{background:W.amberL,border:"1px solid #FCD34D",borderRadius:10,padding:"10px 14px",fontSize:13,color:W.amber,marginTop:4}}>⚠ Saving updates sections and slots visible to all teachers at this institute. If any section name was changed, you'll review the rename before it goes live.</div>}
+      {isEdit&&<div style={{background:W.amberL,border:"1px solid #FCD34D",borderRadius:10,padding:"10px 14px",fontSize:13,color:W.amber,marginTop:4}}>⚠ Saving updates this group for all linked teachers. If any section name was changed, you'll review the rename before it goes live.</div>}
     </>);
   }
 
   // Map step number → component
-  const STEPS_COACHING = [null, StepCoachingBatches, StepTimeSlots, StepReview];
-  const STEPS_SCHOOL   = [null, StepSchoolGrades, StepSchoolSections, StepTimeSlots, StepReview];
-  const STEPS = isCoaching ? STEPS_COACHING : STEPS_SCHOOL;
+  const STEPS = [null, StepSchoolSections, StepTimeSlots, StepReview];
   const renderStep = STEPS[step];
 
   return (
@@ -1785,7 +1776,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
         {/* Header */}
         <div style={{padding:"12px 16px 0",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-            <div style={{fontSize:12,color:W.textL,fontFamily:W.mono}}>{inst} · {isCoaching?"Coaching":"School"}</div>
+            <div style={{fontSize:12,color:W.textL,fontFamily:W.mono}}>{inst} · Timetable group</div>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:W.textL,lineHeight:1}}>✕</button>
           </div>
           {/* Progress dots */}
@@ -1890,7 +1881,6 @@ function AdminPanelInner({user}){
   const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
   const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
-  const [typePicker, setTypePicker]         = useState(null); // null | instituteName (asking type)
   const [instMenuOpen, setInstMenuOpen]     = useState(null); // inst name whose ⋯ menu is open
   const [instSearch, setInstSearch]         = useState("");
   const [p2Search, setP2Search]             = useState("");
@@ -4159,7 +4149,7 @@ function AdminPanelInner({user}){
         {grpModal&&(
           <GradeGroupModal
             inst={grpModal.inst}
-            instType={instSectionsAll[grpModal.inst]?.type||"school"}
+            instType={instSectionsAll[grpModal.inst]?.type||""}
             group={grpModal.mode==="edit"?grpModal.group:null}
             onSave={async(savedGroup, changeMeta)=>{
               const instData = instSectionsAll[grpModal.inst] || {};
@@ -4182,37 +4172,12 @@ function AdminPanelInner({user}){
           />
         )}
 
-        {/* Type picker modal */}
-        {typePicker&&(
-          <InstTypePicker
-            inst={typePicker}
-            onSelect={(type)=>{
-              // Update UI immediately — don't wait for Firestore
-              setInstSectionsAll(a=>({...a,[typePicker]:{...(a[typePicker]||{}),type}}));
-              setTypePicker(null);
-              // Save in background, silently retry on failure
-              saveInstituteType(typePicker, type).catch(()=>{
-                // Will be saved again next time admin opens manage sections
-              });
-            }}
-            onClose={()=>setTypePicker(null)}
-          />
-        )}
-
         {/* Institute detail drill-down (replaces tab content when active) */}
         {instDetailView?(()=>{
           const instData=instSectionsAll[instDetailView]||{};
-          const instType=instData.type||null;
           const groups=instData.gradeGroups||[];
-          const classificationCards = buildInstituteClassification(instType, groups);
-          const classificationTitle = instType==="school"
-            ? "School classification"
-            : instType==="coaching_12"
-              ? "Coaching classification"
-              : instType==="coaching_grad"
-                ? "Coaching classification"
-                : "Classification";
-          const addButtonLabel = instType==="school" ? "+ Add Grade Group" : "+ Add Batch Group";
+          const sortedGroups = [...groups].sort((a,b)=>exportTextSorter.compare(a?.label || "", b?.label || ""));
+          const addButtonLabel = "+ Add Timetable Group";
           const fmtSlotPill=s=>{const[h,m]=s.start.split(":").map(Number);const e=s.end?.split(":").map(Number)||[0,0];const f=(hh,mm)=>`${hh%12||12}:${String(mm).padStart(2,"0")} ${hh>=12?"PM":"AM"}`;return`${f(h,m)}–${f(e[0],e[1])}`;};
           return(
             <div>
@@ -4220,61 +4185,44 @@ function AdminPanelInner({user}){
                 <button onClick={()=>setInstDetailView(null)} style={{...pill(G.bg,G.textS,G.borderM),fontSize:14}}>← Back</button>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display}}>{instDetailView}</div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:2}}>
-                    {instType
-                      ?<span style={{fontSize:12,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",background:instType==="school"?"#EEF2FF":instType==="coaching_12"?"#ECFDF5":"#FFFBEB",color:instType==="school"?G.blue:instType==="coaching_12"?G.green:"#D97706",borderRadius:20,padding:"3px 10px"}}>
-                        {instType==="school"?"🏫 School":instType==="coaching_12"?"📐 After 12th":"🏛 After Graduation"}
-                      </span>
-                      :<span style={{fontSize:12,color:G.textL}}>No type set</span>
-                    }
-                    <button onClick={()=>setTypePicker(instDetailView)} style={{background:"none",border:"none",fontSize:12,color:G.blue,cursor:"pointer",fontFamily:G.sans,fontWeight:600,padding:0}}>Change →</button>
-                  </div>
+                  <div style={{fontSize:13,color:G.textM,marginTop:4}}>Create named timetable groups. Every section inside one group will share the same slots.</div>
                 </div>
               </div>
-              {/* If no type set, prompt admin to set one */}
-              {!instType&&(
-                <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:12,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
-                  <span style={{fontSize:22}}>⚠</span>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:15,fontWeight:700,color:"#92400E",marginBottom:2}}>Institute type not set</div>
-                    <div style={{fontSize:13,color:"#B45309"}}>Please set the type first so the grade/batch wizard shows the right options.</div>
-                  </div>
-                  <button onClick={()=>setTypePicker(instDetailView)} style={{background:"#1A2F5A",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:G.sans,flexShrink:0}}>Set Type</button>
-                </div>
-              )}
               {groups.length===0&&(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"36px 20px",textAlign:"center",marginBottom:16}}>
-                  <div style={{fontSize:32,marginBottom:10}}>📚</div>
-                  <div style={{fontSize:16,fontWeight:600,color:G.textM,marginBottom:6}}>No classification yet</div>
-                  <div style={{fontSize:14,color:G.textL}}>{instType==="school" ? "Add a grade group to define sections and timetable slots for this institute." : "Add a batch group to define sections and timetable slots for this institute."}</div>
+                  <div style={{fontSize:32,marginBottom:10}}>🗂</div>
+                  <div style={{fontSize:16,fontWeight:600,color:G.textM,marginBottom:6}}>No timetable groups yet</div>
+                  <div style={{fontSize:14,color:G.textL}}>Add a timetable group, choose its sections, and define the shared time slots for those sections.</div>
                 </div>
               )}
-              {classificationCards.length>0&&(
+              {sortedGroups.length>0&&(
                 <div style={{marginBottom:14}}>
-                  <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8,fontFamily:G.mono}}>{classificationTitle}</div>
-                  <div style={{fontSize:13,color:G.textL,marginBottom:12}}>Tap any {instType==="school"?"grade":"category"} to expand its {instType==="school"?"sections":"batches"}.</div>
+                  <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8,fontFamily:G.mono}}>Timetable groups</div>
+                  <div style={{fontSize:13,color:G.textL,marginBottom:12}}>Open any group to review its sections and shared time slots.</div>
                 </div>
               )}
-              {classificationCards.map(card=>{
-                const cardStateKey = `${instDetailView}::${card.key}`;
+              {sortedGroups.map(group=>{
+                const cardStateKey = `${instDetailView}::${group.id}`;
                 const isOpen = !!instClassificationOpen[cardStateKey];
-                const singleSource = card.sourceGroups.length===1 ? card.sourceGroups[0] : null;
+                const groupSections = uniqueSectionNames(group.sections || []);
+                const groupSlots = [...(group.slots || [])].sort((a,b)=>(a?.start || "").localeCompare(b?.start || ""));
+                const overrideSections = Object.keys(group.sectionOverrides || {}).filter(key => (group.sectionOverrides?.[key] || []).length > 0);
                 return(
-                  <div key={card.key} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+                  <div key={group.id} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
                     <button
                       onClick={()=>setInstClassificationOpen(prev=>({...prev,[cardStateKey]:!prev[cardStateKey]}))}
                       style={{width:"100%",padding:"16px 18px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}
                     >
                       <div>
-                        <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{card.title}</div>
+                        <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{group.label || "Untitled group"}</div>
                         <div style={{fontSize:13,color:G.textM,marginTop:2}}>
-                          {card.sections.length} {card.sectionLabel} · {card.slots.length} time slots{card.sourceGroups.length>1?` · ${card.sourceGroups.length} setups`:""}
+                          {groupSections.length} sections · {groupSlots.length} time slots
                         </div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-                        {card.overrideSections.length>0&&(
+                        {overrideSections.length>0&&(
                           <span style={{background:"#FFF7ED",color:G.amber,border:`1px solid #FED7AA`,borderRadius:999,padding:"4px 9px",fontSize:11,fontFamily:G.mono,fontWeight:700}}>
-                            {card.overrideSections.length} custom
+                            {overrideSections.length} custom
                           </span>
                         )}
                         <span style={{fontSize:18,color:G.textL,transform:isOpen?"rotate(90deg)":"none",transition:"transform 0.18s"}}>›</span>
@@ -4283,50 +4231,26 @@ function AdminPanelInner({user}){
                     {isOpen&&(
                       <div style={{padding:"0 18px 16px",borderTop:`1px solid ${G.border}`}}>
                         <div style={{paddingTop:14}}>
-                          <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>
-                            {card.sectionLabel==="sections"?"Sections":"Batches"}
-                          </div>
+                          <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Sections</div>
                           <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
-                            {card.sections.map(section=>(
+                            {groupSections.map(section=>(
                               <span key={section} style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 11px",fontSize:12,fontFamily:G.mono,fontWeight:600}}>{section}</span>
                             ))}
                           </div>
                           <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Time slots</div>
                           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                            {card.slots.map((slot, idx)=>(
-                              <span key={`${card.key}_${idx}`} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"3px 11px",fontSize:12,fontFamily:G.mono,color:G.text}}>{fmtSlotPill(slot)}</span>
+                            {groupSlots.map((slot, idx)=>(
+                              <span key={`${group.id}_${idx}`} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"3px 11px",fontSize:12,fontFamily:G.mono,color:G.text}}>{fmtSlotPill(slot)}</span>
                             ))}
                           </div>
-                          {card.overrideSections.length>0&&(
-                            <div style={{fontSize:12,color:G.textL,marginTop:8}}>+ Custom slots for: {card.overrideSections.join(", ")}</div>
+                          {overrideSections.length>0&&(
+                            <div style={{fontSize:12,color:G.textL,marginTop:8}}>+ Custom slots for: {overrideSections.join(", ")}</div>
                           )}
                         </div>
-                        {singleSource ? (
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:14}}>
-                            <button onClick={()=>setGrpModal({mode:"edit",inst:instDetailView,group:singleSource})} style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>Edit</button>
-                            <button onClick={async()=>{if(!window.confirm(`Delete "${singleSource.label}"?`))return;await deleteInstituteGradeGroup(instDetailView,singleSource.id);setInstSectionsAll(a=>({...a,[instDetailView]:{...(a[instDetailView]||{}),gradeGroups:(a[instDetailView]?.gradeGroups||[]).filter(g=>g.id!==singleSource.id)}}));}} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>Delete</button>
-                          </div>
-                        ) : (
-                          <div style={{marginTop:14}}>
-                            <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Underlying setups</div>
-                            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                              {card.sourceGroups.map(group=>(
-                                <div key={group.id} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 14px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
-                                  <div>
-                                    <div style={{fontSize:14,fontWeight:700,color:G.text}}>{group.label}</div>
-                                    <div style={{fontSize:12,color:G.textL,marginTop:3}}>
-                                      {group.sections?.length||0} sections · {group.slots?.length||0} time slots
-                                    </div>
-                                  </div>
-                                  <div style={{display:"flex",gap:6,flexShrink:0}}>
-                                    <button onClick={()=>setGrpModal({mode:"edit",inst:instDetailView,group})} style={{...pill(G.surface,G.textS,G.borderM),fontSize:12}}>Edit</button>
-                                    <button onClick={async()=>{if(!window.confirm(`Delete "${group.label}"?`))return;await deleteInstituteGradeGroup(instDetailView,group.id);setInstSectionsAll(a=>({...a,[instDetailView]:{...(a[instDetailView]||{}),gradeGroups:(a[instDetailView]?.gradeGroups||[]).filter(g=>g.id!==group.id)}}));}} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:12}}>Delete</button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:14}}>
+                          <button onClick={()=>setGrpModal({mode:"edit",inst:instDetailView,group})} style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>Edit</button>
+                          <button onClick={async()=>{if(!window.confirm(`Delete "${group.label}"?`))return;await deleteInstituteGradeGroup(instDetailView,group.id);setInstSectionsAll(a=>({...a,[instDetailView]:{...(a[instDetailView]||{}),gradeGroups:(a[instDetailView]?.gradeGroups||[]).filter(g=>g.id!==group.id)}}));}} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>Delete</button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -4361,7 +4285,7 @@ function AdminPanelInner({user}){
           <div style={{width:48,height:48,borderRadius:14,background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>📚</div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:17,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:3}}>Class Manager</div>
-            <div style={{fontSize:13,color:"rgba(255,255,255,0.6)",lineHeight:1.5}}>Tap any institute below to set up grade groups, sections, and timetable slots. Teachers will see your sections in their class dropdown.</div>
+            <div style={{fontSize:13,color:"rgba(255,255,255,0.6)",lineHeight:1.5}}>Tap any institute below to create named timetable groups. Each group contains the sections that share one slot pattern.</div>
           </div>
         </div>
 
@@ -4399,13 +4323,6 @@ function AdminPanelInner({user}){
                 return(
                   <div key={inst}
                     style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`}}>
-                    {/* Row 1: Institute name — full width */}
-                    {/* Institute type badge */}
-                    {instSectionsAll[inst]?.type&&(
-                      <span style={{fontSize:11,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",background:instSectionsAll[inst].type==="school"?"#EEF2FF":instSectionsAll[inst].type==="coaching_12"?"#ECFDF5":"#FFFBEB",color:instSectionsAll[inst].type==="school"?G.blue:instSectionsAll[inst].type==="coaching_12"?G.green:"#D97706",borderRadius:20,padding:"2px 9px",marginBottom:6,display:"inline-block"}}>
-                        {instSectionsAll[inst].type==="school"?"🏫 School":instSectionsAll[inst].type==="coaching_12"?"📐 After 12th":"🏛 After Graduation"}
-                      </span>
-                    )}
                     {renamingInst===inst?(
                       <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
                         <input value={renameInstVal} onChange={e=>setRenameInstVal(e.target.value)}
@@ -4434,13 +4351,9 @@ function AdminPanelInner({user}){
                         )}
                       </div>
                       <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center",position:"relative"}}>
-                        <button onClick={()=>{
-                            setInstDetailView(inst);
-                            // If no type set yet, open the type picker immediately
-                            if(!(instSectionsAll[inst]?.type)) setTypePicker(inst);
-                          }}
+                        <button onClick={()=>setInstDetailView(inst)}
                           style={{background:G.blueL,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap"}}>
-                          📚 Manage Sections →
+                          📚 Manage Groups →
                         </button>
                         <button
                           onClick={e=>{e.stopPropagation();setInstMenuOpen(instMenuOpen===inst?null:inst);}}
