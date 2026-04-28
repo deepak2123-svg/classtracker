@@ -116,6 +116,123 @@ function ConfirmDeleteModal({ title, lines, confirmLabel, onConfirm, onClose, bu
   );
 }
 
+function SectionRenameReviewModal({
+  draft,
+  selections,
+  onChange,
+  onBack,
+  onConfirm,
+  busy,
+}){
+  const removedCount = draft?.removedSections?.length || 0;
+  const addedCount = draft?.addedSections?.length || 0;
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.48)",zIndex:710,display:"flex",alignItems:"center",justifyContent:"center",padding:18,backdropFilter:"blur(6px)"}}>
+      <div style={{width:"100%",maxWidth:620,maxHeight:"88vh",overflowY:"auto",background:G.surface,border:`1px solid ${G.border}`,borderRadius:24,boxShadow:"0 30px 80px rgba(15,23,42,0.2)"}}>
+        <div style={{padding:"24px 24px 18px",borderBottom:`1px solid ${G.border}`}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#EEF4FF",border:"1px solid #D7E3FB",borderRadius:999,padding:"7px 12px",fontSize:12,fontWeight:700,color:G.navy,fontFamily:G.mono,letterSpacing:0.3,marginBottom:14}}>
+            Section change review
+          </div>
+          <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.15,marginBottom:8}}>
+            Tell teachers what changed
+          </div>
+          <div style={{fontSize:14,color:G.textM,lineHeight:1.7}}>
+            If a section was renamed, map the old name to the new one here. Teachers will get a one-time prompt, and their class history will stay intact.
+          </div>
+        </div>
+
+        <div style={{padding:"18px 24px 10px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:10,marginBottom:18}}>
+            <div style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:5}}>Removed names</div>
+              <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display}}>{removedCount}</div>
+            </div>
+            <div style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:5}}>Current names</div>
+              <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display}}>{draft?.currentSections?.length || 0}</div>
+            </div>
+            <div style={{background:draft?.timetableChanged ? "#FFF7ED" : "#ECFDF5",border:`1px solid ${draft?.timetableChanged ? "#FED7AA" : "#BBF7D0"}`,borderRadius:16,padding:"14px 15px"}}>
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:draft?.timetableChanged ? G.amber : "#166534",marginBottom:5}}>Timetable</div>
+              <div style={{fontSize:16,fontWeight:800,color:draft?.timetableChanged ? G.amber : "#166534",fontFamily:G.display}}>
+                {draft?.timetableChanged ? "Updated for future logs" : "No slot change"}
+              </div>
+            </div>
+          </div>
+
+          {removedCount === 0 ? (
+            <div style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:16,padding:"18px 16px",fontSize:14,color:G.textM,lineHeight:1.65}}>
+              This edit changes the section list, but there are no removed names to map. Saving will treat any extra names as brand-new sections.
+            </div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {draft.removedSections.map(oldSection=>{
+                const selected = selections?.[oldSection] || "";
+                return (
+                  <div key={oldSection} style={{background:"#FBFCFE",border:`1px solid ${G.border}`,borderRadius:18,padding:"16px 16px 14px"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:10}}>
+                      <div>
+                        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:4}}>Old section</div>
+                        <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display}}>{oldSection}</div>
+                      </div>
+                      <div style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>
+                        Teachers will see this once
+                      </div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
+                      <div>
+                        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:6}}>Now renamed as</div>
+                        <select
+                          value={selected}
+                          onChange={e=>onChange(oldSection, e.target.value)}
+                          style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1px solid ${G.borderM}`,fontSize:15,fontFamily:G.sans,color:G.text,background:"#fff",outline:"none"}}
+                        >
+                          <option value="">Treat as removed / don't notify</option>
+                          {(draft.currentSections || []).map(section=>(
+                            <option key={`${oldSection}_${section}`} value={section}>{section}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
+                        {selected
+                          ? <>Teachers with <strong>{oldSection}</strong> will be remapped to <strong>{selected}</strong>. {draft.timetableChanged ? "They'll also be told that future timetable slots changed." : "Their existing timetable pattern stays the same."}</>
+                          : <>No automatic rename will be sent for <strong>{oldSection}</strong>. Teachers can still relink manually later if needed.</>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {addedCount > 0 && (
+            <div style={{marginTop:16,background:"#EEF4FF",border:"1px solid #D7E3FB",borderRadius:16,padding:"14px 16px"}}>
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.blue,marginBottom:6}}>Current section names</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {draft.addedSections.map(section=>(
+                  <span key={section} style={{background:"#fff",border:"1px solid #C7D7F5",borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:G.blue,fontFamily:G.mono}}>
+                    {section}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{padding:"18px 24px 24px",display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",borderTop:`1px solid ${G.border}`}}>
+          <button onClick={onBack} disabled={busy}
+            style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:12,padding:"11px 18px",fontSize:14,fontWeight:700,color:G.textM,cursor:busy?"not-allowed":"pointer",fontFamily:G.sans}}>
+            ← Back
+          </button>
+          <button onClick={onConfirm} disabled={busy}
+            style={{background:G.navy,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:14,fontWeight:800,cursor:busy?"not-allowed":"pointer",fontFamily:G.sans,boxShadow:G.shadowSm}}>
+            {busy ? "Saving…" : "Save section update"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function normaliseName(raw){
   if(!raw) return raw;
   const m=raw.match(/(\d+)/);
@@ -191,6 +308,121 @@ function formatExportPdfTime(start,end){
   if(!start && !end) return "";
   if(start && end) return `${fmt12(start)} - ${fmt12(end)}`;
   return fmt12(start || end || "");
+}
+function normaliseSectionKey(value){
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+function uniqueSectionNames(values){
+  return [...new Set((values || []).map(v => String(v || "").trim()).filter(Boolean))];
+}
+function splitSectionTokens(value){
+  return normaliseSectionKey(value).split(/[^a-z0-9]+/).filter(Boolean);
+}
+function scoreSectionRenameTarget(oldSection, candidate){
+  const oldTokens = splitSectionTokens(oldSection);
+  const nextTokens = splitSectionTokens(candidate);
+  if(!oldTokens.length || !nextTokens.length) return 0;
+  let score = 0;
+  if(oldTokens[0] && nextTokens[0] && oldTokens[0] === nextTokens[0]) score += 4;
+  const shared = oldTokens.filter(token => nextTokens.includes(token));
+  score += shared.length * 2;
+  if(normaliseSectionKey(candidate).startsWith(normaliseSectionKey(oldSection)) || normaliseSectionKey(oldSection).startsWith(normaliseSectionKey(candidate))) {
+    score += 1;
+  }
+  return score;
+}
+function guessSectionRenameTarget(oldSection, preferredSections, fallbackSections = []){
+  const pool = [...(preferredSections || []), ...(fallbackSections || []).filter(item => !(preferredSections || []).includes(item))];
+  if((preferredSections || []).length === 1) return preferredSections[0];
+  const ranked = pool
+    .map((value, index) => ({ value, index, score:scoreSectionRenameTarget(oldSection, value) }))
+    .sort((a,b)=>b.score-a.score || a.index-b.index);
+  return ranked[0]?.score > 0 ? ranked[0].value : "";
+}
+function buildGroupScheduleFingerprint(group){
+  const slots = (group?.slots || []).map(slot => ({
+    start:String(slot?.start || ""),
+    end:String(slot?.end || ""),
+    durMins:Number(slot?.durMins || 0),
+  }));
+  const overrides = Object.fromEntries(
+    Object.entries(group?.sectionOverrides || {})
+      .sort((a,b)=>exportTextSorter.compare(a[0], b[0]))
+      .map(([section, rows])=>[
+        section,
+        (rows || []).map(slot => ({
+          start:String(slot?.start || ""),
+          end:String(slot?.end || ""),
+          durMins:Number(slot?.durMins || 0),
+        })),
+      ])
+  );
+  return JSON.stringify({ slots, overrides });
+}
+function buildSectionChangeDraft(previousGroup, nextGroup){
+  const previousSections = uniqueSectionNames(previousGroup?.sections || []);
+  const nextSections = uniqueSectionNames(nextGroup?.sections || []);
+  const nextLookup = new Set(nextSections.map(normaliseSectionKey));
+  const previousLookup = new Set(previousSections.map(normaliseSectionKey));
+  const removedSections = previousSections.filter(section => !nextLookup.has(normaliseSectionKey(section)));
+  const addedSections = nextSections.filter(section => !previousLookup.has(normaliseSectionKey(section)));
+  return {
+    removedSections,
+    addedSections,
+    currentSections: nextSections,
+    timetableChanged: buildGroupScheduleFingerprint(previousGroup) !== buildGroupScheduleFingerprint(nextGroup),
+  };
+}
+function buildInitialSectionRenameSelections(draft){
+  const selections = {};
+  (draft?.removedSections || []).forEach((oldSection, index) => {
+    const preferred = draft?.addedSections || [];
+    const fallback = draft?.currentSections || [];
+    const guessed = preferred[index] || guessSectionRenameTarget(oldSection, preferred, fallback) || "";
+    selections[oldSection] = guessed;
+  });
+  return selections;
+}
+function applySectionRenameSelections(group, selections){
+  const currentSections = new Set(uniqueSectionNames(group?.sections || []));
+  const nextOverrides = { ...(group?.sectionOverrides || {}) };
+  Object.entries(selections || {}).forEach(([oldSection, newSection])=>{
+    const fromKey = String(oldSection || "").trim();
+    const toKey = String(newSection || "").trim();
+    if(!fromKey) return;
+    if(toKey && currentSections.has(toKey) && !nextOverrides[toKey] && (nextOverrides[fromKey] || []).length){
+      nextOverrides[toKey] = nextOverrides[fromKey];
+    }
+    delete nextOverrides[fromKey];
+  });
+  const filteredOverrides = Object.fromEntries(
+    Object.entries(nextOverrides).filter(([section]) => currentSections.has(section))
+  );
+  return { ...group, sectionOverrides: filteredOverrides };
+}
+function buildSectionChangeEvents(inst, previousGroup, nextGroup, selections, timetableChanged){
+  const changes = Object.entries(selections || {})
+    .map(([oldSection, newSection]) => ({
+      oldSection:String(oldSection || "").trim(),
+      newSection:String(newSection || "").trim(),
+    }))
+    .filter(change => change.oldSection && change.newSection && normaliseSectionKey(change.oldSection) !== normaliseSectionKey(change.newSection));
+  if(!changes.length) return [];
+  return [{
+    id:`secchg_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+    institute: inst,
+    groupId: nextGroup?.id || previousGroup?.id || "",
+    groupLabel: nextGroup?.label || previousGroup?.label || "",
+    createdAt: Date.now(),
+    timetableChanged: !!timetableChanged,
+    changes,
+  }];
+}
+function mergeInstituteSectionChangeEvents(existingEvents, nextEvents){
+  const merged = [...(existingEvents || []), ...(nextEvents || [])];
+  return merged
+    .sort((a,b)=>(a?.createdAt || 0) - (b?.createdAt || 0))
+    .slice(-60);
 }
 function groupAdminPdfRows(rows){
   const byInstitute = new Map();
@@ -933,6 +1165,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
   const [showOv,     setShowOv]     = React.useState(false);
   const [busy,       setBusy]       = React.useState(false);
   const [error,      setError]      = React.useState("");
+  const [renameReview, setRenameReview] = React.useState(null);
 
   const fmtEnd  = (t,m)=>{ if(!t) return ""; const[h,mn]=t.split(":").map(Number); const e=new Date(2000,0,1,h,mn+m); return String(e.getHours()).padStart(2,"0")+":"+String(e.getMinutes()).padStart(2,"0"); };
   const fmtDisp = t=>{ if(!t) return "--"; const[h,m]=t.split(":").map(Number); return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`; };
@@ -953,10 +1186,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
     if (!lines.includes(s)) setBatchText([...lines, s].join("\n"));
   }
 
-  function handleSave() {
-    if (!isCoaching && !gradeNums.length) { setError("Select at least one grade."); setStep(1); return; }
-    if (!sections.length) { setError("Add at least one "+(isCoaching?"batch":"section")+"."); setStep(1); return; }
-    if (!validSlots.length) { setError("Add at least one start time."); setStep(isCoaching?2:3); return; }
+  function buildSavedGroup() {
     const slots = validSlots.map(s=>({ start:s.start, end:fmtEnd(s.start,s.dur), durMins:s.dur }));
     let label, savedGradeNums;
     if (isCoaching) {
@@ -967,9 +1197,40 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
       label = gradeNums.length===1 ? `${gradeNums[0]}th` : `${minG}th–${maxG}th`;
       savedGradeNums = gradeNums;
     }
-    const saved = { id:group?.id||("grp_"+Date.now()), gradeNums:savedGradeNums, label, sections, slots, durMins, sectionOverrides:overrides, instType };
+    return { id:group?.id||("grp_"+Date.now()), gradeNums:savedGradeNums, label, sections, slots, durMins, sectionOverrides:overrides, instType };
+  }
+
+  function finaliseSave(savedGroup, changeMeta = null) {
     setBusy(true);
-    onSave(saved).then(()=>{ setBusy(false); onClose(); }).catch(e=>{ setBusy(false); setError(e.message||"Save failed."); });
+    onSave(savedGroup, changeMeta).then(()=>{ setBusy(false); onClose(); }).catch(e=>{ setBusy(false); setError(e.message||"Save failed."); });
+  }
+
+  function handleSave() {
+    if (!isCoaching && !gradeNums.length) { setError("Select at least one grade."); setStep(1); return; }
+    if (!sections.length) { setError("Add at least one "+(isCoaching?"batch":"section")+"."); setStep(1); return; }
+    if (!validSlots.length) { setError("Add at least one start time."); setStep(isCoaching?2:3); return; }
+    const saved = buildSavedGroup();
+    if(isEdit){
+      const draft = buildSectionChangeDraft(group, saved);
+      if(draft.removedSections.length){
+        setRenameReview({
+          draft,
+          selections: buildInitialSectionRenameSelections(draft),
+          savedGroup: saved,
+        });
+        return;
+      }
+    }
+    finaliseSave(saved, null);
+  }
+
+  function confirmRenameReview() {
+    if(!renameReview?.savedGroup) return;
+    const nextGroup = applySectionRenameSelections(renameReview.savedGroup, renameReview.selections);
+    const events = buildSectionChangeEvents(inst, group, nextGroup, renameReview.selections, renameReview.draft?.timetableChanged);
+    finaliseSave(nextGroup, {
+      sectionChangeEvents: events,
+    });
   }
 
   // ── STEP: School grades ───────────────────────────────────────────────────
@@ -1251,7 +1512,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
           <button onClick={()=>setStep(s)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:W.blue,fontWeight:600,fontFamily:W.sans,flexShrink:0,padding:"2px 0"}}>Edit</button>
         </div>
       ))}
-      {isEdit&&<div style={{background:W.amberL,border:"1px solid #FCD34D",borderRadius:10,padding:"10px 14px",fontSize:13,color:W.amber,marginTop:4}}>⚠ Saving updates sections and slots visible to all teachers at this institute.</div>}
+      {isEdit&&<div style={{background:W.amberL,border:"1px solid #FCD34D",borderRadius:10,padding:"10px 14px",fontSize:13,color:W.amber,marginTop:4}}>⚠ Saving updates sections and slots visible to all teachers at this institute. If any section name was changed, you'll review the rename before it goes live.</div>}
     </>);
   }
 
@@ -1263,6 +1524,19 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"stretch",justifyContent:"center",padding:12,backdropFilter:"blur(6px)",boxSizing:"border-box"}}>
+      {renameReview && (
+        <SectionRenameReviewModal
+          draft={renameReview.draft}
+          selections={renameReview.selections}
+          onChange={(oldSection, nextValue)=>setRenameReview(curr=>curr ? {
+            ...curr,
+            selections:{ ...curr.selections, [oldSection]: nextValue },
+          } : curr)}
+          onBack={()=>setRenameReview(null)}
+          onConfirm={confirmRenameReview}
+          busy={busy}
+        />
+      )}
       <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:520,height:"100%",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
 
         {/* Header */}
@@ -3644,11 +3918,22 @@ function AdminPanelInner({user}){
             inst={grpModal.inst}
             instType={instSectionsAll[grpModal.inst]?.type||"school"}
             group={grpModal.mode==="edit"?grpModal.group:null}
-            onSave={async(savedGroup)=>{
-              const existing=instSectionsAll[grpModal.inst]?.gradeGroups||[];
+            onSave={async(savedGroup, changeMeta)=>{
+              const instData = instSectionsAll[grpModal.inst] || {};
+              const existing=instData.gradeGroups||[];
               const updated=grpModal.mode==="edit"?existing.map(g=>g.id===savedGroup.id?savedGroup:g):[...existing,savedGroup];
-              await saveInstituteGradeGroups(grpModal.inst,updated);
-              setInstSectionsAll(a=>({...a,[grpModal.inst]:{gradeGroups:updated}}));
+              const nextEvents = mergeInstituteSectionChangeEvents(instData.sectionChangeEvents, changeMeta?.sectionChangeEvents);
+              await saveInstituteGradeGroups(grpModal.inst,updated,{
+                sectionChangeEvents: nextEvents,
+              });
+              setInstSectionsAll(a=>({
+                ...a,
+                [grpModal.inst]:{
+                  ...(a[grpModal.inst] || {}),
+                  gradeGroups:updated,
+                  sectionChangeEvents: nextEvents,
+                }
+              }));
             }}
             onClose={()=>setGrpModal(null)}
           />

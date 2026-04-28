@@ -1446,6 +1446,66 @@ function getSlotsForSection(cls, instituteSections) {
   // 2. Fallback: hardcoded KIS SIP logic
   return getKisSlots(cls);
 }
+function normaliseSectionKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+function getInstituteSectionNames(instData) {
+  return [...new Set((instData?.gradeGroups || []).flatMap(group => group.sections || []).map(section => String(section || "").trim()).filter(Boolean))];
+}
+function getInstituteSectionChangeEvents(instData) {
+  return [...(instData?.sectionChangeEvents || [])]
+    .filter(event => Array.isArray(event?.changes) && event.changes.length > 0)
+    .sort((a,b)=>(a?.createdAt || 0) - (b?.createdAt || 0));
+}
+function buildSectionChangeApplication(classes, instituteSections, seenEventIds) {
+  const seen = new Set((seenEventIds || []).map(id => String(id || "")));
+  const notices = [];
+  const triggeredEventIds = new Set();
+  let appliedAny = false;
+  const updatedClasses = (classes || []).map(cls => {
+    if (!cls || cls.left) return cls;
+    const instData = instituteSections?.[cls.institute];
+    if (!instData) return cls;
+    const events = getInstituteSectionChangeEvents(instData);
+    let nextSection = cls.section || "";
+    let changed = false;
+    events.forEach(event => {
+      const eventId = String(event?.id || "");
+      if (!eventId || seen.has(eventId)) return;
+      const match = (event.changes || []).find(change =>
+        normaliseSectionKey(change?.oldSection) === normaliseSectionKey(nextSection) &&
+        String(change?.newSection || "").trim()
+      );
+      if (!match) return;
+      const mappedSection = String(match.newSection || "").trim();
+      notices.push({
+        eventId,
+        classId: cls.id,
+        institute: cls.institute || "",
+        subject: cls.subject || "",
+        oldSection: String(match.oldSection || nextSection || "").trim(),
+        newSection: mappedSection,
+        timetableChanged: !!event.timetableChanged,
+      });
+      triggeredEventIds.add(eventId);
+      if (mappedSection && normaliseSectionKey(mappedSection) !== normaliseSectionKey(nextSection)) {
+        nextSection = mappedSection;
+        changed = true;
+      }
+    });
+    if (changed) {
+      appliedAny = true;
+      return { ...cls, section: nextSection };
+    }
+    return cls;
+  });
+  return {
+    updatedClasses,
+    notices,
+    eventIds:[...triggeredEventIds],
+    appliedAny,
+  };
+}
 
 // ── KIS SIP Kunjpura preset timetable slots ────────────────────────────────────
 // Yellow (break) rows from the timetable are excluded.
@@ -1661,6 +1721,58 @@ function SectionLinkingModal({ unlinkedClasses, instituteSections, onConfirm, on
   );
 }
 
+function SectionChangeNoticeModal({ items, onClose }) {
+  const many = (items || []).length > 1;
+  const groupedItems = (items || []).reduce((list, item) => {
+    const key = [item.eventId, item.classId, item.oldSection, item.newSection].join("|");
+    if (list.some(row => row.key === key)) return list;
+    list.push({ ...item, key });
+    return list;
+  }, []);
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)"}}>
+      <div style={{background:G.surface,borderRadius:24,width:"100%",maxWidth:520,maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.28)"}}>
+        <div style={{padding:"22px 20px 16px",borderBottom:`1px solid ${G.border}`}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:G.greenL,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:G.green,fontFamily:G.mono,letterSpacing:0.3,marginBottom:12}}>
+            Section update
+          </div>
+          <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:6}}>
+            {many ? "Your sections were updated" : "Your section was updated"}
+          </div>
+          <div style={{fontSize:14,color:G.textM,lineHeight:1.65}}>
+            {many
+              ? "Your admin renamed some sections. We've kept your class history safe and updated the class names below for future logging."
+              : "Your admin renamed a section. We've kept your class history safe and updated the class name below for future logging."}
+          </div>
+        </div>
+        <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
+          {groupedItems.map(item=>(
+            <div key={item.key} style={{background:"#F8FBF9",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:8}}>
+                <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display}}>
+                  {item.oldSection} → {item.newSection}
+                </div>
+                <span style={{fontSize:11,fontWeight:700,fontFamily:G.mono,borderRadius:999,padding:"5px 10px",background:item.timetableChanged?"#FEF3C7":G.greenL,color:item.timetableChanged?"#92400E":G.green}}>
+                  {item.timetableChanged ? "Future timetable updated" : "Timetable unchanged"}
+                </span>
+              </div>
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
+                🏫 {item.institute}{item.subject ? ` · ${item.subject}` : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:"12px 20px 22px",display:"flex",justifyContent:"flex-end",borderTop:`1px solid ${G.border}`}}>
+          <button onClick={onClose}
+            style={{padding:"12px 20px",borderRadius:12,border:"none",background:G.forest,fontSize:15,fontWeight:800,cursor:"pointer",color:"#fff",fontFamily:G.sans}}>
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 function ClassTrackerInner({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
@@ -1705,12 +1817,14 @@ function ClassTrackerInner({user}){
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups}}
   const [unlinkedClasses,   setUnlinkedClasses]   = useState([]);  // classes needing link
+  const [sectionChangeNotice, setSectionChangeNotice] = useState(null);
   // Use sessionStorage so "Remind later" hides for this session only — shows again on next app open
   const [linkingDone,       setLinkingDone]        = useState(()=>sessionStorage.getItem("linkDismissed")==="1");
   const pendingSaveKey = `classlog_pending_${user.uid}`;
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
   const [mobileClassLimit, setMobileClassLimit] = useState(mobileBatchSize);
+  const sectionChangeSessionSeenRef = useRef(new Set());
 
   const normaliseLoadedData = React.useCallback((incoming, { forceProfileBlank = false } = {}) => {
     const base = incoming
@@ -2044,9 +2158,39 @@ function ClassTrackerInner({user}){
   },[instFilter, view, data.classes.length, mobileBatchSize]);
 
   // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
+  useEffect(()=>{
+    if(loading || !Object.keys(instituteSections).length || sectionChangeNotice) return;
+    const pendingNotice = data?._meta?.pendingSectionChangeNotice;
+    if(pendingNotice?.items?.length){
+      (pendingNotice.eventIds || []).forEach(id=>sectionChangeSessionSeenRef.current.add(String(id || "")));
+      setSectionChangeNotice(pendingNotice);
+      return;
+    }
+    const persisted = Array.isArray(data?._meta?.seenSectionChangeEvents) ? data._meta.seenSectionChangeEvents : [];
+    const seenIds = [...persisted, ...sectionChangeSessionSeenRef.current];
+    const result = buildSectionChangeApplication(data.classes || [], instituteSections, seenIds);
+    if(!result.appliedAny && !result.notices.length) return;
+    if(result.appliedAny || result.notices.length){
+      const nextNotice = result.notices.length ? { items: result.notices, eventIds: result.eventIds } : null;
+      setData(d=>({
+        ...d,
+        classes: result.appliedAny ? result.updatedClasses : d.classes,
+        _meta: nextNotice ? {
+          ...(d._meta || {}),
+          pendingSectionChangeNotice: nextNotice,
+        } : d._meta,
+      }));
+    }
+    if(result.notices.length){
+      result.eventIds.forEach(id=>sectionChangeSessionSeenRef.current.add(String(id)));
+      setUnlinkedClasses([]);
+      setSectionChangeNotice({ items: result.notices, eventIds: result.eventIds });
+    }
+  },[loading, instituteSections, data.classes, data?._meta?.seenSectionChangeEvents, data?._meta?.pendingSectionChangeNotice, sectionChangeNotice]);
+
   // After both data and sections load, find classes that don't match admin sections
   useEffect(()=>{
-    if(loading || !Object.keys(instituteSections).length || linkingDone) return;
+    if(loading || !Object.keys(instituteSections).length || linkingDone || sectionChangeNotice) return;
     const unlinked=(data.classes||[]).filter(cls=>{
       if(cls.left) return false;
       const instData=instituteSections[cls.institute];
@@ -2056,7 +2200,28 @@ function ClassTrackerInner({user}){
       return !allSections.includes(cls.section);
     });
     setUnlinkedClasses(unlinked);
-  },[loading,instituteSections,data.classes,linkingDone]);
+  },[loading,instituteSections,data.classes,linkingDone,sectionChangeNotice]);
+
+  const acknowledgeSectionChangeNotice = React.useCallback(() => {
+    if(!sectionChangeNotice?.eventIds?.length){
+      setSectionChangeNotice(null);
+      return;
+    }
+    const noticeIds = sectionChangeNotice.eventIds.map(id => String(id || "")).filter(Boolean);
+    setData(d => {
+      const existing = Array.isArray(d?._meta?.seenSectionChangeEvents) ? d._meta.seenSectionChangeEvents : [];
+      const merged = [...new Set([...existing, ...noticeIds])];
+      return {
+        ...d,
+        _meta: {
+          ...(d._meta || {}),
+          seenSectionChangeEvents: merged,
+          pendingSectionChangeNotice: null,
+        },
+      };
+    });
+    setSectionChangeNotice(null);
+  }, [sectionChangeNotice]);
 
   const allNoteDates = useMemo(()=>{
     const map={};
@@ -2293,6 +2458,12 @@ function ClassTrackerInner({user}){
             : <><span>🧩</span> We found {dataWarning.count} unattached class note file{dataWarning.count===1?"":"s"}. If anything looks missing, do not create duplicate classes — contact admin first.</>}
         </div>
       )}
+      {sectionChangeNotice?.items?.length > 0 && (
+        <SectionChangeNoticeModal
+          items={sectionChangeNotice.items}
+          onClose={acknowledgeSectionChangeNotice}
+        />
+      )}
       {/* In-app toast — replaces alert() */}
       {inlineToast&&(
         <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:"rgba(21,43,34,0.95)",color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:14,fontWeight:600,fontFamily:G.sans,whiteSpace:"nowrap",zIndex:9999,pointerEvents:"none",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
@@ -2304,7 +2475,7 @@ function ClassTrackerInner({user}){
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
       {historyClassId && (()=>{const cls=data.classes.find(c=>c.id===historyClassId);return cls?<HistoryModal cls={cls} classNotes={data.notes[historyClassId]||{}} selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={()=>setHistoryClassId(null)}/>:null;})()}
-      {unlinkedClasses.length>0&&!linkingDone&&(
+      {unlinkedClasses.length>0&&!linkingDone&&!sectionChangeNotice&&(
         <SectionLinkingModal
           unlinkedClasses={unlinkedClasses}
           instituteSections={instituteSections}

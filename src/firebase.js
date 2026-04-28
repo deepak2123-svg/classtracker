@@ -549,7 +549,7 @@ export async function deleteGlobalInstitute(name) {
 }
 
 // ── Institute sections (admin-managed) ────────────────────────────────────────
-// config/sections = { [instituteName]: { gradeGroups: [...] } }
+// config/sections = { [instituteName]: { gradeGroups: [...], sectionChangeEvents: [...] } }
 // gradeGroup: { id, gradeNums, label, sections, slots, sectionOverrides }
 
 export async function getAllInstituteSections() {
@@ -559,12 +559,12 @@ export async function getAllInstituteSections() {
   } catch { return {}; }
 }
 
-export async function saveInstituteGradeGroups(instituteName, gradeGroups) {
+export async function saveInstituteGradeGroups(instituteName, gradeGroups, extraPatch = {}) {
   const snap = await getDoc(doc(db, "config", "sections"));
   const existing = snap.exists() ? snap.data() : {};
   await setDoc(doc(db, "config", "sections"), {
     ...existing,
-    [instituteName]: { ...(existing[instituteName]||{}), gradeGroups }
+    [instituteName]: { ...(existing[instituteName]||{}), ...extraPatch, gradeGroups }
   });
 }
 
@@ -584,6 +584,6 @@ export async function deleteInstituteGradeGroup(instituteName, groupId) {
   const updated = current.filter(g => g.id !== groupId);
   await setDoc(doc(db, "config", "sections"), {
     ...existing,
-    [instituteName]: { gradeGroups: updated }
+    [instituteName]: { ...(existing[instituteName] || {}), gradeGroups: updated }
   });
 }
