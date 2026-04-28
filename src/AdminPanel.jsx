@@ -123,21 +123,24 @@ function SectionRenameReviewModal({
   onBack,
   onConfirm,
   busy,
+  entityLabels,
 }){
   const removedCount = draft?.removedSections?.length || 0;
   const addedCount = draft?.addedSections?.length || 0;
+  const singular = entityLabels?.singular || "section";
+  const plural = entityLabels?.plural || "sections";
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.48)",zIndex:710,display:"flex",alignItems:"center",justifyContent:"center",padding:18,backdropFilter:"blur(6px)"}}>
       <div style={{width:"100%",maxWidth:620,maxHeight:"88vh",overflowY:"auto",background:G.surface,border:`1px solid ${G.border}`,borderRadius:24,boxShadow:"0 30px 80px rgba(15,23,42,0.2)"}}>
         <div style={{padding:"24px 24px 18px",borderBottom:`1px solid ${G.border}`}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#EEF4FF",border:"1px solid #D7E3FB",borderRadius:999,padding:"7px 12px",fontSize:12,fontWeight:700,color:G.navy,fontFamily:G.mono,letterSpacing:0.3,marginBottom:14}}>
-            Section change review
+            Rename review
           </div>
           <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.15,marginBottom:8}}>
             Tell teachers what changed
           </div>
           <div style={{fontSize:14,color:G.textM,lineHeight:1.7}}>
-            If a section was renamed, map the old name to the new one here. Teachers will get a one-time prompt, and their class history will stay intact.
+            {`If a ${singular} was renamed, map the old name to the new one here. Teachers will get a one-time prompt, and their class history will stay intact.`}
           </div>
         </div>
 
@@ -161,7 +164,7 @@ function SectionRenameReviewModal({
 
           {removedCount === 0 ? (
             <div style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:16,padding:"18px 16px",fontSize:14,color:G.textM,lineHeight:1.65}}>
-              This edit changes the section list, but there are no removed names to map. Saving will treat any extra names as brand-new sections.
+              {`This edit changes the ${singular} list, but there are no removed names to map. Saving will treat any extra names as brand-new ${plural}.`}
             </div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -171,7 +174,7 @@ function SectionRenameReviewModal({
                   <div key={oldSection} style={{background:"#FBFCFE",border:`1px solid ${G.border}`,borderRadius:18,padding:"16px 16px 14px"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:10}}>
                       <div>
-                        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:4}}>Old section</div>
+                        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:4}}>{`Old ${singular}`}</div>
                         <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display}}>{oldSection}</div>
                       </div>
                       <div style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>
@@ -180,7 +183,7 @@ function SectionRenameReviewModal({
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
                       <div>
-                        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:6}}>Now renamed as</div>
+                        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:6}}>{`New ${singular} name`}</div>
                         <select
                           value={selected}
                           onChange={e=>onChange(oldSection, e.target.value)}
@@ -194,8 +197,8 @@ function SectionRenameReviewModal({
                       </div>
                       <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
                         {selected
-                          ? <>Teachers with <strong>{oldSection}</strong> will be remapped to <strong>{selected}</strong>. {draft.timetableChanged ? "They'll also be told that future timetable slots changed." : "Their existing timetable pattern stays the same."}</>
-                          : <>No automatic rename will be sent for <strong>{oldSection}</strong>. Teachers can still relink manually later if needed.</>}
+                          ? <>Teachers using <strong>{oldSection}</strong> will be remapped to <strong>{selected}</strong>. {draft.timetableChanged ? "They'll also be told that future timetable slots changed." : "Their existing timetable pattern stays the same."}</>
+                          : <>{`No automatic rename will be sent for this ${singular}. Teachers can still relink manually later if needed.`}</>}
                       </div>
                     </div>
                   </div>
@@ -206,7 +209,7 @@ function SectionRenameReviewModal({
 
           {addedCount > 0 && (
             <div style={{marginTop:16,background:"#EEF4FF",border:"1px solid #D7E3FB",borderRadius:16,padding:"14px 16px"}}>
-              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.blue,marginBottom:6}}>Current section names</div>
+              <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.blue,marginBottom:6}}>{`Current ${plural} names`}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                 {draft.addedSections.map(section=>(
                   <span key={section} style={{background:"#fff",border:"1px solid #C7D7F5",borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:G.blue,fontFamily:G.mono}}>
@@ -225,7 +228,57 @@ function SectionRenameReviewModal({
           </button>
           <button onClick={onConfirm} disabled={busy}
             style={{background:G.navy,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:14,fontWeight:800,cursor:busy?"not-allowed":"pointer",fontFamily:G.sans,boxShadow:G.shadowSm}}>
-            {busy ? "Saving…" : "Save section update"}
+            {busy ? "Saving…" : `Save ${singular} update`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionQuickRenameModal({
+  term,
+  originalValue,
+  value,
+  error,
+  onChange,
+  onClose,
+  onSave,
+}){
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.42)",zIndex:720,display:"flex",alignItems:"center",justifyContent:"center",padding:18,backdropFilter:"blur(6px)"}}>
+      <div style={{width:"100%",maxWidth:460,background:G.surface,border:`1px solid ${G.border}`,borderRadius:22,boxShadow:"0 24px 64px rgba(15,23,42,0.2)"}}>
+        <div style={{padding:"24px 24px 16px",borderBottom:`1px solid ${G.border}`}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#EEF4FF",border:"1px solid #D7E3FB",borderRadius:999,padding:"7px 12px",fontSize:12,fontWeight:700,color:G.navy,fontFamily:G.mono,letterSpacing:0.3,marginBottom:14}}>
+            Quick rename
+          </div>
+          <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.15,marginBottom:8}}>
+            {`Rename this ${term}`}
+          </div>
+          <div style={{fontSize:14,color:G.textM,lineHeight:1.65}}>
+            {`Teachers using "${originalValue}" will see the new name after you save.`}
+          </div>
+        </div>
+        <div style={{padding:"18px 24px 22px"}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:6}}>{`New ${term} name`}</div>
+          <input
+            value={value}
+            onChange={e=>onChange(e.target.value)}
+            autoFocus
+            style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1px solid ${error ? G.red : G.borderM}`,fontSize:15,fontFamily:G.sans,color:G.text,background:"#fff",outline:"none"}}
+          />
+          {error && (
+            <div style={{marginTop:10,fontSize:13,color:G.red,lineHeight:1.5}}>{error}</div>
+          )}
+        </div>
+        <div style={{padding:"0 24px 24px",display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+          <button onClick={onClose}
+            style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:12,padding:"11px 18px",fontSize:14,fontWeight:700,color:G.textM,cursor:"pointer",fontFamily:G.sans}}>
+            Cancel
+          </button>
+          <button onClick={onSave}
+            style={{background:G.navy,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:G.sans,boxShadow:G.shadowSm}}>
+            Save rename
           </button>
         </div>
       </div>
@@ -383,6 +436,68 @@ function buildInitialSectionRenameSelections(draft){
   });
   return selections;
 }
+function mergeExplicitSectionRenames(records, oldSection, newSection){
+  const oldLabel = String(oldSection || "").trim();
+  const nextLabel = String(newSection || "").trim();
+  const oldKey = normaliseSectionKey(oldLabel);
+  const nextKey = normaliseSectionKey(nextLabel);
+  if(!oldKey || !nextKey || oldKey === nextKey) return records || [];
+  const nextRecords = [];
+  let linked = false;
+  (records || []).forEach(record => {
+    const recordOld = String(record?.oldSection || "").trim();
+    const recordNew = String(record?.newSection || "").trim();
+    const recordOldKey = normaliseSectionKey(recordOld);
+    const recordNewKey = normaliseSectionKey(recordNew);
+    if(!recordOldKey || !recordNewKey) return;
+    if(recordNewKey === oldKey || recordOldKey === oldKey){
+      nextRecords.push({ oldSection: recordOld, newSection: nextLabel });
+      linked = true;
+      return;
+    }
+    nextRecords.push({ oldSection: recordOld, newSection: recordNew });
+  });
+  if(!linked){
+    nextRecords.push({ oldSection: oldLabel, newSection: nextLabel });
+  }
+  const byOld = new Map();
+  nextRecords.forEach(record => {
+    const recordOld = String(record?.oldSection || "").trim();
+    const recordNew = String(record?.newSection || "").trim();
+    const recordOldKey = normaliseSectionKey(recordOld);
+    const recordNewKey = normaliseSectionKey(recordNew);
+    if(!recordOldKey || !recordNewKey || recordOldKey === recordNewKey) return;
+    byOld.set(recordOldKey, { oldSection: recordOld, newSection: recordNew });
+  });
+  return [...byOld.values()];
+}
+function pruneExplicitSectionRenames(records, removedSection){
+  const removedKey = normaliseSectionKey(removedSection);
+  return (records || []).filter(record => {
+    const oldKey = normaliseSectionKey(record?.oldSection);
+    const newKey = normaliseSectionKey(record?.newSection);
+    return oldKey && newKey && oldKey !== removedKey && newKey !== removedKey;
+  });
+}
+function buildExplicitSectionRenameSelections(previousGroup, nextGroup, records){
+  const previousSections = uniqueSectionNames(previousGroup?.sections || []);
+  const nextSections = uniqueSectionNames(nextGroup?.sections || []);
+  const previousLookup = new Set(previousSections.map(normaliseSectionKey));
+  const nextLookup = new Set(nextSections.map(normaliseSectionKey));
+  const selections = {};
+  (records || []).forEach(record => {
+    const oldSection = String(record?.oldSection || "").trim();
+    const newSection = String(record?.newSection || "").trim();
+    const oldKey = normaliseSectionKey(oldSection);
+    const newKey = normaliseSectionKey(newSection);
+    if(!oldKey || !newKey || oldKey === newKey) return;
+    if(!previousLookup.has(oldKey)) return;
+    if(nextLookup.has(oldKey)) return;
+    if(!nextLookup.has(newKey)) return;
+    selections[oldSection] = newSection;
+  });
+  return selections;
+}
 function applySectionRenameSelections(group, selections){
   const currentSections = new Set(uniqueSectionNames(group?.sections || []));
   const nextOverrides = { ...(group?.sectionOverrides || {}) };
@@ -417,6 +532,12 @@ function buildSectionChangeEvents(inst, previousGroup, nextGroup, selections, ti
     timetableChanged: !!timetableChanged,
     changes,
   }];
+}
+function getInstituteEntityLabels(instType){
+  const coaching = instType === "coaching_12" || instType === "coaching_grad";
+  return coaching
+    ? { singular:"batch", plural:"batches" }
+    : { singular:"section", plural:"sections" };
 }
 function mergeInstituteSectionChangeEvents(existingEvents, nextEvents){
   const merged = [...(existingEvents || []), ...(nextEvents || [])];
@@ -1166,12 +1287,17 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
   const [busy,       setBusy]       = React.useState(false);
   const [error,      setError]      = React.useState("");
   const [renameReview, setRenameReview] = React.useState(null);
+  const [quickRename, setQuickRename] = React.useState(null);
+  const [quickRenameError, setQuickRenameError] = React.useState("");
+  const [pendingRenames, setPendingRenames] = React.useState([]);
 
   const fmtEnd  = (t,m)=>{ if(!t) return ""; const[h,mn]=t.split(":").map(Number); const e=new Date(2000,0,1,h,mn+m); return String(e.getHours()).padStart(2,"0")+":"+String(e.getMinutes()).padStart(2,"0"); };
   const fmtDisp = t=>{ if(!t) return "--"; const[h,m]=t.split(":").map(Number); return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`; };
   const toMins  = t=>{ if(!t) return 0; const[h,m]=t.split(":").map(Number); return h*60+m; };
+  const sectionTerm = isCoaching ? "batch" : "section";
+  const sectionText = isCoaching ? batchText : secText;
 
-  const sections    = (isCoaching ? batchText : secText).split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+  const sections    = uniqueSectionNames(sectionText.split(/[\n,]/).map(s=>s.trim()).filter(Boolean));
   const validSlots  = startTimes.map((s,i)=>({start:s,dur:slotDurs[i]||durMins})).filter(s=>s.start).sort((a,b)=>toMins(a.start)-toMins(b.start));
   const inp = { width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid ${W.border}`,fontSize:15,fontFamily:W.sans,outline:"none",background:W.bg,color:W.text,boxSizing:"border-box" };
 
@@ -1184,6 +1310,89 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
   function addSuggestion(s) {
     const lines = batchText.split("\n").map(l=>l.trim()).filter(Boolean);
     if (!lines.includes(s)) setBatchText([...lines, s].join("\n"));
+  }
+  function setSectionLines(nextSections) {
+    const nextText = uniqueSectionNames(nextSections).join("\n");
+    if (isCoaching) setBatchText(nextText);
+    else setSecText(nextText);
+  }
+  function updateSectionName(oldName, newName) {
+    const oldKey = normaliseSectionKey(oldName);
+    setSectionLines(sections.map(section => normaliseSectionKey(section) === oldKey ? newName : section));
+  }
+  function removeSectionName(sectionName) {
+    const removeKey = normaliseSectionKey(sectionName);
+    setSectionLines(sections.filter(section => normaliseSectionKey(section) !== removeKey));
+    setOverrides(curr => {
+      const next = { ...curr };
+      delete next[sectionName];
+      return next;
+    });
+    setPendingRenames(curr => pruneExplicitSectionRenames(curr, sectionName));
+  }
+  function openQuickRename(sectionName) {
+    setQuickRename({ oldName: sectionName, nextValue: sectionName });
+    setQuickRenameError("");
+    setError("");
+  }
+  function confirmQuickRename() {
+    const oldName = String(quickRename?.oldName || "").trim();
+    const nextName = String(quickRename?.nextValue || "").trim();
+    if (!oldName) {
+      setQuickRename(null);
+      return;
+    }
+    if (!nextName) {
+      setQuickRenameError(`Enter a ${sectionTerm} name.`);
+      return;
+    }
+    const duplicate = sections.some(section => (
+      normaliseSectionKey(section) === normaliseSectionKey(nextName) &&
+      normaliseSectionKey(section) !== normaliseSectionKey(oldName)
+    ));
+    if (duplicate) {
+      setQuickRenameError(`That ${sectionTerm} name already exists.`);
+      return;
+    }
+    updateSectionName(oldName, nextName);
+    setOverrides(curr => {
+      const next = { ...curr };
+      if (oldName !== nextName && (next[oldName] || []).length) {
+        next[nextName] = next[nextName] || next[oldName];
+      }
+      delete next[oldName];
+      return next;
+    });
+    if (normaliseSectionKey(oldName) !== normaliseSectionKey(nextName)) {
+      setPendingRenames(curr => mergeExplicitSectionRenames(curr, oldName, nextName));
+    }
+    setQuickRename(null);
+    setQuickRenameError("");
+  }
+  function renderSectionActionList() {
+    if (!sections.length) return null;
+    return (
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:12}}>
+        {sections.map(section => (
+          <div key={section} style={{background:W.surface,border:`1px solid ${W.border}`,borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+            <div style={{minWidth:0,flex:"1 1 220px"}}>
+              <div style={{fontSize:14,fontWeight:700,color:W.text,fontFamily:W.display,wordBreak:"break-word"}}>{section}</div>
+              <div style={{fontSize:12,color:W.textL,marginTop:4}}>{`Teachers will see this exact ${sectionTerm} name.`}</div>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",flexShrink:0}}>
+              <button onClick={()=>openQuickRename(section)}
+                style={{padding:"8px 12px",borderRadius:10,border:`1px solid ${W.blue}`,background:W.blueL,color:W.blue,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:W.sans}}>
+                Rename
+              </button>
+              <button onClick={()=>removeSectionName(section)}
+                style={{padding:"8px 12px",borderRadius:10,border:`1px solid ${W.border}`,background:"#fff",color:W.textM,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:W.sans}}>
+                Remove
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   function buildSavedGroup() {
@@ -1212,22 +1421,36 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
     const saved = buildSavedGroup();
     if(isEdit){
       const draft = buildSectionChangeDraft(group, saved);
-      if(draft.removedSections.length){
+      const explicitSelections = buildExplicitSectionRenameSelections(group, saved, pendingRenames);
+      const explicitKeys = new Set(Object.keys(explicitSelections).map(normaliseSectionKey));
+      const unresolvedRemoved = draft.removedSections.filter(section => !explicitKeys.has(normaliseSectionKey(section)));
+      if(unresolvedRemoved.length){
         setRenameReview({
-          draft,
-          selections: buildInitialSectionRenameSelections(draft),
+          draft: { ...draft, removedSections: unresolvedRemoved },
+          selections: buildInitialSectionRenameSelections({ ...draft, removedSections: unresolvedRemoved }),
           savedGroup: saved,
+          explicitSelections,
         });
         return;
       }
+      const nextGroup = applySectionRenameSelections(saved, explicitSelections);
+      const events = buildSectionChangeEvents(inst, group, nextGroup, explicitSelections, draft.timetableChanged);
+      finaliseSave(nextGroup, events.length ? {
+        sectionChangeEvents: events,
+      } : null);
+      return;
     }
     finaliseSave(saved, null);
   }
 
   function confirmRenameReview() {
     if(!renameReview?.savedGroup) return;
-    const nextGroup = applySectionRenameSelections(renameReview.savedGroup, renameReview.selections);
-    const events = buildSectionChangeEvents(inst, group, nextGroup, renameReview.selections, renameReview.draft?.timetableChanged);
+    const finalSelections = {
+      ...(renameReview.explicitSelections || {}),
+      ...(renameReview.selections || {}),
+    };
+    const nextGroup = applySectionRenameSelections(renameReview.savedGroup, finalSelections);
+    const events = buildSectionChangeEvents(inst, group, nextGroup, finalSelections, renameReview.draft?.timetableChanged);
     finaliseSave(nextGroup, {
       sectionChangeEvents: events,
     });
@@ -1268,7 +1491,8 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
         placeholder={"11th NDA\n11th IIT Star\n11th MED\n12th NDA"}
         style={{...inp,resize:"vertical",lineHeight:1.9,fontFamily:W.mono,fontSize:14}}/>
       <div style={{fontSize:12,color:W.textL,textAlign:"right",marginTop:5}}>{sections.length} section{sections.length!==1?"s":""}</div>
-      {sections.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>}
+      {sections.length>0&&<div style={{fontSize:12,color:W.textM,marginTop:10,lineHeight:1.55}}>Use Rename for simple name changes so teachers get the right update automatically after you save.</div>}
+      {renderSectionActionList()}
     </>);
   }
 
@@ -1301,7 +1525,8 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
         placeholder={"Dronacharya\nLakshya\nArjun\nMorning Batch"}
         style={{...inp,resize:"vertical",lineHeight:1.9,fontFamily:W.mono,fontSize:14}}/>
       <div style={{fontSize:12,color:W.textL,textAlign:"right",marginTop:5}}>{sections.length} batch{sections.length!==1?"es":""}</div>
-      {sections.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8}}>{sections.map(s=><span key={s} style={{background:W.blueL,color:W.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontWeight:600,fontFamily:W.mono}}>{s}</span>)}</div>}
+      {sections.length>0&&<div style={{fontSize:12,color:W.textM,marginTop:10,lineHeight:1.55}}>Use Rename for a direct batch-name change. If you also adjust time slots before saving, teachers will be told about that too.</div>}
+      {renderSectionActionList()}
 
       {/* Optional group label */}
       <div style={{marginTop:16}}>
@@ -1524,10 +1749,28 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:950,display:"flex",alignItems:"stretch",justifyContent:"center",padding:12,backdropFilter:"blur(6px)",boxSizing:"border-box"}}>
+      {quickRename && (
+        <SectionQuickRenameModal
+          term={sectionTerm}
+          originalValue={quickRename.oldName}
+          value={quickRename.nextValue}
+          error={quickRenameError}
+          onChange={nextValue=>{
+            setQuickRenameError("");
+            setQuickRename(curr=>curr ? { ...curr, nextValue } : curr);
+          }}
+          onClose={()=>{
+            setQuickRename(null);
+            setQuickRenameError("");
+          }}
+          onSave={confirmQuickRename}
+        />
+      )}
       {renameReview && (
         <SectionRenameReviewModal
           draft={renameReview.draft}
           selections={renameReview.selections}
+          entityLabels={getInstituteEntityLabels(instType)}
           onChange={(oldSection, nextValue)=>setRenameReview(curr=>curr ? {
             ...curr,
             selections:{ ...curr.selections, [oldSection]: nextValue },

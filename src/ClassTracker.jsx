@@ -1452,6 +1452,13 @@ function normaliseSectionKey(value) {
 function getInstituteSectionNames(instData) {
   return [...new Set((instData?.gradeGroups || []).flatMap(group => group.sections || []).map(section => String(section || "").trim()).filter(Boolean))];
 }
+function getInstituteSectionEntityLabels(instData) {
+  const type = String(instData?.type || "").trim();
+  const coaching = type === "coaching_12" || type === "coaching_grad";
+  return coaching
+    ? { singular:"batch", plural:"batches" }
+    : { singular:"section", plural:"sections" };
+}
 function getInstituteSectionChangeEvents(instData) {
   return [...(instData?.sectionChangeEvents || [])]
     .filter(event => Array.isArray(event?.changes) && event.changes.length > 0)
@@ -1466,6 +1473,7 @@ function buildSectionChangeApplication(classes, instituteSections, seenEventIds)
     if (!cls || cls.left) return cls;
     const instData = instituteSections?.[cls.institute];
     if (!instData) return cls;
+    const entityLabels = getInstituteSectionEntityLabels(instData);
     const events = getInstituteSectionChangeEvents(instData);
     let nextSection = cls.section || "";
     let changed = false;
@@ -1486,6 +1494,8 @@ function buildSectionChangeApplication(classes, instituteSections, seenEventIds)
         oldSection: String(match.oldSection || nextSection || "").trim(),
         newSection: mappedSection,
         timetableChanged: !!event.timetableChanged,
+        entitySingular: entityLabels.singular,
+        entityPlural: entityLabels.plural,
       });
       triggeredEventIds.add(eventId);
       if (mappedSection && normaliseSectionKey(mappedSection) !== normaliseSectionKey(nextSection)) {
@@ -1721,28 +1731,47 @@ function SectionLinkingModal({ unlinkedClasses, instituteSections, onConfirm, on
   );
 }
 
+function capitalizeWord(value) {
+  const text = String(value || "").trim();
+  return text ? text[0].toUpperCase() + text.slice(1) : "";
+}
+
+function describeSectionChangeSubject(items) {
+  const singulars = [...new Set((items || []).map(item => String(item?.entitySingular || "section")).filter(Boolean))];
+  if (singulars.length === 1) {
+    const singular = singulars[0];
+    return {
+      singular,
+      plural: String(items?.[0]?.entityPlural || `${singular}s`),
+    };
+  }
+  return { singular:"class name", plural:"class names" };
+}
+
 function SectionChangeNoticeModal({ items, onClose }) {
-  const many = (items || []).length > 1;
   const groupedItems = (items || []).reduce((list, item) => {
     const key = [item.eventId, item.classId, item.oldSection, item.newSection].join("|");
     if (list.some(row => row.key === key)) return list;
     list.push({ ...item, key });
     return list;
   }, []);
+  const many = groupedItems.length > 1;
+  const subject = describeSectionChangeSubject(groupedItems);
+  const badgeLabel = subject.singular === "class name" ? "Rename update" : `${capitalizeWord(subject.singular)} rename`;
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)"}}>
       <div style={{background:G.surface,borderRadius:24,width:"100%",maxWidth:520,maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.28)"}}>
         <div style={{padding:"22px 20px 16px",borderBottom:`1px solid ${G.border}`}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,background:G.greenL,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:G.green,fontFamily:G.mono,letterSpacing:0.3,marginBottom:12}}>
-            Section update
+            {badgeLabel}
           </div>
           <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:6}}>
-            {many ? "Your sections were updated" : "Your section was updated"}
+            {many ? `Your ${subject.plural} were renamed` : `Your ${subject.singular} was renamed`}
           </div>
           <div style={{fontSize:14,color:G.textM,lineHeight:1.65}}>
             {many
-              ? "Your admin renamed some sections. We've kept your class history safe and updated the class names below for future logging."
-              : "Your admin renamed a section. We've kept your class history safe and updated the class name below for future logging."}
+              ? `Your admin renamed some ${subject.plural}. We've kept your class history safe and updated the names below for future logging.`
+              : `Your admin renamed a ${subject.singular}. We've kept your class history safe and updated the name below for future logging.`}
           </div>
         </div>
         <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
@@ -1757,7 +1786,7 @@ function SectionChangeNoticeModal({ items, onClose }) {
                 </span>
               </div>
               <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
-                🏫 {item.institute}{item.subject ? ` · ${item.subject}` : ""}
+                {`${capitalizeWord(item.entitySingular || "section")} rename · 🏫 ${item.institute}${item.subject ? ` · ${item.subject}` : ""}`}
               </div>
             </div>
           ))}
