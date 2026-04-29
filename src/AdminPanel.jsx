@@ -2174,9 +2174,9 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
 function AdminPanelInner({user}){
   const PANEL_LIMITS = React.useMemo(()=>({
-    p1:{ min:96, max:340, collapsed:80, default:175 },
-    p2:{ min:160, max:380, collapsed:90, default:205 },
-    p3:{ min:110, max:360, collapsed:80, default:200 },
+    p1:{ min:112, max:340, collapsed:118, default:175 },
+    p2:{ min:160, max:380, collapsed:124, default:205 },
+    p3:{ min:112, max:360, collapsed:118, default:200 },
   }),[]);
   const [teachers,    setTeachers]    = useState([]);
   const [fullData,    setFullData]    = useState({});
@@ -4317,19 +4317,18 @@ function AdminPanelInner({user}){
       : label === "Classes"
         ? "📚"
         : label === "Institutes"
-          ? "🏫"
-          : "🗂";
+        ? "🏫"
+        : "🗂";
     return (
-      <div style={{display:"flex",justifyContent:"center",padding:touchRail?"10px 4px 14px":"10px 3px 14px",flex:"0 0 auto"}}>
+      <div style={{display:"flex",justifyContent:"center",padding:touchRail?"10px 6px 14px":"10px 5px 14px",flex:"0 0 auto"}}>
         <div style={{
           width:"100%",
-          maxWidth:78,
-          minHeight:touchRail ? 248 : 232,
+          minHeight:touchRail ? 252 : 238,
           display:"flex",
           flexDirection:"column",
           alignItems:"center",
-          gap:touchRail?12:11,
-          padding:touchRail?"12px 8px 14px":"12px 7px 14px",
+          gap:touchRail?12:10,
+          padding:touchRail?"12px 10px 14px":"12px 10px 14px",
           borderRadius:28,
           background:`linear-gradient(180deg, ${tone.bg} 0%, #FFFFFF 88%)`,
           border:`1px solid ${tone.edge}`,
@@ -4338,33 +4337,35 @@ function AdminPanelInner({user}){
           overflow:"visible",
         }}>
           <CollapseButton collapsed direction={direction} tone={tone} onClick={onExpand} title={`Expand ${label}`} />
-          <div style={{width:touchRail?38:36,height:touchRail?38:36,borderRadius:14,background:"rgba(255,255,255,0.88)",border:`1px solid ${tone.edge}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}}>
+          <div style={{width:touchRail?42:40,height:touchRail?42:40,borderRadius:15,background:"rgba(255,255,255,0.88)",border:`1px solid ${tone.edge}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}}>
             {folderIcon}
           </div>
-          <span style={{fontSize:10,letterSpacing:1.05,color:tone.accent,fontFamily:G.mono,fontWeight:800,textTransform:"uppercase",background:"rgba(255,255,255,0.76)",border:`1px solid ${tone.edge}`,borderRadius:999,padding:"4px 8px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.5)"}}>
-            {step}
-          </span>
-          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",width:"100%",padding:"4px 0",minHeight:96}}>
-            <span style={{
-              writingMode:"vertical-rl",
-              textOrientation:"upright",
-              fontSize:touchRail?10.5:10,
-              letterSpacing:1.5,
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,width:"100%",padding:"2px 0 0"}}>
+            <span style={{fontSize:10.5,letterSpacing:1.1,color:tone.accent,fontFamily:G.mono,fontWeight:800,textTransform:"uppercase",background:"rgba(255,255,255,0.78)",border:`1px solid ${tone.edge}`,borderRadius:999,padding:"5px 10px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.5)"}}>
+              {step}
+            </span>
+            <div style={{
+              width:"100%",
+              textAlign:"center",
               color:tone.text,
               fontFamily:G.display,
+              fontSize:14.5,
               fontWeight:800,
-              textTransform:"uppercase",
-              lineHeight:1.05,
-              whiteSpace:"nowrap",
+              lineHeight:1.15,
+              letterSpacing:0.1,
               textShadow:"0 1px 0 rgba(255,255,255,0.68)",
+              wordBreak:"break-word",
             }}>
               {label}
-            </span>
+            </div>
           </div>
+          <div style={{flex:1}} />
           {badge!==undefined && (
-            <span style={{background:tone.tab,color:tone.accent,border:`1px solid ${tone.edge}`,borderRadius:999,padding:"5px 10px",fontSize:10,fontFamily:G.mono,fontWeight:800,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.45)"}}>
-              {badge}
-            </span>
+            <div style={{display:"flex",justifyContent:"center",width:"100%"}}>
+              <span style={{minWidth:38,background:tone.tab,color:tone.accent,border:`1px solid ${tone.edge}`,borderRadius:999,padding:"6px 10px",fontSize:11,fontFamily:G.mono,fontWeight:800,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.45)",textAlign:"center"}}>
+                {badge}
+              </span>
+            </div>
           )}
         </div>
       </div>
