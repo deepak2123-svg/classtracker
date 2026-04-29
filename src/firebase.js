@@ -391,14 +391,30 @@ export async function verifyInviteToken(token) {
 }
 
 export async function useInviteToken(token, uid) {
-  // Mark invite as used
-  await setDoc(doc(db, "invites", token), { used: true, usedBy: uid, usedAt: Date.now() }, { merge: true });
-  // Promote to admin
-  await setDoc(doc(db, "roles", uid), {
-    role: "admin",
-    grantedAt: Date.now(),
-    grantedBy: "invite-link",
-    inviteToken: token,
+  const inviteRef = doc(db, "invites", token);
+  const roleRef = doc(db, "roles", uid);
+  await runTransaction(db, async (tx) => {
+    const inviteSnap = await tx.get(inviteRef);
+    if (!inviteSnap.exists()) throw new Error("Invalid invite link.");
+
+    const invite = inviteSnap.data() || {};
+    if (Date.now() > invite.expiresAt) throw new Error("This invite link has expired.");
+    if (invite.used && invite.usedBy !== uid) {
+      throw new Error("This invite link has already been used.");
+    }
+
+    const now = Date.now();
+    tx.set(inviteRef, {
+      used: true,
+      usedBy: uid,
+      usedAt: now,
+    }, { merge: true });
+    tx.set(roleRef, {
+      role: "admin",
+      grantedAt: now,
+      grantedBy: "invite-link",
+      inviteToken: token,
+    }, { merge: true });
   });
 }
 

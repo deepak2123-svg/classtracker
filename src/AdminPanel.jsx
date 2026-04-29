@@ -934,6 +934,15 @@ function lastEntryTs(notes={}){
   } catch(e){}
   return latest||null;
 }
+function shortDateLabel(ts){
+  if(!ts) return "";
+  return new Date(ts).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+}
+function lastEntryCaption(ts){
+  if(!ts) return "Last entry: no logs yet";
+  const relative = daysAgo(ts);
+  return `Last entry: ${relative || shortDateLabel(ts)}`;
+}
 function getEntriesInRange(classNotes={}, days=null){
   // returns flat array of {dateKey, entry} sorted by time asc
   const cutoff=days?Date.now()-days*24*60*60*1000:0;
@@ -2157,6 +2166,35 @@ function AdminPanelInner({user}){
     return Math.max(fromIndex,fromFull);
   },[teachers,fullData]);
 
+  const instituteStats = useMemo(()=>{
+    return institutes.reduce((acc, inst)=>{
+      const teacherUids = new Set();
+      const classKeys = new Set();
+      teachers.forEach(t=>{
+        const d = fullData[t.uid];
+        if(d){
+          const classesHere = (d.classes||[]).filter(c=>sameInstituteName(c.institute, inst));
+          if(classesHere.length){
+            teacherUids.add(t.uid);
+            classesHere.forEach(c=>{
+              const key = (c.section||"").trim().toLowerCase();
+              if(key) classKeys.add(key);
+            });
+          }
+          return;
+        }
+        if((t.institutes||[]).some(i=>sameInstituteName(i, inst))){
+          teacherUids.add(t.uid);
+        }
+      });
+      acc[inst] = {
+        teacherCount: teacherUids.size,
+        classCount: classKeys.size || teacherUids.size,
+      };
+      return acc;
+    }, {});
+  },[institutes,teachers,fullData]);
+
   // ── Teachers at selected institute ────────────────────────────────────────
   const instTeachers=useMemo(()=>{
     if(!selInst) return [];
@@ -2207,14 +2245,42 @@ function AdminPanelInner({user}){
     return institutes.filter(inst=>(inst||"").toLowerCase().includes(instSearchKey));
   },[institutes,instSearchKey]);
 
+  const instTeacherMeta = useMemo(()=>{
+    const meta = {};
+    if(!selInst) return meta;
+    instTeachers.forEach(t=>{
+      const d = fullData[t.uid];
+      let ts = 0;
+      if(d){
+        ts = (d.classes||[])
+          .filter(c=>sameInstituteName(c.institute, selInst))
+          .reduce((latest,c)=>Math.max(latest, lastEntryTs((d.notes||{})[c.id]||{}) || 0), 0);
+      } else {
+        ts = Number(t.lastActive || 0);
+      }
+      meta[t.uid] = {
+        lastEntryTs: ts || null,
+        label: lastEntryCaption(ts || null),
+      };
+    });
+    return meta;
+  },[selInst,instTeachers,fullData]);
+
   const visibleInstTeachers = useMemo(()=>{
-    if(!p2SearchKey) return instTeachers;
-    return instTeachers.filter(t=>{
+    const filtered = !p2SearchKey ? instTeachers : instTeachers.filter(t=>{
       const name = (fullData[t.uid]?.profile?.name || t.name || "").toLowerCase();
       const otherInsts = (t.institutes||[]).join(" ").toLowerCase();
       return name.includes(p2SearchKey) || otherInsts.includes(p2SearchKey);
     });
-  },[instTeachers,fullData,p2SearchKey]);
+    return [...filtered].sort((a,b)=>{
+      const aTs = instTeacherMeta[a.uid]?.lastEntryTs || 0;
+      const bTs = instTeacherMeta[b.uid]?.lastEntryTs || 0;
+      if(bTs !== aTs) return bTs - aTs;
+      const aName = fullData[a.uid]?.profile?.name || a.name || "";
+      const bName = fullData[b.uid]?.profile?.name || b.name || "";
+      return exportTextSorter.compare(aName, bName);
+    });
+  },[instTeachers,fullData,p2SearchKey,instTeacherMeta]);
 
   const visibleInstClasses = useMemo(()=>{
     if(!p2SearchKey) return instClasses;
@@ -2514,6 +2580,7 @@ function AdminPanelInner({user}){
       .map(t=>{
         const d = fullData[t.uid];
         const teacherName = d?.profile?.name || t.name || "Teacher";
+        const fallbackLastEntryTs = instTeacherMeta[t.uid]?.lastEntryTs || null;
         if(!d){
           return {
             uid:t.uid,
@@ -2524,6 +2591,7 @@ function AdminPanelInner({user}){
             weekEntries:0,
             monthEntries:0,
             todayUpdated:false,
+            lastEntryTs:fallbackLastEntryTs,
           };
         }
         const classes = (d.classes||[]).filter(c=>sameInstituteName(c.institute, selInst));
@@ -2543,16 +2611,18 @@ function AdminPanelInner({user}){
           weekEntries:stats.weekEntries,
           monthEntries:stats.monthEntries,
           todayUpdated:stats.todayEntries>0,
+          lastEntryTs:fallbackLastEntryTs,
         };
       })
       .sort((a,b)=>{
         if(a.loaded !== b.loaded) return a.loaded ? -1 : 1;
-        if(a.todayUpdated !== b.todayUpdated) return a.todayUpdated ? 1 : -1;
+        if((b.lastEntryTs||0) !== (a.lastEntryTs||0)) return (b.lastEntryTs||0) - (a.lastEntryTs||0);
+        if(a.todayUpdated !== b.todayUpdated) return a.todayUpdated ? -1 : 1;
         if(b.weekEntries !== a.weekEntries) return b.weekEntries - a.weekEntries;
         if(b.monthEntries !== a.monthEntries) return b.monthEntries - a.monthEntries;
         return exportTextSorter.compare(a.name,b.name);
       });
-  },[selInst,instTeachers,fullData]);
+  },[selInst,instTeachers,fullData,instTeacherMeta]);
 
   const teacherEntrySummary = useMemo(()=>{
     const loaded = teacherEntryStatus.filter(item=>item.loaded);
@@ -2658,16 +2728,7 @@ function AdminPanelInner({user}){
   const globalInstituteHighlights = useMemo(()=>{
     return institutes
       .map(inst=>{
-        const teacherCount = teachers.filter(t=>{
-          const idxInsts=t.institutes||[];
-          if(idxInsts.includes(inst)) return true;
-          return (fullData[t.uid]?.classes||[]).some(c=>sameInstituteName(c.institute,inst));
-        }).length;
-        const classCount = teachers.reduce((sum,t)=>{
-          const d = fullData[t.uid];
-          if(!d) return sum;
-          return sum + (d.classes||[]).filter(c=>sameInstituteName(c.institute,inst)).length;
-        },0);
+        const stats = instituteStats[inst] || { teacherCount:0, classCount:0 };
         const entryCount = teachers.reduce((sum,t)=>{
           const d = fullData[t.uid];
           if(!d) return sum;
@@ -2675,11 +2736,11 @@ function AdminPanelInner({user}){
             .filter(c=>sameInstituteName(c.institute,inst))
             .reduce((classSum,c)=>classSum + Object.values((d.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
         },0);
-        return { inst, teacherCount, classCount, entryCount };
+        return { inst, teacherCount:stats.teacherCount, classCount:stats.classCount, entryCount };
       })
       .sort((a,b)=>b.entryCount-a.entryCount || b.classCount-a.classCount || exportTextSorter.compare(a.inst,b.inst))
       .slice(0,5);
-  },[institutes,teachers,fullData]);
+  },[institutes,teachers,fullData,instituteStats]);
 
   // ── Role actions ──────────────────────────────────────────────────────────
   // Save a new global institute to Firestore config
@@ -3887,6 +3948,8 @@ function AdminPanelInner({user}){
     const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
     const touchRail = coarsePointer || isWeakDevice;
     const compactLabel = label.length > 7;
+    const railMinHeight = touchRail ? 208 : 196;
+    const railLabelHeight = touchRail ? 94 : 82;
     const folderIcon = label === "Teachers"
       ? "👥"
       : label === "Classes"
@@ -3895,10 +3958,10 @@ function AdminPanelInner({user}){
           ? "🏫"
           : "🗂";
     return (
-      <div style={{display:"flex",flexDirection:"column",alignItems:"stretch",height:"100%",minHeight:0,padding:touchRail?"5px 3px 5px 4px":"4px 2px 4px 3px"}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"stretch",minHeight:0,padding:touchRail?"6px 3px 10px 4px":"5px 2px 10px 3px"}}>
         <div style={{
           width:"100%",
-          height:"100%",
+          minHeight:railMinHeight,
           display:"flex",
           flexDirection:"column",
           alignItems:"center",
@@ -3917,7 +3980,7 @@ function AdminPanelInner({user}){
           <div style={{width:touchRail?34:36,height:touchRail?34:36,borderRadius:12,background:"rgba(255,255,255,0.84)",border:`1px solid ${tone.edge}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}}>
             {folderIcon}
           </div>
-          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",width:"100%",overflow:"hidden"}}>
+          <div style={{minHeight:railLabelHeight,display:"flex",alignItems:"center",justifyContent:"center",width:"100%",padding:"4px 0 2px",overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",gap:touchRail?8:10,transform:"rotate(-90deg)",transformOrigin:"center",whiteSpace:"nowrap",maxWidth:compactLabel?176:162}}>
               <span style={{fontSize:9.5,letterSpacing:1.1,color:tone.accent,fontFamily:G.mono,fontWeight:800,textTransform:"uppercase",background:"rgba(255,255,255,0.75)",border:`1px solid ${tone.edge}`,borderRadius:999,padding:"4px 7px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.5)"}}>
                 {step}
@@ -4347,7 +4410,7 @@ function AdminPanelInner({user}){
             :<div style={{display:"flex",flexDirection:"column",gap:10}}>
               {institutes.map((inst,instIdx)=>{
                 const instTeacherList=teachers.filter(t=>{const d=fullData[t.uid];if(d)return(d.classes||[]).some(c=>(c.institute||"").trim()===inst.trim());return(t.institutes||[]).some(i=>i.trim()===inst.trim());});
-                const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||instTeacherList.length;
+                const clsCount=instituteStats[inst]?.classCount || instTeacherList.length;
                 return(
                   <div key={inst}
                     style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`}}>
@@ -4756,9 +4819,10 @@ function AdminPanelInner({user}){
           <div style={{fontSize:11,fontWeight:700,color:G.textL,letterSpacing:1.5,fontFamily:G.sans,textTransform:"uppercase",marginBottom:12}}>Institutes</div>
           {renderSearchInput(instSearch,setInstSearch,"Search institutes",true)}
           <div style={{fontSize:12,color:G.textL,margin:"10px 2px 12px"}}>{visibleInstitutes.length} of {institutes.length} institutes</div>
-          {visibleInstitutes.map((inst,idx)=>{
-            const tCount=teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())||(fullData[t.uid]?.classes||[]).some(c=>(c.institute||"").trim()===inst.trim())).length;
-            const clsCount=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).filter(c=>(c.institute||"").trim()===inst.trim()).length,0)||teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim())).length;
+              {visibleInstitutes.map((inst,idx)=>{
+            const stats = instituteStats[inst] || { teacherCount:0, classCount:0 };
+            const tCount = stats.teacherCount;
+            const clsCount = stats.classCount;
             const isDragging=dragInst===inst;
             const isDragOver=dragOverInst===inst&&dragInst!==inst;
             return(
@@ -4909,11 +4973,13 @@ function AdminPanelInner({user}){
             const d=fullData[t.uid]||{};
             const name=d.profile?.name||t.name||"?";
             const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
+            const activityLabel = instTeacherMeta[t.uid]?.label || lastEntryCaption(null);
             return(
               <div key={t.uid} onClick={()=>openTeacherSelection(t.uid)}
                 style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                 <div>
                   <div style={{fontSize:16,fontWeight:700,color:G.text}}>{name}</div>
+                  <div style={{fontSize:12,color:G.textL,marginTop:4,fontFamily:G.mono}}>{activityLabel}</div>
                   {otherInsts.length>0&&<div style={{fontSize:13,color:G.textM,marginTop:2,fontStyle:"italic"}}>also at {otherInsts.join(", ")}</div>}
                 </div>
                 <span style={{fontSize:20,color:G.textL}}>›</span>
@@ -5357,16 +5423,9 @@ function AdminPanelInner({user}){
                 )}
                 {visibleInstitutes.map(inst=>{
                   const isSel=inst===selInst;
-                  const tCount=teachers.filter(t=>{
-                    const idxInsts=t.institutes||[];
-                    if(idxInsts.includes(inst)) return true;
-                    return (fullData[t.uid]?.classes||[]).some(c=>c.institute===inst);
-                  }).length;
-                  const clsCount=instClasses.length > 0 && inst===selInst
-                    ? instClasses.length
-                    : Object.values(fullData).reduce((s,d)=>{
-                        return s+(d.classes||[]).filter(c=>c.institute===inst).length;
-                      },0) || teachers.filter(t=>(t.institutes||[]).includes(inst)).length;
+                  const stats = instituteStats[inst] || { teacherCount:0, classCount:0 };
+                  const tCount = stats.teacherCount;
+                  const clsCount = stats.classCount;
                   return(
                     <div key={inst} style={{position:"relative",display:"flex",alignItems:"center",gap:4}}>
                       <div onClick={()=>onSelectInstitute(inst)}
@@ -5450,6 +5509,7 @@ function AdminPanelInner({user}){
                   const d=fullData[t.uid]||{};
                   const name=d.profile?.name||t.name||"?";
                   const isSel=selP2===t.uid;
+                  const activityLabel = instTeacherMeta[t.uid]?.label || lastEntryCaption(null);
                   return(
                     <div key={t.uid} onClick={()=>openTeacherSelection(t.uid)}
                       style={{...siBase,display:"flex",alignItems:"center",gap:9,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
@@ -5460,6 +5520,7 @@ function AdminPanelInner({user}){
                       </div>
                       <div style={{minWidth:0}}>
                         <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
+                        <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:3}}>{activityLabel}</div>
 
                         {(()=>{
                           const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());

@@ -9,12 +9,19 @@ import AdminPanel from "./AdminPanel";
 
 // VITE_APP_MODE = "admin" on ctadmin.vercel.app, unset on teacherct.vercel.app
 const IS_ADMIN_APP = import.meta.env.VITE_APP_MODE === "admin";
-const HAS_ADMIN_INVITE = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("invite");
+const ADMIN_INVITE_STORAGE_KEY = "ct_admin_invite_token";
+
+function hasPendingAdminInvite() {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has("invite") || !!window.sessionStorage.getItem(ADMIN_INVITE_STORAGE_KEY);
+}
 
 function App() {
   const [user,        setUser]        = useState(undefined); // undefined = loading
   const [role,        setRole]        = useState(null);
   const [roleLoading, setRoleLoading] = useState(false);
+  const hasAdminInvite = hasPendingAdminInvite();
 
   // Prevents onAuth's async getUserRole from overwriting the role
   // after handleAdminVerified has already set it correctly.
@@ -59,7 +66,7 @@ function App() {
 
     // Invite-based admin activation can briefly sign the user in before the role handoff
     // completes. Keep the invite-aware auth screen mounted so it can finish promotion.
-    if (HAS_ADMIN_INVITE) return <AdminAuth onVerified={handleAdminVerified} currentUser={user} />;
+    if (hasAdminInvite) return <AdminAuth onVerified={handleAdminVerified} currentUser={user} />;
 
     // Signed in but role not admin — show denied
     return <AccessDenied />;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { loginWithGoogle, loginWithEmail, signupWithEmail, verifyInviteToken, useInviteToken, db, saveProfileName } from "./firebase";
+import { loginWithGoogle, loginWithEmail, signupWithEmail, useInviteToken, db, saveProfileName } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { friendlyError } from "./shared.jsx";
 
@@ -10,6 +10,23 @@ const G = {
   red:"#C93030", sans:"'Inter',sans-serif",
   display:"'Poppins',sans-serif", mono:"'JetBrains Mono',monospace",
 };
+
+const ADMIN_INVITE_STORAGE_KEY = "ct_admin_invite_token";
+
+function readInviteToken() {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("invite") || window.sessionStorage.getItem(ADMIN_INVITE_STORAGE_KEY) || null;
+  if (token) {
+    window.sessionStorage.setItem(ADMIN_INVITE_STORAGE_KEY, token);
+  }
+  return token;
+}
+
+function clearInviteToken() {
+  if (typeof window === "undefined") return;
+  try { window.sessionStorage.removeItem(ADMIN_INVITE_STORAGE_KEY); } catch {}
+}
 
 // ── Name setup screen — shown after first admin login ─────────────────────────
 function NameSetup({ user, onDone }) {
@@ -61,12 +78,14 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
   const inviteProcessingRef = useRef(false);
   const inviteResolvedKeyRef = useRef("");
 
-  const [inviteToken] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("invite") || null;
-  });
+  const [inviteToken] = useState(() => readInviteToken());
 
   const hasInvite = !!inviteToken;
+
+  function finishVerified(user) {
+    clearInviteToken();
+    onVerified(user);
+  }
 
   async function afterLogin(user) {
     try {
@@ -75,6 +94,7 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
       const isAdmin = snap.exists() && snap.data().role === "admin";
 
       if (isAdmin) {
+        window.history.replaceState({}, "", window.location.pathname);
         // Check if they have a saved name — if not, show name setup
         const dataSnap = await getDoc(doc(db, "users", user.uid, "appdata", "main")).catch(() => null);
         const hasName = dataSnap?.exists() && dataSnap.data()?.profile?.name;
@@ -86,14 +106,13 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
         if (!hasName && user.displayName) {
           await saveProfileName(user.uid, user.displayName);
         }
-        onVerified(user);
+        finishVerified(user);
         return;
       }
 
       // 2. Try invite token
       if (inviteToken) {
         try {
-          await verifyInviteToken(inviteToken);
           await useInviteToken(inviteToken, user.uid);
           window.history.replaceState({}, "", window.location.pathname);
           // New admin — always ask for name
@@ -151,7 +170,7 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
 
   // Show name setup screen before handing off to the admin panel
   if (pendingUser) {
-    return <NameSetup user={pendingUser} onDone={() => onVerified(pendingUser)} />;
+    return <NameSetup user={pendingUser} onDone={() => finishVerified(pendingUser)} />;
   }
 
   const inp = {
