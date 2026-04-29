@@ -1257,6 +1257,61 @@ function formatDateLabel(dk){
 
 const pill=(bg,color,border)=>({background:bg,color,border:`1px solid ${border||bg}`,borderRadius:8,padding:"6px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:500,transition:"all 0.15s"});
 
+function AlsoAtInstitutes({ institutes = [], maxVisible = 2 }){
+  const cleaned = [...new Set((institutes || []).map(inst => String(inst || "").trim()).filter(Boolean))];
+  if(!cleaned.length) return null;
+  const visible = cleaned.slice(0, maxVisible);
+  const remaining = cleaned.length - visible.length;
+  const hiddenLabel = cleaned.slice(maxVisible).join(", ");
+  return (
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8,alignItems:"center"}}>
+      <span style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8}}>
+        Also at
+      </span>
+      {visible.map(inst=>(
+        <span
+          key={inst}
+          title={inst}
+          style={{
+            display:"inline-flex",
+            alignItems:"center",
+            maxWidth:"100%",
+            background:G.bg,
+            border:`1px solid ${G.border}`,
+            borderRadius:999,
+            padding:"4px 10px",
+            fontSize:12,
+            lineHeight:1.35,
+            color:G.textM,
+            fontFamily:G.sans,
+            fontWeight:600,
+          }}>
+          {inst}
+        </span>
+      ))}
+      {remaining>0&&(
+        <span
+          title={hiddenLabel}
+          style={{
+            display:"inline-flex",
+            alignItems:"center",
+            background:"#EEF4FF",
+            border:"1px solid #C7D7F5",
+            borderRadius:999,
+            padding:"4px 10px",
+            fontSize:12,
+            lineHeight:1.35,
+            color:G.blue,
+            fontFamily:G.sans,
+            fontWeight:700,
+          }}>
+          +{remaining} more
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Panel styles ──────────────────────────────────────────────────────────────
 const sidePanel={flexShrink:0,background:G.surface,borderRight:`1px solid ${G.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxSizing:"border-box"};
 const panelLabel={fontSize:11,letterSpacing:1.5,color:G.textM,fontFamily:G.sans,fontWeight:600,textTransform:"uppercase",padding:"12px 14px 7px",flexShrink:0};
@@ -4257,9 +4312,6 @@ function AdminPanelInner({user}){
   const CollapsedPanelRail = ({ step, label, onExpand, badge, direction="right", themeKey="p1" }) => {
     const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
     const touchRail = coarsePointer || isWeakDevice;
-    const compactLabel = label.length > 7;
-    const railMinHeight = touchRail ? 208 : 196;
-    const railLabelHeight = touchRail ? 94 : 82;
     const folderIcon = label === "Teachers"
       ? "👥"
       : label === "Classes"
@@ -4268,40 +4320,49 @@ function AdminPanelInner({user}){
           ? "🏫"
           : "🗂";
     return (
-      <div style={{display:"flex",flexDirection:"column",alignItems:"stretch",minHeight:0,padding:touchRail?"6px 3px 10px 4px":"5px 2px 10px 3px"}}>
+      <div style={{display:"flex",justifyContent:"center",padding:touchRail?"10px 4px 14px":"10px 3px 14px",flex:"0 0 auto"}}>
         <div style={{
           width:"100%",
-          minHeight:railMinHeight,
+          maxWidth:78,
+          minHeight:touchRail ? 248 : 232,
           display:"flex",
           flexDirection:"column",
           alignItems:"center",
-          gap:touchRail?10:12,
-          padding:touchRail?"15px 5px 10px":"14px 5px 9px",
-          borderRadius:"20px 20px 24px 24px",
+          gap:touchRail?12:11,
+          padding:touchRail?"12px 8px 14px":"12px 7px 14px",
+          borderRadius:28,
           background:`linear-gradient(180deg, ${tone.bg} 0%, #FFFFFF 88%)`,
           border:`1px solid ${tone.edge}`,
-          boxShadow:"0 14px 28px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.55)",
+          boxShadow:"0 12px 30px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.65)",
           position:"relative",
-          overflow:"hidden",
+          overflow:"visible",
         }}>
-          <div style={{position:"absolute",top:7,left:9,width:"58%",height:16,background:`linear-gradient(180deg, ${tone.tab} 0%, ${tone.bg} 100%)`,border:`1px solid ${tone.edge}`,borderBottom:"none",borderRadius:"13px 13px 0 0",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}} />
-          <div style={{position:"absolute",top:18,left:0,right:0,height:1,background:`linear-gradient(90deg, transparent 0%, ${tone.edge} 24%, ${tone.edge} 76%, transparent 100%)`,opacity:0.6}} />
           <CollapseButton collapsed direction={direction} tone={tone} onClick={onExpand} title={`Expand ${label}`} />
-          <div style={{width:touchRail?34:36,height:touchRail?34:36,borderRadius:12,background:"rgba(255,255,255,0.84)",border:`1px solid ${tone.edge}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}}>
+          <div style={{width:touchRail?38:36,height:touchRail?38:36,borderRadius:14,background:"rgba(255,255,255,0.88)",border:`1px solid ${tone.edge}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}}>
             {folderIcon}
           </div>
-          <div style={{minHeight:railLabelHeight,display:"flex",alignItems:"center",justifyContent:"center",width:"100%",padding:"4px 0 2px",overflow:"hidden"}}>
-            <div style={{display:"flex",alignItems:"center",gap:touchRail?8:10,transform:"rotate(-90deg)",transformOrigin:"center",whiteSpace:"nowrap",maxWidth:compactLabel?176:162}}>
-              <span style={{fontSize:9.5,letterSpacing:1.1,color:tone.accent,fontFamily:G.mono,fontWeight:800,textTransform:"uppercase",background:"rgba(255,255,255,0.75)",border:`1px solid ${tone.edge}`,borderRadius:999,padding:"4px 7px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.5)"}}>
-                {step}
-              </span>
-              <span style={{fontSize:compactLabel?11:12,letterSpacing:1.15,color:tone.text,fontFamily:G.display,fontWeight:800,textTransform:"uppercase",textShadow:"0 1px 0 rgba(255,255,255,0.65)"}}>
-                {label}
-              </span>
-            </div>
+          <span style={{fontSize:10,letterSpacing:1.05,color:tone.accent,fontFamily:G.mono,fontWeight:800,textTransform:"uppercase",background:"rgba(255,255,255,0.76)",border:`1px solid ${tone.edge}`,borderRadius:999,padding:"4px 8px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.5)"}}>
+            {step}
+          </span>
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",width:"100%",padding:"4px 0",minHeight:96}}>
+            <span style={{
+              writingMode:"vertical-rl",
+              textOrientation:"upright",
+              fontSize:touchRail?10.5:10,
+              letterSpacing:1.5,
+              color:tone.text,
+              fontFamily:G.display,
+              fontWeight:800,
+              textTransform:"uppercase",
+              lineHeight:1.05,
+              whiteSpace:"nowrap",
+              textShadow:"0 1px 0 rgba(255,255,255,0.68)",
+            }}>
+              {label}
+            </span>
           </div>
           {badge!==undefined && (
-            <span style={{background:tone.tab,color:tone.accent,border:`1px solid ${tone.edge}`,borderRadius:999,padding:"4px 8px",fontSize:10,fontFamily:G.mono,fontWeight:800,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.45)"}}>
+            <span style={{background:tone.tab,color:tone.accent,border:`1px solid ${tone.edge}`,borderRadius:999,padding:"5px 10px",fontSize:10,fontFamily:G.mono,fontWeight:800,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.45)"}}>
               {badge}
             </span>
           )}
@@ -4315,7 +4376,7 @@ function AdminPanelInner({user}){
     return {
       background:`linear-gradient(180deg, #FFFFFF 0%, ${tone.bg} 100%)`,
       borderRight:`1px solid ${tone.edge}`,
-      padding:coarsePointer ? "4px 3px 4px 2px" : "3px 2px 3px 1px",
+      padding:coarsePointer ? "6px 4px 10px 3px" : "5px 3px 10px 2px",
       boxShadow:"inset -1px 0 0 rgba(255,255,255,0.5)",
     };
   }, [coarsePointer]);
@@ -5290,7 +5351,7 @@ function AdminPanelInner({user}){
                 <div>
                   <div style={{fontSize:16,fontWeight:700,color:G.text}}>{name}</div>
                   <div style={{fontSize:12,color:G.textL,marginTop:4,fontFamily:G.mono}}>{activityLabel}</div>
-                  {otherInsts.length>0&&<div style={{fontSize:13,color:G.textM,marginTop:2,fontStyle:"italic"}}>also at {otherInsts.join(", ")}</div>}
+                  {otherInsts.length>0&&<AlsoAtInstitutes institutes={otherInsts} />}
                 </div>
                 <span style={{fontSize:20,color:G.textL}}>›</span>
               </div>
@@ -5820,6 +5881,7 @@ function AdminPanelInner({user}){
                   const name=d.profile?.name||t.name||"?";
                   const isSel=selP2===t.uid;
                   const activityLabel = instTeacherMeta[t.uid]?.label || lastEntryCaption(null);
+                  const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
                   return(
                     <div key={t.uid} onClick={()=>openTeacherSelection(t.uid)}
                       style={{...siBase,display:"flex",alignItems:"center",gap:9,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
@@ -5831,12 +5893,7 @@ function AdminPanelInner({user}){
                       <div style={{minWidth:0}}>
                         <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</div>
                         <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:3}}>{activityLabel}</div>
-
-                        {(()=>{
-                          const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
-                          if(!otherInsts.length) return null;
-                          return <div style={{fontSize:13,color:G.textM,fontFamily:G.sans,marginTop:3,fontStyle:"italic"}}>also at {otherInsts.join(", ")}</div>;
-                        })()}
+                        {otherInsts.length>0&&<AlsoAtInstitutes institutes={otherInsts} />}
                       </div>
                     </div>
                   );
