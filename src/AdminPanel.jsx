@@ -2205,6 +2205,10 @@ function AdminPanelInner({user}){
   const [mobileLiteMode,setMobileLiteMode] = useState(false);
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | admins | institutes
+  const [manageTeacherSearch, setManageTeacherSearch] = useState("");
+  const [manageAdminSearch, setManageAdminSearch] = useState("");
+  const [openTeacherInstitute, setOpenTeacherInstitute] = useState(null);
+  const [openAdminInstitute, setOpenAdminInstitute] = useState(null);
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
   const [profileOpen,  setProfileOpen]  = useState(false);
@@ -4587,6 +4591,90 @@ function AdminPanelInner({user}){
     );
   };
 
+  const manageSearchInput = (value, onChange, placeholder) => (
+    <div style={{position:"relative",marginBottom:16}}>
+      <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:13,color:G.textL,pointerEvents:"none"}}>⌕</span>
+      <input
+        value={value}
+        onChange={e=>onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width:"100%",
+          height:42,
+          borderRadius:11,
+          border:`1px solid ${G.border}`,
+          background:G.surface,
+          padding:"0 14px 0 36px",
+          fontSize:14,
+          color:G.text,
+          outline:"none",
+          fontFamily:G.sans,
+          boxShadow:reduceEffects ? "none" : G.shadowSm,
+        }}
+      />
+    </div>
+  );
+
+  const getTeacherInstituteList = React.useCallback((teacher) => {
+    const list = [];
+    const add = (value) => {
+      const next = String(value || "").trim();
+      if(!next) return;
+      if(list.some(existing => sameInstituteName(existing, next))) return;
+      list.push(next);
+    };
+    (teacher?.institutes || []).forEach(add);
+    const data = fullData[teacher?.uid];
+    (data?.classes || []).forEach(cls => add(cls?.institute));
+    return list;
+  }, [fullData]);
+
+  const teacherBelongsToInstitute = React.useCallback((teacher, instituteName) => {
+    if(!teacher || !instituteName) return false;
+    return getTeacherInstituteList(teacher).some(inst => sameInstituteName(inst, instituteName));
+  }, [getTeacherInstituteList]);
+
+  const getTeacherDisplayName = React.useCallback((teacher) => {
+    const data = fullData[teacher?.uid];
+    return data?.profile?.name || teacher?.name || "Unknown";
+  }, [fullData]);
+
+  const getTeacherEmail = React.useCallback((teacher) => {
+    const data = fullData[teacher?.uid];
+    return String(data?.profile?.email || teacher?.email || "").trim();
+  }, [fullData]);
+
+  const instituteAccordionHeader = ({ icon, title, count, countLabel, isOpen, onClick }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width:"100%",
+        background:G.surface,
+        border:`1px solid ${isOpen ? G.borderM : G.border}`,
+        borderRadius:14,
+        padding:"14px 16px",
+        cursor:"pointer",
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"space-between",
+        gap:12,
+        boxShadow:reduceEffects ? "none" : G.shadowSm,
+        textAlign:"left",
+      }}>
+      <div style={{minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:18,flexShrink:0}}>{icon}</span>
+          <span style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,minWidth:0}}>{title}</span>
+        </div>
+        <div style={{fontSize:13,color:G.textM,marginTop:5}}>
+          {count} {countLabel}{count!==1?"s":""}
+        </div>
+      </div>
+      <span style={{fontSize:18,color:G.textL,transform:isOpen?"rotate(90deg)":"none",transition:"transform 0.18s",flexShrink:0}}>›</span>
+    </button>
+  );
+
   // ── MANAGE ACCESS VIEW ────────────────────────────────────────────────────
   if(view==="manage") return(
     <div style={{minHeight:"100svh",background:G.bg,fontFamily:G.sans,overflowX:"hidden"}}>
@@ -4806,7 +4894,11 @@ function AdminPanelInner({user}){
                             <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 12px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>
                               {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}
                             </span>
-                            <button onClick={()=>setManageTab("teachers")}
+                            <button onClick={()=>{
+                              setManageTab("teachers");
+                              setOpenTeacherInstitute(inst);
+                              setManageTeacherSearch("");
+                            }}
                               style={{background:"none",border:"none",fontSize:12,color:G.textM,cursor:"pointer",fontFamily:G.sans,textDecoration:"underline",padding:0}}>
                               View in Teachers →
                             </button>
@@ -4860,6 +4952,21 @@ function AdminPanelInner({user}){
 
         {manageTab==="admins"&&(()=>{
           const adminList = teachers.filter(t=>roles[t.uid]==="admin");
+          const adminSearchKey = manageAdminSearch.trim().toLowerCase();
+          const matchesAdmin = (teacher) => {
+            if(!adminSearchKey) return true;
+            const name = getTeacherDisplayName(teacher).toLowerCase();
+            const email = String(teacher?.email || "").toLowerCase();
+            const instituteText = getTeacherInstituteList(teacher).join(" ").toLowerCase();
+            return name.includes(adminSearchKey) || email.includes(adminSearchKey) || instituteText.includes(adminSearchKey);
+          };
+          const adminInstitutes = [...new Set([
+            ...institutes,
+            ...adminList.flatMap(t=>getTeacherInstituteList(t)),
+          ])]
+            .filter(Boolean)
+            .sort(exportTextSorter.compare);
+          const adminsWithoutInstitute = adminList.filter(t=>!getTeacherInstituteList(t).length && matchesAdmin(t));
           return(
             <>
               {/* Invite link */}
@@ -4891,35 +4998,111 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
                   Admins ({adminList.length})
                 </div>
-                <div style={{fontSize:14,color:G.textM,marginBottom:14}}>These accounts have full access to the admin panel.</div>
+                <div style={{fontSize:14,color:G.textM,marginBottom:10}}>These accounts have full access to the admin panel. Open an institute to view its admins.</div>
+                {manageSearchInput(manageAdminSearch,setManageAdminSearch,"Search admins by name, email, or institute")}
                 {adminList.length===0
                   ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No admins yet. Generate an invite link above.</div>
-                  :<div style={{display:"flex",flexDirection:"column",gap:10}}>
-                    {adminList.map(t=>{
-                      const d=fullData[t.uid]||{};
-                      const name=d.profile?.name||t.name||"Unknown";
-                      const isMe=t.uid===user.uid;
+                  :<div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    {adminInstitutes.map(inst=>{
+                      const instAdmins = adminList.filter(t=>teacherBelongsToInstitute(t, inst) && matchesAdmin(t));
+                      if(!instAdmins.length) return null;
+                      const isOpen = openAdminInstitute===inst;
                       return(
-                        <div key={t.uid} style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:12}}>
-                          <div style={{width:42,height:42,borderRadius:11,background:G.amberL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:G.amber,fontFamily:G.mono,flexShrink:0}}>
-                            {(name[0]||"?").toUpperCase()}
-                          </div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8}}>
-                              {name}
-                              {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
+                        <div key={inst}>
+                          {instituteAccordionHeader({
+                            icon:"👑",
+                            title:inst,
+                            count:instAdmins.length,
+                            countLabel:"admin",
+                            isOpen,
+                            onClick:()=>setOpenAdminInstitute(curr=>curr===inst?null:inst),
+                          })}
+                          {isOpen&&(
+                            <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
+                              {instAdmins.map(t=>{
+                                const name=getTeacherDisplayName(t);
+                                const isMe=t.uid===user.uid;
+                                const instituteList = getTeacherInstituteList(t);
+                                const otherInstitutes = instituteList.filter(value=>!sameInstituteName(value, inst));
+                                return(
+                                  <div key={`${inst}_${t.uid}`} style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:12}}>
+                                    <div style={{width:42,height:42,borderRadius:11,background:G.amberL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:G.amber,fontFamily:G.mono,flexShrink:0}}>
+                                      {(name[0]||"?").toUpperCase()}
+                                    </div>
+                                    <div style={{flex:1,minWidth:0}}>
+                                      <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                                      {name}
+                                      {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
+                                    </div>
+                                    <div style={{fontSize:13,color:G.textM,marginTop:3,fontFamily:G.mono}}>
+                                      {getTeacherEmail(t) || "Email not available"}
+                                    </div>
+                                    {otherInstitutes.length>0&&<AlsoAtInstitutes institutes={otherInstitutes} />}
+                                  </div>
+                                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,flexShrink:0}}>
+                                      <span style={{background:G.amberL,color:G.amber,fontSize:12,fontWeight:700,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
+                                        👑 Admin
+                                      </span>
+                                      {!isMe&&(
+                                        <button onClick={()=>handleDemote(t.uid)}
+                                          style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,flexShrink:0}}>
+                                          Remove Admin
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                            <div style={{fontSize:13,color:G.textM,marginTop:2}}>{t.email||""}</div>
-                          </div>
-                          {!isMe&&(
-                            <button onClick={()=>handleDemote(t.uid)}
-                              style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,flexShrink:0}}>
-                              Remove Admin
-                            </button>
                           )}
                         </div>
                       );
                     })}
+                    {adminsWithoutInstitute.length>0&&(
+                      <div>
+                        {instituteAccordionHeader({
+                          icon:"👑",
+                          title:"No Institute Assigned",
+                          count:adminsWithoutInstitute.length,
+                          countLabel:"admin",
+                          isOpen:openAdminInstitute==="__no_inst__",
+                          onClick:()=>setOpenAdminInstitute(curr=>curr==="__no_inst__"?null:"__no_inst__"),
+                        })}
+                        {openAdminInstitute==="__no_inst__"&&(
+                          <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
+                            {adminsWithoutInstitute.map(t=>{
+                              const name=getTeacherDisplayName(t);
+                              const isMe=t.uid===user.uid;
+                              return(
+                                <div key={`noinst_${t.uid}`} style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:12}}>
+                                  <div style={{width:42,height:42,borderRadius:11,background:G.amberL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:G.amber,fontFamily:G.mono,flexShrink:0}}>
+                                    {(name[0]||"?").toUpperCase()}
+                                  </div>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                                      {name}
+                                      {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
+                                    </div>
+                                    <div style={{fontSize:13,color:G.textM,marginTop:3,fontFamily:G.mono}}>
+                                      {getTeacherEmail(t) || "Email not available"}
+                                    </div>
+                                  </div>
+                                  {!isMe&&(
+                                    <button onClick={()=>handleDemote(t.uid)}
+                                      style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,flexShrink:0}}>
+                                      Remove Admin
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {adminList.length>0 && adminInstitutes.every(inst=>!adminList.some(t=>teacherBelongsToInstitute(t, inst) && matchesAdmin(t))) && adminsWithoutInstitute.length===0 && (
+                      <div style={{fontSize:15,color:G.textM,padding:"10px 0",textAlign:"center"}}>No admins match your search.</div>
+                    )}
                   </div>
                 }
               </div>
@@ -4928,29 +5111,42 @@ function AdminPanelInner({user}){
         })()}
 
         {/* ── TEACHERS TAB ── */}
-        {manageTab==="teachers"&&<>
-
-        {/* Teachers grouped by institute */}
-        {(()=>{
-          // Build groups: institute → teachers
-          const allInsts = [...new Set([
+        {manageTab==="teachers"&&(()=>{
+          const teacherOnlyList = teachers.filter(t=>roles[t.uid]!=="admin");
+          const teacherSearchKey = manageTeacherSearch.trim().toLowerCase();
+          const matchesTeacher = (teacher) => {
+            if(!teacherSearchKey) return true;
+            const name = getTeacherDisplayName(teacher).toLowerCase();
+            const email = getTeacherEmail(teacher).toLowerCase();
+            const instituteText = getTeacherInstituteList(teacher).join(" ").toLowerCase();
+            return name.includes(teacherSearchKey) || email.includes(teacherSearchKey) || instituteText.includes(teacherSearchKey);
+          };
+          const teacherInstitutes = [...new Set([
             ...institutes,
-            ...teachers.flatMap(t=>(t.institutes||[]))
-          ])].sort();
-          const noInst = teachers.filter(t=>!(t.institutes||[]).length);
+            ...teacherOnlyList.flatMap(t=>getTeacherInstituteList(t)),
+          ])]
+            .filter(Boolean)
+            .sort(exportTextSorter.compare);
+          const teachersWithoutInstitute = teacherOnlyList.filter(t=>!getTeacherInstituteList(t).length && matchesTeacher(t));
+          const hasInstituteMatches = teacherInstitutes.some(inst => teacherOnlyList.some(t => teacherBelongsToInstitute(t, inst) && matchesTeacher(t)));
 
-          const TeacherCard = ({t, highlight}) => {
-            const d = fullData[t.uid]||{};
-            const name = d.profile?.name||t.name||"Unknown";
-            const isAdmin = roles[t.uid]==="admin";
+          const TeacherCard = ({ t, currentInstitute = null }) => {
+            const d = fullData[t.uid] || {};
+            const name = getTeacherDisplayName(t);
+            const email = getTeacherEmail(t);
             const isMe = t.uid===user.uid;
             const isSel = selTeacher===t.uid;
+            const allTeacherInstitutes = getTeacherInstituteList(t);
+            const otherInstitutes = currentInstitute
+              ? allTeacherInstitutes.filter(value=>!sameInstituteName(value, currentInstitute))
+              : allTeacherInstitutes;
+            const classCount = fullData[t.uid] ? (d.classes||[]).length : (t.classCount||0);
+
             return(
-              <div style={{background:G.surface,borderRadius:12,border:`2px solid ${isSel?G.blue:G.border}`,overflow:"hidden",boxShadow:isSel?`0 0 0 3px ${G.blueL}`:G.shadowSm,transition:"all 0.15s",marginBottom:0}}>
-                {/* Card header — clickable */}
+              <div style={{background:G.surface,borderRadius:12,border:`2px solid ${isSel?G.blue:G.border}`,overflow:"hidden",boxShadow:isSel?`0 0 0 3px ${G.blueL}`:G.shadowSm,transition:"all 0.15s"}}>
                 <div onClick={()=>{ensureFullData(t.uid);setSelTeacher(isSel?null:t.uid);}}
                   style={{padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:42,height:42,borderRadius:11,background:isAdmin?G.amberL:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:isAdmin?G.amber:G.blue,fontFamily:G.mono,flexShrink:0}}>
+                  <div style={{width:42,height:42,borderRadius:11,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
                     {(name[0]||"?").toUpperCase()}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
@@ -4958,23 +5154,21 @@ function AdminPanelInner({user}){
                       {name}
                       {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
                     </div>
-                    <div style={{fontSize:13,color:G.textM,marginTop:3}}>
-                      {(t.institutes||[]).join(" · ")||"No institute yet"}
+                    <div style={{fontSize:13,color:G.textM,marginTop:3,fontFamily:G.mono}}>
+                      {email || "Email not available"}
                     </div>
+                    {otherInstitutes.length>0&&<AlsoAtInstitutes institutes={otherInstitutes} />}
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
-                    <span style={{background:isAdmin?G.amberL:G.blueL,color:isAdmin?G.amber:G.blue,fontSize:12,fontWeight:700,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
-                      {isAdmin?"👑 Admin":"👤 Teacher"}
+                    <span style={{background:G.blueL,color:G.blue,fontSize:12,fontWeight:700,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
+                      👤 Teacher
                     </span>
-                    <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>{fullData[t.uid]?(d.classes||[]).length:(t.classCount||0)} classes · tap to manage</span>
+                    <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>{classCount} classes · tap to manage</span>
                   </div>
                 </div>
 
-                {/* Expanded actions panel */}
                 {isSel&&(
                   <div style={{borderTop:`1px solid ${G.border}`,background:G.bg,padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
-
-                    {/* Classes list */}
                     {(d.classes||[]).length>0&&(
                       <div>
                         <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Classes</div>
@@ -4995,9 +5189,7 @@ function AdminPanelInner({user}){
                       </div>
                     )}
 
-                    {/* Action buttons */}
                     <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:4}}>
-                      {/* Rename */}
                       {renamingTeacher?.uid===t.uid?(
                         <div style={{display:"flex",gap:6,flex:1,minWidth:200}}>
                           <input value={renameVal} onChange={e=>setRenameVal(e.target.value)}
@@ -5012,13 +5204,10 @@ function AdminPanelInner({user}){
                           style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>✏ Rename</button>
                       )}
 
-                      {/* Role actions */}
-                      {!isMe&&(isAdmin
-                        ?<button onClick={()=>handleDemote(t.uid)} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>Remove Admin</button>
-                        :<button onClick={()=>handlePromote(t.uid)} style={{...pill(G.blueL,G.blue,G.borderM),fontSize:13}}>Make Admin</button>
+                      {!isMe&&(
+                        <button onClick={()=>handlePromote(t.uid)} style={{...pill(G.blueL,G.blue,G.borderM),fontSize:13}}>Make Admin</button>
                       )}
 
-                      {/* View in main panel */}
                       <button onClick={()=>{setView("main");setSelP2(t.uid);setTab("teacher");setMobileStep(2);}}
                         style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>📋 View Entries</button>
 
@@ -5028,7 +5217,6 @@ function AdminPanelInner({user}){
                         {repairingTeacherUid===t.uid ? "🛠 Repairing…" : "🛠 Repair Index"}
                       </button>
 
-                      {/* Remove teacher from system */}
                       {!isMe&&(
                         <button onClick={()=>handleRemoveTeacher(t.uid,name)}
                           style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>🚫 Remove Teacher</button>
@@ -5041,43 +5229,76 @@ function AdminPanelInner({user}){
           };
 
           return(
-            <div style={{display:"flex",flexDirection:"column",gap:20}}>
-              {allInsts.map(inst=>{
-                const instT=teachers.filter(t=>(t.institutes||[]).some(i=>i.trim()===inst.trim()));
-                if(!instT.length) return null;
-                return(
-                  <div key={inst}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                      <div style={{flex:1,height:1,background:G.border}}/>
-                      <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,textTransform:"uppercase",letterSpacing:0.5,background:G.surface,padding:"4px 12px",borderRadius:20,border:`1px solid ${G.border}`}}>
-                        🏫 {inst}
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
+              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
+                Teachers ({teacherOnlyList.length})
+              </div>
+              <div style={{fontSize:14,color:G.textM,marginBottom:10}}>
+                Click an institute to expand its teachers. Search by name, email, or institute.
+              </div>
+              {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search teachers by name, email, or institute")}
+
+              {teacherOnlyList.length===0
+                ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No teachers found yet.</div>
+                :<div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  {teacherInstitutes.map(inst=>{
+                    const instTeachers = teacherOnlyList.filter(t=>teacherBelongsToInstitute(t, inst) && matchesTeacher(t));
+                    if(!instTeachers.length) return null;
+                    const isOpen = openTeacherInstitute===inst;
+                    return(
+                      <div key={inst}>
+                        {instituteAccordionHeader({
+                          icon:"🏫",
+                          title:inst,
+                          count:instTeachers.length,
+                          countLabel:"teacher",
+                          isOpen,
+                          onClick:()=>{
+                            if(!isOpen) warmTeacherUids(instTeachers.map(t=>t.uid), inst);
+                            setOpenTeacherInstitute(curr=>curr===inst?null:inst);
+                          },
+                        })}
+                        {isOpen&&(
+                          <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
+                            {instTeachers.map(t=>(
+                              <TeacherCard key={`${inst}_${t.uid}`} t={t} currentInstitute={inst} />
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div style={{flex:1,height:1,background:G.border}}/>
+                    );
+                  })}
+
+                  {teachersWithoutInstitute.length>0&&(
+                    <div>
+                      {instituteAccordionHeader({
+                        icon:"🏫",
+                        title:"No Institute Assigned",
+                        count:teachersWithoutInstitute.length,
+                        countLabel:"teacher",
+                        isOpen:openTeacherInstitute==="__no_inst__",
+                        onClick:()=>{
+                          setOpenTeacherInstitute(curr=>curr==="__no_inst__"?null:"__no_inst__");
+                        },
+                      })}
+                      {openTeacherInstitute==="__no_inst__"&&(
+                        <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
+                          {teachersWithoutInstitute.map(t=>(
+                            <TeacherCard key={`noinst_${t.uid}`} t={t} />
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      {instT.map(t=><TeacherCard key={t.uid} t={t}/>)}
-                    </div>
-                  </div>
-                );
-              })}
-              {noInst.length>0&&(
-                <div>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                    <div style={{flex:1,height:1,background:G.border}}/>
-                    <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.sans,textTransform:"uppercase",letterSpacing:0.5,background:G.surface,padding:"4px 12px",borderRadius:20,border:`1px solid ${G.border}`}}>
-                      No Institute Assigned
-                    </div>
-                    <div style={{flex:1,height:1,background:G.border}}/>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                    {noInst.map(t=><TeacherCard key={t.uid} t={t}/>)}
-                  </div>
+                  )}
+
+                  {teacherOnlyList.length>0 && !hasInstituteMatches && teachersWithoutInstitute.length===0 && (
+                    <div style={{fontSize:15,color:G.textM,padding:"10px 0",textAlign:"center"}}>No teachers match your search.</div>
+                  )}
                 </div>
-              )}
+              }
             </div>
           );
         })()}
-        </>}
       </>)}
       </div>
     </div>

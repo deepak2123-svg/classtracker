@@ -69,6 +69,15 @@ function uniqueTrimmed(values) {
   return [...new Set((values || []).map(v => (v || "").trim()).filter(Boolean))];
 }
 
+function buildTeacherIdentityPatch(uid) {
+  const currentUser = auth.currentUser;
+  if (currentUser?.uid !== uid) return {};
+  const patch = {};
+  if (currentUser.email) patch.email = currentUser.email;
+  if (currentUser.photoURL) patch.photoURL = currentUser.photoURL;
+  return patch;
+}
+
 function buildTeacherIndexPayload(uid, data) {
   const classes = Array.isArray(data?.classes) ? data.classes : [];
   return {
@@ -310,6 +319,7 @@ export async function syncTeacherIndex(uid, data) {
     await setDoc(doc(db, "teachers", uid), {
       ...buildTeacherIndexPayload(uid, data),
       name: data.profile.name,
+      ...buildTeacherIdentityPatch(uid),
     }, { merge: true });
   } catch { /* silent fail — admin feature optional */ }
 }
@@ -469,7 +479,10 @@ export async function saveProfileName(uid, name) {
       },
     });
     // Also update the teacher index entry
-    await setDoc(doc(db, "teachers", uid), { name: name.trim() }, { merge: true });
+    await setDoc(doc(db, "teachers", uid), {
+      name: name.trim(),
+      ...buildTeacherIdentityPatch(uid),
+    }, { merge: true });
   } catch (e) { console.error("saveProfileName", e); }
 }
 
