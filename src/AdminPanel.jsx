@@ -968,7 +968,7 @@ function formatDateLabel(dk){
 const pill=(bg,color,border)=>({background:bg,color,border:`1px solid ${border||bg}`,borderRadius:8,padding:"6px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:500,transition:"all 0.15s"});
 
 // ── Panel styles ──────────────────────────────────────────────────────────────
-const sidePanel={flexShrink:0,background:G.surface,borderRight:`1px solid ${G.border}`,display:"flex",flexDirection:"column",overflow:"hidden"};
+const sidePanel={flexShrink:0,background:G.surface,borderRight:`1px solid ${G.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxSizing:"border-box"};
 const panelLabel={fontSize:11,letterSpacing:1.5,color:G.textM,fontFamily:G.sans,fontWeight:600,textTransform:"uppercase",padding:"12px 14px 7px",flexShrink:0};
 const siBase={padding:"12px 13px",borderRadius:9,cursor:"pointer",marginBottom:3,borderLeft:"3px solid transparent",transition:"background 0.1s"};
 
@@ -1829,9 +1829,9 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
 function AdminPanelInner({user}){
   const PANEL_LIMITS = React.useMemo(()=>({
-    p1:{ min:96, max:340, collapsed:58, default:175 },
-    p2:{ min:160, max:380, collapsed:58, default:205 },
-    p3:{ min:110, max:360, collapsed:58, default:200 },
+    p1:{ min:96, max:340, collapsed:80, default:175 },
+    p2:{ min:160, max:380, collapsed:90, default:205 },
+    p3:{ min:110, max:360, collapsed:80, default:200 },
   }),[]);
   const [teachers,    setTeachers]    = useState([]);
   const [fullData,    setFullData]    = useState({});
@@ -3866,9 +3866,9 @@ function AdminPanelInner({user}){
       onClick={onClick}
       title={title}
       style={{
-        width:28,
-        height:28,
-        borderRadius:10,
+        width:30,
+        height:30,
+        borderRadius:11,
         border:`1px solid ${tone?.edge || G.border}`,
         background:collapsed && tone ? tone.tab : G.surface,
         color:collapsed && tone ? tone.accent : G.textM,
@@ -3885,28 +3885,46 @@ function AdminPanelInner({user}){
 
   const CollapsedPanelRail = ({ step, label, onExpand, badge, direction="right", themeKey="p1" }) => {
     const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
+    const touchRail = coarsePointer || isWeakDevice;
+    const compactLabel = label.length > 7;
+    const folderIcon = label === "Teachers"
+      ? "👥"
+      : label === "Classes"
+        ? "📚"
+        : label === "Institutes"
+          ? "🏫"
+          : "🗂";
     return (
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",height:"100%",padding:"8px 5px"}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"stretch",height:"100%",minHeight:0,padding:touchRail?"5px 3px 5px 4px":"4px 2px 4px 3px"}}>
         <div style={{
           width:"100%",
           height:"100%",
           display:"flex",
           flexDirection:"column",
           alignItems:"center",
-          gap:14,
-          padding:"14px 6px 10px",
-          borderRadius:22,
-          background:`linear-gradient(180deg, ${tone.bg} 0%, #FFFFFF 84%)`,
+          gap:touchRail?10:12,
+          padding:touchRail?"15px 5px 10px":"14px 5px 9px",
+          borderRadius:"20px 20px 24px 24px",
+          background:`linear-gradient(180deg, ${tone.bg} 0%, #FFFFFF 88%)`,
           border:`1px solid ${tone.edge}`,
-          boxShadow:G.shadowSm,
+          boxShadow:"0 14px 28px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.55)",
           position:"relative",
           overflow:"hidden",
         }}>
-          <div style={{position:"absolute",top:0,left:0,right:0,height:10,background:`linear-gradient(180deg, ${tone.tab} 0%, ${tone.bg} 100%)`}} />
+          <div style={{position:"absolute",top:7,left:9,width:"58%",height:16,background:`linear-gradient(180deg, ${tone.tab} 0%, ${tone.bg} 100%)`,border:`1px solid ${tone.edge}`,borderBottom:"none",borderRadius:"13px 13px 0 0",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}} />
+          <div style={{position:"absolute",top:18,left:0,right:0,height:1,background:`linear-gradient(90deg, transparent 0%, ${tone.edge} 24%, ${tone.edge} 76%, transparent 100%)`,opacity:0.6}} />
           <CollapseButton collapsed direction={direction} tone={tone} onClick={onExpand} title={`Expand ${label}`} />
-          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <div style={{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:12,letterSpacing:1.8,color:tone.text,fontFamily:G.display,fontWeight:800,textTransform:"uppercase",textAlign:"center",textShadow:"0 1px 0 rgba(255,255,255,0.65)"}}>
-              {step} · {label}
+          <div style={{width:touchRail?34:36,height:touchRail?34:36,borderRadius:12,background:"rgba(255,255,255,0.84)",border:`1px solid ${tone.edge}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}}>
+            {folderIcon}
+          </div>
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",width:"100%",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:touchRail?8:10,transform:"rotate(-90deg)",transformOrigin:"center",whiteSpace:"nowrap",maxWidth:compactLabel?176:162}}>
+              <span style={{fontSize:9.5,letterSpacing:1.1,color:tone.accent,fontFamily:G.mono,fontWeight:800,textTransform:"uppercase",background:"rgba(255,255,255,0.75)",border:`1px solid ${tone.edge}`,borderRadius:999,padding:"4px 7px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.5)"}}>
+                {step}
+              </span>
+              <span style={{fontSize:compactLabel?11:12,letterSpacing:1.15,color:tone.text,fontFamily:G.display,fontWeight:800,textTransform:"uppercase",textShadow:"0 1px 0 rgba(255,255,255,0.65)"}}>
+                {label}
+              </span>
             </div>
           </div>
           {badge!==undefined && (
@@ -3918,6 +3936,16 @@ function AdminPanelInner({user}){
       </div>
     );
   };
+
+  const getCollapsedPanelShellStyle = React.useCallback((themeKey) => {
+    const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
+    return {
+      background:`linear-gradient(180deg, #FFFFFF 0%, ${tone.bg} 100%)`,
+      borderRight:`1px solid ${tone.edge}`,
+      padding:coarsePointer ? "4px 3px 4px 2px" : "3px 2px 3px 1px",
+      boxShadow:"inset -1px 0 0 rgba(255,255,255,0.5)",
+    };
+  }, [coarsePointer]);
 
   const PanelDivider = ({onDrag, onToggleCollapse, onDragStart, onDragEnd}) => {
     const ref = React.useRef(null);
@@ -5308,7 +5336,7 @@ function AdminPanelInner({user}){
         }}>
 
         {/* ── P1: Institutes ── */}
-        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:panelCollapsed.p1?PANEL_RAIL_THEMES.p1.bg:G.bg,borderRight:`1px solid ${panelCollapsed.p1?PANEL_RAIL_THEMES.p1.edge:G.border}`,transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
+        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,...(panelCollapsed.p1?getCollapsedPanelShellStyle("p1"):{background:G.bg,borderRight:`1px solid ${G.border}`}),transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
           {panelCollapsed.p1 ? (
             <CollapsedPanelRail step="Step 1" label="Institutes" badge={institutes.length} direction="right" themeKey="p1" onExpand={()=>togglePanelCollapse("p1")} />
           ) : (
@@ -5361,7 +5389,7 @@ function AdminPanelInner({user}){
         <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p1", dx)} onToggleCollapse={()=>togglePanelCollapse("p1")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
 
         {/* ── P2: Toggle + Teacher or Class list ── */}
-        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:panelCollapsed.p2?PANEL_RAIL_THEMES.p2.bg:G.surface,borderRight:`1px solid ${panelCollapsed.p2?PANEL_RAIL_THEMES.p2.edge:G.border}`,transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
+        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,...(panelCollapsed.p2?getCollapsedPanelShellStyle("p2"):{background:G.surface,borderRight:`1px solid ${G.border}`}),transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
           {panelCollapsed.p2 ? (
             <CollapsedPanelRail
               step="Step 2"
@@ -5479,7 +5507,7 @@ function AdminPanelInner({user}){
         <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p2", dx)} onToggleCollapse={()=>togglePanelCollapse("p2")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
 
         {/* ── P3: Sub-list ── */}
-        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:panelCollapsed.p3?PANEL_RAIL_THEMES.p3.bg:G.bg,borderRight:`1px solid ${panelCollapsed.p3?PANEL_RAIL_THEMES.p3.edge:G.border}`,transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
+        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,...(panelCollapsed.p3?getCollapsedPanelShellStyle("p3"):{background:G.bg,borderRight:`1px solid ${G.border}`}),transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
           {panelCollapsed.p3 ? (
             <CollapsedPanelRail
               step="Step 3"
