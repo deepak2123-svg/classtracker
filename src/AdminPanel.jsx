@@ -943,6 +943,287 @@ function lastEntryCaption(ts){
   const relative = daysAgo(ts);
   return `Last entry: ${relative || shortDateLabel(ts)}`;
 }
+function buildTeacherEntryStatusItem(teacher, data, instituteName, fallbackLastEntryTs = null){
+  const teacherName = data?.profile?.name || teacher?.name || "Teacher";
+  if(!data){
+    return {
+      uid:teacher?.uid || teacherName,
+      name:teacherName,
+      loaded:false,
+      classCount:null,
+      todayEntries:0,
+      weekEntries:0,
+      monthEntries:0,
+      todayUpdated:false,
+      lastEntryTs:fallbackLastEntryTs || null,
+    };
+  }
+  const classes = (data.classes||[]).filter(c=>sameInstituteName(c.institute, instituteName));
+  const stats = classes.reduce((acc,c)=>{
+    const classNotes = (data.notes||{})[c.id]||{};
+    acc.todayEntries += getEntriesInRange(classNotes, 1).length;
+    acc.weekEntries += getEntriesInRange(classNotes, 7).length;
+    acc.monthEntries += getEntriesInRange(classNotes, 30).length;
+    acc.lastEntryTs = Math.max(acc.lastEntryTs, lastEntryTs(classNotes) || 0);
+    return acc;
+  },{todayEntries:0,weekEntries:0,monthEntries:0,lastEntryTs:fallbackLastEntryTs || 0});
+  return {
+    uid:teacher?.uid || teacherName,
+    name:teacherName,
+    loaded:true,
+    classCount:classes.length,
+    todayEntries:stats.todayEntries,
+    weekEntries:stats.weekEntries,
+    monthEntries:stats.monthEntries,
+    todayUpdated:stats.todayEntries>0,
+    lastEntryTs:stats.lastEntryTs || fallbackLastEntryTs || null,
+  };
+}
+function sortTeacherStatusForShare(items=[]){
+  return [...items].sort((a,b)=>{
+    if(!!a.todayUpdated !== !!b.todayUpdated) return a.todayUpdated ? 1 : -1;
+    if(!a.todayUpdated && !b.todayUpdated){
+      if((a.lastEntryTs||0) !== (b.lastEntryTs||0)) return (a.lastEntryTs||0) - (b.lastEntryTs||0);
+    } else {
+      if((b.todayEntries||0) !== (a.todayEntries||0)) return (b.todayEntries||0) - (a.todayEntries||0);
+      if((b.lastEntryTs||0) !== (a.lastEntryTs||0)) return (b.lastEntryTs||0) - (a.lastEntryTs||0);
+    }
+    if((b.weekEntries||0) !== (a.weekEntries||0)) return (b.weekEntries||0) - (a.weekEntries||0);
+    if((b.monthEntries||0) !== (a.monthEntries||0)) return (b.monthEntries||0) - (a.monthEntries||0);
+    return exportTextSorter.compare(a.name || "", b.name || "");
+  });
+}
+function slugifyDownloadPart(value){
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "report";
+}
+async function waitForCanvasFonts(){
+  try {
+    if(document?.fonts?.ready) await document.fonts.ready;
+  } catch {}
+}
+function drawRoundedRect(ctx, x, y, width, height, radius){
+  const r = Math.max(0, Math.min(radius, width / 2, height / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+function fitCanvasText(ctx, value, maxWidth){
+  const text = String(value || "");
+  if(!text) return "";
+  if(ctx.measureText(text).width <= maxWidth) return text;
+  const ellipsis = "…";
+  let low = 0;
+  let high = text.length;
+  let best = ellipsis;
+  while(low <= high){
+    const mid = Math.floor((low + high) / 2);
+    const candidate = `${text.slice(0, mid).trimEnd()}${ellipsis}`;
+    if(ctx.measureText(candidate).width <= maxWidth){
+      best = candidate;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return best;
+}
+function drawCanvasPill(ctx, { x, y, label, bg, border, color, font = "700 20px 'JetBrains Mono',monospace", padX = 16, height = 46 }){
+  ctx.save();
+  ctx.font = font;
+  const textWidth = ctx.measureText(label).width;
+  const width = Math.ceil(textWidth + padX * 2);
+  drawRoundedRect(ctx, x, y, width, height, height / 2);
+  ctx.fillStyle = bg;
+  ctx.fill();
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, x + padX, y + height / 2 + 1);
+  ctx.restore();
+  return width;
+}
+function triggerBlobDownload(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const anchor = Object.assign(document.createElement("a"), { href:url, download:filename });
+  anchor.click();
+  window.setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+async function downloadTeacherStatusShareImage({ instituteName, rows, summary, generatedOnLabel }){
+  await waitForCanvasFonts();
+  const width = 1080;
+  const cardX = 36;
+  const cardY = 36;
+  const cardWidth = width - cardX * 2;
+  const headerHeight = 198;
+  const rowHeight = 118;
+  const cardHeight = headerHeight + Math.max(1, rows.length) * rowHeight + 28;
+  const height = cardY * 2 + cardHeight;
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const ctx = canvas.getContext("2d");
+  if(!ctx) throw new Error("Canvas is not available.");
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = "#F4F7FB";
+  ctx.fillRect(0, 0, width, height);
+
+  drawRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 30);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fill();
+  ctx.strokeStyle = "#DDE3ED";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const contentX = cardX + 28;
+  const contentWidth = cardWidth - 56;
+  let cursorY = cardY + 30;
+
+  ctx.fillStyle = "#111827";
+  ctx.font = "800 38px 'Poppins',sans-serif";
+  ctx.textBaseline = "top";
+  ctx.fillText("Teacher entry status", contentX, cursorY);
+
+  cursorY += 48;
+  ctx.fillStyle = "#4B5563";
+  ctx.font = "600 18px 'Inter',sans-serif";
+  ctx.fillText(
+    fitCanvasText(ctx, `${instituteName} · ${generatedOnLabel}`, contentWidth),
+    contentX,
+    cursorY
+  );
+
+  cursorY += 34;
+  ctx.fillStyle = "#6B7280";
+  ctx.font = "500 20px 'Inter',sans-serif";
+  ctx.fillText(
+    fitCanvasText(ctx, "Who has updated class logs today, plus week and month entry counts.", contentWidth),
+    contentX,
+    cursorY
+  );
+
+  cursorY += 46;
+  let chipX = contentX;
+  chipX += drawCanvasPill(ctx, {
+    x: chipX,
+    y: cursorY,
+    label: `${summary.updatedToday}/${summary.totalTeachers} updated today`,
+    bg: "#DCFCE7",
+    border: "#BBF7D0",
+    color: "#166534",
+    font: "700 20px 'JetBrains Mono',monospace",
+    padX: 18,
+    height: 48,
+  }) + 12;
+  chipX += drawCanvasPill(ctx, {
+    x: chipX,
+    y: cursorY,
+    label: `${summary.weekEntries} this week`,
+    bg: "#F8FAFC",
+    border: "#DDE3ED",
+    color: "#1F2937",
+    font: "700 20px 'JetBrains Mono',monospace",
+    padX: 18,
+    height: 48,
+  }) + 12;
+  drawCanvasPill(ctx, {
+    x: chipX,
+    y: cursorY,
+    label: `${summary.monthEntries} this month`,
+    bg: "#F8FAFC",
+    border: "#DDE3ED",
+    color: "#1F2937",
+    font: "700 20px 'JetBrains Mono',monospace",
+    padX: 18,
+    height: 48,
+  });
+
+  cursorY += 74;
+  ctx.strokeStyle = "#E5E7EB";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(contentX, cursorY);
+  ctx.lineTo(contentX + contentWidth, cursorY);
+  ctx.stroke();
+  cursorY += 16;
+
+  const rowsToDraw = rows.length ? rows : [{
+    uid:"empty",
+    name:"No teacher activity yet",
+    classCount:0,
+    todayEntries:0,
+    weekEntries:0,
+    monthEntries:0,
+    todayUpdated:false,
+  }];
+
+  rowsToDraw.forEach((item, index)=>{
+    const rowTop = cursorY + index * rowHeight;
+    const rowBottom = rowTop + rowHeight - 12;
+    const leftWidth = contentWidth - 240;
+    const pillLabel = item.todayUpdated ? "Updated today" : "No update today";
+    const safeClassCount = Number.isFinite(item.classCount) ? item.classCount : 0;
+
+    ctx.fillStyle = "#111827";
+    ctx.font = "800 30px 'Poppins',sans-serif";
+    ctx.fillText(fitCanvasText(ctx, item.name, leftWidth), contentX, rowTop);
+
+    ctx.fillStyle = "#6B7280";
+    ctx.font = "600 18px 'Inter',sans-serif";
+    const classCountLabel = safeClassCount === 1 ? "1 class in this institute" : `${safeClassCount} classes in this institute`;
+    ctx.fillText(fitCanvasText(ctx, classCountLabel, leftWidth), contentX, rowTop + 38);
+
+    ctx.fillStyle = "#6B7280";
+    ctx.font = "700 19px 'JetBrains Mono',monospace";
+    ctx.fillText(`Today ${item.todayEntries} • Week ${item.weekEntries} • Month ${item.monthEntries}`, contentX, rowTop + 74);
+
+    ctx.font = "700 20px 'JetBrains Mono',monospace";
+    const pillWidth = ctx.measureText(pillLabel).width + 36;
+    drawCanvasPill(ctx, {
+      x: contentX + contentWidth - pillWidth,
+      y: rowTop + 4,
+      label:pillLabel,
+      bg:item.todayUpdated ? "#DCFCE7" : "#F8FAFC",
+      border:item.todayUpdated ? "#BBF7D0" : "#DDE3ED",
+      color:item.todayUpdated ? "#166534" : "#1F2937",
+      font:"700 20px 'JetBrains Mono',monospace",
+      padX:18,
+      height:46,
+    });
+
+    if(index < rowsToDraw.length - 1){
+      ctx.strokeStyle = "#E5E7EB";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(contentX, rowBottom);
+      ctx.lineTo(contentX + contentWidth, rowBottom);
+      ctx.stroke();
+    }
+  });
+
+  const blob = await new Promise(resolve=>canvas.toBlob(resolve, "image/png"));
+  if(blob){
+    triggerBlobDownload(blob, `${slugifyDownloadPart(instituteName)}_teacher_entry_status_${todayKey()}.png`);
+    return;
+  }
+  const fallbackUrl = canvas.toDataURL("image/png");
+  const anchor = Object.assign(document.createElement("a"), {
+    href:fallbackUrl,
+    download:`${slugifyDownloadPart(instituteName)}_teacher_entry_status_${todayKey()}.png`,
+  });
+  anchor.click();
+}
 function getEntriesInRange(classNotes={}, days=null){
   // returns flat array of {dateKey, entry} sorted by time asc
   const cutoff=days?Date.now()-days*24*60*60*1000:0;
@@ -1859,6 +2140,7 @@ function AdminPanelInner({user}){
   const [period,      setPeriod]      = useState("today");
   const [mobileStep,  setMobileStep]  = useState(0);
   const [exportOpen,   setExportOpen]   = useState(false);
+  const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
   const [panelCollapsed, setPanelCollapsed] = useState({p1:false, p2:false, p3:false});
   const [panelDragging, setPanelDragging] = useState(false);
@@ -2579,40 +2861,8 @@ function AdminPanelInner({user}){
     return instTeachers
       .map(t=>{
         const d = fullData[t.uid];
-        const teacherName = d?.profile?.name || t.name || "Teacher";
         const fallbackLastEntryTs = instTeacherMeta[t.uid]?.lastEntryTs || null;
-        if(!d){
-          return {
-            uid:t.uid,
-            name:teacherName,
-            loaded:false,
-            classCount:null,
-            todayEntries:0,
-            weekEntries:0,
-            monthEntries:0,
-            todayUpdated:false,
-            lastEntryTs:fallbackLastEntryTs,
-          };
-        }
-        const classes = (d.classes||[]).filter(c=>sameInstituteName(c.institute, selInst));
-        const stats = classes.reduce((acc,c)=>{
-          const classNotes = (d.notes||{})[c.id]||{};
-          acc.todayEntries += getEntriesInRange(classNotes, 1).length;
-          acc.weekEntries += getEntriesInRange(classNotes, 7).length;
-          acc.monthEntries += getEntriesInRange(classNotes, 30).length;
-          return acc;
-        },{todayEntries:0,weekEntries:0,monthEntries:0});
-        return {
-          uid:t.uid,
-          name:teacherName,
-          loaded:true,
-          classCount:classes.length,
-          todayEntries:stats.todayEntries,
-          weekEntries:stats.weekEntries,
-          monthEntries:stats.monthEntries,
-          todayUpdated:stats.todayEntries>0,
-          lastEntryTs:fallbackLastEntryTs,
-        };
+        return buildTeacherEntryStatusItem(t, d, selInst, fallbackLastEntryTs);
       })
       .sort((a,b)=>{
         if(a.loaded !== b.loaded) return a.loaded ? -1 : 1;
@@ -2634,6 +2884,37 @@ function AdminPanelInner({user}){
       loadedCount: loaded.length,
     };
   },[teacherEntryStatus]);
+
+  const handleDownloadTeacherStatusImage = React.useCallback(async ()=>{
+    if(!selInst || statusImageBusy) return;
+    setStatusImageBusy(true);
+    try {
+      const exportItems = [];
+      for(const teacher of instTeachers){
+        const data = fullData[teacher.uid] || await ensureFullData(teacher.uid);
+        const fallbackLastEntryTs = instTeacherMeta[teacher.uid]?.lastEntryTs || Number(teacher.lastActive || 0) || null;
+        const item = buildTeacherEntryStatusItem(teacher, data, selInst, fallbackLastEntryTs);
+        exportItems.push(item.loaded ? item : { ...item, loaded:true, classCount:0 });
+      }
+      const rows = sortTeacherStatusForShare(exportItems);
+      await downloadTeacherStatusShareImage({
+        instituteName: selInst,
+        rows,
+        summary: {
+          updatedToday: rows.filter(item=>item.todayUpdated).length,
+          weekEntries: rows.reduce((sum,item)=>sum + (item.weekEntries || 0), 0),
+          monthEntries: rows.reduce((sum,item)=>sum + (item.monthEntries || 0), 0),
+          totalTeachers: rows.length,
+        },
+        generatedOnLabel: `Generated ${new Date().toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`,
+      });
+    } catch (error) {
+      console.error("teacher status image export failed", error);
+      window.alert("Could not generate the teacher status image. Please try again.");
+    } finally {
+      setStatusImageBusy(false);
+    }
+  },[selInst,statusImageBusy,instTeachers,fullData,ensureFullData,instTeacherMeta]);
 
   const classSubjectTime = useMemo(()=>{
     if(!selInst) return [];
@@ -3839,9 +4120,38 @@ function AdminPanelInner({user}){
             </div>
             <div style={{display:"grid",gap:14}}>
               <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
-                <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>Teacher entry status</div>
-                <div style={{fontSize:12,color:G.textL,marginTop:4,lineHeight:1.55}}>
-                  Who has updated class logs today, plus week and month entry counts.
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>Teacher entry status</div>
+                    <div style={{fontSize:12,color:G.textL,marginTop:4,lineHeight:1.55}}>
+                      Who has updated class logs today, plus week and month entry counts.
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleDownloadTeacherStatusImage}
+                    disabled={statusImageBusy || !selInst}
+                    style={{
+                      display:"inline-flex",
+                      alignItems:"center",
+                      gap:8,
+                      background:(statusImageBusy || !selInst) ? "#D5DDEB" : G.navy,
+                      color:"#fff",
+                      border:"none",
+                      borderRadius:10,
+                      padding:"9px 13px",
+                      fontSize:13,
+                      fontWeight:700,
+                      cursor:(statusImageBusy || !selInst) ? "not-allowed" : "pointer",
+                      fontFamily:G.sans,
+                      whiteSpace:"nowrap",
+                      opacity:statusImageBusy ? 0.85 : 1,
+                    }}>
+                    <span style={{fontSize:14}}>⬇</span>
+                    <span>{statusImageBusy ? "Preparing image…" : "Download image"}</span>
+                  </button>
+                </div>
+                <div style={{fontSize:11,color:G.textL,marginTop:8,fontFamily:G.mono}}>
+                  Creates a shareable PNG for your teachers&apos; group.
                 </div>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
                   <span style={{background:"#DCFCE7",border:"1px solid #BBF7D0",borderRadius:999,padding:"5px 10px",fontSize:12,color:"#166534",fontFamily:G.mono,fontWeight:700}}>
