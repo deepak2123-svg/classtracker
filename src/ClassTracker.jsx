@@ -2699,29 +2699,20 @@ function ClassTrackerInner({user}){
     // ── MOBILE VIEW: full-page class list ────────────────────────────────────
     const MobileHome = () => (
       <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-        <div style={{padding:mobileLiteMode?"10px 12px 8px":"12px 14px 10px"}}>
-          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 58%, #24533F 100%)`,borderRadius:20,padding:mobileLiteMode?"12px 13px 11px":"14px 15px 13px",boxShadow:reduceEffects?"none":"0 10px 22px rgba(17,34,27,0.16)"}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+        <div style={{padding:"8px 12px 6px"}}>
+          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 58%, #24533F 100%)`,borderRadius:14,padding:"10px 13px",boxShadow:reduceEffects?"none":"0 6px 14px rgba(17,34,27,0.14)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
               <div>
-                <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.82)",fontFamily:G.mono,letterSpacing:0.45,textTransform:"uppercase",marginBottom:8}}>Teacher workspace</div>
-                <h1 style={{fontSize:mobileLiteMode?21:23,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.55,marginBottom:4,lineHeight:1.08}}>{teacherName}</h1>
-                <p style={{fontSize:12.5,color:"rgba(255,255,255,0.72)",lineHeight:1.45,maxWidth:250}}>
-                  {currentSession()} session with {quickHomeSummary.active} active classes across {quickHomeSummary.instituteCount} institute{quickHomeSummary.instituteCount===1?"":"s"}.
-                </p>
-              </div>
-              <div style={{width:42,height:42,borderRadius:14,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.12)"}}>📘</div>
-            </div>
-            <div style={{display:"flex",gap:6,overflowX:"auto",paddingTop:10}} className="hide-scrollbar">
-              {[
-                {label:"Logged today",value:quickHomeSummary.loggedToday,accent:"#BDF5D0"},
-                {label:"This month",value:quickHomeSummary.monthEntries,accent:"#FFFFFF"},
-                {label:"Classes",value:quickHomeSummary.active,accent:"#D8E7FF"},
-              ].map(item=>(
-                <div key={item.label} style={{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"8px 10px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)",minWidth:mobileLiteMode?100:108,flexShrink:0}}>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.45}}>{item.label}</div>
-                  <div style={{fontSize:mobileLiteMode?17:18,fontWeight:800,color:item.accent,fontFamily:G.display,marginTop:4,lineHeight:1}}>{item.value}</div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                  <h1 style={{fontSize:18,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.4,lineHeight:1}}>{teacherName}</h1>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.55)",fontFamily:G.mono}}>{currentSession()}</span>
                 </div>
-              ))}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:5,paddingTop:8,flexWrap:"wrap"}}>
+              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#BDF5D0"}}>{quickHomeSummary.loggedToday} today</span>
+              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#FFFFFF"}}>{quickHomeSummary.monthEntries} this month</span>
+              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#D8E7FF"}}>{quickHomeSummary.active} classes</span>
             </div>
           </div>
         </div>
@@ -3536,12 +3527,26 @@ function ClassTrackerInner({user}){
               </div>
             </div>
           )}
-          <div className="mobile-pad" style={{maxWidth:660,width:"100%",margin:"0 auto",padding:"32px 16px 72px",boxSizing:"border-box"}}>
-            <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:5,textTransform:"uppercase",fontWeight:600}}>{isEdit?"Editing Entry":"New Entry For"}</p>
-            <h2 style={{marginBottom:22,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>{isEdit?form.title||"Entry":formatDateLabel(selectedDate)}</h2>
-            <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
-              <span>👤</span><span>Logged as: <strong>{teacherName}</strong></span>
-            </div>
+          <div className="mobile-pad" style={{maxWidth:660,width:"100%",margin:"0 auto",padding:"16px 16px 72px",boxSizing:"border-box"}}>
+            {isEdit?(
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                <div style={{flex:1}}>
+                  <p style={{fontSize:12,color:G.textM,fontFamily:G.sans,marginBottom:2,textTransform:"uppercase",fontWeight:600,letterSpacing:0.4}}>Editing Entry</p>
+                  <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{formatDateLabel(selectedDate)}</div>
+                </div>
+                <div style={{background:G.greenL,borderRadius:8,padding:"6px 10px",fontSize:13,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:5}}>
+                  <span>👤</span><span style={{fontWeight:600}}>{teacherName}</span>
+                </div>
+              </div>
+            ):(
+              <>
+                <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:5,textTransform:"uppercase",fontWeight:600}}>New Entry For</p>
+                <h2 style={{marginBottom:22,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>{formatDateLabel(selectedDate)}</h2>
+                <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
+                  <span>👤</span><span>Logged as: <strong>{teacherName}</strong></span>
+                </div>
+              </>
+            )}
           <div className="form-card" style={{...card,padding:"24px"}}>
             <div style={{marginBottom:18}}>
               <label style={lbl}>Topic Status</label>
