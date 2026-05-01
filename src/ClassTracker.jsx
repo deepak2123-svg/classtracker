@@ -346,7 +346,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 
   return(
     <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06), 0 10px 24px rgba(7,16,12,0.18)"}}>
-      <div style={{height:64,display:"flex",alignItems:"center",padding:"0 12px",gap:10}}>
+      <div style={{height:64,display:"flex",alignItems:"center",padding:"0 12px",gap:8,overflow:"hidden"}}>
 
         {/* Ledgr logo */}
         <div onClick={onLogoClick}
@@ -367,13 +367,13 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 
         <div style={{flex:1}}/>
 
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,minWidth:0}}>
           {right}
 
           {/* Clickable profile pill */}
-          <div style={{position:"relative"}}>
+          <div style={{position:"relative",flexShrink:0}}>
             <div onClick={()=>setProfileOpen(o=>!o)}
-              style={{height:42,display:"flex",alignItems:"center",gap:7,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"0 12px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
+              style={{height:38,display:"flex",alignItems:"center",gap:6,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"0 9px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
               <Avatar user={user} size={22}/>
               <span style={{fontWeight:600,fontSize:13,color:"rgba(255,255,255,0.92)",whiteSpace:"nowrap",fontFamily:G.sans}}>
                 <span className="desktop-only">{teacherName}</span>
@@ -3029,29 +3029,28 @@ function ClassTrackerInner({user}){
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
-        <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F7FAF8 100%)",borderBottom:`1px solid ${G.border}`,padding:"14px 16px 16px",flexShrink:0}}>
-          <div style={{background:`linear-gradient(135deg, ${color.light} 0%, #FFFFFF 78%)`,border:`1px solid ${color.bg}1A`,borderRadius:24,padding:"16px 16px 14px",boxShadow:reduceEffects?"none":"0 12px 24px rgba(14,31,24,0.08)"}}>
-            <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
-              <div style={{width:48,height:48,borderRadius:14,background:`linear-gradient(180deg, ${color.bg} 0%, ${color.bg}CC 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,color:"#fff",fontFamily:G.mono,boxShadow:`0 10px 18px ${color.bg}24`}}>
-                {(cls.section||"?").slice(0,2).toUpperCase()}
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Class detail</div>
-                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,lineHeight:1.1}}>{cls.section}</div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                  <span style={{background:"#fff",border:`1px solid ${color.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:color.bg,fontFamily:G.sans,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.institute}</span>
-                  {cls.subject&&<span style={{background:"rgba(15,23,42,0.04)",border:"1px solid rgba(15,23,42,0.08)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textS,fontFamily:G.sans}}>{cls.subject}</span>}
-                  <span style={{background:G.greenL,border:`1px solid ${G.green}1E`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.green,fontFamily:G.mono}}>{totalCount} entries</span>
-                  <span style={{background:"rgba(15,23,42,0.04)",border:"1px solid rgba(15,23,42,0.08)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{activeDays} active days</span>
-                </div>
-              </div>
-              <OverflowMenu items={[
-                { icon:"✏", label:"Edit class", onClick:()=>setEditingClass(cls) },
-                { icon:"🗑", label:"Archive class", danger:true, onClick:()=>setLeaveModal(cls.id) },
-              ]}/>
+        <div style={{background:G.forest,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
+          {/* Compact single-line class identity */}
+          <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
+            <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(180deg, ${color.bg} 0%, ${color.bg}CC 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",fontFamily:G.mono}}>
+              {(cls.section||"?").slice(0,2).toUpperCase()}
             </div>
-            <div style={{maxWidth:420}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/></div>
+            <div style={{flex:1,minWidth:0,display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
+              <span style={{fontSize:16,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.3,lineHeight:1,flexShrink:0}}>{cls.section}</span>
+              <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.sans,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}}>{cls.institute}</span>
+              {cls.subject&&<><span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span><span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.sans,fontWeight:600,flexShrink:0}}>{cls.subject}</span></>}
+              <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
+              <span style={{fontSize:11,color:"#BDF5D0",fontFamily:G.mono,fontWeight:700,flexShrink:0}}>{totalCount} entries</span>
+              <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.45)",fontFamily:G.mono,flexShrink:0}}>{activeDays}d active</span>
+            </div>
+            <OverflowMenu items={[
+              { icon:"✏", label:"Edit class", onClick:()=>setEditingClass(cls) },
+              { icon:"🗑", label:"Archive class", danger:true, onClick:()=>setLeaveModal(cls.id) },
+            ]}/>
           </div>
+          <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
         </div>
         {/* Entries scroll area */}
         <div style={{flex:1,overflowY:"auto",padding:"14px 16px 16px",WebkitOverflowScrolling:"touch"}}>
