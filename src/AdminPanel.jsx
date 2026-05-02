@@ -640,11 +640,31 @@ function formatDurationShort(totalMins){
   if(h) return `${h}h`;
   return `${m}m`;
 }
+const MONTH_NAMES_SHORT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function adminPeriodLabel(period){
   if(period==="today") return "Today";
   if(period==="week") return "This Week";
   if(period==="month") return "This Month";
+  if(period==="all") return "All Time";
+  if(/^\d{4}-\d{2}$/.test(period)){
+    const [y,m]=period.split("-").map(Number);
+    return `${MONTH_NAMES_SHORT[m-1]} '${String(y).slice(2)}`;
+  }
   return "All Time";
+}
+function getPeriodFilter(period){
+  if(period==="today") return {days:1,startKey:null,endKey:null};
+  if(period==="week") return {days:7,startKey:null,endKey:null};
+  if(period==="month") return {days:30,startKey:null,endKey:null};
+  if(period==="all") return {days:null,startKey:null,endKey:null};
+  if(/^\d{4}-\d{2}$/.test(period)){
+    const [y,m]=period.split("-").map(Number);
+    const startKey=`${y}-${String(m).padStart(2,"0")}-01`;
+    const lastDay=new Date(y,m,0).getDate();
+    const endKey=`${y}-${String(m).padStart(2,"0")}-${String(lastDay).padStart(2,"0")}`;
+    return {days:null,startKey,endKey};
+  }
+  return {days:null,startKey:null,endKey:null};
 }
 const SUBJECT_COLOR_PALETTE = ["#1D4ED8","#16A34A","#EA580C","#7C3AED","#0891B2","#DC2626","#CA8A04","#4F46E5"];
 function subjectColor(name){
@@ -1224,12 +1244,14 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
   });
   anchor.click();
 }
-function getEntriesInRange(classNotes={}, days=null){
-  // returns flat array of {dateKey, entry} sorted by time asc
+function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
+  // returns flat array of {dateKey, entry} sorted by date desc, time asc
   const cutoff=days?Date.now()-days*24*60*60*1000:0;
   const result=[];
   Object.entries(classNotes||{}).forEach(([dk,arr])=>{
     if(days && new Date(dk).getTime()<cutoff) return;
+    if(!days && startKey && dk<startKey) return;
+    if(!days && endKey && dk>endKey) return;
     if(!Array.isArray(arr)) return;
     arr.forEach(e=>{ if(e) result.push({dateKey:dk,entry:e}); });
   });
@@ -1341,6 +1363,108 @@ class ErrorBoundary extends Component {
     );
     return this.props.children;
   }
+}
+
+// ── Period Selector (Option B: quick pills + month scroller) ─────────────────
+function PeriodSelector({ period, onChangePeriod, compact = false, accentColor = null }) {
+  const scrollRef = React.useRef(null);
+  const accent = accentColor || G.navy;
+
+  const months = React.useMemo(()=>{
+    const result=[];
+    const now=new Date();
+    const curY=now.getFullYear(), curM=now.getMonth()+1;
+    for(let i=14;i>=0;i--){
+      let m=curM-i, y=curY;
+      while(m<=0){m+=12;y--;}
+      const key=`${y}-${String(m).padStart(2,"0")}`;
+      const label=`${MONTH_NAMES_SHORT[m-1]} '${String(y).slice(2)}`;
+      result.push({key,label,isNow:m===curM&&y===curY});
+    }
+    return result;
+  },[]);
+
+  React.useEffect(()=>{
+    if(scrollRef.current) scrollRef.current.scrollLeft=scrollRef.current.scrollWidth;
+  },[]);
+
+  const quickPills=[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]];
+  const isMonthPeriod=/^\d{4}-\d{2}$/.test(period);
+  const labelStyle={fontSize:11,color:G.textL,fontFamily:G.mono,whiteSpace:"nowrap",flexShrink:0,letterSpacing:0.3};
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:compact?5:6}}>
+      {/* Quick pills */}
+      <div style={{display:"flex",alignItems:"center",gap:compact?5:7,flexWrap:"nowrap"}}>
+        <span style={labelStyle}>Quick</span>
+        <div style={{display:"flex",gap:compact?3:4,flexWrap:"nowrap"}}>
+          {quickPills.map(([k,l])=>{
+            const sel=period===k;
+            return(
+              <button key={k} onClick={()=>onChangePeriod(k)}
+                style={{
+                  padding:compact?"5px 9px":"6px 13px",
+                  borderRadius:12,
+                  fontSize:compact?12:13,
+                  cursor:"pointer",
+                  fontFamily:G.sans,
+                  fontWeight:sel?700:500,
+                  background:sel?accent:"transparent",
+                  color:sel?"#fff":G.textS,
+                  border:`1.5px solid ${sel?accent:G.borderM}`,
+                  whiteSpace:"nowrap",
+                  transition:"all 0.14s",
+                  WebkitTapHighlightColor:"transparent",
+                  flexShrink:0,
+                }}>
+                {l}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {/* Month scroller */}
+      <div style={{display:"flex",alignItems:"center",gap:compact?5:7}}>
+        <span style={labelStyle}>or pick</span>
+        <div ref={scrollRef}
+          style={{
+            display:"flex",
+            gap:compact?3:4,
+            overflowX:"auto",
+            scrollbarWidth:"none",
+            msOverflowStyle:"none",
+            WebkitOverflowScrolling:"touch",
+            flex:1,
+            paddingBottom:2,
+          }}>
+          <style>{`.ps-scroll::-webkit-scrollbar{display:none}`}</style>
+          {months.map(({key,label,isNow})=>{
+            const sel=period===key;
+            return(
+              <button key={key} onClick={()=>onChangePeriod(key)}
+                style={{
+                  padding:compact?"5px 9px":"5px 11px",
+                  borderRadius:12,
+                  fontSize:compact?12:13,
+                  cursor:"pointer",
+                  fontFamily:G.mono,
+                  fontWeight:sel?700:isNow?600:500,
+                  background:sel?"#DBEAFE":isNow?"rgba(255,255,255,0.9)":"transparent",
+                  color:sel?G.blue:isNow?G.navy:G.textM,
+                  border:`1.5px solid ${sel?G.blue:isNow?G.borderM:G.border}`,
+                  whiteSpace:"nowrap",
+                  flexShrink:0,
+                  transition:"all 0.14s",
+                  WebkitTapHighlightColor:"transparent",
+                }}>
+                {label}{isNow?" ←now":""}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -2694,10 +2818,9 @@ function AdminPanelInner({user}){
     const d=fullData[teacherUid];
     if(!d) return null;
     const classNotes=(d.notes||{})[classId]||{};
-    const days=period==="today"?1:period==="week"?7:period==="month"?30:null;
-    const flat=getEntriesInRange(classNotes,days);
+    const flat=getEntriesInRange(classNotes,periodDays,periodStartKey,periodEndKey);
     return groupByDate(flat);
-  },[selP3,fullData,period]);
+  },[selP3,fullData,period,periodDays,periodStartKey,periodEndKey]);
 
   const selectedTeacherName = (uid) => {
     if(!uid) return "";
@@ -2714,7 +2837,10 @@ function AdminPanelInner({user}){
   const isAggregateSelection = isAllClassesSelected || isAllTeachersSelected;
   const aggregateTitle = isAllClassesSelected ? "All Classes" : isAllTeachersSelected ? "All Teachers" : "";
   const isScopedFullView = !!fullView;
-  const periodDays = period==="today"?1:period==="week"?7:period==="month"?30:null;
+  const periodFilter = useMemo(()=>getPeriodFilter(period),[period]);
+  const periodDays = periodFilter.days;
+  const periodStartKey = periodFilter.startKey;
+  const periodEndKey = periodFilter.endKey;
   const selectedClassMeta = useMemo(()=>{
     if(!selP3) return null;
     const d = fullData[selP3.teacherUid];
@@ -2729,7 +2855,7 @@ function AdminPanelInner({user}){
     if(!selP3) return null;
     const d = fullData[selP3.teacherUid];
     const classNotes = (d?.notes||{})[selP3.classId] || {};
-    const flat = getEntriesInRange(classNotes, periodDays);
+    const flat = getEntriesInRange(classNotes, periodDays, periodStartKey, periodEndKey);
     const statusMap = {};
     const daySet = new Set();
     let totalMinutes = 0;
@@ -2764,12 +2890,12 @@ function AdminPanelInner({user}){
           ...(STATUS_STYLES[key] || { bg:G.bg, text:G.textS, label:key }),
         })),
     };
-  },[selP3,fullData,periodDays]);
+  },[selP3,fullData,periodDays,periodStartKey,periodEndKey]);
 
-  const collectEntriesForTeacherClass = (teacherUid, teacherName, classId, className, subject, instituteName = selInst, days = periodDays) => {
+  const collectEntriesForTeacherClass = (teacherUid, teacherName, classId, className, subject, instituteName = selInst, days = periodDays, sk = periodStartKey, ek = periodEndKey) => {
     const d = fullData[teacherUid];
     if(!d) return [];
-    return getEntriesInRange((d.notes||{})[classId]||{}, days).map(({dateKey, entry})=>({
+    return getEntriesInRange((d.notes||{})[classId]||{}, days, sk, ek).map(({dateKey, entry})=>({
       id: entry.id,
       dateKey,
       timeStart: entry.timeStart || "",
@@ -2802,7 +2928,7 @@ function AdminPanelInner({user}){
           normaliseName(c.section),
           c.subject,
           c.institute || selInst,
-          periodDays
+          periodDays, periodStartKey, periodEndKey
         ))
         .sort(compareAdminPanelEntries);
     }
@@ -2817,12 +2943,12 @@ function AdminPanelInner({user}){
           cls.display,
           t.subject || cls.subjects?.[0] || "",
           selInst,
-          periodDays
+          periodDays, periodStartKey, periodEndKey
         ))
         .sort(compareAdminPanelEntries);
     }
     return [];
-  },[fullView,selInst,fullData,instClasses,periodDays]);
+  },[fullView,selInst,fullData,instClasses,periodDays,periodStartKey,periodEndKey]);
 
   const fullViewGroups = useMemo(()=>{
     if(!fullView) return [];
@@ -2875,11 +3001,11 @@ function AdminPanelInner({user}){
             normaliseName(c.section),
             c.subject,
             c.institute || selInst,
-            periodDays
+            periodDays, periodStartKey, periodEndKey
           ));
       })
       .sort(compareAdminPanelEntries);
-  },[isAggregateSelection,selInst,teachers,fullData,periodDays]);
+  },[isAggregateSelection,selInst,teachers,fullData,periodDays,periodStartKey,periodEndKey]);
 
   const aggregateGroups=useMemo(()=>{
     if(!isAggregateSelection) return [];
@@ -2911,9 +3037,9 @@ function AdminPanelInner({user}){
       if(!d) return sum;
       return sum + (d.classes||[])
         .filter(c=>sameInstituteName(c.institute, selInst))
-        .reduce((classSum,c)=>classSum + getEntriesInRange((d.notes||{})[c.id]||{}, periodDays).length,0);
+        .reduce((classSum,c)=>classSum + getEntriesInRange((d.notes||{})[c.id]||{}, periodDays, periodStartKey, periodEndKey).length,0);
     },0);
-  },[selInst,teachers,fullData,periodDays]);
+  },[selInst,teachers,fullData,periodDays,periodStartKey,periodEndKey]);
 
   const teacherEntryStatus = useMemo(()=>{
     if(!selInst) return [];
@@ -2987,7 +3113,7 @@ function AdminPanelInner({user}){
         (cls.teachers||[]).forEach(t=>{
           const d = fullData[t.uid];
           if(!d) return;
-          const entries = getEntriesInRange((d.notes||{})[t.classId]||{}, periodDays);
+          const entries = getEntriesInRange((d.notes||{})[t.classId]||{}, periodDays, periodStartKey, periodEndKey);
           if(entries.length) activeTeachers.add(t.uid);
           entries.forEach(({entry})=>{
             entryCount += 1;
@@ -3016,7 +3142,7 @@ function AdminPanelInner({user}){
       })
       .filter(item=>item.entryCount>0)
       .sort((a,b)=>classNum(b.display)-classNum(a.display) || exportTextSorter.compare(a.display,b.display));
-  },[selInst,instClasses,fullData,periodDays]);
+  },[selInst,instClasses,fullData,periodDays,periodStartKey,periodEndKey]);
 
   const classSubjectSummary = useMemo(()=>{
     return classSubjectTime.reduce((acc,item)=>{
@@ -5665,8 +5791,23 @@ function AdminPanelInner({user}){
 
     // ── STEP 3: Entries ───────────────────────────────────────────────────────
     if(mobileStep===3&&(selP3||isAggregateSelection||isScopedFullView)) {
-      const days=period==="today"?1:period==="week"?7:period==="month"?30:null;
-      const classNotes=selP3?((fullData[selP3.teacherUid]?.notes||{})[selP3.classId]||{}):{};
+      return(
+        <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
+          {binView&&<AdminBinModal/>}
+          {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+          {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
+          <MobileNav/><MobileBreadcrumb/>
+          <div style={{padding:"12px 14px 40px"}}>
+            <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>
+              {isScopedFullView ? fullViewTitle : isAggregateSelection ? aggregateTitle : `${selP3.teacherName} — ${selP3.className}`}
+            </h2>
+            <div style={{fontSize:14,color:G.textM,marginBottom:14}}>
+              {isScopedFullView ? fullViewSubtitle : isAggregateSelection ? `${selInst} · grouped by class, chronological inside each class` : [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")}
+            </div>
+            {/* Period selector — Option B */}
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
+              <PeriodSelector period={period} onChangePeriod={setPeriod} compact />
+            </div>
       const entries=selP3?groupByDate(getEntriesInRange(classNotes,days)):[];
       return(
         <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
@@ -5680,12 +5821,6 @@ function AdminPanelInner({user}){
             </h2>
             <div style={{fontSize:14,color:G.textM,marginBottom:16}}>
               {isScopedFullView ? fullViewSubtitle : isAggregateSelection ? `${selInst} · grouped by class, chronological inside each class` : [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")}
-            </div>
-            {/* Period pills — horizontal scroll, never wraps */}
-            <div style={{display:"flex",gap:6,marginBottom:10,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none",paddingBottom:2}}>
-              {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
-                <button key={k} onClick={()=>setPeriod(k)} style={{padding:"7px 14px",borderRadius:16,fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:period===k?700:500,background:period===k?G.navy:"transparent",color:period===k?"#fff":G.textS,border:`1.5px solid ${period===k?G.navy:G.borderM}`,minHeight:36,WebkitTapHighlightColor:"transparent",flexShrink:0}}>{l}</button>
-              ))}
             </div>
             {/* Export — its own row, always visible */}
             <button onClick={()=>setExportOpen(true)}
@@ -6375,34 +6510,9 @@ function AdminPanelInner({user}){
                 {p4HeaderStatusNode}
               </div>
 
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:14,flexWrap:"wrap",marginTop:18,position:"relative"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                  <span style={{background:"#FFFFFF",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:999,padding:"7px 11px",fontSize:12,color:p4HeaderTone.chipText,fontFamily:G.mono,fontWeight:700,flexShrink:0}}>
-                    Period
-                  </span>
-                  <div style={{display:"flex",gap:6,alignItems:"center",background:"rgba(255,255,255,0.78)",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:18,padding:4,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.75)"}}>
-                    {[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]].map(([k,l])=>(
-                      <button key={k} onClick={()=>setPeriod(k)}
-                        style={{
-                          padding:"7px 15px",
-                          borderRadius:14,
-                          fontSize:14,
-                          cursor:"pointer",
-                          fontFamily:G.sans,
-                          fontWeight:period===k?700:500,
-                          transition:"all 0.14s",
-                          background:period===k?p4HeaderTone.accent:"transparent",
-                          color:period===k?"#fff":G.textS,
-                          border:`1px solid ${period===k?p4HeaderTone.accent:"transparent"}`,
-                          boxShadow:period===k?`0 8px 18px ${alphaHex(p4HeaderTone.accent,0.18)}`:"none",
-                          flexShrink:0,
-                          minHeight:38,
-                          WebkitTapHighlightColor:"transparent",
-                        }}>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap",marginTop:18,position:"relative"}}>
+                <div style={{flex:1,minWidth:0,background:"rgba(255,255,255,0.78)",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:16,padding:"12px 14px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.75)"}}>
+                  <PeriodSelector period={period} onChangePeriod={setPeriod} accentColor={p4HeaderTone.accent} />
                 </div>
                 {(selP3||isAggregateSelection||isScopedFullView)&&(
                   <button onClick={()=>setExportOpen(true)}
