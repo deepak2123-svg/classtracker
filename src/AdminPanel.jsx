@@ -2812,16 +2812,6 @@ function AdminPanelInner({user}){
   },[selP2,tab,selInst,fullData]);
 
   // ── Entries for P4 ────────────────────────────────────────────────────────
-  const p4Entries=useMemo(()=>{
-    if(!selP3) return null;
-    const {teacherUid, classId}=selP3;
-    const d=fullData[teacherUid];
-    if(!d) return null;
-    const classNotes=(d.notes||{})[classId]||{};
-    const flat=getEntriesInRange(classNotes,periodDays,periodStartKey,periodEndKey);
-    return groupByDate(flat);
-  },[selP3,fullData,period,periodDays,periodStartKey,periodEndKey]);
-
   const selectedTeacherName = (uid) => {
     if(!uid) return "";
     return fullData[uid]?.profile?.name || teachers.find(t=>t.uid===uid)?.name || uid;
@@ -2841,6 +2831,16 @@ function AdminPanelInner({user}){
   const periodDays = periodFilter.days;
   const periodStartKey = periodFilter.startKey;
   const periodEndKey = periodFilter.endKey;
+
+  const p4Entries=useMemo(()=>{
+    if(!selP3) return null;
+    const {teacherUid, classId}=selP3;
+    const d=fullData[teacherUid];
+    if(!d) return null;
+    const classNotes=(d.notes||{})[classId]||{};
+    const flat=getEntriesInRange(classNotes,periodDays,periodStartKey,periodEndKey);
+    return groupByDate(flat);
+  },[selP3,fullData,period,periodDays,periodStartKey,periodEndKey]);
   const selectedClassMeta = useMemo(()=>{
     if(!selP3) return null;
     const d = fullData[selP3.teacherUid];
