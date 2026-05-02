@@ -5808,20 +5808,6 @@ function AdminPanelInner({user}){
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
               <PeriodSelector period={period} onChangePeriod={setPeriod} compact />
             </div>
-      const entries=selP3?groupByDate(getEntriesInRange(classNotes,days)):[];
-      return(
-        <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
-          {binView&&<AdminBinModal/>}
-          {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
-          {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
-          <MobileNav/><MobileBreadcrumb/>
-          <div style={{padding:"12px 14px 40px"}}>
-            <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>
-              {isScopedFullView ? fullViewTitle : isAggregateSelection ? aggregateTitle : `${selP3.teacherName} — ${selP3.className}`}
-            </h2>
-            <div style={{fontSize:14,color:G.textM,marginBottom:16}}>
-              {isScopedFullView ? fullViewSubtitle : isAggregateSelection ? `${selInst} · grouped by class, chronological inside each class` : [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")}
-            </div>
             {/* Export — its own row, always visible */}
             <button onClick={()=>setExportOpen(true)}
               style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"11px 0",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:44,WebkitTapHighlightColor:"transparent",marginBottom:20}}>
