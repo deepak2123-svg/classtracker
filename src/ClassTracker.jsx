@@ -375,9 +375,8 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
             <div onClick={()=>setProfileOpen(o=>!o)}
               style={{height:38,display:"flex",alignItems:"center",gap:6,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"0 9px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
               <Avatar user={user} size={22}/>
-              <span style={{fontWeight:600,fontSize:13,color:"rgba(255,255,255,0.92)",whiteSpace:"nowrap",fontFamily:G.sans}}>
-                <span className="desktop-only">{teacherName}</span>
-                <span className="mobile-inline">{shortName}</span>
+              <span style={{fontWeight:600,fontSize:13,color:"rgba(255,255,255,0.92)",whiteSpace:"nowrap",fontFamily:G.sans}} className="desktop-only">
+                {teacherName}
               </span>
               <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:2}}>{profileOpen?"▲":"▼"}</span>
             </div>
