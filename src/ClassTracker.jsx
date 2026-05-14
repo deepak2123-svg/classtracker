@@ -887,11 +887,13 @@ const LEAVE_REASONS = [
   { id:"reassigned", icon:"🔄", label:"Reassigned", desc:"Another teacher has taken over this class" },
   { id:"merged",     icon:"🔀", label:"Merged",     desc:"This batch was combined with another batch" },
   { id:"onhold",     icon:"⏸", label:"On Hold",    desc:"Class is paused for now, may continue later" },
+  { id:"delete",     icon:"🗑", label:"Delete",     desc:"Remove this class from your active list" },
 ];
 function LeaveClassModal({cls,onConfirm,onClose}){
   const [selected,setSelected]=useState(null);
+  const primaryLabel=selected==="delete"?"Delete Class":"Archive Class";
   return(
-    <Modal title="Why are you removing this class?" subtitle={`"${cls.section} · ${cls.institute}" will be removed from your active list, with this reason visible to your admin.`} onClose={onClose}>
+    <Modal title="Manage this class" subtitle={`"${cls.section} · ${cls.institute}" will be updated with this action visible to your admin.`} onClose={onClose}>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
         {LEAVE_REASONS.map(r=>(
           <button key={r.id} onClick={()=>setSelected(r.id)} type="button"
@@ -914,7 +916,7 @@ function LeaveClassModal({cls,onConfirm,onClose}){
           style={{background:selected?G.red:"#D5D5D5",color:"#fff",border:"none",borderRadius:10,
             padding:"9px 20px",fontSize:15,cursor:selected?"pointer":"not-allowed",
             fontFamily:G.sans,fontWeight:600,transition:"background 0.15s"}}>
-          Delete Class
+          {primaryLabel}
         </button>
       </div>
     </Modal>
