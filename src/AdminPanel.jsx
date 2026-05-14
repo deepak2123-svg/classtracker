@@ -641,10 +641,26 @@ function formatDurationShort(totalMins){
   return `${m}m`;
 }
 const MONTH_NAMES_SHORT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-function adminPeriodLabel(period){
+function formatAdminDateKey(dateKey, options = { month:"short", day:"numeric" }){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey||""))) return "";
+  const [y,m,d]=String(dateKey).split("-").map(Number);
+  return new Date(y,m-1,d).toLocaleDateString("en-US", options);
+}
+function adminPeriodLabel(period, rangeStart = null, rangeEnd = null){
   if(period==="today") return "Today";
   if(period==="week") return "This Week";
   if(period==="month") return "This Month";
+  if(period==="range"){
+    const start=/^\d{4}-\d{2}-\d{2}$/.test(String(rangeStart||"")) ? String(rangeStart) : "";
+    const end=/^\d{4}-\d{2}-\d{2}$/.test(String(rangeEnd||"")) ? String(rangeEnd) : "";
+    if(start && end){
+      const first=start<=end?start:end;
+      const last=start<=end?end:start;
+      if(first===last) return formatAdminDateKey(first, { month:"short", day:"numeric", year:"numeric" });
+      return `${formatAdminDateKey(first)} - ${formatAdminDateKey(last, { month:"short", day:"numeric", year:"numeric" })}`;
+    }
+    return "Selected Range";
+  }
   if(period==="all") return "All Time";
   if(/^\d{4}-\d{2}$/.test(period)){
     const [y,m]=period.split("-").map(Number);
@@ -652,10 +668,16 @@ function adminPeriodLabel(period){
   }
   return "All Time";
 }
-function getPeriodFilter(period){
+function getPeriodFilter(period, rangeStart = null, rangeEnd = null){
   if(period==="today") return {days:1,startKey:null,endKey:null};
   if(period==="week") return {days:7,startKey:null,endKey:null};
   if(period==="month") return {days:30,startKey:null,endKey:null};
+  if(period==="range"){
+    const fallback=todayKey();
+    const start=/^\d{4}-\d{2}-\d{2}$/.test(String(rangeStart||"")) ? String(rangeStart) : (/^\d{4}-\d{2}-\d{2}$/.test(String(rangeEnd||"")) ? String(rangeEnd) : fallback);
+    const end=/^\d{4}-\d{2}-\d{2}$/.test(String(rangeEnd||"")) ? String(rangeEnd) : start;
+    return start<=end ? {days:null,startKey:start,endKey:end} : {days:null,startKey:end,endKey:start};
+  }
   if(period==="all") return {days:null,startKey:null,endKey:null};
   if(/^\d{4}-\d{2}$/.test(period)){
     const [y,m]=period.split("-").map(Number);
@@ -1084,7 +1106,7 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
   const cardX = 36;
   const cardY = 36;
   const cardWidth = width - cardX * 2;
-  const headerHeight = 198;
+  const headerHeight = 290;
   const rowHeight = 118;
   const cardHeight = headerHeight + Math.max(1, rows.length) * rowHeight + 28;
   const height = cardY * 2 + cardHeight;
@@ -1111,20 +1133,29 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
   let cursorY = cardY + 30;
 
   ctx.fillStyle = "#111827";
-  ctx.font = "800 38px 'Poppins',sans-serif";
+  ctx.font = "800 34px 'Poppins',sans-serif";
   ctx.textBaseline = "top";
   ctx.fillText("Teacher entry status", contentX, cursorY);
 
-  cursorY += 48;
-  ctx.fillStyle = "#4B5563";
-  ctx.font = "600 18px 'Inter',sans-serif";
+  cursorY += 50;
+  ctx.fillStyle = "#1A2F5A";
+  ctx.font = "800 30px 'Poppins',sans-serif";
   ctx.fillText(
-    fitCanvasText(ctx, `${instituteName} · ${generatedOnLabel}`, contentWidth),
+    fitCanvasText(ctx, instituteName, contentWidth),
     contentX,
     cursorY
   );
 
-  cursorY += 34;
+  cursorY += 40;
+  ctx.fillStyle = "#4B5563";
+  ctx.font = "600 18px 'Inter',sans-serif";
+  ctx.fillText(
+    fitCanvasText(ctx, `Generated ${generatedOnLabel}`, contentWidth),
+    contentX,
+    cursorY
+  );
+
+  cursorY += 32;
   ctx.fillStyle = "#6B7280";
   ctx.font = "500 20px 'Inter',sans-serif";
   ctx.fillText(
@@ -1133,7 +1164,7 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
     cursorY
   );
 
-  cursorY += 46;
+  cursorY += 44;
   let chipX = contentX;
   chipX += drawCanvasPill(ctx, {
     x: chipX,
@@ -1365,104 +1396,71 @@ class ErrorBoundary extends Component {
   }
 }
 
-// ── Period Selector (Option B: quick pills + month scroller) ─────────────────
-function PeriodSelector({ period, onChangePeriod, compact = false, accentColor = null }) {
-  const scrollRef = React.useRef(null);
+// ── Period Selector ────────────────────────────────────────────────────────────
+function PeriodSelector({
+  period,
+  onChangePeriod,
+  compact = false,
+  accentColor = null,
+  rangeStart = "",
+  rangeEnd = "",
+  onChangeRangeStart = ()=>{},
+  onChangeRangeEnd = ()=>{},
+}) {
   const accent = accentColor || G.navy;
-
-  const months = React.useMemo(()=>{
-    const result=[];
-    const now=new Date();
-    const curY=now.getFullYear(), curM=now.getMonth()+1;
-    for(let i=14;i>=0;i--){
-      let m=curM-i, y=curY;
-      while(m<=0){m+=12;y--;}
-      const key=`${y}-${String(m).padStart(2,"0")}`;
-      const label=`${MONTH_NAMES_SHORT[m-1]} '${String(y).slice(2)}`;
-      result.push({key,label,isNow:m===curM&&y===curY});
-    }
-    return result;
-  },[]);
-
-  React.useEffect(()=>{
-    if(scrollRef.current) scrollRef.current.scrollLeft=scrollRef.current.scrollWidth;
-  },[]);
-
-  const quickPills=[["today","Today"],["week","This Week"],["month","This Month"],["all","All Time"]];
-  const isMonthPeriod=/^\d{4}-\d{2}$/.test(period);
-  const labelStyle={fontSize:11,color:G.textL,fontFamily:G.mono,whiteSpace:"nowrap",flexShrink:0,letterSpacing:0.3};
+  const quickPills=[["today","Today"],["week","This Week"],["month","This Month"],["range","Range"]];
+  const rangeActive=period==="range";
+  const dateInputStyle={
+    width:"100%",
+    padding:compact?"8px 10px":"9px 11px",
+    borderRadius:10,
+    border:`1.5px solid ${rangeActive?accent:G.borderM}`,
+    background:"#FFFFFF",
+    color:G.textS,
+    fontSize:compact?12.5:13,
+    fontFamily:G.sans,
+    boxSizing:"border-box",
+    outline:"none",
+  };
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:compact?5:6}}>
-      {/* Quick pills */}
-      <div style={{display:"flex",alignItems:"center",gap:compact?5:7,flexWrap:"nowrap"}}>
-        <span style={labelStyle}>Quick</span>
-        <div style={{display:"flex",gap:compact?3:4,flexWrap:"nowrap"}}>
-          {quickPills.map(([k,l])=>{
-            const sel=period===k;
-            return(
-              <button key={k} onClick={()=>onChangePeriod(k)}
-                style={{
-                  padding:compact?"5px 9px":"6px 13px",
-                  borderRadius:12,
-                  fontSize:compact?12:13,
-                  cursor:"pointer",
-                  fontFamily:G.sans,
-                  fontWeight:sel?700:500,
-                  background:sel?accent:"transparent",
-                  color:sel?"#fff":G.textS,
-                  border:`1.5px solid ${sel?accent:G.borderM}`,
-                  whiteSpace:"nowrap",
-                  transition:"all 0.14s",
-                  WebkitTapHighlightColor:"transparent",
-                  flexShrink:0,
-                }}>
-                {l}
-              </button>
-            );
-          })}
-        </div>
+    <div style={{display:"flex",flexDirection:"column",gap:compact?8:10}}>
+      <div style={{display:"flex",gap:compact?4:6,flexWrap:"wrap"}}>
+        {quickPills.map(([k,l])=>{
+          const sel=period===k;
+          return(
+            <button key={k} onClick={()=>onChangePeriod(k)}
+              style={{
+                padding:compact?"6px 10px":"7px 14px",
+                borderRadius:12,
+                fontSize:compact?12:13,
+                cursor:"pointer",
+                fontFamily:G.sans,
+                fontWeight:sel?700:600,
+                background:sel?accent:"transparent",
+                color:sel?"#fff":G.textS,
+                border:`1.5px solid ${sel?accent:G.borderM}`,
+                whiteSpace:"nowrap",
+                transition:"all 0.14s",
+                WebkitTapHighlightColor:"transparent",
+              }}>
+              {l}
+            </button>
+          );
+        })}
       </div>
-      {/* Month scroller */}
-      <div style={{display:"flex",alignItems:"center",gap:compact?5:7}}>
-        <span style={labelStyle}>or pick</span>
-        <div ref={scrollRef}
-          style={{
-            display:"flex",
-            gap:compact?3:4,
-            overflowX:"auto",
-            scrollbarWidth:"none",
-            msOverflowStyle:"none",
-            WebkitOverflowScrolling:"touch",
-            flex:1,
-            paddingBottom:2,
-          }}>
-          <style>{`.ps-scroll::-webkit-scrollbar{display:none}`}</style>
-          {months.map(({key,label,isNow})=>{
-            const sel=period===key;
-            return(
-              <button key={key} onClick={()=>onChangePeriod(key)}
-                style={{
-                  padding:compact?"5px 9px":"5px 11px",
-                  borderRadius:12,
-                  fontSize:compact?12:13,
-                  cursor:"pointer",
-                  fontFamily:G.mono,
-                  fontWeight:sel?700:isNow?600:500,
-                  background:sel?"#DBEAFE":isNow?"rgba(255,255,255,0.9)":"transparent",
-                  color:sel?G.blue:isNow?G.navy:G.textM,
-                  border:`1.5px solid ${sel?G.blue:isNow?G.borderM:G.border}`,
-                  whiteSpace:"nowrap",
-                  flexShrink:0,
-                  transition:"all 0.14s",
-                  WebkitTapHighlightColor:"transparent",
-                }}>
-                {label}{isNow?" ←now":""}
-              </button>
-            );
-          })}
+      {rangeActive&&(
+        <div style={{display:"grid",gridTemplateColumns:compact?"1fr":"repeat(2,minmax(0,1fr))",gap:compact?8:10}}>
+          <div>
+            <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,marginBottom:6,textTransform:"uppercase",letterSpacing:0.45}}>From</div>
+            <input type="date" value={rangeStart||""} max={rangeEnd||undefined} onChange={e=>onChangeRangeStart(e.target.value)} style={dateInputStyle}/>
+          </div>
+          <div>
+            <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,marginBottom:6,textTransform:"uppercase",letterSpacing:0.45}}>To</div>
+            <input type="date" value={rangeEnd||""} min={rangeStart||undefined} onChange={e=>onChangeRangeEnd(e.target.value)} style={dateInputStyle}/>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -2317,6 +2315,10 @@ function AdminPanelInner({user}){
   const [selP3,       setSelP3]       = useState(null); // { teacherUid, classRaw }
   const [fullView,    setFullView]    = useState(null); // null | {kind:"teacher"|"class", ...}
   const [period,      setPeriod]      = useState("today");
+  const [customRange, setCustomRange] = useState(()=>{
+    const today=todayKey();
+    return { start:`${today.slice(0,7)}-01`, end:today };
+  });
   const [mobileStep,  setMobileStep]  = useState(0);
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
@@ -2367,6 +2369,37 @@ function AdminPanelInner({user}){
   const panelWRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelResizeFrameRef = React.useRef(null);
   const panelsBodyRef = React.useRef(null);
+
+  const handlePeriodChange = React.useCallback((nextPeriod)=>{
+    if(nextPeriod==="range"){
+      setCustomRange(current=>{
+        const today=todayKey();
+        return {
+          start:current.start||`${today.slice(0,7)}-01`,
+          end:current.end||today,
+        };
+      });
+    }
+    setPeriod(nextPeriod);
+  },[]);
+  const handleRangeStartChange = React.useCallback((nextStart)=>{
+    const start=String(nextStart||"");
+    setCustomRange(current=>{
+      const end=String(current.end||"");
+      if(start && end && start>end) return { start, end:start };
+      return { ...current, start };
+    });
+    setPeriod("range");
+  },[]);
+  const handleRangeEndChange = React.useCallback((nextEnd)=>{
+    const end=String(nextEnd||"");
+    setCustomRange(current=>{
+      const start=String(current.start||"");
+      if(start && end && end<start) return { start:end, end };
+      return { ...current, end };
+    });
+    setPeriod("range");
+  },[]);
 
   useEffect(()=>{
     const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -2827,7 +2860,7 @@ function AdminPanelInner({user}){
   const isAggregateSelection = isAllClassesSelected || isAllTeachersSelected;
   const aggregateTitle = isAllClassesSelected ? "All Classes" : isAllTeachersSelected ? "All Teachers" : "";
   const isScopedFullView = !!fullView;
-  const periodFilter = useMemo(()=>getPeriodFilter(period),[period]);
+  const periodFilter = useMemo(()=>getPeriodFilter(period, customRange.start, customRange.end),[period,customRange.start,customRange.end]);
   const periodDays = periodFilter.days;
   const periodStartKey = periodFilter.startKey;
   const periodEndKey = periodFilter.endKey;
@@ -3017,7 +3050,7 @@ function AdminPanelInner({user}){
     return instTeachers.filter(t=>!!fullData[t.uid]).length;
   },[selInst,instTeachers,fullData]);
   const aggregateLoading = isAggregateSelection && selInst && aggregateLoadedTeacherCount < instTeachers.length;
-  const overviewPeriodText = adminPeriodLabel(period);
+  const overviewPeriodText = adminPeriodLabel(period, customRange.start, customRange.end);
 
   const selectedInstituteEntryCount = useMemo(()=>{
     if(!selInst) return 0;
@@ -5806,7 +5839,15 @@ function AdminPanelInner({user}){
             </div>
             {/* Period selector — Option B */}
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
-              <PeriodSelector period={period} onChangePeriod={setPeriod} compact />
+              <PeriodSelector
+                period={period}
+                onChangePeriod={handlePeriodChange}
+                compact
+                rangeStart={customRange.start}
+                rangeEnd={customRange.end}
+                onChangeRangeStart={handleRangeStartChange}
+                onChangeRangeEnd={handleRangeEndChange}
+              />
             </div>
             {/* Export — its own row, always visible */}
             <button onClick={()=>setExportOpen(true)}
@@ -6498,7 +6539,15 @@ function AdminPanelInner({user}){
 
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap",marginTop:18,position:"relative"}}>
                 <div style={{flex:1,minWidth:0,background:"rgba(255,255,255,0.78)",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:16,padding:"12px 14px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.75)"}}>
-                  <PeriodSelector period={period} onChangePeriod={setPeriod} accentColor={p4HeaderTone.accent} />
+                  <PeriodSelector
+                    period={period}
+                    onChangePeriod={handlePeriodChange}
+                    accentColor={p4HeaderTone.accent}
+                    rangeStart={customRange.start}
+                    rangeEnd={customRange.end}
+                    onChangeRangeStart={handleRangeStartChange}
+                    onChangeRangeEnd={handleRangeEndChange}
+                  />
                 </div>
                 {(selP3||isAggregateSelection||isScopedFullView)&&(
                   <button onClick={()=>setExportOpen(true)}
