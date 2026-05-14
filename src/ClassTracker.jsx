@@ -891,7 +891,7 @@ const LEAVE_REASONS = [
 function LeaveClassModal({cls,onConfirm,onClose}){
   const [selected,setSelected]=useState(null);
   return(
-    <Modal title="Why are you leaving this class?" subtitle={`"${cls.section} · ${cls.institute}" will be archived with this reason visible to your admin.`} onClose={onClose}>
+    <Modal title="Why are you removing this class?" subtitle={`"${cls.section} · ${cls.institute}" will be removed from your active list, with this reason visible to your admin.`} onClose={onClose}>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
         {LEAVE_REASONS.map(r=>(
           <button key={r.id} onClick={()=>setSelected(r.id)} type="button"
@@ -914,7 +914,7 @@ function LeaveClassModal({cls,onConfirm,onClose}){
           style={{background:selected?G.red:"#D5D5D5",color:"#fff",border:"none",borderRadius:10,
             padding:"9px 20px",fontSize:15,cursor:selected?"pointer":"not-allowed",
             fontFamily:G.sans,fontWeight:600,transition:"background 0.15s"}}>
-          Archive Class
+          Delete Class
         </button>
       </div>
     </Modal>
@@ -2567,7 +2567,7 @@ function ClassTrackerInner({user}){
     </>;
 
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
-    const ClassCard = ({cls, onClick, compact = false}) => {
+    const ClassCard = ({cls, onClick, compact = false, onDelete = null}) => {
       const ic=instColor(cls.institute);
       const classNotes=data.notes?.[cls.id]||{};
       const total=Object.values(classNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
@@ -2623,7 +2623,12 @@ function ClassTrackerInner({user}){
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:compact?4:5}}>
                 <div style={{fontSize:compact?15:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,lineHeight:1.2}}>{cls.section}</div>
-                {compact&&<span style={{display:"inline-flex",alignItems:"center",gap:5,background:todayN>0?G.greenL:"rgba(15,23,42,0.05)",border:todayN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.08)`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,color:todayN>0?G.green:G.textL,whiteSpace:"nowrap"}}>{todayN} today</span>}
+                {compact&&<div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:5,background:todayN>0?G.greenL:"rgba(15,23,42,0.05)",border:todayN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.08)`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,color:todayN>0?G.green:G.textL,whiteSpace:"nowrap"}}>{todayN} today</span>
+                  {onDelete&&<OverflowMenu buttonSize={30} items={[
+                    { icon:"🗑", label:"Delete class", danger:true, onClick:onDelete },
+                  ]}/>}
+                </div>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 <span title={instFull} style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"2px 9px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}33`,flexShrink:0,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
@@ -2646,6 +2651,9 @@ function ClassTrackerInner({user}){
               )}
             </div>
             {!compact&&<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:7,flexShrink:0}}>
+              {onDelete&&<OverflowMenu buttonSize={30} items={[
+                { icon:"🗑", label:"Delete class", danger:true, onClick:onDelete },
+              ]}/>}
               <span style={{display:"inline-flex",alignItems:"center",gap:5,background:`${ic.bg}10`,color:ic.bg,border:`1px solid ${ic.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>{total} total</span>
               <span style={{display:"inline-flex",alignItems:"center",gap:5,background:todayN>0?G.greenL:"rgba(15,23,42,0.04)",color:todayN>0?G.green:G.textL,border:todayN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.08)`,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>{todayN} today</span>
             </div>}
@@ -2746,7 +2754,7 @@ function ClassTrackerInner({user}){
           ):(
             <div style={{display:"flex",flexDirection:"column",gap:mobileLiteMode?8:10}}>
               {visibleMobileClasses.map(cls=>(
-                <ClassCard key={cls.id} cls={cls} compact={mobileLiteMode} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}}/>
+                <ClassCard key={cls.id} cls={cls} compact={mobileLiteMode} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}} onDelete={()=>setLeaveModal(cls.id)}/>
               ))}
               {hasMoreMobileClasses&&(
                 <button onClick={()=>setMobileClassLimit(limit=>Math.min(filtered.length, limit + mobileBatchSize))}
@@ -2846,9 +2854,14 @@ function ClassTrackerInner({user}){
                       <div style={{fontSize:15,fontWeight:700,color:isSel?ic.bg:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                       <div style={{fontSize:12,color:G.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.subject||cls.institute}</div>
                     </div>
-                    <div style={{textAlign:"right",flexShrink:0}}>
-                      <div style={{fontSize:14,fontWeight:800,color:isSel?ic.bg:G.textS,fontFamily:G.display,lineHeight:1}}>{total}</div>
-                      <div style={{fontSize:10,color:todayN>0?G.green:G.textL,fontWeight:700,marginTop:3}}>{todayN>0?`+${todayN} today`:"quiet today"}</div>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:14,fontWeight:800,color:isSel?ic.bg:G.textS,fontFamily:G.display,lineHeight:1}}>{total}</div>
+                        <div style={{fontSize:10,color:todayN>0?G.green:G.textL,fontWeight:700,marginTop:3}}>{todayN>0?`+${todayN} today`:"quiet today"}</div>
+                      </div>
+                      <OverflowMenu buttonSize={30} items={[
+                        { icon:"🗑", label:"Delete class", danger:true, onClick:()=>setLeaveModal(cls.id) },
+                      ]}/>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
@@ -2911,7 +2924,7 @@ function ClassTrackerInner({user}){
                   </div>
                   <OverflowMenu buttonSize={34} items={[
                     { icon:"✏", label:"Edit class", onClick:()=>setEditingClass(selCls) },
-                    { icon:"🗑", label:"Archive class", danger:true, onClick:()=>setLeaveModal(selCls.id) },
+                    { icon:"🗑", label:"Delete class", danger:true, onClick:()=>setLeaveModal(selCls.id) },
                   ]}/>
                 </div>
                 <div style={{maxWidth:500,margin:"0 auto"}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/></div>
@@ -3046,7 +3059,7 @@ function ClassTrackerInner({user}){
             </div>
             <OverflowMenu items={[
               { icon:"✏", label:"Edit class", onClick:()=>setEditingClass(cls) },
-              { icon:"🗑", label:"Archive class", danger:true, onClick:()=>setLeaveModal(cls.id) },
+              { icon:"🗑", label:"Delete class", danger:true, onClick:()=>setLeaveModal(cls.id) },
             ]}/>
           </div>
           <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
@@ -3480,6 +3493,8 @@ function ClassTrackerInner({user}){
     const color=activeClass?instColor(activeClass.institute):COLORS[0];
     const hasExtraDetails=Boolean((form.title||"").trim()||(form.body||"").trim());
     const saveLabel=isEdit?"Save Changes":hasExtraDetails?"Save Entry":"Quick Save";
+    const lastTopicSuggestion=form.status==="inprogress" ? (getClassUrgencyMeta(activeClass).lastTopic||"").trim() : "";
+    const topicSuggestionApplied=form.status==="inprogress"&&!!lastTopicSuggestion&&String(form.title||"").trim()===lastTopicSuggestion;
 
     return(
       <div style={{height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans}}>
@@ -3550,7 +3565,11 @@ function ClassTrackerInner({user}){
               <label style={lbl}>Topic Status</label>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                 {Object.entries(STATUS_STYLES).map(([key,val])=>(
-                  <button key={key} onClick={()=>setForm({...form,status:form.status===key?"":key})}
+                  <button key={key} onClick={()=>{
+                    const nextStatus=form.status===key?"":key;
+                    setForm({...form,status:nextStatus});
+                    if(nextStatus==="inprogress") setShowNoteDetails(true);
+                  }}
                     style={{background:form.status===key?val.bg:G.surface,color:form.status===key?val.text:G.textM,
                       border:`1.5px solid ${form.status===key?val.dot:G.border}`,
                       borderRadius:20,padding:"8px 18px",fontSize:14,cursor:"pointer",fontFamily:G.sans,
@@ -3562,6 +3581,20 @@ function ClassTrackerInner({user}){
               </div>
               <div style={{fontSize:12,color:G.textL,marginTop:5}}>Tap again to deselect</div>
             </div>
+            {form.status==="inprogress"&&lastTopicSuggestion&&(
+              <div style={{marginBottom:18,background:"#FFF7E8",border:"1px solid #FCD34D",borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:12,fontWeight:800,color:"#B45309",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>Suggested topic heading</div>
+                  <div style={{fontSize:14,color:G.text,fontFamily:G.sans,fontWeight:600,marginTop:4,wordBreak:"break-word"}}>{lastTopicSuggestion}</div>
+                </div>
+                {topicSuggestionApplied
+                  ? <span style={{background:"#E8F8EF",border:`1px solid ${G.green}22`,borderRadius:999,padding:"7px 10px",fontSize:12,color:G.green,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>Added below</span>
+                  : <button type="button" onClick={()=>{setForm({...form,title:lastTopicSuggestion});setShowNoteDetails(true);}}
+                      style={{background:"#FFFFFF",border:"1px solid #F59E0B",borderRadius:10,padding:"9px 14px",fontSize:13,cursor:"pointer",color:"#B45309",fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}}>
+                      Use this
+                    </button>}
+              </div>
+            )}
             <div style={{marginBottom:16}}>
 
               {/* ══════════════════════════════════════════════════════
@@ -3805,7 +3838,7 @@ function ClassTrackerInner({user}){
                 <div style={{padding:"0 16px 16px"}}>
                   <div style={{marginBottom:14}}>
                     <label style={lbl}>Title</label>
-                    <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="What was covered?" style={{...inp,fontSize:16,fontWeight:500,marginBottom:0}}/>
+                    <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder={form.status==="inprogress"&&lastTopicSuggestion?"Continue the topic heading here":"What was covered?"} style={{...inp,fontSize:16,fontWeight:500,marginBottom:0}}/>
                   </div>
                   <div>
                     <label style={lbl}>Notes</label>
