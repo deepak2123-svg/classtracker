@@ -1,37 +1,39 @@
 import React, { useState, useEffect, useRef, useMemo, Component } from "react";
+import { createPortal } from "react-dom";
 import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
 const G = {
-  forest:"#152B22",  forestS:"#1E3D2F",
-  green:"#1B8A4C",   greenV:"#34D077",  greenL:"#E8F8EF",
-  bg:"#F5F7F5",      surface:"#FFFFFF",
-  border:"#D9E4DC",  borderM:"#B8CEC2",
+  forest:"#14213D",  forestS:"#243B63",
+  green:"#1D8F8A",   greenV:"#45C4BC",  greenL:"#E4FAF8",
+  bg:"#F4F6FB",      surface:"#FFFFFF",
+  pageBg:"radial-gradient(circle at top left, rgba(69,115,214,0.12) 0%, transparent 28%), radial-gradient(circle at top right, rgba(29,143,138,0.12) 0%, transparent 34%), #F4F6FB",
+  border:"#D8E1F0",  borderM:"#B5C4DD",
   // High contrast text — primary reading on mobile
-  text:  "#111827",   // near-black
-  textS: "#1F2937",
-  textM: "#374151",   // was #5C7268 (too light) — now clearly readable
-  textL: "#6B7280",   // was #94ADA5 (too faint) — now visible
-  red:"#C93030",     redL:"#FDF1F1",
-  navy:"#111827",
-  shadowSm:"0 1px 4px rgba(14,31,24,0.08)",
-  shadowMd:"0 4px 14px rgba(14,31,24,0.10)",
-  shadowLg:"0 12px 32px rgba(14,31,24,0.12)",
+  text:  "#172033",
+  textS: "#26324A",
+  textM: "#4A5B78",
+  textL: "#7C8BA4",
+  red:"#C65A5A",     redL:"#FDF0EF",
+  navy:"#14213D",
+  shadowSm:"0 2px 8px rgba(20,33,61,0.08)",
+  shadowMd:"0 12px 24px rgba(20,33,61,0.10)",
+  shadowLg:"0 22px 48px rgba(20,33,61,0.16)",
   mono:"'JetBrains Mono',monospace",
   sans:"'Inter',sans-serif",
   display:"'Poppins',sans-serif",
 };
 
 const COLORS = [
-  {bg:"#1B8A4C",light:"#E8F8EF",text:"#0E4229"},
-  {bg:"#0882B3",light:"#E0F4FB",text:"#084A6A"},
-  {bg:"#C47D0A",light:"#FDF3E0",text:"#6A4200"},
-  {bg:"#7040D0",light:"#EEE8FB",text:"#3C1A80"},
-  {bg:"#C02828",light:"#FDEAEA",text:"#6A0E0E"},
-  {bg:"#0A8A72",light:"#E0F7F3",text:"#054A3E"},
-  {bg:"#C0286A",light:"#FDE8F2",text:"#700038"},
-  {bg:"#2050C8",light:"#E6EDFA",text:"#102070"},
+  {bg:"#1D8F8A",light:"#E4FAF8",text:"#0F4A47"},
+  {bg:"#2C6DD8",light:"#E8F0FF",text:"#163D80"},
+  {bg:"#D38A24",light:"#FFF4E1",text:"#7A4B04"},
+  {bg:"#C85F53",light:"#FDEBE9",text:"#7C251C"},
+  {bg:"#2C9C73",light:"#E7F8F1",text:"#14543D"},
+  {bg:"#4662C4",light:"#EAEFFE",text:"#243A86"},
+  {bg:"#9C7A2B",light:"#F7F1DF",text:"#5A4412"},
+  {bg:"#147CA8",light:"#E3F4FB",text:"#0B4862"},
 ];
 
 // Stable colour per institute name (same institute always same colour)
@@ -246,12 +248,41 @@ function GhostBtn({onClick,children,style={}}){
 
 function OverflowMenu({ items = [], buttonSize = 36 }) {
   const [open, setOpen] = React.useState(false);
-  const rootRef = React.useRef(null);
+  const buttonRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+  const [menuPos, setMenuPos] = React.useState({ top: 0, left: 0, origin: "top right" });
+
+  const positionMenu = React.useCallback(() => {
+    if (!buttonRef.current || typeof window === "undefined") return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const menuWidth = menuRef.current?.offsetWidth || 190;
+    const menuHeight = menuRef.current?.offsetHeight || Math.max(56, items.length * 46 + 12);
+    const gap = 10;
+    const gutter = 12;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    let left = rect.right - menuWidth;
+    let top = rect.bottom + gap;
+    let origin = "top right";
+
+    if (left < gutter) left = gutter;
+    if (left + menuWidth > viewportWidth - gutter) left = viewportWidth - menuWidth - gutter;
+
+    if (top + menuHeight > viewportHeight - gutter && rect.top - gap - menuHeight >= gutter) {
+      top = rect.top - menuHeight - gap;
+      origin = "bottom right";
+    }
+    if (top < gutter) top = gutter;
+    if (top + menuHeight > viewportHeight - gutter) top = viewportHeight - menuHeight - gutter;
+
+    setMenuPos({ top, left, origin });
+  }, [items.length]);
 
   React.useEffect(() => {
     if (!open) return;
     function handlePointerDown(e) {
-      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+      if (buttonRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      setOpen(false);
     }
     function handleEscape(e) {
       if (e.key === "Escape") setOpen(false);
@@ -264,13 +295,36 @@ function OverflowMenu({ items = [], buttonSize = 36 }) {
     };
   }, [open]);
 
+  React.useEffect(() => {
+    if (!open) return;
+    positionMenu();
+    function handleViewportChange() {
+      positionMenu();
+    }
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [open, positionMenu]);
+
   return (
-    <div ref={rootRef} style={{ position:"relative", flexShrink:0 }}>
+    <div style={{ position:"relative", flexShrink:0 }}>
       <button
+        ref={buttonRef}
         type="button"
         aria-label="More actions"
         onClick={e => {
           e.stopPropagation();
+          if (!open && e.currentTarget) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setMenuPos({
+              top: rect.bottom + 10,
+              left: Math.max(12, rect.right - 190),
+              origin: "top right",
+            });
+          }
           setOpen(o => !o);
         }}
         style={{
@@ -290,19 +344,25 @@ function OverflowMenu({ items = [], buttonSize = 36 }) {
         }}>
         ⋯
       </button>
-      {open && (
-        <div style={{
-          position:"absolute",
-          top:"calc(100% + 8px)",
-          right:0,
-          minWidth:170,
-          background:G.surface,
-          border:`1px solid ${G.border}`,
-          borderRadius:12,
-          boxShadow:G.shadowMd,
-          padding:6,
-          zIndex:1200
-        }}>
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position:"fixed",
+            top:menuPos.top,
+            left:menuPos.left,
+            minWidth:190,
+            maxWidth:"min(240px, calc(100vw - 24px))",
+            background:"rgba(255,255,255,0.96)",
+            backdropFilter:"blur(14px)",
+            WebkitBackdropFilter:"blur(14px)",
+            border:`1px solid ${G.border}`,
+            borderRadius:14,
+            boxShadow:G.shadowLg,
+            padding:6,
+            zIndex:1600,
+            transformOrigin:menuPos.origin
+          }}>
           {items.map(item => (
             <button
               key={item.label}
@@ -316,8 +376,8 @@ function OverflowMenu({ items = [], buttonSize = 36 }) {
                 width:"100%",
                 border:"none",
                 background:"transparent",
-                borderRadius:9,
-                padding:"10px 12px",
+                borderRadius:10,
+                padding:"11px 12px",
                 cursor:"pointer",
                 display:"flex",
                 alignItems:"center",
@@ -333,7 +393,8 @@ function OverflowMenu({ items = [], buttonSize = 36 }) {
               <span>{item.label}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -345,7 +406,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
   const [profileOpen, setProfileOpen] = React.useState(false);
 
   return(
-    <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06), 0 10px 24px rgba(7,16,12,0.18)"}}>
+    <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 72%, #355C8D 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06), 0 14px 28px rgba(20,33,61,0.18)"}}>
       <div style={{height:64,display:"flex",alignItems:"center",padding:"0 12px",gap:8,overflow:"visible"}}>
 
         {/* Ledgr logo */}
@@ -384,7 +445,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
             {/* Profile dropdown */}
             {profileOpen&&(<>
               <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
-              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#1B3A2E",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.35)",minWidth:230,overflow:"hidden"}}>
+              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"rgba(20,33,61,0.97)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 18px 38px rgba(20,33,61,0.34)",minWidth:230,overflow:"hidden"}}>
 
                 {/* Profile header */}
                 <div style={{padding:"14px 16px 12px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
@@ -400,7 +461,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
                 <div style={{padding:"8px"}}>
                   {/* Stats */}
                   <button onClick={()=>{setProfileOpen(false);onViewStats();}}
-                    style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(52,208,119,0.12)",border:"1px solid rgba(52,208,119,0.25)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#34D07A",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
+                    style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(69,196,188,0.14)",border:"1px solid rgba(69,196,188,0.26)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#7DE0D9",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
                     View Stats
                   </button>
@@ -715,7 +776,7 @@ function ProfileSetup({user,onSave}){
     <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
       <div style={{width:"100%",maxWidth:420}}>
         <div style={{textAlign:"center",marginBottom:36}}>
-          <div style={{width:72,height:72,borderRadius:22,background:G.greenV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px",boxShadow:`0 8px 24px rgba(52,208,119,0.35)`}}>🎓</div>
+          <div style={{width:72,height:72,borderRadius:22,background:G.greenV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px",boxShadow:`0 8px 24px rgba(69,196,188,0.35)`}}>🎓</div>
           <h1 style={{fontSize:30,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:10,letterSpacing:-0.5}}>Welcome to Class Tracker</h1>
           <p style={{fontSize:16,color:"rgba(255,255,255,0.45)",lineHeight:1.7}}>Your name is stamped on every entry.<br/>Set it once — no one else can change it.</p>
         </div>
@@ -724,7 +785,7 @@ function ProfileSetup({user,onSave}){
           <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&name.trim()&&onSave(name.trim())} placeholder="e.g. Ramsingh Yadav" autoFocus
             style={{...inp,background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",fontSize:17}}/>
           <button onClick={()=>name.trim()&&onSave(name.trim())} disabled={!name.trim()} onPointerDown={e=>rpl(e,true)}
-            style={{width:"100%",padding:"13px",background:name.trim()?G.greenV:"rgba(255,255,255,0.1)",color:name.trim()?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:name.trim()?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:name.trim()?`0 4px 16px rgba(52,208,119,0.3)`:"none"}}>
+            style={{width:"100%",padding:"13px",background:name.trim()?G.greenV:"rgba(255,255,255,0.1)",color:name.trim()?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:name.trim()?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:name.trim()?`0 4px 16px rgba(69,196,188,0.3)`:"none"}}>
             Get Started →
           </button>
         </div>
@@ -2688,17 +2749,50 @@ function ClassTrackerInner({user}){
     };
 
     // Institute filter pills
-    const InstFilter = () => institutes.length>1?(
-      <div style={{display:"flex",gap:7,overflowX:"auto",WebkitOverflowScrolling:"touch",padding:"0 0 2px"}} className="hide-scrollbar">
+    const InstFilter = ({ columns = "1fr", compact = false }) => institutes.length>1?(
+      <div style={{display:"grid",gridTemplateColumns:columns,gap:compact?6:8,padding:"0 0 2px"}}>
         {["all",...institutes].map(inst=>{
           const isSel=instFilter===inst;
-          const ic=inst==="all"?null:instColor(inst);
+          const ic=inst==="all"?{bg:G.forest,light:"rgba(20,33,61,0.08)",text:"#fff"}:instColor(inst);
           return(
             <button key={inst} onClick={()=>setInstFilter(inst)}
-              style={{flexShrink:0,padding:"6px 14px",borderRadius:18,border:"none",cursor:"pointer",fontFamily:G.sans,fontSize:12.5,fontWeight:isSel?700:500,minHeight:32,WebkitTapHighlightColor:"transparent",transition:"all 0.15s",
-                background:isSel?(inst==="all"?G.forest:ic.bg):"rgba(0,0,0,0.07)",
-                color:isSel?"#fff":G.textM}}>
-              {inst==="all"?"All Classes":inst}
+              style={{
+                width:"100%",
+                minWidth:0,
+                minHeight:compact?40:44,
+                padding:compact?"8px 10px":"10px 12px",
+                borderRadius:16,
+                border:isSel?`1px solid ${inst==="all"?"rgba(20,33,61,0.22)":`${ic.bg}22`}`:`1px solid ${G.border}`,
+                cursor:"pointer",
+                fontFamily:G.sans,
+                fontSize:compact?12:12.5,
+                fontWeight:isSel?700:600,
+                WebkitTapHighlightColor:"transparent",
+                transition:"all 0.15s",
+                background:isSel
+                  ?(inst==="all"
+                    ?`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`
+                    :`linear-gradient(180deg, ${ic.light} 0%, #FFFFFF 100%)`)
+                  :"rgba(255,255,255,0.82)",
+                color:isSel?(inst==="all"?"#fff":ic.bg):G.textS,
+                boxShadow:isSel?`0 10px 22px ${inst==="all"?"rgba(20,33,61,0.18)":`${ic.bg}18`}`:"inset 0 1px 0 rgba(255,255,255,0.65)",
+                display:"flex",
+                alignItems:"flex-start",
+                gap:8,
+                textAlign:"left",
+                lineHeight:1.3,
+                overflowWrap:"anywhere"
+              }}>
+              <span style={{
+                width:10,
+                height:10,
+                borderRadius:999,
+                flexShrink:0,
+                marginTop:3,
+                background:inst==="all"?(isSel?"rgba(255,255,255,0.92)":"rgba(20,33,61,0.34)"):(isSel?ic.bg:ic.bg),
+                boxShadow:isSel&&inst!=="all"?"0 0 0 3px rgba(255,255,255,0.78)":"none"
+              }}/>
+              <span style={{minWidth:0,flex:1}}>{inst==="all"?"All Classes":inst}</span>
             </button>
           );
         })}
@@ -2709,7 +2803,7 @@ function ClassTrackerInner({user}){
     const MobileHome = () => (
       <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
         <div style={{padding:"8px 12px 6px"}}>
-          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 58%, #24533F 100%)`,borderRadius:14,padding:"10px 13px",boxShadow:reduceEffects?"none":"0 6px 14px rgba(17,34,27,0.14)"}}>
+          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 58%, #3C6697 100%)`,borderRadius:14,padding:"10px 13px",boxShadow:reduceEffects?"none":"0 10px 22px rgba(20,33,61,0.16)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
@@ -2729,7 +2823,7 @@ function ClassTrackerInner({user}){
           <div style={{padding:mobileLiteMode?"0 12px 8px":"0 14px 10px"}}>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"8px 8px 6px",boxShadow:G.shadowSm}}>
               <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6,padding:"0 4px"}}>Institute filter</div>
-              <InstFilter/>
+              <InstFilter columns="1fr" compact={mobileLiteMode}/>
             </div>
           </div>
         )}
@@ -2784,10 +2878,15 @@ function ClassTrackerInner({user}){
 
     // ── TABLET / DESKTOP VIEW: sidebar + detail panel ────────────────────────
     const SplitView = () => {
-      const [sidebarWidth, setSidebarWidth] = React.useState(280);
+      const [sidebarWidth, setSidebarWidth] = React.useState(() => {
+        if (typeof window === "undefined") return 360;
+        if (window.innerWidth >= 1440) return 396;
+        if (window.innerWidth >= 1200) return 360;
+        return 320;
+      });
       const isDragging = React.useRef(false);
       const dragStartX = React.useRef(0);
-      const dragStartW = React.useRef(280);
+      const dragStartW = React.useRef(sidebarWidth);
       const containerRef = React.useRef(null);
 
       function onDividerPointerDown(e) {
@@ -2802,7 +2901,7 @@ function ClassTrackerInner({user}){
           if (!isDragging.current) return;
           const dx = ev.clientX - dragStartX.current;
           const containerW = containerRef.current?.offsetWidth || window.innerWidth;
-          const newW = Math.min(Math.max(dragStartW.current + dx, 180), containerW * 0.6);
+          const newW = Math.min(Math.max(dragStartW.current + dx, 280), containerW * 0.68);
           setSidebarWidth(newW);
         }
         function onUp() {
@@ -2819,9 +2918,9 @@ function ClassTrackerInner({user}){
       return (
       <div ref={containerRef} style={{display:"flex",flex:1,overflow:"hidden"}}>
         {/* Left sidebar */}
-        <div style={{width:sidebarWidth,flexShrink:0,display:"flex",flexDirection:"column",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FBF9 100%)",overflow:"hidden"}}>
+        <div style={{width:sidebarWidth,flexShrink:0,display:"flex",flexDirection:"column",background:"linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(242,246,252,0.98) 100%)",overflow:"hidden"}}>
           <div style={{padding:"14px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-            <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 62%, #27503D 100%)`,borderRadius:22,padding:"15px 14px 14px",color:"#fff",boxShadow:reduceEffects?"none":"0 12px 26px rgba(15,32,25,0.16)"}}>
+            <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 62%, #3C6697 100%)`,borderRadius:22,padding:"15px 14px 14px",color:"#fff",boxShadow:reduceEffects?"none":"0 14px 30px rgba(20,33,61,0.18)"}}>
               <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Teacher workspace</div>
               <div style={{fontSize:20,fontWeight:800,fontFamily:G.display,letterSpacing:-0.4,marginBottom:5,lineHeight:1.1}}>{teacherName}</div>
               <div style={{fontSize:13,color:"rgba(255,255,255,0.72)",lineHeight:1.45}}>{currentSession()} session • {filtered.length} visible classes</div>
@@ -2834,11 +2933,7 @@ function ClassTrackerInner({user}){
           </div>
           {institutes.length>1&&<div style={{padding:"10px 10px 8px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
             <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:8,padding:"0 2px"}}>Institute filter</div>
-            <div style={{display:"flex",gap:5,overflowX:"auto"}} className="hide-scrollbar">
-              {["all",...institutes].map(inst=>{const isSel=instFilter===inst;const ic=inst==="all"?null:instColor(inst);return(
-                <button key={inst} onClick={()=>setInstFilter(inst)} style={{flexShrink:0,padding:"6px 11px",borderRadius:999,border:isSel?`1px solid ${inst==="all"?"rgba(21,43,34,0.12)":`${ic.bg}22`}`:"1px solid rgba(15,23,42,0.08)",cursor:"pointer",fontFamily:G.sans,fontSize:12,fontWeight:isSel?700:600,background:isSel?(inst==="all"?G.forest:ic.light):"#fff",color:isSel?(inst==="all"?"#fff":ic.bg):G.textM,boxShadow:isSel?"inset 0 1px 0 rgba(255,255,255,0.32)":"none"}}>{inst==="all"?"All Classes":inst}</button>
-              );})}
-            </div>
+            <InstFilter columns={sidebarWidth >= 360 ? "repeat(2,minmax(0,1fr))" : "1fr"} compact={sidebarWidth < 360}/>
           </div>}
           <div style={{flex:1,overflowY:"auto",padding:"10px"}}>
             {filtered.map(cls=>{
@@ -3018,7 +3113,7 @@ function ClassTrackerInner({user}){
     };
 
     return(
-      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
+      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} trashCount={trashCount} right={NavRight}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
@@ -3038,12 +3133,12 @@ function ClassTrackerInner({user}){
     const noteDates=Object.fromEntries(Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
     const activeDays=Object.keys(noteDates).length;
     return(
-      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans,overflow:"hidden"}}>
+      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
-        <div style={{background:G.forest,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
+        <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 72%, #355C8D 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
           {/* Compact single-line class identity */}
           <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
             <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(180deg, ${color.bg} 0%, ${color.bg}CC 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",fontFamily:G.mono}}>
@@ -3163,7 +3258,7 @@ function ClassTrackerInner({user}){
       .filter(combo=>!selectedInstitute || combo.institute===selectedInstitute)
       .slice(0,4);
     return(
-    <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
+    <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
       <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
         right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
       <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px 80px"}}>
@@ -3288,7 +3383,7 @@ function ClassTrackerInner({user}){
     const navBtnStyle={background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",fontFamily:G.sans};
 
     return(
-      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<button onClick={()=>setView("home")} style={navBtnStyle}>← Back</button>}/>
@@ -3396,7 +3491,7 @@ function ClassTrackerInner({user}){
     const tNotes=(Array.isArray(data.trash?.notes)?data.trash.notes:[]).sort((a,b)=>b.deletedAt-a.deletedAt);
     const daysLeft=ts=>Math.max(0,30-Math.floor((Date.now()-ts)/(1000*60*60*24)));
     return(
-      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>safeNav("stats")} onViewTrash={()=>setView("trash")} trashCount={trashCount} right={<GhostBtn onClick={()=>safeNav("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
@@ -3499,7 +3594,7 @@ function ClassTrackerInner({user}){
     const topicSuggestionApplied=form.status==="inprogress"&&!!lastTopicSuggestion&&String(form.title||"").trim()===lastTopicSuggestion;
 
     return(
-      <div style={{height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.sans}}>
+      <div style={{height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans}}>
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<>
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
