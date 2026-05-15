@@ -5,35 +5,35 @@ import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, 
 
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
 const G = {
-  forest:"#14213D",  forestS:"#243B63",
-  green:"#1D8F8A",   greenV:"#45C4BC",  greenL:"#E4FAF8",
-  bg:"#F4F6FB",      surface:"#FFFFFF",
-  pageBg:"radial-gradient(circle at top left, rgba(69,115,214,0.12) 0%, transparent 28%), radial-gradient(circle at top right, rgba(29,143,138,0.12) 0%, transparent 34%), #F4F6FB",
-  border:"#D8E1F0",  borderM:"#B5C4DD",
+  forest:"#0F172A",  forestS:"#1E293B",
+  green:"#2563EB",   greenV:"#3B82F6",  greenL:"#E8F0FF",
+  bg:"#F6F8FC",      surface:"#FFFFFF",
+  pageBg:"linear-gradient(180deg, #F8FAFC 0%, #F3F6FB 100%)",
+  border:"#D7DFEC",  borderM:"#B7C3D7",
   // High contrast text — primary reading on mobile
-  text:  "#172033",
-  textS: "#26324A",
-  textM: "#4A5B78",
-  textL: "#7C8BA4",
-  red:"#C65A5A",     redL:"#FDF0EF",
-  navy:"#14213D",
-  shadowSm:"0 2px 8px rgba(20,33,61,0.08)",
-  shadowMd:"0 12px 24px rgba(20,33,61,0.10)",
-  shadowLg:"0 22px 48px rgba(20,33,61,0.16)",
+  text:  "#0F172A",
+  textS: "#1E293B",
+  textM: "#475569",
+  textL: "#94A3B8",
+  red:"#C24141",     redL:"#FDECEC",
+  navy:"#0F172A",
+  shadowSm:"0 2px 8px rgba(15,23,42,0.06)",
+  shadowMd:"0 10px 24px rgba(15,23,42,0.08)",
+  shadowLg:"0 20px 44px rgba(15,23,42,0.14)",
   mono:"'JetBrains Mono',monospace",
   sans:"'Inter',sans-serif",
   display:"'Poppins',sans-serif",
 };
 
 const COLORS = [
-  {bg:"#1D8F8A",light:"#E4FAF8",text:"#0F4A47"},
-  {bg:"#2C6DD8",light:"#E8F0FF",text:"#163D80"},
-  {bg:"#D38A24",light:"#FFF4E1",text:"#7A4B04"},
-  {bg:"#C85F53",light:"#FDEBE9",text:"#7C251C"},
-  {bg:"#2C9C73",light:"#E7F8F1",text:"#14543D"},
-  {bg:"#4662C4",light:"#EAEFFE",text:"#243A86"},
-  {bg:"#9C7A2B",light:"#F7F1DF",text:"#5A4412"},
-  {bg:"#147CA8",light:"#E3F4FB",text:"#0B4862"},
+  {bg:"#2563EB",light:"#E8F0FF",text:"#1D4ED8"},
+  {bg:"#0F766E",light:"#E6F7F5",text:"#115E59"},
+  {bg:"#475569",light:"#EEF2F7",text:"#334155"},
+  {bg:"#7C3AED",light:"#F3ECFF",text:"#6D28D9"},
+  {bg:"#B45309",light:"#FFF4E5",text:"#92400E"},
+  {bg:"#1D4ED8",light:"#EAF1FF",text:"#1E40AF"},
+  {bg:"#0369A1",light:"#E8F7FF",text:"#075985"},
+  {bg:"#0F766E",light:"#E8F8F6",text:"#0F5F59"},
 ];
 
 // Stable colour per institute name (same institute always same colour)
@@ -406,7 +406,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
   const [profileOpen, setProfileOpen] = React.useState(false);
 
   return(
-    <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 72%, #355C8D 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06), 0 14px 28px rgba(20,33,61,0.18)"}}>
+    <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06), 0 14px 28px rgba(15,23,42,0.16)"}}>
       <div style={{height:64,display:"flex",alignItems:"center",padding:"0 12px",gap:8,overflow:"visible"}}>
 
         {/* Ledgr logo */}
@@ -461,7 +461,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
                 <div style={{padding:"8px"}}>
                   {/* Stats */}
                   <button onClick={()=>{setProfileOpen(false);onViewStats();}}
-                    style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(69,196,188,0.14)",border:"1px solid rgba(69,196,188,0.26)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#7DE0D9",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
+                    style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(59,130,246,0.14)",border:"1px solid rgba(59,130,246,0.24)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#BFDBFE",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
                     View Stats
                   </button>
@@ -776,7 +776,7 @@ function ProfileSetup({user,onSave}){
     <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
       <div style={{width:"100%",maxWidth:420}}>
         <div style={{textAlign:"center",marginBottom:36}}>
-          <div style={{width:72,height:72,borderRadius:22,background:G.greenV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px",boxShadow:`0 8px 24px rgba(69,196,188,0.35)`}}>🎓</div>
+          <div style={{width:72,height:72,borderRadius:22,background:G.greenV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px",boxShadow:`0 8px 24px rgba(59,130,246,0.28)`}}>🎓</div>
           <h1 style={{fontSize:30,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:10,letterSpacing:-0.5}}>Welcome to Class Tracker</h1>
           <p style={{fontSize:16,color:"rgba(255,255,255,0.45)",lineHeight:1.7}}>Your name is stamped on every entry.<br/>Set it once — no one else can change it.</p>
         </div>
@@ -785,7 +785,7 @@ function ProfileSetup({user,onSave}){
           <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&name.trim()&&onSave(name.trim())} placeholder="e.g. Ramsingh Yadav" autoFocus
             style={{...inp,background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",fontSize:17}}/>
           <button onClick={()=>name.trim()&&onSave(name.trim())} disabled={!name.trim()} onPointerDown={e=>rpl(e,true)}
-            style={{width:"100%",padding:"13px",background:name.trim()?G.greenV:"rgba(255,255,255,0.1)",color:name.trim()?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:name.trim()?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:name.trim()?`0 4px 16px rgba(69,196,188,0.3)`:"none"}}>
+            style={{width:"100%",padding:"13px",background:name.trim()?G.greenV:"rgba(255,255,255,0.1)",color:name.trim()?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:name.trim()?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:name.trim()?`0 4px 16px rgba(59,130,246,0.26)`:"none"}}>
             Get Started →
           </button>
         </div>
@@ -1838,7 +1838,7 @@ function SectionChangeNoticeModal({ items, onClose }) {
         </div>
         <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
           {groupedItems.map(item=>(
-            <div key={item.key} style={{background:"#F8FBF9",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
+            <div key={item.key} style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:8}}>
                 <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display}}>
                   {item.oldSection} → {item.newSection}
@@ -2673,7 +2673,7 @@ function ClassTrackerInner({user}){
       );
       return(
         <div onClick={onClick}
-          style={{background:`linear-gradient(180deg, #FFFFFF 0%, #FAFCFB 100%)`,borderRadius:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:compact||reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:compact||reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
+          style={{background:`linear-gradient(180deg, #FFFFFF 0%, #FAFBFD 100%)`,borderRadius:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:compact||reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:compact||reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
           onPointerDown={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";e.currentTarget.style.borderColor=`${ic.bg}33`;})}
           onPointerUp={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}
           onPointerCancel={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}>
@@ -2754,18 +2754,19 @@ function ClassTrackerInner({user}){
         {["all",...institutes].map(inst=>{
           const isSel=instFilter===inst;
           const ic=inst==="all"?{bg:G.forest,light:"rgba(20,33,61,0.08)",text:"#fff"}:instColor(inst);
+          const label=inst==="all"?"All Classes":inst;
           return(
-            <button key={inst} onClick={()=>setInstFilter(inst)}
+            <button key={inst} title={label} onClick={()=>setInstFilter(inst)}
               style={{
                 width:"100%",
                 minWidth:0,
-                minHeight:compact?40:44,
-                padding:compact?"8px 10px":"10px 12px",
-                borderRadius:16,
+                minHeight:compact?34:44,
+                padding:compact?"6px 9px":"10px 12px",
+                borderRadius:compact?14:16,
                 border:isSel?`1px solid ${inst==="all"?"rgba(20,33,61,0.22)":`${ic.bg}22`}`:`1px solid ${G.border}`,
                 cursor:"pointer",
                 fontFamily:G.sans,
-                fontSize:compact?12:12.5,
+                fontSize:compact?11.5:12.5,
                 fontWeight:isSel?700:600,
                 WebkitTapHighlightColor:"transparent",
                 transition:"all 0.15s",
@@ -2777,22 +2778,22 @@ function ClassTrackerInner({user}){
                 color:isSel?(inst==="all"?"#fff":ic.bg):G.textS,
                 boxShadow:isSel?`0 10px 22px ${inst==="all"?"rgba(20,33,61,0.18)":`${ic.bg}18`}`:"inset 0 1px 0 rgba(255,255,255,0.65)",
                 display:"flex",
-                alignItems:"flex-start",
-                gap:8,
+                alignItems:compact?"center":"flex-start",
+                gap:compact?6:8,
                 textAlign:"left",
-                lineHeight:1.3,
-                overflowWrap:"anywhere"
+                lineHeight:compact?1.15:1.3,
+                overflowWrap:compact?"normal":"anywhere"
               }}>
               <span style={{
-                width:10,
-                height:10,
+                width:compact?8:10,
+                height:compact?8:10,
                 borderRadius:999,
                 flexShrink:0,
-                marginTop:3,
+                marginTop:compact?0:3,
                 background:inst==="all"?(isSel?"rgba(255,255,255,0.92)":"rgba(20,33,61,0.34)"):(isSel?ic.bg:ic.bg),
                 boxShadow:isSel&&inst!=="all"?"0 0 0 3px rgba(255,255,255,0.78)":"none"
               }}/>
-              <span style={{minWidth:0,flex:1}}>{inst==="all"?"All Classes":inst}</span>
+              <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:compact?"nowrap":"normal"}}>{label}</span>
             </button>
           );
         })}
@@ -2803,7 +2804,7 @@ function ClassTrackerInner({user}){
     const MobileHome = () => (
       <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
         <div style={{padding:"8px 12px 6px"}}>
-          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 58%, #3C6697 100%)`,borderRadius:14,padding:"10px 13px",boxShadow:reduceEffects?"none":"0 10px 22px rgba(20,33,61,0.16)"}}>
+          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:14,padding:"10px 13px",boxShadow:reduceEffects?"none":"0 10px 22px rgba(15,23,42,0.14)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
@@ -2813,9 +2814,9 @@ function ClassTrackerInner({user}){
               </div>
             </div>
             <div style={{display:"flex",gap:5,paddingTop:8,flexWrap:"wrap"}}>
-              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#BDF5D0"}}>{quickHomeSummary.loggedToday} today</span>
+              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#DBEAFE"}}>{quickHomeSummary.loggedToday} today</span>
               <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#FFFFFF"}}>{quickHomeSummary.monthEntries} this month</span>
-              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#D8E7FF"}}>{quickHomeSummary.active} classes</span>
+              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#E2E8F0"}}>{quickHomeSummary.active} classes</span>
             </div>
           </div>
         </div>
@@ -2823,7 +2824,7 @@ function ClassTrackerInner({user}){
           <div style={{padding:mobileLiteMode?"0 12px 8px":"0 14px 10px"}}>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"8px 8px 6px",boxShadow:G.shadowSm}}>
               <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6,padding:"0 4px"}}>Institute filter</div>
-              <InstFilter columns="1fr" compact={mobileLiteMode}/>
+              <InstFilter columns="repeat(2,minmax(0,1fr))" compact/>
             </div>
           </div>
         )}
@@ -2854,15 +2855,15 @@ function ClassTrackerInner({user}){
               ))}
               {hasMoreMobileClasses&&(
                 <button onClick={()=>setMobileClassLimit(limit=>Math.min(filtered.length, limit + mobileBatchSize))}
-                  style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FBF9 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 16px",fontSize:14,fontWeight:700,color:G.textS,fontFamily:G.sans,cursor:"pointer",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}>
+                  style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 16px",fontSize:14,fontWeight:700,color:G.textS,fontFamily:G.sans,cursor:"pointer",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}>
                   Load {Math.min(mobileBatchSize, filtered.length - visibleMobileClasses.length)} more classes
                 </button>
               )}
               <div onClick={()=>setView("addClass")}
-                style={{borderRadius:18,border:`2px dashed ${G.border}`,padding:"20px",display:"flex",alignItems:"center",justifyContent:"center",gap:12,cursor:"pointer",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FBF9 100%)",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}
+                style={{borderRadius:18,border:`2px dashed ${G.border}`,padding:"20px",display:"flex",alignItems:"center",justifyContent:"center",gap:12,cursor:"pointer",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}
                 onPointerDown={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.borderColor=G.green;}}
-                onPointerUp={e=>{e.currentTarget.style.background="linear-gradient(180deg, #FFFFFF 0%, #F8FBF9 100%)";e.currentTarget.style.borderColor=G.border;}}
-                onPointerCancel={e=>{e.currentTarget.style.background="linear-gradient(180deg, #FFFFFF 0%, #F8FBF9 100%)";e.currentTarget.style.borderColor=G.border;}}>
+                onPointerUp={e=>{e.currentTarget.style.background="linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)";e.currentTarget.style.borderColor=G.border;}}
+                onPointerCancel={e=>{e.currentTarget.style.background="linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)";e.currentTarget.style.borderColor=G.border;}}>
                 <span style={{width:34,height:34,borderRadius:12,background:G.greenL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:G.green,flexShrink:0}}>+</span>
                 <span style={{fontSize:15,fontWeight:600,color:G.textM,fontFamily:G.display}}>Add New Class</span>
               </div>
@@ -2920,14 +2921,14 @@ function ClassTrackerInner({user}){
         {/* Left sidebar */}
         <div style={{width:sidebarWidth,flexShrink:0,display:"flex",flexDirection:"column",background:"linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(242,246,252,0.98) 100%)",overflow:"hidden"}}>
           <div style={{padding:"14px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-            <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 62%, #3C6697 100%)`,borderRadius:22,padding:"15px 14px 14px",color:"#fff",boxShadow:reduceEffects?"none":"0 14px 30px rgba(20,33,61,0.18)"}}>
+            <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:22,padding:"15px 14px 14px",color:"#fff",boxShadow:reduceEffects?"none":"0 14px 30px rgba(15,23,42,0.16)"}}>
               <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Teacher workspace</div>
               <div style={{fontSize:20,fontWeight:800,fontFamily:G.display,letterSpacing:-0.4,marginBottom:5,lineHeight:1.1}}>{teacherName}</div>
               <div style={{fontSize:13,color:"rgba(255,255,255,0.72)",lineHeight:1.45}}>{currentSession()} session • {filtered.length} visible classes</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}}>
-                <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#CFF6DD"}}>{quickHomeSummary.loggedToday} logged today</span>
+                <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#DBEAFE"}}>{quickHomeSummary.loggedToday} logged today</span>
                 <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#FFFFFF"}}>{quickHomeSummary.monthEntries} this month</span>
-                <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#D8E7FF"}}>{quickHomeSummary.instituteCount} institutes</span>
+                <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#E2E8F0"}}>{quickHomeSummary.instituteCount} institutes</span>
               </div>
             </div>
           </div>
@@ -2968,7 +2969,7 @@ function ClassTrackerInner({user}){
                 </div>
               );
             })}
-            <div onClick={()=>setView("addClass")} style={{borderRadius:16,padding:"12px 12px",marginTop:6,cursor:"pointer",border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",gap:10,transition:"all 0.15s",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FBF9 100%)",boxShadow:G.shadowSm}} onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.background=G.greenL;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background='linear-gradient(180deg, #FFFFFF 0%, #F8FBF9 100%)';}}>
+            <div onClick={()=>setView("addClass")} style={{borderRadius:16,padding:"12px 12px",marginTop:6,cursor:"pointer",border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",gap:10,transition:"all 0.15s",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",boxShadow:G.shadowSm}} onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.background=G.greenL;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background='linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)';}}>
               <span style={{width:28,height:28,borderRadius:10,background:G.greenL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:G.green,flexShrink:0}}>+</span><span style={{fontSize:13,color:G.textM,fontWeight:700}}>Add New Class</span>
             </div>
           </div>
@@ -3069,7 +3070,7 @@ function ClassTrackerInner({user}){
                 </div>
               </div>
               {selDateNotes.length===0?(
-                <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FBF9 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"44px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+                <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"44px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
                   <div style={{fontSize:36,marginBottom:10}}>✏️</div>
                   <div style={{fontSize:16,color:G.textM,fontWeight:600}}>{canAdd?"No entries yet — click + Add Entry":"No entries for this date"}</div>
                 </div>
@@ -3081,7 +3082,7 @@ function ClassTrackerInner({user}){
                     </div>
                   )}
                   {selDateNotes.map(note=>{const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;return(
-                    <div key={note.id} style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFB 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
+                    <div key={note.id} style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
                       <div style={{height:4,background:tag.bg}}/>
                       <div style={{padding:"13px 15px"}}>
                         <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
@@ -3138,7 +3139,7 @@ function ClassTrackerInner({user}){
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
-        <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 72%, #355C8D 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
+        <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
           {/* Compact single-line class identity */}
           <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
             <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(180deg, ${color.bg} 0%, ${color.bg}CC 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",fontFamily:G.mono}}>
@@ -3150,7 +3151,7 @@ function ClassTrackerInner({user}){
               <span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.sans,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}}>{cls.institute}</span>
               {cls.subject&&<><span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span><span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.sans,fontWeight:600,flexShrink:0}}>{cls.subject}</span></>}
               <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
-              <span style={{fontSize:11,color:"#BDF5D0",fontFamily:G.mono,fontWeight:700,flexShrink:0}}>{totalCount} entries</span>
+              <span style={{fontSize:11,color:"#DBEAFE",fontFamily:G.mono,fontWeight:700,flexShrink:0}}>{totalCount} entries</span>
               <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
               <span style={{fontSize:11,color:"rgba(255,255,255,0.45)",fontFamily:G.mono,flexShrink:0}}>{activeDays}d active</span>
             </div>
@@ -3207,7 +3208,7 @@ function ClassTrackerInner({user}){
             </div>
           </div>
           {dateNotes.length===0?(
-            <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FBF9 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+            <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
               <div style={{fontSize:40,marginBottom:12}}>✏️</div>
               <div style={{fontSize:16,color:G.textM,fontWeight:600}}>{canAdd?"No entries yet":"No entries for this date"}</div>
               {canAdd&&<div style={{fontSize:14,color:G.textL,marginTop:6}}>Tap + Add Entry to log this class</div>}
@@ -3222,7 +3223,7 @@ function ClassTrackerInner({user}){
               {dateNotes.map(note=>{
                 const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
                 return(
-                  <div key={note.id} style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFB 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
+                  <div key={note.id} style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
                     <div style={{height:4,background:tag.bg}}/>
                     <div style={{padding:"14px 15px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
