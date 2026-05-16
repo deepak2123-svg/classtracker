@@ -2296,9 +2296,9 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
 function AdminPanelInner({user}){
   const PANEL_LIMITS = React.useMemo(()=>({
-    p1:{ min:112, max:340, collapsed:118, default:175 },
-    p2:{ min:160, max:380, collapsed:124, default:205 },
-    p3:{ min:112, max:360, collapsed:118, default:200 },
+    p1:{ min:112, max:340, collapsed:76, default:175 },
+    p2:{ min:160, max:380, collapsed:82, default:205 },
+    p3:{ min:112, max:360, collapsed:76, default:200 },
   }),[]);
   const [teachers,    setTeachers]    = useState([]);
   const [fullData,    setFullData]    = useState({});
@@ -2574,8 +2574,7 @@ function AdminPanelInner({user}){
   const clampPanelWidth = React.useCallback((key, nextWidth) => {
     const limits = PANEL_LIMITS[key];
     if(!limits) return nextWidth;
-    const min = key==="p2" ? limits.min : limits.collapsed;
-    return Math.max(min, Math.min(limits.max, nextWidth));
+    return Math.max(limits.collapsed, Math.min(limits.max, nextWidth));
   }, [PANEL_LIMITS]);
 
   const setDesktopPanelWidth = React.useCallback((key, nextWidth) => {
@@ -4475,6 +4474,7 @@ function AdminPanelInner({user}){
   const CollapsedPanelRail = ({ step, label, onExpand, badge, direction="right", themeKey="p1" }) => {
     const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
     const touchRail = coarsePointer || isWeakDevice;
+    const stepNumber = String(step || "").match(/\d+/)?.[0] || step;
     const folderIcon = label === "Teachers"
       ? "👥"
       : label === "Classes"
@@ -4483,52 +4483,96 @@ function AdminPanelInner({user}){
         ? "🏫"
         : "🗂";
     return (
-      <div style={{display:"flex",justifyContent:"center",padding:touchRail?"10px 6px 14px":"10px 5px 14px",flex:"0 0 auto"}}>
+      <div style={{display:"flex",justifyContent:"center",padding:touchRail?"8px 3px 12px":"8px 3px 12px",flex:1,minHeight:0}}>
         <div style={{
           width:"100%",
-          minHeight:touchRail ? 252 : 238,
+          height:"100%",
           display:"flex",
           flexDirection:"column",
           alignItems:"center",
-          gap:touchRail?12:10,
-          padding:touchRail?"12px 10px 14px":"12px 10px 14px",
-          borderRadius:28,
-          background:`linear-gradient(180deg, ${tone.bg} 0%, #FFFFFF 88%)`,
+          padding:touchRail?"10px 4px 12px":"10px 4px 12px",
+          borderRadius:24,
+          background:`linear-gradient(180deg, rgba(255,255,255,0.94) 0%, ${tone.bg} 100%)`,
           border:`1px solid ${tone.edge}`,
-          boxShadow:"0 12px 30px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.65)",
+          boxShadow:"inset 0 1px 0 rgba(255,255,255,0.72), 0 10px 22px rgba(15,23,42,0.06)",
           position:"relative",
-          overflow:"visible",
+          overflow:"hidden",
         }}>
+          <div style={{position:"absolute",top:10,bottom:10,left:6,width:2,borderRadius:999,background:`linear-gradient(180deg, ${tone.accent}22 0%, ${tone.accent}80 45%, ${tone.accent}22 100%)`}}/>
           <CollapseButton collapsed direction={direction} tone={tone} onClick={onExpand} title={`Expand ${label}`} />
-          <div style={{width:touchRail?42:40,height:touchRail?42:40,borderRadius:15,background:"rgba(255,255,255,0.88)",border:`1px solid ${tone.edge}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)"}}>
-            {folderIcon}
-          </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,width:"100%",padding:"2px 0 0"}}>
-            <span style={{fontSize:10.5,letterSpacing:1.1,color:tone.accent,fontFamily:G.mono,fontWeight:800,textTransform:"uppercase",background:"rgba(255,255,255,0.78)",border:`1px solid ${tone.edge}`,borderRadius:999,padding:"5px 10px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.5)"}}>
-              {step}
-            </span>
-            <div style={{
-              width:"100%",
-              textAlign:"center",
-              color:tone.text,
-              fontFamily:G.display,
-              fontSize:14.5,
-              fontWeight:800,
-              lineHeight:1.15,
-              letterSpacing:0.1,
-              textShadow:"0 1px 0 rgba(255,255,255,0.68)",
-              wordBreak:"break-word",
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:touchRail?12:10,marginTop:10,flex:1,minHeight:0}}>
+            <span style={{
+              width:touchRail?28:26,
+              height:touchRail?28:26,
+              borderRadius:10,
+              background:"rgba(255,255,255,0.86)",
+              border:`1px solid ${tone.edge}`,
+              color:tone.accent,
+              display:"flex",
+              alignItems:"center",
+              justifyContent:"center",
+              fontSize:12,
+              fontWeight:900,
+              fontFamily:G.mono,
+              boxShadow:"inset 0 1px 0 rgba(255,255,255,0.65)",
+              flexShrink:0,
             }}>
-              {label}
+              {stepNumber}
+            </span>
+            <div style={{width:touchRail?36:34,height:touchRail?36:34,borderRadius:13,background:"rgba(255,255,255,0.92)",border:`1px solid ${tone.edge}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)",flexShrink:0}}>
+              {folderIcon}
             </div>
-          </div>
-          <div style={{flex:1}} />
-          {badge!==undefined && (
-            <div style={{display:"flex",justifyContent:"center",width:"100%"}}>
-              <span style={{minWidth:38,background:tone.tab,color:tone.accent,border:`1px solid ${tone.edge}`,borderRadius:999,padding:"6px 10px",fontSize:11,fontFamily:G.mono,fontWeight:800,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.45)",textAlign:"center"}}>
-                {badge}
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,flex:1,minHeight:0}}>
+              <div style={{
+                writingMode:"vertical-rl",
+                transform:"rotate(180deg)",
+                color:tone.text,
+                fontFamily:G.display,
+                fontSize:touchRail?13.5:13,
+                fontWeight:800,
+                letterSpacing:0.35,
+                lineHeight:1,
+                textTransform:"uppercase",
+                textShadow:"0 1px 0 rgba(255,255,255,0.72)",
+                whiteSpace:"nowrap",
+                flex:1,
+              }}>
+                {label}
+              </div>
+              <span style={{
+                fontSize:9,
+                letterSpacing:1.2,
+                color:tone.accent,
+                fontFamily:G.mono,
+                fontWeight:800,
+                textTransform:"uppercase",
+                transform:"rotate(180deg)",
+                writingMode:"vertical-rl",
+                opacity:0.8,
+              }}>
+                {`Step ${stepNumber}`}
               </span>
             </div>
+          </div>
+          {badge!==undefined && (
+            <span style={{
+              minWidth:touchRail?34:32,
+              minHeight:touchRail?28:26,
+              background:"rgba(255,255,255,0.92)",
+              color:tone.accent,
+              border:`1px solid ${tone.edge}`,
+              borderRadius:999,
+              padding:"5px 8px",
+              fontSize:11,
+              fontFamily:G.mono,
+              fontWeight:800,
+              boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)",
+              textAlign:"center",
+              flexShrink:0,
+              marginTop:10,
+            }}>
+              {badge}
+            </span>
           )}
         </div>
       </div>
@@ -4540,7 +4584,7 @@ function AdminPanelInner({user}){
     return {
       background:`linear-gradient(180deg, #FFFFFF 0%, ${tone.bg} 100%)`,
       borderRight:`1px solid ${tone.edge}`,
-      padding:coarsePointer ? "6px 4px 10px 3px" : "5px 3px 10px 2px",
+      padding:coarsePointer ? "4px 2px 8px" : "4px 2px 8px",
       boxShadow:"inset -1px 0 0 rgba(255,255,255,0.5)",
     };
   }, [coarsePointer]);
