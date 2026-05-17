@@ -2876,6 +2876,9 @@ function AdminPanelInner({user}){
   const fullDataRequestRef = React.useRef({});
   const warmupJobRef = React.useRef(0);
   const repairPromptSeenRef = React.useRef(new Set());
+  const historyReadyRef = React.useRef(false);
+  const historyRestoreRef = React.useRef(false);
+  const lastHistoryKeyRef = React.useRef("");
   const expandedPanelWidthsRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelWRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelResizeFrameRef = React.useRef(null);
@@ -2997,39 +3000,54 @@ function AdminPanelInner({user}){
   },[]);
 
   // ── Browser history — Android back gesture ───────────────────────────────────
-  // Encode the full nav state so every meaningful screen transition is back-able
-  function navState() {
-    return { view, mobileStep, instDetailView: instDetailView||null };
-  }
-  function pushNav(state) {
-    window.history.pushState(state, "");
-  }
+  // Keep the browser stack aligned with the visible mobile drill-down state,
+  // but skip synthetic pushes while we are restoring a prior entry.
+  const currentNavState = useMemo(() => ({
+    view,
+    mobileStep,
+    instDetailView: instDetailView || null,
+    selInst: selInst || null,
+    tab,
+    selP2: selP2 || null,
+    selP3: selP3 || null,
+    fullView: fullView || null,
+  }), [view, mobileStep, instDetailView, selInst, tab, selP2, selP3, fullView]);
+  const currentNavKey = useMemo(() => JSON.stringify(currentNavState), [currentNavState]);
 
-  // Seed base history on mount
   useEffect(() => {
-    window.history.replaceState({ view:"main", mobileStep:0, instDetailView:null }, "");
-    window.history.pushState({ view:"main", mobileStep:0, instDetailView:null }, "");
+    window.history.replaceState(currentNavState, "");
+    lastHistoryKeyRef.current = currentNavKey;
+    historyReadyRef.current = true;
   }, []);
 
-  // When key nav state changes, push a new history entry
   useEffect(() => {
-    window.history.pushState({ view, mobileStep, instDetailView:instDetailView||null }, "");
-  }, [view, mobileStep, instDetailView]);
+    if(!historyReadyRef.current) return;
+    if(historyRestoreRef.current){
+      historyRestoreRef.current = false;
+      lastHistoryKeyRef.current = currentNavKey;
+      return;
+    }
+    if(currentNavKey === lastHistoryKeyRef.current) return;
+    window.history.pushState(currentNavState, "");
+    lastHistoryKeyRef.current = currentNavKey;
+  }, [currentNavKey, currentNavState]);
 
-  // Handle back gesture
   useEffect(() => {
     const onPop = (e) => {
       const s = e.state;
       if (!s) return;
-      // Restore nav state from history entry — use raw setters to avoid re-pushing
-      if (s.view !== undefined)            setView(s.view);
-      if (s.mobileStep !== undefined)      setMobileStep(s.mobileStep);
-      if (s.instDetailView !== undefined)  setInstDetailView(s.instDetailView);
-      // Reset sub-selections when stepping back
-      if (s.mobileStep < 3) setSelP3(null);
-      if (s.mobileStep < 2) setSelP2(null);
-      if (s.mobileStep < 1) { setSelInst(null); }
-      if (s.view === "main") setInstDetailView(null);
+      historyRestoreRef.current = true;
+      lastHistoryKeyRef.current = JSON.stringify(s);
+      setProfileOpen(false);
+      setExportOpen(false);
+      setView(s.view ?? "main");
+      setMobileStep(typeof s.mobileStep === "number" ? s.mobileStep : 0);
+      setInstDetailView(s.instDetailView ?? null);
+      setSelInst(s.selInst ?? null);
+      setTab(s.tab === "teacher" ? "teacher" : "class");
+      setSelP2(s.selP2 ?? null);
+      setSelP3(s.selP3 ?? null);
+      setFullView(s.fullView ?? null);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -3682,6 +3700,16 @@ function AdminPanelInner({user}){
   const isAggregateSelection = isAllClassesSelected || isAllTeachersSelected;
   const aggregateTitle = isAllClassesSelected ? "All Classes" : isAllTeachersSelected ? "All Teachers" : "";
   const isScopedFullView = !!fullView;
+  const isInstituteOverviewStep = mobileStep===3 && !!selInst && !selP2 && !selP3 && !isScopedFullView;
+  const mobileStep3Label = isInstituteOverviewStep
+    ? "Overview"
+    : isScopedFullView
+      ? "View Full"
+      : isAggregateSelection
+        ? aggregateTitle
+        : selP3
+          ? selP3.className
+          : "All entries";
   const periodFilter = useMemo(()=>getPeriodFilter(period, customRange.start, customRange.end),[period,customRange.start,customRange.end]);
   const periodDays = periodFilter.days;
   const periodStartKey = periodFilter.startKey;
@@ -4388,6 +4416,50 @@ function AdminPanelInner({user}){
       repairPromptSeenRef.current.add(instKey);
       void openLegacySectionRepairForInstitute(inst, { silent:true });
     }
+  };
+
+  const openMobileInstituteOverview = () => {
+    setSelP2(null);
+    setSelP3(null);
+    setFullView(null);
+    setMobileStep(3);
+  };
+
+  const goMobileBack = () => {
+    if(mobileStep===3){
+      if(isAggregateSelection){
+        setSelP3(null);
+        setMobileStep(1);
+        return;
+      }
+      if(isScopedFullView){
+        setFullView(null);
+        setSelP3(null);
+        setMobileStep(2);
+        return;
+      }
+      if(isInstituteOverviewStep){
+        setMobileStep(1);
+        return;
+      }
+      setSelP3(null);
+      setMobileStep(2);
+      return;
+    }
+    if(mobileStep===2){
+      setSelP2(null);
+      setSelP3(null);
+      setFullView(null);
+      setMobileStep(1);
+      return;
+    }
+    if(mobileStep===1){
+      setSelInst(null);
+      clearDrilldown();
+      setMobileStep(0);
+      return;
+    }
+    setMobileStep(0);
   };
 
   // ── Export helpers ────────────────────────────────────────────────────────
@@ -6532,8 +6604,8 @@ function AdminPanelInner({user}){
           <span onClick={()=>{setMobileStep(0);setSelInst(null);resetNav();}} style={{color:"rgba(255,255,255,0.45)",cursor:"pointer",flexShrink:0}}>Inst.</span>
           {mobileStep>=1&&selInst&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);setFullView(null);}} style={{color:mobileStep===1?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===1?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{selInst}</span></>}
           {mobileStep>=2&&selP2&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{if(isAggregateSelection){setMobileStep(1);setSelP3(null);} else {setMobileStep(2);setSelP3(null);setFullView(null);}}} style={{color:mobileStep===2?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===2?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>{p2Label(selP2)}</span></>}
-          {mobileStep>=3&&(selP3||isAggregateSelection||isScopedFullView)&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span style={{color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>{isScopedFullView?"View Full":selP3?selP3.className:"All entries"}</span></>}
-          <button onClick={()=>setMobileStep(s=>isAggregateSelection&&s===3?1:isScopedFullView&&s===3?2:Math.max(0,s-1))} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",borderRadius:7,padding:"5px 12px",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:12,fontFamily:G.sans,fontWeight:600,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>← Back</button>
+          {mobileStep>=3&&(isInstituteOverviewStep||selP3||isAggregateSelection||isScopedFullView)&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span style={{color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>{mobileStep3Label}</span></>}
+          <button onClick={goMobileBack} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",borderRadius:7,padding:"5px 12px",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:12,fontFamily:G.sans,fontWeight:600,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>← Back</button>
         </div>
       )}</>
     );
@@ -6698,6 +6770,35 @@ function AdminPanelInner({user}){
               Export
             </button>
           </div>
+          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"16px 16px 14px",marginBottom:14,boxShadow:reduceEffects?"none":G.shadowSm}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>Institute overview &amp; charts</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:4}}>
+                  Open the phone-friendly summary to see the pie chart, teaching split, and recent activity without desktop panels.
+                </div>
+              </div>
+              <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 10px",fontSize:11,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
+                {overviewPeriodText}
+              </span>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+              <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                {instClasses.length} classes
+              </span>
+              <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
+                {selectedInstitutePeriodCount} logs
+              </span>
+              <span style={{background:"#DCFCE7",border:"1px solid #BBF7D0",borderRadius:999,padding:"5px 10px",fontSize:12,color:"#166534",fontFamily:G.mono,fontWeight:700}}>
+                {formatDurationShort(classSubjectSummary.totalMinutes)} taught
+              </span>
+            </div>
+            <button onClick={openMobileInstituteOverview}
+              style={{marginTop:14,display:"inline-flex",alignItems:"center",gap:8,background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+              Open overview
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
           <div style={{display:"flex",background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:3,marginBottom:16,gap:3}}>
             {["class","teacher"].map(t=>(
               <button key={t} onClick={()=>resetNav(t)}
@@ -6735,10 +6836,10 @@ function AdminPanelInner({user}){
               </div>
               {group.items.map(cls=>(
                 <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
-                  style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-                  <div>
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-                      <div style={{fontSize:16,fontWeight:700,color:G.text,flex:1,minWidth:0}}>{cls.display}</div>
+                  style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"stretch",gap:12,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                      <div style={{fontSize:16,fontWeight:700,color:G.text,flex:"1 1 180px",minWidth:0}}>{cls.display}</div>
                       <button onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(cls);}}
                         style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#B91C1C",cursor:"pointer",fontFamily:G.sans,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
                         Delete
@@ -6751,7 +6852,7 @@ function AdminPanelInner({user}){
                     )}
                     <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:6,display:"inline-block"}}>{cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}</span>
                   </div>
-                  <span style={{fontSize:20,color:G.textL}}>›</span>
+                  <span style={{fontSize:20,color:G.textL,alignSelf:"center",flexShrink:0}}>›</span>
                 </div>
               ))}
             </div>
@@ -6857,7 +6958,7 @@ function AdminPanelInner({user}){
     );
 
     // ── STEP 3: Entries ───────────────────────────────────────────────────────
-    if(mobileStep===3&&(selP3||isAggregateSelection||isScopedFullView)) {
+    if(mobileStep===3&&(isInstituteOverviewStep||selP3||isAggregateSelection||isScopedFullView)) {
       return(
         <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
           {binView&&<AdminBinModal/>}
@@ -6866,10 +6967,16 @@ function AdminPanelInner({user}){
           <MobileNav/><MobileBreadcrumb/>
           <div style={{padding:"12px 14px 40px"}}>
             <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>
-              {isScopedFullView ? fullViewTitle : isAggregateSelection ? aggregateTitle : `${selP3.teacherName} — ${selP3.className}`}
+              {isInstituteOverviewStep ? `${selInst} Overview` : isScopedFullView ? fullViewTitle : isAggregateSelection ? aggregateTitle : `${selP3.teacherName} — ${selP3.className}`}
             </h2>
             <div style={{fontSize:14,color:G.textM,marginBottom:14}}>
-              {isScopedFullView ? fullViewSubtitle : isAggregateSelection ? `${selInst} · grouped by class, chronological inside each class` : [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")}
+              {isInstituteOverviewStep
+                ? `${selInst} · charts, teaching time, and recent institute activity`
+                : isScopedFullView
+                  ? fullViewSubtitle
+                  : isAggregateSelection
+                    ? `${selInst} · grouped by class, chronological inside each class`
+                    : [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")}
             </div>
             {/* Period selector — Option B */}
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
@@ -6889,7 +6996,13 @@ function AdminPanelInner({user}){
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Export
             </button>
-            {isScopedFullView ? renderFullViewEntries(true) : isAggregateSelection ? renderAggregateEntries(true) : renderSelectedTimelineEntries(true)}
+            {isInstituteOverviewStep
+              ? renderOverviewPanel()
+              : isScopedFullView
+                ? renderFullViewEntries(true)
+                : isAggregateSelection
+                  ? renderAggregateEntries(true)
+                  : renderSelectedTimelineEntries(true)}
           </div>
         </div>
       );
