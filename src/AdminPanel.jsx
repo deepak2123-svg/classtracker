@@ -4,7 +4,7 @@ import {
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
   getAllInstituteSections, saveInstituteGradeGroups, deleteInstituteGradeGroup,
   removeTeacherFromSystem, removeInstituteFromIndex,
-  deleteEntryFromTeacherData, deleteClassFromTeacherData,
+  deleteEntryFromTeacherData, deleteClassFromTeacherData, deleteClassNotes,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute,
   repairTeacherIndex, saveProfileName, saveUserData,
 } from "./firebase";
@@ -313,7 +313,7 @@ function LegacySectionRepairModal({
             Repair old section names
           </div>
           <div style={{fontSize:14,color:G.textM,lineHeight:1.7}}>
-            {`These classes still use names that are no longer present in ${scopeDescription}. Choose the correct current section for each old name and we'll merge them centrally.`}
+            {`These classes still use names that are no longer present in ${scopeDescription}. Map each old section to the right current section, or choose delete to remove that section and all its entries.`}
           </div>
         </div>
 
@@ -356,18 +356,24 @@ function LegacySectionRepairModal({
 
                   <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
                     <div>
-                      <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:6}}>Current section name</div>
+                      <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,color:G.textL,marginBottom:6}}>Map or delete</div>
                       <select
                         value={selected}
                         onChange={e=>onChange(selectionKey, e.target.value)}
                         style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1px solid ${G.borderM}`,fontSize:15,fontFamily:G.sans,color:G.text,background:"#fff",outline:"none"}}
                       >
-                        <option value="">Select the current section…</option>
+                        <option value="">Select the action…</option>
+                        <option value={DELETE_SECTION_ACTION}>Delete this section and its entries</option>
                         {options.map(section=>(
                           <option key={`${item.oldSection}_${section}`} value={section}>{section}</option>
                         ))}
                       </select>
                     </div>
+                    {selected===DELETE_SECTION_ACTION&&(
+                      <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#B91C1C",fontWeight:600,lineHeight:1.5}}>
+                        This will permanently delete every matching class record and all entries under this section.
+                      </div>
+                    )}
                     {item.subjects.length>0&&(
                       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                         {item.subjects.map(subject=>(
@@ -402,7 +408,7 @@ function LegacySectionRepairModal({
           </button>
           <button onClick={onConfirm} disabled={busy}
             style={{background:G.navy,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:14,fontWeight:800,cursor:busy?"not-allowed":"pointer",fontFamily:G.sans,boxShadow:G.shadowSm}}>
-            {busy ? "Repairing…" : "Repair section names"}
+            {busy ? "Applying changes…" : "Apply section changes"}
           </button>
         </div>
       </div>
@@ -426,6 +432,7 @@ function normaliseName(raw){
 function classNum(name){const m=(name||"").match(/(\d+)/);return m?parseInt(m[1]):0;}
 const ALL_CLASSES_KEY = "__all_classes__";
 const ALL_TEACHERS_KEY = "__all_teachers__";
+const DELETE_SECTION_ACTION = "__delete_section__";
 const exportTextSorter = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 function exportClassMeta(name){
   const clean = (name || "").trim();
@@ -880,6 +887,107 @@ function collectAllLegacySectionRepairItems(fullDataByUid, teachers, instituteNa
     exportTextSorter.compare(a.institute || "", b.institute || "") ||
     exportTextSorter.compare(a.oldSection || "", b.oldSection || "")
   );
+}
+function mergeEntryDateMaps(existingMap, incomingMap){
+  const next = {};
+  const keys = new Set([
+    ...Object.keys(existingMap || {}),
+    ...Object.keys(incomingMap || {}),
+  ]);
+  keys.forEach(dateKey => {
+    const existing = Array.isArray(existingMap?.[dateKey]) ? existingMap[dateKey] : [];
+    const incoming = Array.isArray(incomingMap?.[dateKey]) ? incomingMap[dateKey] : [];
+    if(!existing.length && !incoming.length) return;
+    next[dateKey] = [...existing, ...incoming].sort((a,b)=>
+      String(a?.timeStart || "").localeCompare(String(b?.timeStart || "")) ||
+      String(a?.timeEnd || "").localeCompare(String(b?.timeEnd || "")) ||
+      String(a?.id || "").localeCompare(String(b?.id || ""))
+    );
+  });
+  return next;
+}
+function applyInstituteSectionActionsToTeacherData(data, instituteName, actionMap){
+  if(!data) return { data, changed:false, removedClassIds:[] };
+  const actions = Object.fromEntries(
+    Object.entries(actionMap || {})
+      .map(([section, action])=>[normaliseSectionKey(section), String(action || "").trim()])
+      .filter(([sectionKey, action])=>sectionKey && action)
+  );
+  if(!Object.keys(actions).length) return { data, changed:false, removedClassIds:[] };
+
+  let changed = false;
+  let classes = [...(data.classes || [])];
+  const notes = { ...(data.notes || {}) };
+  const removedClassIds = [];
+
+  Object.entries(actions).forEach(([oldSectionKey, action]) => {
+    const matchingClasses = classes.filter(cls =>
+      cls &&
+      !cls.left &&
+      sameInstituteName(cls.institute, instituteName) &&
+      normaliseSectionKey(cls.section) === oldSectionKey
+    );
+    if(!matchingClasses.length) return;
+
+    if(action === DELETE_SECTION_ACTION){
+      matchingClasses.forEach(cls => {
+        classes = classes.filter(item => item.id !== cls.id);
+        delete notes[cls.id];
+        removedClassIds.push(cls.id);
+        changed = true;
+      });
+      return;
+    }
+
+    matchingClasses.forEach(cls => {
+      const targetSection = action;
+      const targetKey = normaliseSectionKey(targetSection);
+      const existingTarget = classes.find(other =>
+        other &&
+        other.id !== cls.id &&
+        !other.left &&
+        sameInstituteName(other.institute, cls.institute) &&
+        normaliseSectionKey(other.section) === targetKey &&
+        normaliseSectionKey(other.subject) === normaliseSectionKey(cls.subject)
+      );
+
+      if(existingTarget){
+        notes[existingTarget.id] = mergeEntryDateMaps(notes[existingTarget.id] || {}, notes[cls.id] || {});
+        delete notes[cls.id];
+        classes = classes.filter(item => item.id !== cls.id);
+        removedClassIds.push(cls.id);
+        changed = true;
+        return;
+      }
+
+      classes = classes.map(item => item.id === cls.id ? { ...item, section: targetSection } : item);
+      changed = true;
+    });
+  });
+
+  if(!changed) return { data, changed:false, removedClassIds:[] };
+
+  const transformedSections = (data.sections || []).map(section => {
+    const action = actions[normaliseSectionKey(section)];
+    if(!action) return section;
+    if(action === DELETE_SECTION_ACTION) return "";
+    return action;
+  }).filter(Boolean);
+  const derivedSections = classes
+    .filter(cls => !cls?.left && sameInstituteName(cls?.institute, instituteName))
+    .map(cls => String(cls.section || "").trim())
+    .filter(Boolean);
+
+  return {
+    data: {
+      ...data,
+      classes,
+      notes,
+      sections: uniqueSectionNames([...transformedSections, ...derivedSections]),
+    },
+    changed:true,
+    removedClassIds:[...new Set(removedClassIds)],
+  };
 }
 function compareClassCardsByActivity(a,b){
   const aTs = Number(a?.lastActivityTs || 0);
@@ -2708,6 +2816,7 @@ function AdminPanelInner({user}){
   const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
   const fullDataRequestRef = React.useRef({});
   const warmupJobRef = React.useRef(0);
+  const repairPromptSeenRef = React.useRef(new Set());
   const expandedPanelWidthsRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelWRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelResizeFrameRef = React.useRef(null);
@@ -2933,16 +3042,16 @@ function AdminPanelInner({user}){
     warmTeacherUids(getInstituteTeacherUids(inst), inst);
   }, [getInstituteTeacherUids, warmTeacherUids]);
 
-  const openLegacySectionRepair = React.useCallback(async () => {
-    if(!selInst) return;
-    const instData = getInstituteSectionConfig(instSectionsAll, selInst);
+  const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
+    if(!instituteName) return false;
+    const instData = getInstituteSectionConfig(instSectionsAll, instituteName);
     const currentSections = getInstituteSectionNames(instData);
     if(!currentSections.length){
-      showAdminToast("No current section list found for this institute.");
-      return;
+      if(!silent) showAdminToast("No current section list found for this institute.");
+      return false;
     }
 
-    const uids = getInstituteTeacherUids(selInst);
+    const uids = getInstituteTeacherUids(instituteName);
     const loadedEntries = await Promise.all(
       uids.map(async uid => [uid, await ensureFullData(uid)])
     );
@@ -2950,25 +3059,31 @@ function AdminPanelInner({user}){
       ...fullData,
       ...Object.fromEntries(loadedEntries.filter(([, data]) => !!data)),
     };
-    const repair = collectLegacySectionRepairItems(fullSnapshot, teachers, selInst, instSectionsAll);
+    const repair = collectLegacySectionRepairItems(fullSnapshot, teachers, instituteName, instSectionsAll);
     if(!repair.items.length){
-      showAdminToast("No legacy section names found for this institute.");
-      return;
+      if(!silent) showAdminToast("No legacy section names found for this institute.");
+      return false;
     }
 
     setLegacySectionRepair({
-      scopeLabel: selInst,
+      scopeLabel: instituteName,
       items: repair.items.map(item => ({
         ...item,
-        institute: selInst,
+        institute: instituteName,
         options: repair.currentSections,
-        selectionKey: `${selInst}::${item.oldSection}`,
+        selectionKey: `${instituteName}::${item.oldSection}`,
       })),
-      selections: Object.fromEntries(repair.items.map(item => [`${selInst}::${item.oldSection}`, item.suggested || ""])),
+      selections: Object.fromEntries(repair.items.map(item => [`${instituteName}::${item.oldSection}`, item.suggested || ""])),
       busy: false,
       error: "",
     });
-  }, [selInst, instSectionsAll, getInstituteTeacherUids, ensureFullData, fullData, teachers, showAdminToast]);
+    return true;
+  }, [instSectionsAll, getInstituteTeacherUids, ensureFullData, fullData, teachers, showAdminToast]);
+
+  const openLegacySectionRepair = React.useCallback(async () => {
+    if(!selInst) return;
+    await openLegacySectionRepairForInstitute(selInst);
+  }, [selInst, openLegacySectionRepairForInstitute]);
 
   const openAllLegacySectionRepair = React.useCallback(async () => {
     const instituteSet = new Set();
@@ -3018,69 +3133,80 @@ function AdminPanelInner({user}){
     const selections = legacySectionRepair.selections || {};
     const missing = legacySectionRepair.items.filter(item => !String(selections[item.selectionKey || item.oldSection] || "").trim());
     if(missing.length){
-      setLegacySectionRepair(prev => prev ? { ...prev, error: "Select the current section for each old name." } : prev);
+      setLegacySectionRepair(prev => prev ? { ...prev, error: "Choose a current section or delete each old section." } : prev);
       return;
     }
 
     setLegacySectionRepair(prev => prev ? { ...prev, busy: true, error: "" } : prev);
     try {
-      const resolvedSelections = Object.fromEntries(
-        legacySectionRepair.items.map(item => [item.selectionKey || item.oldSection, String(selections[item.selectionKey || item.oldSection] || "").trim()])
-      );
-      const eventsByInstitute = {};
+      const actionsByInstitute = {};
       legacySectionRepair.items.forEach(item => {
         const instituteName = item.institute || legacySectionRepair.scopeLabel || "";
-        const nextSection = resolvedSelections[item.selectionKey || item.oldSection];
-        if(!instituteName || !nextSection) return;
-        if(!eventsByInstitute[instituteName]) eventsByInstitute[instituteName] = {};
-        eventsByInstitute[instituteName][item.oldSection] = nextSection;
+        const action = String(selections[item.selectionKey || item.oldSection] || "").trim();
+        if(!instituteName || !action) return;
+        if(!actionsByInstitute[instituteName]) actionsByInstitute[instituteName] = {};
+        actionsByInstitute[instituteName][item.oldSection] = action;
       });
 
-      const nextInstSections = { ...instSectionsAll };
-      for (const [instituteName, instituteSelections] of Object.entries(eventsByInstitute)) {
-        const manualEvents = buildSectionChangeEvents(instituteName, null, null, instituteSelections, false);
-        const instKey = getInstituteSectionConfigKey(nextInstSections, instituteName);
-        const instData = getInstituteSectionConfig(nextInstSections, instituteName) || {};
-        const nextEvents = mergeInstituteSectionChangeEvents(instData.sectionChangeEvents, manualEvents);
-        await saveInstituteGradeGroups(instKey, instData.gradeGroups || [], {
-          sectionChangeEvents: nextEvents,
-        });
-        nextInstSections[instKey] = {
-          ...(nextInstSections[instKey] || {}),
-          gradeGroups: instData.gradeGroups || nextInstSections[instKey]?.gradeGroups || [],
-          sectionChangeEvents: nextEvents,
-        };
-      }
+      const affectedUids = [...new Set(
+        legacySectionRepair.items
+          .flatMap(item => (item.classRefs || []).map(ref => ref.uid))
+          .filter(Boolean)
+      )];
+      const updatedEntries = [];
+      let changedTeachers = 0;
+      let deletedClasses = 0;
 
-      const affectedUids = [...new Set(legacySectionRepair.items.flatMap(item => item.classRefs.map(ref => ref.uid)).filter(Boolean))];
-      const updatedEntries = await Promise.all(affectedUids.map(async uid => {
+      for (const uid of affectedUids) {
         const latest = await getTeacherFullData(uid);
-        if(!latest) return [uid, null];
-        let updated = latest;
-        Object.entries(eventsByInstitute).forEach(([instituteName, instituteSelections]) => {
-          const manualEvents = buildSectionChangeEvents(instituteName, null, null, instituteSelections, false);
-          updated = applyAdminSectionChangeEventsToTeacherData(updated, instituteName, manualEvents);
+        if(!latest) continue;
+
+        let nextData = latest;
+        let changed = false;
+        let removedClassIds = [];
+        Object.entries(actionsByInstitute).forEach(([instituteName, actionMap]) => {
+          const result = applyInstituteSectionActionsToTeacherData(nextData, instituteName, actionMap);
+          nextData = result.data;
+          if(result.changed){
+            changed = true;
+            removedClassIds.push(...(result.removedClassIds || []));
+          }
         });
-        if(updated !== latest){
-          await saveUserData(uid, updated, {
-            expectedRevision: Number(latest?._meta?.revision || 0),
-            source: "adminLegacySectionRepair",
-          });
+
+        if(!changed) continue;
+
+        await saveUserData(uid, nextData, {
+          expectedRevision: Number(latest?._meta?.revision || 0),
+          source: "adminLegacySectionRepair",
+        });
+
+        const uniqueRemovedClassIds = [...new Set(removedClassIds.filter(Boolean))];
+        if(uniqueRemovedClassIds.length){
+          await Promise.all(
+            uniqueRemovedClassIds.map(classId => deleteClassNotes(uid, classId).catch(() => {}))
+          );
         }
-        return [uid, updated];
-      }));
+
+        const fresh = await getTeacherFullData(uid);
+        if(fresh) updatedEntries.push([uid, fresh]);
+        changedTeachers += 1;
+        deletedClasses += uniqueRemovedClassIds.length;
+      }
 
       setFullData(prev => ({
         ...prev,
         ...Object.fromEntries(updatedEntries.filter(([, data]) => !!data)),
       }));
-      setInstSectionsAll(nextInstSections);
       setLegacySectionRepair(null);
-      showAdminToast("Legacy section names repaired.");
+      showAdminToast(
+        changedTeachers
+          ? `Applied section changes for ${changedTeachers} teacher${changedTeachers!==1?"s":""}${deletedClasses ? ` and removed ${deletedClasses} old class record${deletedClasses!==1?"s":""}` : ""}.`
+          : "No matching class records needed changes."
+      );
     } catch (e) {
       setLegacySectionRepair(prev => prev ? { ...prev, busy: false, error: e.message || "Repair failed." } : prev);
     }
-  }, [legacySectionRepair, instSectionsAll, showAdminToast]);
+  }, [legacySectionRepair, showAdminToast]);
 
   const setLegacySectionRepairSelection = React.useCallback((oldSection, nextSection) => {
     setLegacySectionRepair(prev => prev ? {
@@ -3982,6 +4108,71 @@ function AdminPanelInner({user}){
     });
   };
 
+  const handleDeleteSectionGroup = React.useCallback((sectionGroup) => {
+    if(!sectionGroup) return;
+    const records = Array.isArray(sectionGroup.teachers) ? sectionGroup.teachers.filter(item => item?.uid && item?.classId) : [];
+    if(!records.length){
+      showAdminToast("No class records found for this section.");
+      return;
+    }
+    const teacherCount = new Set(records.map(item => item.uid)).size;
+    const entryCount = records.reduce((sum, item) => sum + Number(item.entryCount || 0), 0);
+    confirmDelete({
+      title: `Delete section "${sectionGroup.display}"?`,
+      lines: [
+        `This will permanently delete ${records.length} class record${records.length!==1?"s":""} across ${teacherCount} teacher${teacherCount!==1?"s":""}.`,
+        entryCount ? `${entryCount} existing entr${entryCount===1?"y":"ies"} under this section will also be removed.` : "Any entries under this section will also be removed.",
+        "This cannot be undone.",
+      ],
+      confirmLabel: "Delete Section",
+      onConfirm: async () => {
+        setDeleteBusy(true);
+        try {
+          const byTeacher = {};
+          records.forEach(item => {
+            if(!byTeacher[item.uid]) byTeacher[item.uid] = [];
+            byTeacher[item.uid].push(item.classId);
+          });
+
+          for (const [uid, classIds] of Object.entries(byTeacher)) {
+            const uniqueClassIds = [...new Set(classIds.filter(Boolean))];
+            for (const classId of uniqueClassIds) {
+              await deleteClassFromTeacherData(uid, classId);
+            }
+          }
+
+          const refreshedEntries = await Promise.all(
+            Object.keys(byTeacher).map(async uid => [uid, await getTeacherFullData(uid)])
+          );
+          setFullData(prev => ({
+            ...prev,
+            ...Object.fromEntries(refreshedEntries.filter(([, data]) => !!data)),
+          }));
+          setAdminBin(bin => [
+            ...bin,
+            {
+              type: "section",
+              name: sectionGroup.display,
+              institute: selInst,
+              teacherCount,
+              classCount: records.length,
+              deletedAt: Date.now(),
+              deletedBy: user.uid,
+            },
+          ]);
+          setSelP2(current => current === sectionGroup.raw ? null : current);
+          setSelP3(current => current?.className === sectionGroup.display ? null : current);
+          setFullView(current => current?.kind === "class" && current?.classRaw === sectionGroup.raw ? null : current);
+          showAdminToast(`Deleted section "${sectionGroup.display}".`);
+        } catch (e) {
+          showAdminToast("Failed to delete section: " + e.message);
+        }
+        setDeleteBusy(false);
+        setDeleteModal(null);
+      },
+    });
+  }, [confirmDelete, selInst, setFullView, setSelP2, setSelP3, showAdminToast, user.uid]);
+
   const handleDeleteEntry = (teacherUid, classId, dateKey, entryId, entryTitle) => {
     confirmDelete({
       title: "Delete this entry?",
@@ -4023,6 +4214,11 @@ function AdminPanelInner({user}){
     setP2Search("");
     setMobileStep(1);
     warmInstitute(inst);
+    const instKey = normaliseSectionKey(inst);
+    if(instKey && !repairPromptSeenRef.current.has(instKey)){
+      repairPromptSeenRef.current.add(instKey);
+      void openLegacySectionRepairForInstitute(inst, { silent:true });
+    }
   };
 
   // ── Export helpers ────────────────────────────────────────────────────────
@@ -6311,7 +6507,7 @@ function AdminPanelInner({user}){
           {selInst&&tab==="class"&&(
             <button onClick={openLegacySectionRepair}
               style={{display:"inline-flex",alignItems:"center",gap:8,background:"#EEF4FF",color:G.blue,border:"1px solid #C7D7F5",borderRadius:999,padding:"8px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:G.sans,margin:"0 2px 12px"}}>
-              Repair old section names
+              Map or delete old sections
             </button>
           )}
           {renderWarmupBanner(true)}
@@ -6319,7 +6515,13 @@ function AdminPanelInner({user}){
             <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
               style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
               <div>
-                <div style={{fontSize:16,fontWeight:700,color:G.text}}>{cls.display}</div>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                  <div style={{fontSize:16,fontWeight:700,color:G.text,flex:1,minWidth:0}}>{cls.display}</div>
+                  <button onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(cls);}}
+                    style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#B91C1C",cursor:"pointer",fontFamily:G.sans,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
+                    Delete
+                  </button>
+                </div>
                 {cls.subjects.length>0&&(
                   <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
                     {cls.subjects.map(s=><span key={s} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"2px 9px",fontSize:12,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
@@ -6879,7 +7081,7 @@ function AdminPanelInner({user}){
                   <div style={{marginTop:8}}>
                     <button onClick={openLegacySectionRepair}
                       style={{display:"inline-flex",alignItems:"center",gap:8,background:"#EEF4FF",color:G.blue,border:"1px solid #C7D7F5",borderRadius:999,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
-                      Repair old section names
+                      Map or delete old sections
                     </button>
                   </div>
                 )}
@@ -6931,7 +7133,13 @@ function AdminPanelInner({user}){
                       style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
                       onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                       onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                      <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
+                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                        <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS,flex:1,minWidth:0}}>{cls.display}</div>
+                        <button onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(cls);}}
+                          style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,color:"#B91C1C",cursor:"pointer",fontFamily:G.sans,flexShrink:0}}>
+                          Delete
+                        </button>
+                      </div>
                       {cls.subjects.length>0&&(
                         <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
                           {cls.subjects.map(s=><span key={s} style={{background:isSel?G.surface:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"1px 8px",fontSize:11,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
