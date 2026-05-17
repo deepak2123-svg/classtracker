@@ -2869,6 +2869,7 @@ function AdminPanelInner({user}){
   const [instMenuOpen, setInstMenuOpen]     = useState(null); // inst name whose ⋯ menu is open
   const [instSearch, setInstSearch]         = useState("");
   const [p2Search, setP2Search]             = useState("");
+  const [activeProgramFilter, setActiveProgramFilter] = useState(null);
   const [repairingTeacherUid, setRepairingTeacherUid] = useState(null);
   const [instClassificationOpen, setInstClassificationOpen] = useState({});
   const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
@@ -3523,6 +3524,90 @@ function AdminPanelInner({user}){
     ()=>buildAdminProgramClassGroups(visibleInstClasses),
     [visibleInstClasses]
   );
+  const displayedProgramGroups = useMemo(
+    ()=>activeProgramFilter
+      ? groupedVisibleInstClasses.filter(group => group.key === activeProgramFilter)
+      : groupedVisibleInstClasses,
+    [groupedVisibleInstClasses, activeProgramFilter]
+  );
+  const displayedVisibleClassCount = useMemo(
+    ()=>displayedProgramGroups.reduce((sum, group) => sum + (group.items?.length || 0), 0),
+    [displayedProgramGroups]
+  );
+  const visibleInstClassCountLabel = activeProgramFilter
+    ? `${displayedVisibleClassCount} of ${visibleInstClasses.length} classes`
+    : `${visibleInstClasses.length} of ${instClasses.length} classes`;
+
+  React.useEffect(()=>{
+    if(activeProgramFilter && !groupedVisibleInstClasses.some(group => group.key === activeProgramFilter)){
+      setActiveProgramFilter(null);
+    }
+  }, [activeProgramFilter, groupedVisibleInstClasses]);
+
+  React.useEffect(()=>{
+    if(tab !== "class" || !activeProgramFilter || !selP2) return;
+    const visibleRawSet = new Set(
+      displayedProgramGroups.flatMap(group => (group.items || []).map(item => item.raw))
+    );
+    if(!visibleRawSet.has(selP2)){
+      setSelP2(null);
+      setSelP3(null);
+      setFullView(null);
+    }
+  }, [tab, activeProgramFilter, selP2, displayedProgramGroups]);
+
+  const renderProgramFilterBar = (compact = false) => {
+    if(tab !== "class" || groupedVisibleInstClasses.length === 0) return null;
+    const gap = compact ? 6 : 8;
+    const paddingY = compact ? "6px 10px" : "7px 12px";
+    const fontSize = compact ? 11 : 12;
+    return (
+      <div style={{display:"flex",flexWrap:"wrap",gap,marginBottom:compact?10:12}}>
+        <button onClick={()=>setActiveProgramFilter(null)}
+          style={{
+            display:"inline-flex",
+            alignItems:"center",
+            gap:8,
+            background:activeProgramFilter ? "#fff" : G.navy,
+            color:activeProgramFilter ? G.textM : "#fff",
+            border:activeProgramFilter ? `1px solid ${G.border}` : "1px solid transparent",
+            borderRadius:999,
+            padding:paddingY,
+            fontSize,
+            fontWeight:800,
+            cursor:"pointer",
+            fontFamily:G.sans,
+          }}>
+          All
+          <span style={{fontFamily:G.mono,fontWeight:700,opacity:0.9}}>{visibleInstClasses.length}</span>
+        </button>
+        {groupedVisibleInstClasses.map(group=>{
+          const active = activeProgramFilter === group.key;
+          return (
+            <button key={group.key} onClick={()=>setActiveProgramFilter(current => current === group.key ? null : group.key)}
+              style={{
+                display:"inline-flex",
+                alignItems:"center",
+                gap:8,
+                background:active ? group.accent : group.bg,
+                color:active ? "#fff" : group.accent,
+                border:`1px solid ${active ? group.accent : group.border}`,
+                borderRadius:999,
+                padding:paddingY,
+                fontSize,
+                fontWeight:800,
+                cursor:"pointer",
+                fontFamily:G.sans,
+                boxShadow:active ? G.shadowSm : "none",
+              }}>
+              {group.label}
+              <span style={{fontFamily:G.mono,fontWeight:700,opacity:0.9}}>{group.items.length}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
 
   const instWarmupActive = !!(selInst && instWarmup.inst===selInst && instWarmup.total>0 && instWarmup.loaded<instWarmup.total);
   const instWarmupLabel = instWarmupActive
@@ -4283,6 +4368,7 @@ function AdminPanelInner({user}){
   const resetNav=(newTab)=>{
     clearDrilldown();
     setP2Search("");
+    setActiveProgramFilter(null);
     if(newTab)setTab(newTab);
     setMobileStep(s=>Math.min(s,1));
   };
@@ -4294,6 +4380,7 @@ function AdminPanelInner({user}){
     setSelInst(inst);
     clearDrilldown();
     setP2Search("");
+    setActiveProgramFilter(null);
     setMobileStep(1);
     warmInstitute(inst);
     const instKey = normaliseSectionKey(inst);
@@ -6583,7 +6670,7 @@ function AdminPanelInner({user}){
           {renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers",true)}
           <div style={{fontSize:12,color:G.textL,margin:"10px 2px 12px"}}>
             {tab==="class"
-              ? `${visibleInstClasses.length} of ${instClasses.length} classes`
+              ? visibleInstClassCountLabel
               : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
           </div>
           {selInst&&tab==="class"&&(
@@ -6592,14 +6679,16 @@ function AdminPanelInner({user}){
               Map or delete old sections
             </button>
           )}
+          {tab==="class"&&renderProgramFilterBar(true)}
           {renderWarmupBanner(true)}
-          {tab==="class"&&groupedVisibleInstClasses.map(group=>(
+          {tab==="class"&&displayedProgramGroups.map(group=>(
             <div key={group.key} style={{marginBottom:14}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,margin:"0 2px 10px"}}>
                 <div style={{display:"inline-flex",alignItems:"center",gap:8}}>
-                  <span style={{display:"inline-flex",alignItems:"center",background:group.bg,color:group.accent,border:`1px solid ${group.border}`,borderRadius:999,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:G.sans,letterSpacing:0.3}}>
+                  <button onClick={()=>setActiveProgramFilter(current => current === group.key ? null : group.key)}
+                    style={{display:"inline-flex",alignItems:"center",background:activeProgramFilter===group.key?group.accent:group.bg,color:activeProgramFilter===group.key?"#fff":group.accent,border:`1px solid ${activeProgramFilter===group.key?group.accent:group.border}`,borderRadius:999,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:G.sans,letterSpacing:0.3,cursor:"pointer",boxShadow:activeProgramFilter===group.key?G.shadowSm:"none",WebkitTapHighlightColor:"transparent"}}>
                     {group.label}
-                  </span>
+                  </button>
                   <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>
                     {group.items.length} class{group.items.length!==1?"es":""}
                   </span>
@@ -6648,7 +6737,7 @@ function AdminPanelInner({user}){
           {instTeachers.length===0&&tab==="teacher"&&loadingUids.size>0&&(
             <div style={{textAlign:"center",padding:"40px 0",color:G.textM}}>Loading teachers…</div>
           )}
-          {((tab==="class"&&visibleInstClasses.length===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
+          {((tab==="class"&&displayedVisibleClassCount===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"18px 16px",textAlign:"center",color:G.textM}}>
               No {tab==="class"?"classes":"teachers"} match your search.
             </div>
@@ -7170,7 +7259,7 @@ function AdminPanelInner({user}){
                 {selInst&&renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers",true)}
                 {selInst&&<div style={{fontSize:12,color:G.textL,marginTop:8}}>
                   {tab==="class"
-                    ? `${visibleInstClasses.length} of ${instClasses.length} classes`
+                    ? visibleInstClassCountLabel
                     : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
                 </div>}
                 {selInst&&tab==="class"&&(
@@ -7187,6 +7276,7 @@ function AdminPanelInner({user}){
                 {tab==="class"?"Classes ↓ (latest activity first)":"Teachers"}
               </div>
               <div style={{flex:1,overflowY:"auto",padding:"0 7px 8px"}}>
+                {selInst&&tab==="class"&&<div style={{padding:"8px 12px 6px"}}>{renderProgramFilterBar(false)}</div>}
                 {!selInst&&<div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>Select an institute</div>}
                 {selInst&&tab==="teacher"&&instTeachers.length===0&&loadingUids.size>0&&(
                   <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:13,fontFamily:G.mono}}>
@@ -7222,13 +7312,14 @@ function AdminPanelInner({user}){
                     loading classes…
                   </div>
                 )}
-                {selInst&&tab==="class"&&groupedVisibleInstClasses.map(group=>(
+                {selInst&&tab==="class"&&displayedProgramGroups.map(group=>(
                   <div key={group.key} style={{marginBottom:14}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"6px 12px 4px"}}>
                       <div style={{display:"inline-flex",alignItems:"center",gap:8}}>
-                        <span style={{display:"inline-flex",alignItems:"center",background:group.bg,color:group.accent,border:`1px solid ${group.border}`,borderRadius:999,padding:"5px 11px",fontSize:11,fontWeight:800,fontFamily:G.sans,letterSpacing:0.3}}>
+                        <button onClick={()=>setActiveProgramFilter(current => current === group.key ? null : group.key)}
+                          style={{display:"inline-flex",alignItems:"center",background:activeProgramFilter===group.key?group.accent:group.bg,color:activeProgramFilter===group.key?"#fff":group.accent,border:`1px solid ${activeProgramFilter===group.key?group.accent:group.border}`,borderRadius:999,padding:"5px 11px",fontSize:11,fontWeight:800,fontFamily:G.sans,letterSpacing:0.3,cursor:"pointer",boxShadow:activeProgramFilter===group.key?G.shadowSm:"none"}}>
                           {group.label}
-                        </span>
+                        </button>
                         <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>
                           {group.items.length} class{group.items.length!==1?"es":""}
                         </span>
@@ -7263,7 +7354,7 @@ function AdminPanelInner({user}){
                     })}
                   </div>
                 ))}
-                {selInst&&((tab==="class"&&visibleInstClasses.length===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
+                {selInst&&((tab==="class"&&displayedVisibleClassCount===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
                   <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>No {tab==="class"?"classes":"teachers"} match your search</div>
                 )}
               </div>
