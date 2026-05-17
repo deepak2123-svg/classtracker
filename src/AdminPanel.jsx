@@ -4483,16 +4483,21 @@ function AdminPanelInner({user}){
     </button>
   );
 
-  const CollapsedPanelRail = ({ step, label, meta, onExpand, badge, badgeLabel, direction="right", themeKey="p1", stackIndex=0, stackDepth=1 }) => {
+  const CollapsedPanelRail = ({ step, label, meta, onExpand, badge, badgeLabel, direction="right", themeKey="p1", stackIndex=0 }) => {
     const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
     const touchRail = coarsePointer || isWeakDevice;
     const stepNumber = String(step || "").match(/\d+/)?.[0] || step;
-    const cardHeight = touchRail ? 118 : 110;
-    const offsetX = stackIndex * 7;
-    const overlapY = stackIndex === 0 ? 0 : -12;
+    const cardHeight = touchRail ? 132 : 124;
+    const offsetX = stackIndex * 8;
+    const overlapY = stackIndex === 0 ? 0 : -10;
     const footerText = typeof badge === "number"
       ? `${badge} ${badgeLabel || "items"}`
       : badgeLabel || "";
+    const folderCaption = label === "Institutes"
+      ? "Institute list"
+      : label === "Classes"
+        ? "Class list"
+        : "Teacher list";
     return (
       <div style={{display:"flex",justifyContent:"flex-start",flex:"0 0 auto",minHeight:0,marginTop:overlapY,paddingTop:stackIndex === 0 ? 0 : 12,paddingLeft:offsetX,position:"relative",zIndex:stackIndex + 1}}>
         <div style={{
@@ -4502,29 +4507,30 @@ function AdminPanelInner({user}){
           display:"flex",
           flexDirection:"column",
           alignItems:"stretch",
-          padding:touchRail ? "14px 12px 12px" : "13px 11px 11px",
+          padding:touchRail ? "14px 12px 12px 14px" : "14px 12px 12px 14px",
           borderRadius:18,
           background:tone.bg,
           border:`1px solid ${tone.edge}`,
           boxShadow:"0 10px 22px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.38)",
           position:"relative",
-          overflow:"visible",
+          overflow:"hidden",
+          boxSizing:"border-box",
         }}>
-          <div style={{position:"absolute",top:-9,left:14,width:46,height:12,borderRadius:"10px 10px 0 0",background:tone.tab,border:`1px solid ${tone.edge}`,borderBottom:"none"}}/>
-          <div style={{position:"absolute",top:12,bottom:12,left:9,width:3,borderRadius:999,background:tone.accent,opacity:0.18}}/>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,position:"relative"}}>
-            <div style={{display:"inline-flex",alignItems:"center",gap:6,minWidth:0}}>
+          <div style={{position:"absolute",top:0,left:16,width:52,height:12,borderRadius:"0 0 12px 12px",background:tone.tab,border:`1px solid ${tone.edge}`,borderTop:"none"}}/>
+          <div style={{position:"absolute",top:14,bottom:14,left:10,width:4,borderRadius:999,background:tone.accent,opacity:0.16}}/>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,position:"relative",paddingLeft:10}}>
+            <div style={{display:"inline-flex",alignItems:"center",minWidth:0,maxWidth:"100%"}}>
               <span style={{
                 display:"inline-flex",
                 alignItems:"center",
                 justifyContent:"center",
-                minWidth:touchRail ? 54 : 50,
-                height:28,
+                minWidth:touchRail ? 58 : 54,
+                height:30,
                 borderRadius:999,
                 background:"rgba(255,255,255,0.78)",
                 border:`1px solid ${tone.edge}`,
                 color:tone.accent,
-                fontSize:11,
+                fontSize:11.5,
                 fontWeight:800,
                 fontFamily:G.mono,
                 letterSpacing:0.4,
@@ -4533,52 +4539,35 @@ function AdminPanelInner({user}){
               }}>
                 {`Step ${stepNumber}`}
               </span>
-              <span style={{
-                display:"inline-flex",
-                alignItems:"center",
-                justifyContent:"center",
-                minWidth:34,
-                height:28,
-                borderRadius:10,
-                background:"rgba(255,255,255,0.52)",
-                border:`1px solid ${tone.edge}`,
-                color:tone.accent,
-                fontSize:10,
-                fontWeight:800,
-                fontFamily:G.mono,
-                letterSpacing:0.6,
-                padding:"0 8px",
-                flexShrink:0,
-              }}>
-                {tone.code}
-              </span>
             </div>
             <CollapseButton collapsed direction={direction} tone={tone} onClick={onExpand} title={`Expand ${label}`} />
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:12,minHeight:0,paddingLeft:12,position:"relative"}}>
-            <div style={{fontSize:16,fontWeight:800,color:tone.text,fontFamily:G.display,lineHeight:1.1,letterSpacing:-0.2}}>
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:12,minHeight:0,paddingLeft:10,position:"relative"}}>
+            <div style={{fontSize:17,fontWeight:800,color:tone.text,fontFamily:G.display,lineHeight:1.1,letterSpacing:-0.2,wordBreak:"break-word"}}>
               {label}
             </div>
             <div style={{
-              fontSize:11,
+              fontSize:12,
               color:tone.muted,
-              lineHeight:1.35,
-              minHeight:30,
+              lineHeight:1.4,
+              minHeight:34,
               display:"-webkit-box",
               WebkitLineClamp:2,
               WebkitBoxOrient:"vertical",
               overflow:"hidden",
               textOverflow:"ellipsis",
+              wordBreak:"break-word",
             }}>
               {meta}
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:"auto",paddingLeft:12,position:"relative"}}>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,marginTop:"auto",paddingLeft:10,position:"relative"}}>
             <span style={{fontSize:10,color:tone.muted,fontFamily:G.mono,fontWeight:700,letterSpacing:0.45,textTransform:"uppercase"}}>
-              {label === "Institutes" ? "Directory" : label === "Teachers" ? "Selection" : "Timeline"}
+              {folderCaption}
             </span>
             {badge!==undefined && (
               <span style={{
+                maxWidth:"100%",
                 minHeight:28,
                 background:tone.badgeBg,
                 color:tone.badgeText,
@@ -4591,6 +4580,7 @@ function AdminPanelInner({user}){
                 boxShadow:"inset 0 1px 0 rgba(255,255,255,0.68)",
                 textAlign:"center",
                 flexShrink:0,
+                whiteSpace:"nowrap",
               }}>
                 {footerText}
               </span>
@@ -6011,7 +6001,7 @@ function AdminPanelInner({user}){
       </div>
     );
 
-  const collapsedStackWidth = coarsePointer || isWeakDevice ? 138 : 128;
+  const collapsedStackWidth = coarsePointer || isWeakDevice ? 154 : 146;
   const collapsedPanelConfigs = {
     p1: {
       step:"Step 1",
