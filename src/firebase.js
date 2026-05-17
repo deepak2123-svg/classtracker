@@ -80,10 +80,15 @@ function buildTeacherIdentityPatch(uid) {
 
 function buildTeacherIndexPayload(uid, data) {
   const classes = Array.isArray(data?.classes) ? data.classes : [];
+  const classInstitutes = uniqueTrimmed(classes.map(c => c?.institute));
+  const profileInstitutes = uniqueTrimmed(Array.isArray(data?.profile?.institutes) ? data.profile.institutes : []);
+  const classSubjects = uniqueTrimmed(classes.map(c => c?.subject));
+  const profileSubjects = uniqueTrimmed(Array.isArray(data?.profile?.subjects) ? data.profile.subjects : []);
   return {
     uid,
     name: data?.profile?.name || "",
-    institutes: uniqueTrimmed(classes.map(c => c?.institute)),
+    institutes: uniqueTrimmed([...classInstitutes, ...profileInstitutes]),
+    subjects: uniqueTrimmed([...classSubjects, ...profileSubjects]),
     classCount: classes.length,
     mainRevision: safeRevision(data?._meta?.revision),
     lastActive: Date.now(),

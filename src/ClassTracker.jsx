@@ -44,7 +44,42 @@ function instColor(name) {
   return COLORS[Math.abs(h) % COLORS.length];
 }
 
-const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:{name:""},trash:{classes:[],notes:[]}};
+function normaliseChoiceKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function uniqueChoiceValues(values) {
+  const seen = new Set();
+  const result = [];
+  (values || []).forEach(value => {
+    const label = String(value || "").trim().replace(/\s+/g, " ");
+    const key = normaliseChoiceKey(label);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    result.push(label);
+  });
+  return result;
+}
+
+function mergeChoiceValues(...lists) {
+  return uniqueChoiceValues(lists.flatMap(list => Array.isArray(list) ? list : []));
+}
+
+function normaliseProfile(profile, fallbackName = "") {
+  const source = profile || {};
+  return {
+    name: String(source.name || fallbackName || "").trim(),
+    subjects: uniqueChoiceValues(Array.isArray(source.subjects) ? source.subjects : []),
+    institutes: uniqueChoiceValues(Array.isArray(source.institutes) ? source.institutes : []),
+  };
+}
+
+function hasCompleteProfile(profile) {
+  const current = normaliseProfile(profile);
+  return !!current.name && current.subjects.length > 0 && current.institutes.length > 0;
+}
+
+const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:normaliseProfile(),trash:{classes:[],notes:[]}};
 
 function readClientProfile(){
   if(typeof window==="undefined"){
@@ -769,23 +804,125 @@ function ReadOnlyDropdown({value, onChange, options, placeholder, emptyMsg}){
 }
 
 
+function MultiValueField({ label, values, onChange, suggestions = [], placeholder, hint }) {
+  const [draft, setDraft] = useState("");
+
+  const addValue = React.useCallback((rawValue) => {
+    const nextValue = String(rawValue || "").trim().replace(/\s+/g, " ");
+    if (!nextValue) return;
+    onChange(mergeChoiceValues(values, [nextValue]));
+    setDraft("");
+  }, [onChange, values]);
+
+  const removeValue = React.useCallback((value) => {
+    const removeKey = normaliseChoiceKey(value);
+    onChange(values.filter(item => normaliseChoiceKey(item) !== removeKey));
+  }, [onChange, values]);
+
+  const availableSuggestions = React.useMemo(() => (
+    uniqueChoiceValues(suggestions).filter(item => !values.some(value => normaliseChoiceKey(value) === normaliseChoiceKey(item)))
+  ), [suggestions, values]);
+
+  return (
+    <div style={{marginBottom:16}}>
+      <label style={{...lbl,color:"rgba(255,255,255,0.6)"}}>{label}</label>
+      {values.length > 0 && (
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+          {values.map(value => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => removeValue(value)}
+              style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:999,border:"1px solid rgba(59,130,246,0.3)",background:"rgba(59,130,246,0.16)",color:"#DBEAFE",fontSize:13,fontFamily:G.sans,fontWeight:600,cursor:"pointer"}}>
+              <span>{value}</span>
+              <span style={{fontSize:12,color:"rgba(255,255,255,0.65)"}}>×</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{display:"flex",gap:8}}>
+        <input
+          value={draft}
+          onChange={e=>setDraft(e.target.value)}
+          onKeyDown={e=>{
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              addValue(draft);
+            } else if (e.key === "Backspace" && !draft && values.length) {
+              e.preventDefault();
+              removeValue(values[values.length - 1]);
+            }
+          }}
+          placeholder={placeholder}
+          style={{...inp,marginBottom:0,background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff"}}
+        />
+        <button
+          type="button"
+          onClick={()=>addValue(draft)}
+          style={{padding:"0 16px",borderRadius:11,border:"none",background:"rgba(59,130,246,0.2)",color:"#DBEAFE",fontSize:14,fontFamily:G.sans,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+          Add
+        </button>
+      </div>
+      {availableSuggestions.length > 0 && (
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+          {availableSuggestions.map(item => (
+            <button
+              key={item}
+              type="button"
+              onClick={()=>addValue(item)}
+              style={{padding:"7px 11px",borderRadius:999,border:"1px solid rgba(255,255,255,0.14)",background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.72)",fontSize:12,fontFamily:G.sans,fontWeight:600,cursor:"pointer"}}>
+              + {item}
+            </button>
+          ))}
+        </div>
+      )}
+      {hint && (
+        <div style={{marginTop:8,fontSize:12,color:"rgba(255,255,255,0.44)",lineHeight:1.6}}>
+          {hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ── Profile Setup ─────────────────────────────────────────────────────────────
-function ProfileSetup({user,onSave}){
-  const [name,setName]=useState(user.displayName||"");
+function ProfileSetup({user, initialProfile, subjectSuggestions = [], instituteSuggestions = [], onSave}){
+  const initial = normaliseProfile(initialProfile, user.displayName || "");
+  const [name,setName]=useState(initial.name);
+  const [subjects,setSubjects]=useState(initial.subjects);
+  const [institutes,setInstitutes]=useState(initial.institutes);
+  const canContinue = !!name.trim() && subjects.length > 0 && institutes.length > 0;
   return(
     <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
       <div style={{width:"100%",maxWidth:420}}>
         <div style={{textAlign:"center",marginBottom:36}}>
           <div style={{width:72,height:72,borderRadius:22,background:G.greenV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px",boxShadow:`0 8px 24px rgba(59,130,246,0.28)`}}>🎓</div>
-          <h1 style={{fontSize:30,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:10,letterSpacing:-0.5}}>Welcome to Class Tracker</h1>
-          <p style={{fontSize:16,color:"rgba(255,255,255,0.45)",lineHeight:1.7}}>Your name is stamped on every entry.<br/>Set it once — no one else can change it.</p>
+          <h1 style={{fontSize:30,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:10,letterSpacing:-0.5}}>Set up your teacher profile</h1>
+          <p style={{fontSize:16,color:"rgba(255,255,255,0.45)",lineHeight:1.7}}>We’ll use this once so your entries, subjects, and institutes start in the right place from day one.</p>
         </div>
         <div style={{background:"rgba(255,255,255,0.07)",borderRadius:20,padding:"28px 26px",border:"1px solid rgba(255,255,255,0.12)",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
           <label style={{...lbl,color:"rgba(255,255,255,0.6)"}}>Your full name</label>
-          <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&name.trim()&&onSave(name.trim())} placeholder="e.g. Ramsingh Yadav" autoFocus
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Ramsingh Yadav" autoFocus
             style={{...inp,background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",fontSize:17}}/>
-          <button onClick={()=>name.trim()&&onSave(name.trim())} disabled={!name.trim()} onPointerDown={e=>rpl(e,true)}
-            style={{width:"100%",padding:"13px",background:name.trim()?G.greenV:"rgba(255,255,255,0.1)",color:name.trim()?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:name.trim()?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:name.trim()?`0 4px 16px rgba(59,130,246,0.26)`:"none"}}>
+          <MultiValueField
+            label="Subjects you teach"
+            values={subjects}
+            onChange={setSubjects}
+            suggestions={subjectSuggestions}
+            placeholder="Type a subject, then press Enter"
+            hint="Add one or more subjects. You can press Enter or comma after each one."
+          />
+          <MultiValueField
+            label="Institutes where you teach"
+            values={institutes}
+            onChange={setInstitutes}
+            suggestions={instituteSuggestions}
+            placeholder="Type an institute, then press Enter"
+            hint="Pick from the official list if it appears. Add every institute where you currently teach."
+          />
+          <button onClick={()=>canContinue&&onSave({ name:name.trim(), subjects, institutes })} disabled={!canContinue} onPointerDown={e=>rpl(e,true)}
+            style={{width:"100%",padding:"13px",background:canContinue?G.greenV:"rgba(255,255,255,0.1)",color:canContinue?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:canContinue?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:canContinue?`0 4px 16px rgba(59,130,246,0.26)`:"none"}}>
             Get Started →
           </button>
         </div>
@@ -1918,15 +2055,26 @@ function ClassTrackerInner({user}){
   const sectionChangeSessionSeenRef = useRef(new Set());
 
   const normaliseLoadedData = React.useCallback((incoming, { forceProfileBlank = false } = {}) => {
+    const fallbackName = forceProfileBlank ? "" : user.displayName;
+    const incomingProfile = normaliseProfile(incoming?.profile, fallbackName);
     const base = incoming
-      ? { ...DEFAULT_DATA, ...incoming, profile: incoming.profile || { name:"" }, trash: incoming.trash || { classes:[], notes:[] } }
+      ? {
+          ...DEFAULT_DATA,
+          ...incoming,
+          subjects: mergeChoiceValues(incoming.subjects, incomingProfile.subjects),
+          institutes: mergeChoiceValues(incoming.institutes, incomingProfile.institutes),
+          profile: incomingProfile,
+          trash: incoming.trash || { classes:[], notes:[] },
+        }
       : { ...DEFAULT_DATA };
     const purged = purgeExpiredTrash(base);
     if (forceProfileBlank) {
-      purged.profile = { name:"" };
+      purged.profile = normaliseProfile();
     } else if (!purged.profile?.name && user.displayName) {
-      purged.profile = { name:user.displayName.trim() };
+      purged.profile = normaliseProfile(purged.profile, user.displayName.trim());
     }
+    purged.subjects = mergeChoiceValues(purged.subjects, purged.profile?.subjects);
+    purged.institutes = mergeChoiceValues(purged.institutes, purged.profile?.institutes);
     return purged;
   }, [user.displayName]);
 
@@ -1992,7 +2140,18 @@ function ClassTrackerInner({user}){
             const ageHrs=(Date.now()-savedAt)/(1000*60*60);
             if(ageHrs<24 && localData){
               if(Number(baseRevision ?? 0) === liveRevision){
-                const merged={...purged,...localData,profile:purged.profile,trash:localData.trash||purged.trash};
+                const mergedProfile = normaliseProfile({
+                  ...purged.profile,
+                  ...(localData.profile || {}),
+                }, purged.profile?.name || "");
+                const merged={
+                  ...purged,
+                  ...localData,
+                  subjects: mergeChoiceValues(purged.subjects, localData.subjects, mergedProfile.subjects),
+                  institutes: mergeChoiceValues(purged.institutes, localData.institutes, mergedProfile.institutes),
+                  profile: mergedProfile,
+                  trash:localData.trash||purged.trash,
+                };
                 lastSyncedFingerprint.current = dataFingerprint(purged);
                 setCloudRevision(liveRevision);
                 setData(merged);
@@ -2402,7 +2561,23 @@ function ClassTrackerInner({user}){
       />
     );
   }
-  if(!data.profile?.name)return<ProfileSetup user={user} onSave={name=>setData(d=>({...d,profile:{name}}))} />;
+  if(!hasCompleteProfile(data.profile))return(
+    <ProfileSetup
+      user={user}
+      initialProfile={data.profile}
+      subjectSuggestions={data.subjects}
+      instituteSuggestions={mergeChoiceValues(globalInstitutes, data.institutes)}
+      onSave={profile=>{
+        const nextProfile = normaliseProfile(profile);
+        setData(d=>({
+          ...d,
+          profile: nextProfile,
+          subjects: mergeChoiceValues(d.subjects, nextProfile.subjects),
+          institutes: mergeChoiceValues(d.institutes, nextProfile.institutes),
+        }));
+      }}
+    />
+  );
 
   const teacherName=data.profile.name;
   const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
