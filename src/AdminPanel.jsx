@@ -23,7 +23,7 @@ const G = {
   textL: "#6B7280",   // labels — was #94A3B8 (too faint), now visible
   red:"#C93030",  redL:"#FDF1F1",
   amber:"#B45309",amberL:"#FEF3C7",
-  mono:"'JetBrains Mono',monospace",
+  mono:"'Inter',sans-serif",
   sans:"'Inter',sans-serif",
   display:"'Poppins',sans-serif",
   shadowSm:"0 1px 4px rgba(15,23,42,0.08),0 1px 2px rgba(15,23,42,0.05)",
@@ -1453,7 +1453,7 @@ function SubjectSplitDonut({ segments, totalMinutes, size = 120, strokeWidth = 1
         x="50%"
         y={safeTotal > 0 ? "61%" : "60%"}
         textAnchor="middle"
-        style={{ fill: "#6B7280", fontSize: 10, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", textTransform: "uppercase", letterSpacing: 0.9 }}
+        style={{ fill: "#6B7280", fontSize: 10, fontWeight: 700, fontFamily: "'Inter',sans-serif", textTransform: "uppercase", letterSpacing: 0.9 }}
       >
         {safeTotal > 0 ? `${sortedSegments.length} ${sortedSegments.length===1?"subject":"subjects"}` : "logs only"}
       </text>
@@ -1585,7 +1585,7 @@ function fitCanvasText(ctx, value, maxWidth){
   }
   return best;
 }
-function drawCanvasPill(ctx, { x, y, label, bg, border, color, font = "700 20px 'JetBrains Mono',monospace", padX = 16, height = 46 }){
+function drawCanvasPill(ctx, { x, y, label, bg, border, color, font = "700 20px 'Inter',sans-serif", padX = 16, height = 46 }){
   ctx.save();
   ctx.font = font;
   const textWidth = ctx.measureText(label).width;
@@ -1681,7 +1681,7 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
     bg: "#DCFCE7",
     border: "#BBF7D0",
     color: "#166534",
-    font: "700 20px 'JetBrains Mono',monospace",
+    font: "700 20px 'Inter',sans-serif",
     padX: 18,
     height: 48,
   }) + 12;
@@ -1692,7 +1692,7 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
     bg: "#F8FAFC",
     border: "#DDE3ED",
     color: "#1F2937",
-    font: "700 20px 'JetBrains Mono',monospace",
+    font: "700 20px 'Inter',sans-serif",
     padX: 18,
     height: 48,
   }) + 12;
@@ -1703,7 +1703,7 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
     bg: "#F8FAFC",
     border: "#DDE3ED",
     color: "#1F2937",
-    font: "700 20px 'JetBrains Mono',monospace",
+    font: "700 20px 'Inter',sans-serif",
     padX: 18,
     height: 48,
   });
@@ -1744,10 +1744,10 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
     ctx.fillText(fitCanvasText(ctx, classCountLabel, leftWidth), contentX, rowTop + 38);
 
     ctx.fillStyle = "#6B7280";
-    ctx.font = "700 19px 'JetBrains Mono',monospace";
+    ctx.font = "700 19px 'Inter',sans-serif";
     ctx.fillText(`Today ${item.todayEntries} • Week ${item.weekEntries} • Month ${item.monthEntries}`, contentX, rowTop + 74);
 
-    ctx.font = "700 20px 'JetBrains Mono',monospace";
+    ctx.font = "700 20px 'Inter',sans-serif";
     const pillWidth = ctx.measureText(pillLabel).width + 36;
     drawCanvasPill(ctx, {
       x: contentX + contentWidth - pillWidth,
@@ -1756,7 +1756,7 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
       bg:item.todayUpdated ? "#DCFCE7" : "#F8FAFC",
       border:item.todayUpdated ? "#BBF7D0" : "#DDE3ED",
       color:item.todayUpdated ? "#166534" : "#1F2937",
-      font:"700 20px 'JetBrains Mono',monospace",
+      font:"700 20px 'Inter',sans-serif",
       padX:18,
       height:46,
     });
@@ -1891,7 +1891,7 @@ class ErrorBoundary extends Component {
           <p style={{color:"#5C7268",fontSize:15,marginBottom:20,lineHeight:1.6}}>
             There was an error loading this data. This may be caused by unexpected data format in Firestore.
           </p>
-          <p style={{color:"#94ADA5",fontSize:13,fontFamily:"'JetBrains Mono',monospace",background:"#F7F8F6",padding:"8px 12px",borderRadius:8,marginBottom:20,wordBreak:"break-all"}}>
+          <p style={{color:"#94ADA5",fontSize:13,fontFamily:"'Inter',sans-serif",background:"#F7F8F6",padding:"8px 12px",borderRadius:8,marginBottom:20,wordBreak:"break-all"}}>
             {this.state.error?.message}
           </p>
           <button onClick={()=>window.location.reload()} style={{background:"#1B8A4C",color:"#fff",border:"none",borderRadius:9,padding:"10px 22px",fontSize:15,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontWeight:600}}>
@@ -2079,7 +2079,7 @@ function AdminExportModal({ exportActions, onClose }) {
                         <span style={{fontSize:18}}>{a.icon}</span>
                         <div>
                           <div style={{fontSize:14,fontWeight:600,color:"#111827",fontFamily:"'Inter',sans-serif"}}>{a.label}</div>
-                          <div style={{fontSize:12,color:"#6B7280",fontFamily:"'JetBrains Mono',monospace"}}>{a.sub}</div>
+                          <div style={{fontSize:12,color:"#6B7280",fontFamily:"'Inter',sans-serif"}}>{a.sub}</div>
                         </div>
                         {isSel&&<span style={{marginLeft:"auto",fontSize:11,background:"#1A2F5A",color:"#fff",borderRadius:20,padding:"2px 8px",fontFamily:"'Inter',sans-serif",fontWeight:600}}>Selected</span>}
                       </div>
@@ -2167,7 +2167,7 @@ function InstTypePicker({ inst, onSelect, onClose }) {
       <div style={{background:W.surface,borderRadius:22,width:"100%",maxWidth:480,boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
         <div style={{padding:"22px 20px 16px",borderBottom:`1px solid ${W.border}`}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-            <div style={{fontSize:12,color:W.textL,fontFamily:"'JetBrains Mono',monospace"}}>{inst}</div>
+            <div style={{fontSize:12,color:W.textL,fontFamily:"'Inter',sans-serif"}}>{inst}</div>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:W.textL}}>✕</button>
           </div>
           <div style={{fontSize:20,fontWeight:700,color:W.text,fontFamily:W.display,marginBottom:4}}>What kind of institute is this?</div>
@@ -2195,7 +2195,7 @@ function InstTypePicker({ inst, onSelect, onClose }) {
 
 // ── Duration Stepper (replaces pill grid) ─────────────────────────────────────
 function DurStepper({ value, onChange, compact = false }) {
-  const W = { navy:"#1A2F5A",border:"#E2E8F0",text:"#0F172A",textM:"#475569",textL:"#94A3B8",surface:"#fff",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace" };
+  const W = { navy:"#1A2F5A",border:"#E2E8F0",text:"#0F172A",textM:"#475569",textL:"#94A3B8",surface:"#fff",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'Inter',sans-serif" };
   const fmt = m => m < 60 ? `${m} min` : m === 60 ? "1 hour" : m % 60 === 0 ? `${m/60} hours` : `${Math.floor(m/60)}h ${m%60}m`;
   const dec = () => onChange(Math.max(30, value - 5));
   const inc = () => onChange(Math.min(180, value + 5));
@@ -2231,7 +2231,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
     text:"#0F172A",textM:"#475569",textL:"#94A3B8",
     green:"#1B8A4C",greenL:"#ECFDF5",
     red:"#DC2626",redL:"#FEF2F2",amber:"#D97706",amberL:"#FFFBEB",
-    sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace" };
+    sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'Inter',sans-serif" };
 
   const TOTAL = 3;
   const STEP_LABELS = ["Group","Time slots","Review"];
@@ -4424,6 +4424,39 @@ function AdminPanelInner({user}){
     setFullView(null);
     setMobileStep(3);
   };
+
+  const renderSectionDeleteButton = (sectionGroup, { compact = false } = {}) => (
+    <button
+      onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(sectionGroup);}}
+      style={{
+        display:"inline-flex",
+        alignItems:"center",
+        gap:6,
+        background:"linear-gradient(180deg,#FFF6F6 0%,#FFEDED 100%)",
+        border:"1px solid #F4C7CD",
+        borderRadius:compact ? 11 : 12,
+        padding:compact ? "6px 10px" : "7px 11px",
+        fontSize:compact ? 11 : 12,
+        fontWeight:700,
+        color:"#B42318",
+        cursor:"pointer",
+        fontFamily:G.sans,
+        flexShrink:0,
+        boxShadow:"inset 0 1px 0 rgba(255,255,255,0.86)",
+        WebkitTapHighlightColor:"transparent",
+      }}
+      title={`Delete ${sectionGroup?.display || "section"}`}
+    >
+      <svg width={compact ? 12 : 13} height={compact ? 12 : 13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 6h18"/>
+        <path d="M8 6V4h8v2"/>
+        <path d="M19 6l-1 14H6L5 6"/>
+        <path d="M10 11v6"/>
+        <path d="M14 11v6"/>
+      </svg>
+      <span>Delete</span>
+    </button>
+  );
 
   const goMobileBack = () => {
     if(mobileStep===3){
@@ -6774,15 +6807,12 @@ function AdminPanelInner({user}){
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>Institute overview &amp; charts</div>
-                <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:4}}>
-                  Open the phone-friendly summary to see the pie chart, teaching split, and recent activity without desktop panels.
-                </div>
               </div>
               <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 10px",fontSize:11,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
                 {overviewPeriodText}
               </span>
             </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
               <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
                 {instClasses.length} classes
               </span>
@@ -6836,23 +6866,22 @@ function AdminPanelInner({user}){
               </div>
               {group.items.map(cls=>(
                 <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
-                  style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"stretch",gap:12,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",gap:12,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-                      <div style={{fontSize:16,fontWeight:700,color:G.text,flex:"1 1 180px",minWidth:0}}>{cls.display}</div>
-                      <button onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(cls);}}
-                        style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#B91C1C",cursor:"pointer",fontFamily:G.sans,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
-                        Delete
-                      </button>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                      <div style={{fontSize:16,fontWeight:700,color:G.text,flex:1,minWidth:0,lineHeight:1.25}}>{cls.display}</div>
+                      <span style={{width:30,height:30,borderRadius:10,background:"#F8FAFF",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:G.textL,flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.75)"}}>›</span>
                     </div>
                     {cls.subjects.length>0&&(
                       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
                         {cls.subjects.map(s=><span key={s} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"2px 9px",fontSize:12,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
                       </div>
                     )}
-                    <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:6,display:"inline-block"}}>{cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}</span>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginTop:12}}>
+                      <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,display:"inline-block"}}>{cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}</span>
+                      {renderSectionDeleteButton(cls)}
+                    </div>
                   </div>
-                  <span style={{fontSize:20,color:G.textL,alignSelf:"center",flexShrink:0}}>›</span>
                 </div>
               ))}
             </div>
@@ -7486,10 +7515,7 @@ function AdminPanelInner({user}){
                           onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
                           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                             <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS,flex:1,minWidth:0}}>{cls.display}</div>
-                            <button onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(cls);}}
-                              style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,color:"#B91C1C",cursor:"pointer",fontFamily:G.sans,flexShrink:0}}>
-                              Delete
-                            </button>
+                            {renderSectionDeleteButton(cls, { compact:true })}
                           </div>
                           {cls.subjects.length>0&&(
                             <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>

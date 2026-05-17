@@ -20,7 +20,7 @@ const G = {
   shadowSm:"0 2px 8px rgba(15,23,42,0.06)",
   shadowMd:"0 10px 24px rgba(15,23,42,0.08)",
   shadowLg:"0 20px 44px rgba(15,23,42,0.14)",
-  mono:"'JetBrains Mono',monospace",
+  mono:"'Inter',sans-serif",
   sans:"'Inter',sans-serif",
   display:"'Poppins',sans-serif",
 };
@@ -1879,7 +1879,7 @@ function getSuggestedTime(notes, classId, dateKey) {
 // ── Section Linking Modal ─────────────────────────────────────────────────────
 function SectionLinkingModal({ unlinkedClasses, instituteSections, onConfirm, onLater }) {
   const [selections, setSelections] = React.useState({});
-  const G3 = {forest:"#152B22",green:"#1B8A4C",greenV:"#34D077",greenL:"#E8F8EF",bg:"#F5F7F5",surface:"#FFFFFF",border:"#D9E4DC",text:"#111827",textM:"#374151",textL:"#6B7280",red:"#C93030",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace"};
+  const G3 = {forest:"#152B22",green:"#1B8A4C",greenV:"#34D077",greenL:"#E8F8EF",bg:"#F5F7F5",surface:"#FFFFFF",border:"#D9E4DC",text:"#111827",textM:"#374151",textL:"#6B7280",red:"#C93030",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'Inter',sans-serif"};
 
   function getAdminSections(cls) {
     return (getInstituteSectionConfig(instituteSections, cls.institute)?.gradeGroups||[]).flatMap(g=>g.sections||[]);

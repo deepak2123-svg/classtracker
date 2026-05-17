@@ -8,7 +8,7 @@ const G = {
   text:"#0E1F18", textM:"#5C7268", textL:"#94ADA5",
   red:"#C93030", redL:"#FDF1F1",
   sans:"'Inter',sans-serif", display:"'Poppins',sans-serif",
-  mono:"'JetBrains Mono',monospace",
+  mono:"'Inter',sans-serif",
 };
 
 const inp = {

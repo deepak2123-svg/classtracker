@@ -8,7 +8,7 @@ const G = {
   blue:"#1D4ED8", bg:"#F7F8FC", border:"#E2E8F0",
   text:"#0E1F18", textM:"#4B5563", textL:"#6B7280",
   red:"#C93030", sans:"'Inter',sans-serif",
-  display:"'Poppins',sans-serif", mono:"'JetBrains Mono',monospace",
+  display:"'Poppins',sans-serif", mono:"'Inter',sans-serif",
 };
 
 const ADMIN_INVITE_STORAGE_KEY = "ct_admin_invite_token";
