@@ -32,25 +32,37 @@ const G = {
 
 const PANEL_RAIL_THEMES = {
   p1: {
-    bg: "#E4EEFF",
-    edge: "#B8CCF7",
-    tab: "#CFE0FF",
-    accent: "#1D4ED8",
-    text: "#1E3A6D",
+    bg: "#DCE8FF",
+    edge: "#AFC6F3",
+    tab: "#BDD2FB",
+    accent: "#2450A8",
+    text: "#17376C",
+    muted: "#4D6488",
+    badgeBg: "#F4F8FF",
+    badgeText: "#1E4896",
+    code: "INS",
   },
   p2: {
-    bg: "#FFF1D9",
-    edge: "#EBC886",
-    tab: "#F9DDAB",
-    accent: "#B9770E",
-    text: "#6A4708",
+    bg: "#F9E8CC",
+    edge: "#E7C48A",
+    tab: "#F2D7A8",
+    accent: "#A66A10",
+    text: "#6B460D",
+    muted: "#8A6834",
+    badgeBg: "#FFF8EC",
+    badgeText: "#955E12",
+    code: "SEL",
   },
   p3: {
-    bg: "#E3F7EC",
-    edge: "#AFDCC1",
-    tab: "#C9EDD9",
-    accent: "#198754",
-    text: "#1A5A3E",
+    bg: "#DDEFE4",
+    edge: "#ADD7BC",
+    tab: "#C2E4CF",
+    accent: "#1E7A53",
+    text: "#1B5C40",
+    muted: "#4C7A64",
+    badgeBg: "#F2FBF6",
+    badgeText: "#1C6D4A",
+    code: "OPEN",
   },
 };
 
@@ -4471,110 +4483,119 @@ function AdminPanelInner({user}){
     </button>
   );
 
-  const CollapsedPanelRail = ({ step, label, onExpand, badge, direction="right", themeKey="p1" }) => {
+  const CollapsedPanelRail = ({ step, label, meta, onExpand, badge, badgeLabel, direction="right", themeKey="p1", stackIndex=0, stackDepth=1 }) => {
     const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
     const touchRail = coarsePointer || isWeakDevice;
     const stepNumber = String(step || "").match(/\d+/)?.[0] || step;
-    const cardHeight = touchRail ? 132 : 120;
-    const folderIcon = label === "Teachers"
-      ? "👥"
-      : label === "Classes"
-        ? "📚"
-        : label === "Institutes"
-        ? "🏫"
-        : "🗂";
+    const cardHeight = touchRail ? 118 : 110;
+    const offsetX = stackIndex * 7;
+    const overlapY = stackIndex === 0 ? 0 : -12;
+    const footerText = typeof badge === "number"
+      ? `${badge} ${badgeLabel || "items"}`
+      : badgeLabel || "";
     return (
-      <div style={{display:"flex",justifyContent:"center",flex:"0 0 auto",minHeight:0}}>
+      <div style={{display:"flex",justifyContent:"flex-start",flex:"0 0 auto",minHeight:0,marginTop:overlapY,paddingTop:stackIndex === 0 ? 0 : 12,paddingLeft:offsetX,position:"relative",zIndex:stackIndex + 1}}>
         <div style={{
-          width:"100%",
-          height:cardHeight,
+          width:`calc(100% - ${offsetX}px)`,
+          maxWidth:"100%",
+          minHeight:cardHeight,
           display:"flex",
           flexDirection:"column",
-          alignItems:"center",
-          padding:touchRail?"10px 4px 12px":"10px 4px 12px",
-          borderRadius:22,
-          background:`linear-gradient(180deg, rgba(255,255,255,0.94) 0%, ${tone.bg} 100%)`,
+          alignItems:"stretch",
+          padding:touchRail ? "14px 12px 12px" : "13px 11px 11px",
+          borderRadius:18,
+          background:tone.bg,
           border:`1px solid ${tone.edge}`,
-          boxShadow:"inset 0 1px 0 rgba(255,255,255,0.72), 0 10px 22px rgba(15,23,42,0.06)",
+          boxShadow:"0 10px 22px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.38)",
           position:"relative",
-          overflow:"hidden",
+          overflow:"visible",
         }}>
-          <div style={{position:"absolute",top:10,bottom:10,left:6,width:2,borderRadius:999,background:`linear-gradient(180deg, ${tone.accent}22 0%, ${tone.accent}80 45%, ${tone.accent}22 100%)`}}/>
-          <CollapseButton collapsed direction={direction} tone={tone} onClick={onExpand} title={`Expand ${label}`} />
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:touchRail?12:10,marginTop:10,flex:1,minHeight:0}}>
-            <span style={{
-              width:touchRail?28:26,
-              height:touchRail?28:26,
-              borderRadius:10,
-              background:"rgba(255,255,255,0.86)",
-              border:`1px solid ${tone.edge}`,
-              color:tone.accent,
-              display:"flex",
-              alignItems:"center",
-              justifyContent:"center",
-              fontSize:12,
-              fontWeight:900,
-              fontFamily:G.mono,
-              boxShadow:"inset 0 1px 0 rgba(255,255,255,0.65)",
-              flexShrink:0,
-            }}>
-              {stepNumber}
-            </span>
-            <div style={{width:touchRail?36:34,height:touchRail?36:34,borderRadius:13,background:"rgba(255,255,255,0.92)",border:`1px solid ${tone.edge}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)",flexShrink:0}}>
-              {folderIcon}
-            </div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,flex:1,minHeight:0}}>
-              <div style={{
-                writingMode:"vertical-rl",
-                transform:"rotate(180deg)",
-                color:tone.text,
-                fontFamily:G.display,
-                fontSize:touchRail?13.5:13,
-                fontWeight:800,
-                letterSpacing:0.35,
-                lineHeight:1,
-                textTransform:"uppercase",
-                textShadow:"0 1px 0 rgba(255,255,255,0.72)",
-                whiteSpace:"nowrap",
-                flex:1,
-              }}>
-                {label}
-              </div>
+          <div style={{position:"absolute",top:-9,left:14,width:46,height:12,borderRadius:"10px 10px 0 0",background:tone.tab,border:`1px solid ${tone.edge}`,borderBottom:"none"}}/>
+          <div style={{position:"absolute",top:12,bottom:12,left:9,width:3,borderRadius:999,background:tone.accent,opacity:0.18}}/>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,position:"relative"}}>
+            <div style={{display:"inline-flex",alignItems:"center",gap:6,minWidth:0}}>
               <span style={{
-                fontSize:9,
-                letterSpacing:1.2,
+                display:"inline-flex",
+                alignItems:"center",
+                justifyContent:"center",
+                minWidth:touchRail ? 54 : 50,
+                height:28,
+                borderRadius:999,
+                background:"rgba(255,255,255,0.78)",
+                border:`1px solid ${tone.edge}`,
                 color:tone.accent,
-                fontFamily:G.mono,
+                fontSize:11,
                 fontWeight:800,
-                textTransform:"uppercase",
-                transform:"rotate(180deg)",
-                writingMode:"vertical-rl",
-                opacity:0.8,
+                fontFamily:G.mono,
+                letterSpacing:0.4,
+                padding:"0 10px",
+                flexShrink:0,
               }}>
                 {`Step ${stepNumber}`}
               </span>
+              <span style={{
+                display:"inline-flex",
+                alignItems:"center",
+                justifyContent:"center",
+                minWidth:34,
+                height:28,
+                borderRadius:10,
+                background:"rgba(255,255,255,0.52)",
+                border:`1px solid ${tone.edge}`,
+                color:tone.accent,
+                fontSize:10,
+                fontWeight:800,
+                fontFamily:G.mono,
+                letterSpacing:0.6,
+                padding:"0 8px",
+                flexShrink:0,
+              }}>
+                {tone.code}
+              </span>
+            </div>
+            <CollapseButton collapsed direction={direction} tone={tone} onClick={onExpand} title={`Expand ${label}`} />
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:12,minHeight:0,paddingLeft:12,position:"relative"}}>
+            <div style={{fontSize:16,fontWeight:800,color:tone.text,fontFamily:G.display,lineHeight:1.1,letterSpacing:-0.2}}>
+              {label}
+            </div>
+            <div style={{
+              fontSize:11,
+              color:tone.muted,
+              lineHeight:1.35,
+              minHeight:30,
+              display:"-webkit-box",
+              WebkitLineClamp:2,
+              WebkitBoxOrient:"vertical",
+              overflow:"hidden",
+              textOverflow:"ellipsis",
+            }}>
+              {meta}
             </div>
           </div>
-          {badge!==undefined && (
-            <span style={{
-              minWidth:touchRail?34:32,
-              minHeight:touchRail?28:26,
-              background:"rgba(255,255,255,0.92)",
-              color:tone.accent,
-              border:`1px solid ${tone.edge}`,
-              borderRadius:999,
-              padding:"5px 8px",
-              fontSize:11,
-              fontFamily:G.mono,
-              fontWeight:800,
-              boxShadow:"inset 0 1px 0 rgba(255,255,255,0.55)",
-              textAlign:"center",
-              flexShrink:0,
-              marginTop:10,
-            }}>
-              {badge}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:"auto",paddingLeft:12,position:"relative"}}>
+            <span style={{fontSize:10,color:tone.muted,fontFamily:G.mono,fontWeight:700,letterSpacing:0.45,textTransform:"uppercase"}}>
+              {label === "Institutes" ? "Directory" : label === "Teachers" ? "Selection" : "Timeline"}
             </span>
-          )}
+            {badge!==undefined && (
+              <span style={{
+                minHeight:28,
+                background:tone.badgeBg,
+                color:tone.badgeText,
+                border:`1px solid ${tone.edge}`,
+                borderRadius:999,
+                padding:"5px 10px",
+                fontSize:11,
+                fontFamily:G.mono,
+                fontWeight:800,
+                boxShadow:"inset 0 1px 0 rgba(255,255,255,0.68)",
+                textAlign:"center",
+                flexShrink:0,
+              }}>
+                {footerText}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -4582,9 +4603,9 @@ function AdminPanelInner({user}){
 
   const getCollapsedStackShellStyle = React.useCallback(() => {
     return {
-      background:"linear-gradient(180deg, #FFFFFF 0%, #F5F7FA 100%)",
+      background:"#F4F7FB",
       borderRight:`1px solid ${G.border}`,
-      padding:coarsePointer ? "8px 4px 10px" : "8px 4px 10px",
+      padding:coarsePointer ? "14px 8px 18px" : "14px 8px 18px",
       boxShadow:"inset -1px 0 0 rgba(255,255,255,0.5)",
     };
   }, [coarsePointer]);
@@ -5990,11 +6011,46 @@ function AdminPanelInner({user}){
       </div>
     );
 
-  const collapsedStackWidth = coarsePointer || isWeakDevice ? 104 : 94;
+  const collapsedStackWidth = coarsePointer || isWeakDevice ? 138 : 128;
   const collapsedPanelConfigs = {
-    p1: { step:"Step 1", label:"Institutes", badge:institutes.length, direction:"right", themeKey:"p1", onExpand:()=>togglePanelCollapse("p1") },
-    p2: { step:"Step 2", label:tab==="class" ? "Classes" : "Teachers", badge:selInst ? (tab==="class" ? instClasses.length : instTeachers.length) : 0, direction:"right", themeKey:"p2", onExpand:()=>togglePanelCollapse("p2") },
-    p3: { step:"Step 3", label:tab==="teacher" ? "Classes" : "Teachers", badge:selP2 ? p3Items.length : 0, direction:"right", themeKey:"p3", onExpand:()=>togglePanelCollapse("p3") },
+    p1: {
+      step:"Step 1",
+      label:"Institutes",
+      meta:"Browse the institute directory and pick the workspace you want to inspect.",
+      badge:institutes.length,
+      badgeLabel:institutes.length===1 ? "institute" : "institutes",
+      direction:"right",
+      themeKey:"p1",
+      onExpand:()=>togglePanelCollapse("p1"),
+    },
+    p2: {
+      step:"Step 2",
+      label:tab==="class" ? "Classes" : "Teachers",
+      meta:selInst
+        ? `${selInst}`
+        : "Select an institute first to open the list for this step.",
+      badge:selInst ? (tab==="class" ? instClasses.length : instTeachers.length) : 0,
+      badgeLabel:tab==="class"
+        ? (selInst && instClasses.length===1 ? "class" : "classes")
+        : (selInst && instTeachers.length===1 ? "teacher" : "teachers"),
+      direction:"right",
+      themeKey:"p2",
+      onExpand:()=>togglePanelCollapse("p2"),
+    },
+    p3: {
+      step:"Step 3",
+      label:tab==="teacher" ? "Classes" : "Teachers",
+      meta:selP2
+        ? `${p2Label(selP2)}`
+        : `Choose a ${tab==="teacher" ? "teacher" : "class"} in step 2 to drill down here.`,
+      badge:selP2 ? p3Items.length : 0,
+      badgeLabel:tab==="teacher"
+        ? (selP2 && p3Items.length===1 ? "class" : "classes")
+        : (selP2 && p3Items.length===1 ? "teacher" : "teachers"),
+      direction:"right",
+      themeKey:"p3",
+      onExpand:()=>togglePanelCollapse("p3"),
+    },
   };
   // Keep this as a plain derived value so desktop-only collapse UI never changes hook order.
   const collapsedPanelGroups = (() => {
@@ -6033,8 +6089,8 @@ function AdminPanelInner({user}){
           justifyContent:"flex-start",
           overflowY:"auto",
         }}>
-        {keys.map(key=>(
-          <CollapsedPanelRail key={key} {...collapsedPanelConfigs[key]} />
+        {keys.map((key, index)=>(
+          <CollapsedPanelRail key={key} stackIndex={index} stackDepth={keys.length} {...collapsedPanelConfigs[key]} />
         ))}
       </div>
     );
