@@ -511,6 +511,14 @@ function formatExportPdfTime(start,end){
 function normaliseSectionKey(value){
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
+function getInstituteSectionNames(instData){
+  return [...new Set(
+    (instData?.gradeGroups || [])
+      .flatMap(group => group.sections || [])
+      .map(section => String(section || "").trim())
+      .filter(Boolean)
+  )];
+}
 function uniqueSectionNames(values){
   return [...new Set((values || []).map(v => String(v || "").trim()).filter(Boolean))];
 }
@@ -3043,41 +3051,51 @@ function AdminPanelInner({user}){
   }, [getInstituteTeacherUids, warmTeacherUids]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
-    if(!instituteName) return false;
-    const instData = getInstituteSectionConfig(instSectionsAll, instituteName);
-    const currentSections = getInstituteSectionNames(instData);
-    if(!currentSections.length){
-      if(!silent) showAdminToast("No current section list found for this institute.");
+    try {
+      if(!instituteName) return false;
+      const instData = getInstituteSectionConfig(instSectionsAll, instituteName);
+      const currentSections = getInstituteSectionNames(instData);
+      if(!currentSections.length){
+        if(!silent) showAdminToast("No current section list found for this institute.");
+        return false;
+      }
+
+      const uids = getInstituteTeacherUids(instituteName);
+      const loadedEntries = await Promise.allSettled(
+        uids.map(async uid => [uid, await ensureFullData(uid)])
+      );
+      const fullSnapshot = {
+        ...fullData,
+        ...Object.fromEntries(
+          loadedEntries
+            .filter(result => result.status === "fulfilled" && result.value?.[1])
+            .map(result => result.value)
+        ),
+      };
+      const repair = collectLegacySectionRepairItems(fullSnapshot, teachers, instituteName, instSectionsAll);
+      if(!repair.items.length){
+        if(!silent) showAdminToast("No old section names were found for this institute.");
+        return false;
+      }
+
+      setLegacySectionRepair({
+        scopeLabel: instituteName,
+        items: repair.items.map(item => ({
+          ...item,
+          institute: instituteName,
+          options: repair.currentSections,
+          selectionKey: `${instituteName}::${item.oldSection}`,
+        })),
+        selections: Object.fromEntries(repair.items.map(item => [`${instituteName}::${item.oldSection}`, item.suggested || ""])),
+        busy: false,
+        error: "",
+      });
+      return true;
+    } catch (e) {
+      console.error("openLegacySectionRepairForInstitute", e);
+      if(!silent) showAdminToast("Could not open section mapping: " + (e?.message || "Unknown error"));
       return false;
     }
-
-    const uids = getInstituteTeacherUids(instituteName);
-    const loadedEntries = await Promise.all(
-      uids.map(async uid => [uid, await ensureFullData(uid)])
-    );
-    const fullSnapshot = {
-      ...fullData,
-      ...Object.fromEntries(loadedEntries.filter(([, data]) => !!data)),
-    };
-    const repair = collectLegacySectionRepairItems(fullSnapshot, teachers, instituteName, instSectionsAll);
-    if(!repair.items.length){
-      if(!silent) showAdminToast("No legacy section names found for this institute.");
-      return false;
-    }
-
-    setLegacySectionRepair({
-      scopeLabel: instituteName,
-      items: repair.items.map(item => ({
-        ...item,
-        institute: instituteName,
-        options: repair.currentSections,
-        selectionKey: `${instituteName}::${item.oldSection}`,
-      })),
-      selections: Object.fromEntries(repair.items.map(item => [`${instituteName}::${item.oldSection}`, item.suggested || ""])),
-      busy: false,
-      error: "",
-    });
-    return true;
   }, [instSectionsAll, getInstituteTeacherUids, ensureFullData, fullData, teachers, showAdminToast]);
 
   const openLegacySectionRepair = React.useCallback(async () => {
@@ -3086,46 +3104,55 @@ function AdminPanelInner({user}){
   }, [selInst, openLegacySectionRepairForInstitute]);
 
   const openAllLegacySectionRepair = React.useCallback(async () => {
-    const instituteSet = new Set();
-    globalInstList.forEach(inst => { if(inst) instituteSet.add(String(inst).trim()); });
-    teachers.forEach(teacher => {
-      (teacher.institutes || []).forEach(inst => { if(inst) instituteSet.add(String(inst).trim()); });
-    });
-    Object.values(fullData).forEach(data => {
-      (data.classes || []).forEach(cls => { if(cls?.institute) instituteSet.add(String(cls.institute).trim()); });
-    });
-    deletedInstitutes.forEach(inst => instituteSet.delete(inst));
-    const instituteNames = [
-      ...globalInstList.filter(inst => instituteSet.has(inst)),
-      ...Array.from(instituteSet).filter(inst => !globalInstList.includes(inst)).sort(exportTextSorter.compare),
-    ];
-    const institutesWithSections = instituteNames.filter(inst => getInstituteSectionNames(getInstituteSectionConfig(instSectionsAll, inst)).length > 0);
-    if(!institutesWithSections.length){
-      showAdminToast("No institutes with section lists found.");
-      return;
-    }
+    try {
+      const instituteSet = new Set();
+      globalInstList.forEach(inst => { if(inst) instituteSet.add(String(inst).trim()); });
+      teachers.forEach(teacher => {
+        (teacher.institutes || []).forEach(inst => { if(inst) instituteSet.add(String(inst).trim()); });
+      });
+      Object.values(fullData).forEach(data => {
+        (data.classes || []).forEach(cls => { if(cls?.institute) instituteSet.add(String(cls.institute).trim()); });
+      });
+      deletedInstitutes.forEach(inst => instituteSet.delete(inst));
+      const instituteNames = [
+        ...globalInstList.filter(inst => instituteSet.has(inst)),
+        ...Array.from(instituteSet).filter(inst => !globalInstList.includes(inst)).sort(exportTextSorter.compare),
+      ];
+      const institutesWithSections = instituteNames.filter(inst => getInstituteSectionNames(getInstituteSectionConfig(instSectionsAll, inst)).length > 0);
+      if(!institutesWithSections.length){
+        showAdminToast("No institutes with section lists found.");
+        return;
+      }
 
-    const allUids = [...new Set(institutesWithSections.flatMap(inst => getInstituteTeacherUids(inst)).filter(Boolean))];
-    const loadedEntries = await Promise.all(
-      allUids.map(async uid => [uid, await ensureFullData(uid)])
-    );
-    const fullSnapshot = {
-      ...fullData,
-      ...Object.fromEntries(loadedEntries.filter(([, data]) => !!data)),
-    };
-    const items = collectAllLegacySectionRepairItems(fullSnapshot, teachers, institutesWithSections, instSectionsAll);
-    if(!items.length){
-      showAdminToast("No legacy section names found across institutes.");
-      return;
-    }
+      const allUids = [...new Set(institutesWithSections.flatMap(inst => getInstituteTeacherUids(inst)).filter(Boolean))];
+      const loadedEntries = await Promise.allSettled(
+        allUids.map(async uid => [uid, await ensureFullData(uid)])
+      );
+      const fullSnapshot = {
+        ...fullData,
+        ...Object.fromEntries(
+          loadedEntries
+            .filter(result => result.status === "fulfilled" && result.value?.[1])
+            .map(result => result.value)
+        ),
+      };
+      const items = collectAllLegacySectionRepairItems(fullSnapshot, teachers, institutesWithSections, instSectionsAll);
+      if(!items.length){
+        showAdminToast("No old section names were found across institutes.");
+        return;
+      }
 
-    setLegacySectionRepair({
-      scopeLabel: "all institutes",
-      items,
-      selections: Object.fromEntries(items.map(item => [item.selectionKey, item.suggested || ""])),
-      busy: false,
-      error: "",
-    });
+      setLegacySectionRepair({
+        scopeLabel: "all institutes",
+        items,
+        selections: Object.fromEntries(items.map(item => [item.selectionKey, item.suggested || ""])),
+        busy: false,
+        error: "",
+      });
+    } catch (e) {
+      console.error("openAllLegacySectionRepair", e);
+      showAdminToast("Could not open institute repair: " + (e?.message || "Unknown error"));
+    }
   }, [globalInstList, teachers, fullData, deletedInstitutes, instSectionsAll, getInstituteTeacherUids, ensureFullData, showAdminToast]);
 
   const applyLegacySectionRepair = React.useCallback(async () => {
