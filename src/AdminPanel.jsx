@@ -4475,6 +4475,7 @@ function AdminPanelInner({user}){
     const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
     const touchRail = coarsePointer || isWeakDevice;
     const stepNumber = String(step || "").match(/\d+/)?.[0] || step;
+    const cardHeight = touchRail ? 132 : 120;
     const folderIcon = label === "Teachers"
       ? "👥"
       : label === "Classes"
@@ -4483,15 +4484,15 @@ function AdminPanelInner({user}){
         ? "🏫"
         : "🗂";
     return (
-      <div style={{display:"flex",justifyContent:"center",padding:touchRail?"8px 3px 12px":"8px 3px 12px",flex:1,minHeight:0}}>
+      <div style={{display:"flex",justifyContent:"center",flex:"0 0 auto",minHeight:0}}>
         <div style={{
           width:"100%",
-          height:"100%",
+          height:cardHeight,
           display:"flex",
           flexDirection:"column",
           alignItems:"center",
           padding:touchRail?"10px 4px 12px":"10px 4px 12px",
-          borderRadius:24,
+          borderRadius:22,
           background:`linear-gradient(180deg, rgba(255,255,255,0.94) 0%, ${tone.bg} 100%)`,
           border:`1px solid ${tone.edge}`,
           boxShadow:"inset 0 1px 0 rgba(255,255,255,0.72), 0 10px 22px rgba(15,23,42,0.06)",
@@ -4579,12 +4580,11 @@ function AdminPanelInner({user}){
     );
   };
 
-  const getCollapsedPanelShellStyle = React.useCallback((themeKey) => {
-    const tone = PANEL_RAIL_THEMES[themeKey] || PANEL_RAIL_THEMES.p1;
+  const getCollapsedStackShellStyle = React.useCallback(() => {
     return {
-      background:`linear-gradient(180deg, #FFFFFF 0%, ${tone.bg} 100%)`,
-      borderRight:`1px solid ${tone.edge}`,
-      padding:coarsePointer ? "4px 2px 8px" : "4px 2px 8px",
+      background:"linear-gradient(180deg, #FFFFFF 0%, #F5F7FA 100%)",
+      borderRight:`1px solid ${G.border}`,
+      padding:coarsePointer ? "8px 4px 10px" : "8px 4px 10px",
       boxShadow:"inset -1px 0 0 rgba(255,255,255,0.5)",
     };
   }, [coarsePointer]);
@@ -5990,6 +5990,55 @@ function AdminPanelInner({user}){
       </div>
     );
 
+  const collapsedStackWidth = coarsePointer || isWeakDevice ? 104 : 94;
+  const collapsedPanelConfigs = {
+    p1: { step:"Step 1", label:"Institutes", badge:institutes.length, direction:"right", themeKey:"p1", onExpand:()=>togglePanelCollapse("p1") },
+    p2: { step:"Step 2", label:tab==="class" ? "Classes" : "Teachers", badge:selInst ? (tab==="class" ? instClasses.length : instTeachers.length) : 0, direction:"right", themeKey:"p2", onExpand:()=>togglePanelCollapse("p2") },
+    p3: { step:"Step 3", label:tab==="teacher" ? "Classes" : "Teachers", badge:selP2 ? p3Items.length : 0, direction:"right", themeKey:"p3", onExpand:()=>togglePanelCollapse("p3") },
+  };
+  const collapsedPanelGroups = React.useMemo(() => {
+    const order = ["p1","p2","p3"];
+    const groups = {};
+    let activeStart = null;
+    order.forEach((key, index) => {
+      if(!panelCollapsed[key]){
+        activeStart = null;
+        return;
+      }
+      const prevKey = index > 0 ? order[index - 1] : null;
+      if(!prevKey || !panelCollapsed[prevKey]){
+        activeStart = key;
+        groups[key] = [key];
+        return;
+      }
+      if(activeStart){
+        groups[activeStart].push(key);
+      }
+    });
+    return groups;
+  }, [panelCollapsed]);
+  const renderCollapsedGroup = (groupStartKey) => {
+    const keys = collapsedPanelGroups[groupStartKey] || [];
+    if(!keys.length) return null;
+    return (
+      <div
+        key={`collapsed-${groupStartKey}`}
+        className={`admin-side-panel admin-${groupStartKey}-collapsed-stack`}
+        style={{
+          ...sidePanel,
+          width:collapsedStackWidth,
+          ...getCollapsedStackShellStyle(),
+          gap:8,
+          justifyContent:"flex-start",
+          overflowY:"auto",
+        }}>
+        {keys.map(key=>(
+          <CollapsedPanelRail key={key} {...collapsedPanelConfigs[key]} />
+        ))}
+      </div>
+    );
+  };
+
   // ── DESKTOP: original 4-panel layout ─────────────────────────────────────
   return(
     <div style={{minHeight:"100svh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
@@ -6202,11 +6251,11 @@ function AdminPanelInner({user}){
         }}>
 
         {/* ── P1: Institutes ── */}
-        <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,...(panelCollapsed.p1?getCollapsedPanelShellStyle("p1"):{background:G.bg,borderRight:`1px solid ${G.border}`}),transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
-          {panelCollapsed.p1 ? (
-            <CollapsedPanelRail step="Step 1" label="Institutes" badge={institutes.length} direction="right" themeKey="p1" onExpand={()=>togglePanelCollapse("p1")} />
-          ) : (
-            <>
+        {collapsedPanelGroups.p1 ? (
+          renderCollapsedGroup("p1")
+        ) : !panelCollapsed.p1 ? (
+          <>
+            <div className="admin-side-panel admin-p1" style={{...sidePanel,width:panelW.p1,background:G.bg,borderRight:`1px solid ${G.border}`,transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"10px 10px 4px",flexShrink:0}}>
                 <div style={{...panelLabel,padding:0}}>Step 1 · Institutes</div>
                 <CollapseButton direction="right" onClick={()=>togglePanelCollapse("p1")} title="Collapse institutes panel" />
@@ -6242,24 +6291,17 @@ function AdminPanelInner({user}){
                   );
                 })}
               </div>
-            </>
-          )}
-        </div>
-        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p1", dx)} onToggleCollapse={()=>togglePanelCollapse("p1")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
+            </div>
+            <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p1", dx)} onToggleCollapse={()=>togglePanelCollapse("p1")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
+          </>
+        ) : null}
 
         {/* ── P2: Toggle + Teacher or Class list ── */}
-        <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,...(panelCollapsed.p2?getCollapsedPanelShellStyle("p2"):{background:G.surface,borderRight:`1px solid ${G.border}`}),transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
-          {panelCollapsed.p2 ? (
-            <CollapsedPanelRail
-              step="Step 2"
-              label={tab==="class" ? "Classes" : "Teachers"}
-              badge={selInst ? (tab==="class" ? instClasses.length : instTeachers.length) : 0}
-              direction="right"
-              themeKey="p2"
-              onExpand={()=>togglePanelCollapse("p2")}
-            />
-          ) : (
-            <>
+        {collapsedPanelGroups.p2 ? (
+          renderCollapsedGroup("p2")
+        ) : !panelCollapsed.p2 ? (
+          <>
+            <div className="admin-side-panel admin-p2" style={{...sidePanel,width:panelW.p2,background:G.surface,borderRight:`1px solid ${G.border}`,transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
               <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10}}>
                   <div style={{minWidth:0}}>
@@ -6358,24 +6400,17 @@ function AdminPanelInner({user}){
                   <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>No {tab==="class"?"classes":"teachers"} match your search</div>
                 )}
               </div>
-            </>
-          )}
-        </div>
-        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p2", dx)} onToggleCollapse={()=>togglePanelCollapse("p2")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
+            </div>
+            <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p2", dx)} onToggleCollapse={()=>togglePanelCollapse("p2")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
+          </>
+        ) : null}
 
         {/* ── P3: Sub-list ── */}
-        <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,...(panelCollapsed.p3?getCollapsedPanelShellStyle("p3"):{background:G.bg,borderRight:`1px solid ${G.border}`}),transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
-          {panelCollapsed.p3 ? (
-            <CollapsedPanelRail
-              step="Step 3"
-              label={tab==="teacher"?"Classes":"Teachers"}
-              badge={selP2 ? p3Items.length : 0}
-              direction="right"
-              themeKey="p3"
-              onExpand={()=>togglePanelCollapse("p3")}
-            />
-          ) : (
-            <>
+        {collapsedPanelGroups.p3 ? (
+          renderCollapsedGroup("p3")
+        ) : !panelCollapsed.p3 ? (
+          <>
+            <div className="admin-side-panel admin-p3" style={{...sidePanel,width:panelW.p3,background:G.bg,borderRight:`1px solid ${G.border}`,transition:panelWidthTransition,willChange:panelDragging?"width":"auto"}}>
               <div style={{padding:"10px 12px 8px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
                   <div style={{minWidth:0}}>
@@ -6547,10 +6582,10 @@ function AdminPanelInner({user}){
               </>);
             })()}
               </div>
-            </>
-          )}
-        </div>
-        <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p3", dx)} onToggleCollapse={()=>togglePanelCollapse("p3")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
+            </div>
+            <PanelDivider onDrag={dx=>nudgeDesktopPanelWidth("p3", dx)} onToggleCollapse={()=>togglePanelCollapse("p3")} onDragStart={()=>setPanelDragging(true)} onDragEnd={()=>setPanelDragging(false)} />
+          </>
+        ) : null}
 
         {/* ── P4: Entries ── */}
         <div className="admin-p4" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:G.bg,minWidth:0}}>
