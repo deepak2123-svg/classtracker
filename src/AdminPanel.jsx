@@ -1003,6 +1003,56 @@ function compareClassCardsByActivity(a,b){
   if(bTs !== aTs) return bTs - aTs;
   return exportTextSorter.compare(a?.display || "", b?.display || "");
 }
+const ADMIN_PROGRAM_GROUPS = [
+  { key:"jee", label:"JEE", accent:"#1D4ED8", bg:"#EEF4FF", border:"#BFDBFE" },
+  { key:"neet", label:"NEET", accent:"#059669", bg:"#ECFDF5", border:"#A7F3D0" },
+  { key:"foundation", label:"Foundation", accent:"#7C3AED", bg:"#F5F3FF", border:"#DDD6FE" },
+];
+const ADMIN_JEE_SECTION_HINTS = ["virat", "madhav", "parth", "iit", "jee"];
+const ADMIN_NEET_SECTION_HINTS = ["sankalp", "keshav", "govind", "medical", "neet"];
+const ADMIN_FOUNDATION_SECTION_HINTS = ["lakshay", "aarambh", "foundation"];
+function extractExplicitClassGrade(value){
+  const match = String(value || "").match(/(?:^|\b)(6|7|8|9|10|11|12)(?:st|nd|rd|th)\b/i);
+  return match ? Number(match[1]) : 0;
+}
+function includesAnyProgramHint(haystack, hints){
+  return (hints || []).some(hint => haystack.includes(hint));
+}
+function detectAdminClassProgramGroup(cls){
+  const label = `${cls?.display || ""} ${cls?.raw || ""}`;
+  const normalisedLabel = normaliseSectionKey(label);
+  const grade = extractExplicitClassGrade(label);
+  if(grade >= 6 && grade <= 10) return "foundation";
+  if(includesAnyProgramHint(normalisedLabel, ADMIN_FOUNDATION_SECTION_HINTS)) return "foundation";
+  if(includesAnyProgramHint(normalisedLabel, ADMIN_NEET_SECTION_HINTS)) return "neet";
+  if(includesAnyProgramHint(normalisedLabel, ADMIN_JEE_SECTION_HINTS)) return "jee";
+
+  const subjectKeys = (cls?.subjects || []).map(normaliseSectionKey);
+  const hasBiology = subjectKeys.some(subject => subject.includes("biology"));
+  const hasMathematics = subjectKeys.some(subject => subject.includes("mathematics"));
+  const hasPhysics = subjectKeys.some(subject => subject.includes("physics"));
+  const hasChemistry = subjectKeys.some(subject => subject.includes("chemistry"));
+
+  if(hasBiology && !hasMathematics) return "neet";
+  if(grade >= 11) return "jee";
+  if(hasMathematics || hasPhysics || hasChemistry) return "jee";
+  return "jee";
+}
+function buildAdminProgramClassGroups(classes){
+  const grouped = {
+    jee:[],
+    neet:[],
+    foundation:[],
+  };
+  (classes || []).forEach(cls => {
+    const groupKey = detectAdminClassProgramGroup(cls);
+    if(!grouped[groupKey]) grouped[groupKey] = [];
+    grouped[groupKey].push(cls);
+  });
+  return ADMIN_PROGRAM_GROUPS
+    .map(group => ({ ...group, items: grouped[group.key] || [] }))
+    .filter(group => group.items.length > 0);
+}
 function groupAdminPdfRows(rows){
   const byInstitute = new Map();
   rows.forEach(row=>{
@@ -3468,6 +3518,11 @@ function AdminPanelInner({user}){
       return haystack.includes(p2SearchKey);
     });
   },[instClasses,p2SearchKey]);
+
+  const groupedVisibleInstClasses = useMemo(
+    ()=>buildAdminProgramClassGroups(visibleInstClasses),
+    [visibleInstClasses]
+  );
 
   const instWarmupActive = !!(selInst && instWarmup.inst===selInst && instWarmup.total>0 && instWarmup.loaded<instWarmup.total);
   const instWarmupLabel = instWarmupActive
@@ -6538,25 +6593,39 @@ function AdminPanelInner({user}){
             </button>
           )}
           {renderWarmupBanner(true)}
-          {tab==="class"&&visibleInstClasses.map(cls=>(
-            <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
-              style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-              <div>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-                  <div style={{fontSize:16,fontWeight:700,color:G.text,flex:1,minWidth:0}}>{cls.display}</div>
-                  <button onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(cls);}}
-                    style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#B91C1C",cursor:"pointer",fontFamily:G.sans,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
-                    Delete
-                  </button>
+          {tab==="class"&&groupedVisibleInstClasses.map(group=>(
+            <div key={group.key} style={{marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,margin:"0 2px 10px"}}>
+                <div style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                  <span style={{display:"inline-flex",alignItems:"center",background:group.bg,color:group.accent,border:`1px solid ${group.border}`,borderRadius:999,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:G.sans,letterSpacing:0.3}}>
+                    {group.label}
+                  </span>
+                  <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>
+                    {group.items.length} class{group.items.length!==1?"es":""}
+                  </span>
                 </div>
-                {cls.subjects.length>0&&(
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
-                    {cls.subjects.map(s=><span key={s} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"2px 9px",fontSize:12,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
-                  </div>
-                )}
-                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:6,display:"inline-block"}}>{cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}</span>
               </div>
-              <span style={{fontSize:20,color:G.textL}}>›</span>
+              {group.items.map(cls=>(
+                <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
+                  style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                      <div style={{fontSize:16,fontWeight:700,color:G.text,flex:1,minWidth:0}}>{cls.display}</div>
+                      <button onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(cls);}}
+                        style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#B91C1C",cursor:"pointer",fontFamily:G.sans,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
+                        Delete
+                      </button>
+                    </div>
+                    {cls.subjects.length>0&&(
+                      <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
+                        {cls.subjects.map(s=><span key={s} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"2px 9px",fontSize:12,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
+                      </div>
+                    )}
+                    <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:6,display:"inline-block"}}>{cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}</span>
+                  </div>
+                  <span style={{fontSize:20,color:G.textL}}>›</span>
+                </div>
+              ))}
             </div>
           ))}
           {tab==="teacher"&&visibleInstTeachers.map(t=>{
@@ -7153,33 +7222,47 @@ function AdminPanelInner({user}){
                     loading classes…
                   </div>
                 )}
-                {selInst&&tab==="class"&&visibleInstClasses.map(cls=>{
-                  const isSel=selP2===cls.raw;
-                  return(
-                    <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
-                      style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
-                      onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
-                      onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-                        <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS,flex:1,minWidth:0}}>{cls.display}</div>
-                        <button onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(cls);}}
-                          style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,color:"#B91C1C",cursor:"pointer",fontFamily:G.sans,flexShrink:0}}>
-                          Delete
-                        </button>
-                      </div>
-                      {cls.subjects.length>0&&(
-                        <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
-                          {cls.subjects.map(s=><span key={s} style={{background:isSel?G.surface:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"1px 8px",fontSize:11,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
-                        </div>
-                      )}
-                      <div style={{marginTop:4}}>
-                        <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
-                          {cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}
+                {selInst&&tab==="class"&&groupedVisibleInstClasses.map(group=>(
+                  <div key={group.key} style={{marginBottom:14}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"6px 12px 4px"}}>
+                      <div style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                        <span style={{display:"inline-flex",alignItems:"center",background:group.bg,color:group.accent,border:`1px solid ${group.border}`,borderRadius:999,padding:"5px 11px",fontSize:11,fontWeight:800,fontFamily:G.sans,letterSpacing:0.3}}>
+                          {group.label}
+                        </span>
+                        <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>
+                          {group.items.length} class{group.items.length!==1?"es":""}
                         </span>
                       </div>
                     </div>
-                  );
-                })}
+                    {group.items.map(cls=>{
+                      const isSel=selP2===cls.raw;
+                      return(
+                        <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
+                          style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent"}}
+                          onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
+                          onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                            <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS,flex:1,minWidth:0}}>{cls.display}</div>
+                            <button onClick={e=>{e.stopPropagation();handleDeleteSectionGroup(cls);}}
+                              style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,color:"#B91C1C",cursor:"pointer",fontFamily:G.sans,flexShrink:0}}>
+                              Delete
+                            </button>
+                          </div>
+                          {cls.subjects.length>0&&(
+                            <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
+                              {cls.subjects.map(s=><span key={s} style={{background:isSel?G.surface:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"1px 8px",fontSize:11,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
+                            </div>
+                          )}
+                          <div style={{marginTop:4}}>
+                            <span style={{background:G.blueL,color:G.blue,borderRadius:10,padding:"2px 7px",fontSize:12,fontFamily:G.mono}}>
+                              {cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
                 {selInst&&((tab==="class"&&visibleInstClasses.length===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
                   <div style={{padding:"20px 10px",textAlign:"center",color:G.textL,fontSize:14,fontStyle:"italic"}}>No {tab==="class"?"classes":"teachers"} match your search</div>
                 )}
