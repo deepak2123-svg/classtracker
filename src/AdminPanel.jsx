@@ -410,6 +410,15 @@ function LegacySectionRepairModal({
   );
 }
 
+function AdminToastBanner({ message }) {
+  if(!message) return null;
+  return (
+    <div style={{position:"fixed",right:18,bottom:18,zIndex:760,background:"#0F1E3D",color:"#fff",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,padding:"12px 16px",boxShadow:"0 18px 48px rgba(15,23,42,0.28)",fontSize:14,fontWeight:700,fontFamily:G.sans,maxWidth:320}}>
+      {message}
+    </div>
+  );
+}
+
 function normaliseName(raw){
   if(!raw) return raw;
   return String(raw).trim().replace(/\s+/g, " ");
@@ -521,6 +530,20 @@ function guessSectionRenameTarget(oldSection, preferredSections, fallbackSection
     .map((value, index) => ({ value, index, score:scoreSectionRenameTarget(oldSection, value) }))
     .sort((a,b)=>b.score-a.score || a.index-b.index);
   return ranked[0]?.score > 0 ? ranked[0].value : "";
+}
+function findStrongSectionRenameTarget(oldSection, candidateSections){
+  const oldKey = normaliseSectionKey(oldSection);
+  const pool = uniqueSectionNames(candidateSections).filter(section => normaliseSectionKey(section) !== oldKey);
+  if(!oldKey || !pool.length) return "";
+  if(pool.length === 1) return pool[0];
+  const ranked = pool
+    .map((value, index) => ({ value, index, score:scoreSectionRenameTarget(oldSection, value) }))
+    .sort((a,b)=>b.score-a.score || a.index-b.index);
+  const top = ranked[0];
+  const second = ranked[1];
+  if(!top || top.score < 4) return "";
+  if(second && second.score >= top.score - 1 && top.score < 7) return "";
+  return top.value || "";
 }
 function buildGroupScheduleFingerprint(group){
   const slots = (group?.slots || []).map(slot => ({
@@ -695,6 +718,13 @@ function resolveAdminSectionName(section, instituteName, instituteSections){
       current = String(match.newSection || "").trim();
     }
   });
+  const currentSections = getInstituteSectionNames(instData);
+  const currentKey = normaliseSectionKey(current);
+  const inCurrentList = currentSections.some(section => normaliseSectionKey(section) === currentKey);
+  if(!inCurrentList){
+    const guessed = findStrongSectionRenameTarget(current, currentSections);
+    if(guessed) return guessed;
+  }
   return current || original;
 }
 function dedupeSectionLabels(values){
@@ -781,21 +811,30 @@ function collectLegacySectionRepairItems(fullDataByUid, teachers, instituteName,
       if(!cls || cls.left || !sameInstituteName(cls.institute, instituteName)) return;
       const rawSection = String(cls.section || "").trim();
       if(!rawSection) return;
-      if(currentLookup.has(normaliseSectionKey(rawSection))) return;
+      const rawKey = normaliseSectionKey(rawSection);
       const resolvedSection = String(resolveAdminSectionName(rawSection, cls.institute, instituteSections) || rawSection).trim();
-      if(currentLookup.has(normaliseSectionKey(resolvedSection))) return;
+      const resolvedKey = normaliseSectionKey(resolvedSection);
+      const suggested =
+        resolvedKey && resolvedKey !== rawKey && currentLookup.has(resolvedKey)
+          ? resolvedSection
+          : findStrongSectionRenameTarget(rawSection, currentSections);
+      const shouldInclude = !currentLookup.has(rawKey) || (suggested && normaliseSectionKey(suggested) !== rawKey);
+      if(!shouldInclude) return;
 
-      const key = normaliseSectionKey(rawSection);
+      const key = rawKey;
       if(!byLegacySection.has(key)){
         byLegacySection.set(key, {
           oldSection: rawSection,
           teacherNames: new Set(),
           subjects: new Set(),
           classRefs: [],
-          suggested: guessSectionRenameTarget(rawSection, currentSections, currentSections) || "",
+          suggested: suggested || guessSectionRenameTarget(rawSection, currentSections, currentSections) || "",
         });
       }
       const bucket = byLegacySection.get(key);
+      if(!bucket.suggested && suggested){
+        bucket.suggested = suggested;
+      }
       bucket.teacherNames.add(teacherName);
       if(cls.subject) bucket.subjects.add(String(cls.subject).trim());
       bucket.classRefs.push({
@@ -5376,6 +5415,7 @@ function AdminPanelInner({user}){
     <div style={{minHeight:"100svh",background:G.bg,fontFamily:G.sans,overflowX:"hidden"}}>
       {binView&&<AdminBinModal/>}
       {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+      <AdminToastBanner message={adminToast} />
       {/* nav */}
       <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
@@ -6667,6 +6707,7 @@ function AdminPanelInner({user}){
           onConfirm={applyLegacySectionRepair}
         />
       )}
+      <AdminToastBanner message={adminToast} />
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
       {mobileStep>0&&(
         <div className="admin-mobile-back" style={{background:G.navyS,borderBottom:`1px solid rgba(255,255,255,0.08)`,padding:"8px 14px",flexShrink:0,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
