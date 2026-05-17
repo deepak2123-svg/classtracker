@@ -5996,7 +5996,8 @@ function AdminPanelInner({user}){
     p2: { step:"Step 2", label:tab==="class" ? "Classes" : "Teachers", badge:selInst ? (tab==="class" ? instClasses.length : instTeachers.length) : 0, direction:"right", themeKey:"p2", onExpand:()=>togglePanelCollapse("p2") },
     p3: { step:"Step 3", label:tab==="teacher" ? "Classes" : "Teachers", badge:selP2 ? p3Items.length : 0, direction:"right", themeKey:"p3", onExpand:()=>togglePanelCollapse("p3") },
   };
-  const collapsedPanelGroups = React.useMemo(() => {
+  // Keep this as a plain derived value so desktop-only collapse UI never changes hook order.
+  const collapsedPanelGroups = (() => {
     const order = ["p1","p2","p3"];
     const groups = {};
     let activeStart = null;
@@ -6016,7 +6017,7 @@ function AdminPanelInner({user}){
       }
     });
     return groups;
-  }, [panelCollapsed]);
+  })();
   const renderCollapsedGroup = (groupStartKey) => {
     const keys = collapsedPanelGroups[groupStartKey] || [];
     if(!keys.length) return null;
