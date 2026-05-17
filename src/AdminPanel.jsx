@@ -288,11 +288,7 @@ function SectionQuickRenameModal({
 
 function normaliseName(raw){
   if(!raw) return raw;
-  const m=raw.match(/(\d+)/);
-  if(!m) return raw;
-  const num=parseInt(m[1]);
-  const rest=raw.replace(/\d+(st|nd|rd|th)?/i,"").trim();
-  return rest?`${num}${ordSuffix(num)} ${rest}`:`${num}${ordSuffix(num)}`;
+  return String(raw).trim().replace(/\s+/g, " ");
 }
 function classNum(name){const m=(name||"").match(/(\d+)/);return m?parseInt(m[1]):0;}
 const ALL_CLASSES_KEY = "__all_classes__";
@@ -306,6 +302,12 @@ function exportClassMeta(name){
 }
 function sameInstituteName(a,b){
   return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase();
+}
+function getInstituteSectionConfig(instituteSections, instituteName){
+  if(!instituteSections || !instituteName) return null;
+  if(instituteSections[instituteName]) return instituteSections[instituteName];
+  const match = Object.entries(instituteSections).find(([name]) => sameInstituteName(name, instituteName));
+  return match?.[1] || null;
 }
 function compareExportRows(a,b){
   const aClass = exportClassMeta(a.class);
@@ -553,7 +555,7 @@ function getAdminInstituteSectionChangeEvents(instData){
 function resolveAdminSectionName(section, instituteName, instituteSections){
   const original = String(section || "").trim();
   if(!original) return "";
-  const instData = instituteSections?.[instituteName];
+  const instData = getInstituteSectionConfig(instituteSections, instituteName);
   if(!instData) return original;
   let current = original;
   getAdminInstituteSectionChangeEvents(instData).forEach(event => {
@@ -566,6 +568,77 @@ function resolveAdminSectionName(section, instituteName, instituteSections){
     }
   });
   return current || original;
+}
+function dedupeSectionLabels(values){
+  const seen = new Set();
+  const result = [];
+  (values || []).forEach(value => {
+    const label = String(value || "").trim();
+    const key = normaliseSectionKey(label);
+    if(!key || seen.has(key)) return;
+    seen.add(key);
+    result.push(label);
+  });
+  return result;
+}
+function applyAdminSectionChangeEventsToTeacherData(data, instituteName, sectionChangeEvents){
+  const changes = (sectionChangeEvents || [])
+    .flatMap(event => Array.isArray(event?.changes) ? event.changes : [])
+    .map(change => ({
+      oldSection:String(change?.oldSection || "").trim(),
+      newSection:String(change?.newSection || "").trim(),
+    }))
+    .filter(change => change.oldSection && change.newSection && normaliseSectionKey(change.oldSection) !== normaliseSectionKey(change.newSection));
+  if(!data || !changes.length) return data;
+
+  let changed = false;
+  const resolveSectionLabel = (section, targetInstitute) => {
+    if(!sameInstituteName(targetInstitute, instituteName)) return String(section || "").trim();
+    let nextSection = String(section || "").trim();
+    changes.forEach(change => {
+      if(normaliseSectionKey(change.oldSection) === normaliseSectionKey(nextSection)){
+        nextSection = change.newSection;
+      }
+    });
+    return nextSection;
+  };
+  const updateClassLike = (item, sectionField = "section", instituteField = "institute") => {
+    if(!item) return item;
+    const currentSection = String(item?.[sectionField] || "").trim();
+    const nextSection = resolveSectionLabel(currentSection, item?.[instituteField]);
+    if(normaliseSectionKey(nextSection) === normaliseSectionKey(currentSection)) return item;
+    changed = true;
+    return { ...item, [sectionField]: nextSection };
+  };
+  const nextClasses = (data.classes || []).map(cls => updateClassLike(cls));
+  const nextSections = dedupeSectionLabels((data.sections || []).map(section => resolveSectionLabel(section, instituteName)));
+  const existingSections = data.sections || [];
+  if(
+    nextSections.length !== existingSections.length ||
+    nextSections.some((section, index) => normaliseSectionKey(section) !== normaliseSectionKey(existingSections[index]))
+  ){
+    changed = true;
+  }
+  const nextTrashClasses = (data.trash?.classes || []).map(cls => updateClassLike(cls));
+  const nextTrashNotes = (data.trash?.notes || []).map(note => {
+    if(!note) return note;
+    const currentClassName = String(note.className || "").trim();
+    const nextClassName = resolveSectionLabel(currentClassName, note.institute);
+    if(normaliseSectionKey(nextClassName) === normaliseSectionKey(currentClassName)) return note;
+    changed = true;
+    return { ...note, className: nextClassName };
+  });
+  if(!changed) return data;
+  return {
+    ...data,
+    classes: nextClasses,
+    sections: nextSections,
+    trash: {
+      ...(data.trash || {}),
+      classes: nextTrashClasses,
+      notes: nextTrashNotes,
+    },
+  };
 }
 function compareClassCardsByActivity(a,b){
   const aTs = Number(a?.lastActivityTs || 0);
@@ -4954,6 +5027,14 @@ function AdminPanelInner({user}){
               await saveInstituteGradeGroups(grpModal.inst,updated,{
                 sectionChangeEvents: nextEvents,
               });
+              if(changeMeta?.sectionChangeEvents?.length){
+                setFullData(prev => Object.fromEntries(
+                  Object.entries(prev).map(([uid, teacherData]) => [
+                    uid,
+                    applyAdminSectionChangeEventsToTeacherData(teacherData, grpModal.inst, changeMeta.sectionChangeEvents),
+                  ])
+                ));
+              }
               setInstSectionsAll(a=>({
                 ...a,
                 [grpModal.inst]:{
@@ -5420,10 +5501,10 @@ function AdminPanelInner({user}){
                           {(d.classes||[]).map(cls=>(
                             <div key={cls.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:G.surface,borderRadius:8,padding:"9px 12px",border:`1px solid ${G.border}`,gap:8}}>
                               <div>
-                                <div style={{fontSize:14,fontWeight:600,color:G.text}}>{normaliseName(cls.section)}</div>
+                                <div style={{fontSize:14,fontWeight:600,color:G.text}}>{normaliseName(resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section)}</div>
                                 <div style={{fontSize:12,color:G.textM}}>{cls.institute} · {cls.subject}</div>
                               </div>
-                              <button onClick={()=>handleRemoveFromClass(t.uid,cls.id,normaliseName(cls.section))}
+                              <button onClick={()=>handleRemoveFromClass(t.uid,cls.id,normaliseName(resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section))}
                                 style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:7,padding:"5px 11px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,flexShrink:0}}>
                                 Remove
                               </button>

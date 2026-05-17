@@ -1628,10 +1628,18 @@ ${groups.map(inst=>`<section class="inst-block">
 // ── Slot resolution: Firestore sections first, KIS hardcode as fallback ─────────
 // getSlotsForSection(cls, instituteSections) → slots array | null
 // instituteSections = getAllInstituteSections() result: { [instName]: { gradeGroups } }
+function getInstituteSectionConfig(instituteSections, instituteName) {
+  if (!instituteSections || !instituteName) return null;
+  if (instituteSections[instituteName]) return instituteSections[instituteName];
+  const target = String(instituteName || "").trim().toLowerCase();
+  if (!target) return null;
+  const match = Object.entries(instituteSections).find(([name]) => String(name || "").trim().toLowerCase() === target);
+  return match?.[1] || null;
+}
 function getSlotsForSection(cls, instituteSections) {
   if (!cls) return null;
   // 1. Check Firestore admin-created sections for this institute
-  const instData = instituteSections?.[cls.institute];
+  const instData = getInstituteSectionConfig(instituteSections, cls.institute);
   if (instData?.gradeGroups?.length) {
     for (const grp of instData.gradeGroups) {
       if ((grp.sections || []).includes(cls.section)) {
@@ -1670,7 +1678,7 @@ function buildSectionChangeApplication(classes, instituteSections, seenEventIds)
   let appliedAny = false;
   const updatedClasses = (classes || []).map(cls => {
     if (!cls || cls.left) return cls;
-    const instData = instituteSections?.[cls.institute];
+    const instData = getInstituteSectionConfig(instituteSections, cls.institute);
     if (!instData) return cls;
     const entityLabels = getInstituteSectionEntityLabels(instData);
     const events = getInstituteSectionChangeEvents(instData);
@@ -1874,7 +1882,7 @@ function SectionLinkingModal({ unlinkedClasses, instituteSections, onConfirm, on
   const G3 = {forest:"#152B22",green:"#1B8A4C",greenV:"#34D077",greenL:"#E8F8EF",bg:"#F5F7F5",surface:"#FFFFFF",border:"#D9E4DC",text:"#111827",textM:"#374151",textL:"#6B7280",red:"#C93030",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif",mono:"'JetBrains Mono',monospace"};
 
   function getAdminSections(cls) {
-    return (instituteSections[cls.institute]?.gradeGroups||[]).flatMap(g=>g.sections||[]);
+    return (getInstituteSectionConfig(instituteSections, cls.institute)?.gradeGroups||[]).flatMap(g=>g.sections||[]);
   }
 
   function handleConfirm() {
@@ -2443,7 +2451,7 @@ function ClassTrackerInner({user}){
     if(loading || !Object.keys(instituteSections).length || linkingDone || sectionChangeNotice) return;
     const unlinked=(data.classes||[]).filter(cls=>{
       if(cls.left) return false;
-      const instData=instituteSections[cls.institute];
+      const instData=getInstituteSectionConfig(instituteSections, cls.institute);
       if(!instData) return false;
       const allSections=(instData.gradeGroups||[]).flatMap(g=>g.sections||[]);
       if(!allSections.length) return false;
@@ -3451,7 +3459,7 @@ function ClassTrackerInner({user}){
           )}
           <label style={{...lbl,marginTop:10}}>Class / Section</label>
           {(()=>{
-            const adminSecs=(instituteSections[newClass.institute]?.gradeGroups||[]).flatMap(g=>g.sections||[]);
+            const adminSecs=(getInstituteSectionConfig(instituteSections, newClass.institute)?.gradeGroups||[]).flatMap(g=>g.sections||[]);
             return adminSecs.length>0
               ? <ReadOnlyDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={adminSecs} placeholder="Select section" emptyMsg="Ask your admin to add sections."/>
               : <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>;
