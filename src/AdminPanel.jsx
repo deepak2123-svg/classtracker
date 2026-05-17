@@ -2843,7 +2843,7 @@ function AdminPanelInner({user}){
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [openTeacherInstitute, setOpenTeacherInstitute] = useState(null);
   const [openAdminInstitute, setOpenAdminInstitute] = useState(null);
-  const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute", ...data, deletedAt}]
+  const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute"|"section", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
   const [profileOpen,  setProfileOpen]  = useState(false);
   const [selTeacher,   setSelTeacher]   = useState(null); // uid of teacher in detail modal
@@ -5101,7 +5101,7 @@ function AdminPanelInner({user}){
     if(!selP2){
       return (
         <div style={{display:"grid",gap:14}}>
-          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"16px 18px",boxShadow:G.shadowSm,display:"flex",justifyContent:"space-between",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:20,padding:"18px 20px",boxShadow:G.shadowSm,display:"flex",justifyContent:"space-between",alignItems:"center",gap:14,flexWrap:"wrap",overflow:"hidden"}}>
             <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1.1}}>
               Institute overview
             </div>
@@ -5126,7 +5126,7 @@ function AdminPanelInner({user}){
             ]}
           </div>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.45fr) minmax(320px,0.95fr)",gap:14,alignItems:"start"}}>
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+            <div style={{background:"linear-gradient(180deg,#FFFFFF 0%,#F9FBFF 100%)",border:`1px solid ${G.border}`,borderRadius:20,padding:"18px",boxShadow:G.shadowSm,overflow:"hidden"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
                 <div>
                   <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>Class teaching time</div>
@@ -5232,7 +5232,7 @@ function AdminPanelInner({user}){
               )}
             </div>
             <div style={{display:"grid",gap:14}}>
-              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+              <div style={{background:"linear-gradient(180deg,#FFFFFF 0%,#F9FBFF 100%)",border:`1px solid ${G.border}`,borderRadius:20,padding:"18px",boxShadow:G.shadowSm,overflow:"hidden"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
                   <div>
                     <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display}}>Teacher entry status</div>
@@ -5305,7 +5305,7 @@ function AdminPanelInner({user}){
                   </div>
                 ))}
               </div>
-              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"16px",boxShadow:G.shadowSm}}>
+              <div style={{background:"linear-gradient(180deg,#FFFFFF 0%,#F9FBFF 100%)",border:`1px solid ${G.border}`,borderRadius:20,padding:"18px",boxShadow:G.shadowSm,overflow:"hidden"}}>
                 <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:10}}>Recent log activity</div>
                 {overviewRecentEntries.length===0 ? <div style={{fontSize:14,color:G.textL}}>No recent entries inside this institute yet.</div> : overviewRecentEntries.map(item=>(
                   <div key={item.id} style={{padding:"10px 0",borderTop:`1px solid ${G.border}`}}>
@@ -5622,6 +5622,7 @@ function AdminPanelInner({user}){
   const AdminBinModal = () => {
     const byClass = adminBin.filter(x=>x.type==="class");
     const byInst  = adminBin.filter(x=>x.type==="institute");
+    const bySection = adminBin.filter(x=>x.type==="section");
     const daysLeft = ts => Math.max(0, 30-Math.floor((Date.now()-ts)/(1000*60*60*24)));
     return(
       <div style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(4px)"}}>
@@ -5639,7 +5640,7 @@ function AdminPanelInner({user}){
               <div style={{textAlign:"center",padding:"48px 20px"}}>
                 <div style={{fontSize:40,marginBottom:12}}>✅</div>
                 <div style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display,marginBottom:6}}>Bin is empty</div>
-                <div style={{fontSize:14,color:G.textM}}>Deleted classes and institutes will appear here.</div>
+                <div style={{fontSize:14,color:G.textM}}>Deleted classes, sections, and institutes will appear here.</div>
               </div>
             )}
 
@@ -5671,6 +5672,44 @@ function AdminPanelInner({user}){
                           })}
                           style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>
                           ↩ Restore
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Sections section */}
+            {bySection.length>0&&(
+              <div style={{marginBottom:24}}>
+                <div style={{fontSize:13,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,marginBottom:12,paddingBottom:8,borderBottom:`1px solid ${G.border}`}}>
+                  Deleted Sections ({bySection.length})
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {bySection.map((item,i)=>{
+                    const dl=daysLeft(item.deletedAt);
+                    const binIdx=adminBin.findIndex(x=>x.type==="section"&&x.name===item.name&&x.institute===item.institute&&x.deletedAt===item.deletedAt);
+                    return(
+                      <div key={i} style={{background:G.bg,borderRadius:12,padding:"13px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"flex-start",gap:12}}>
+                        <div style={{fontSize:22,flexShrink:0}}>🧩</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{item.name}</div>
+                          <div style={{fontSize:13,color:G.textM,marginTop:2}}>
+                            Institute: <strong>{item.institute || "No institute"}</strong>
+                          </div>
+                          <div style={{fontSize:12,color:G.textL,marginTop:5,lineHeight:1.55}}>
+                            {item.classCount || 0} class record{item.classCount===1?"":"s"} removed across {item.teacherCount || 0} teacher{item.teacherCount===1?"":"s"}.
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap"}}>
+                            <span style={{fontSize:12,color:dl<=7?G.red:G.textM,fontFamily:G.mono}}>⏳ {dl}d left</span>
+                            <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>Deleted {new Date(item.deletedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={()=>setAdminBin(b=>b.filter((_,j)=>j!==binIdx))}
+                          style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.textM,fontFamily:G.sans,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>
+                          Dismiss
                         </button>
                       </div>
                     );
@@ -7555,13 +7594,13 @@ function AdminPanelInner({user}){
         {/* ── P4: Entries ── */}
         <div className="admin-p4" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:G.bg,minWidth:0}}>
           {/* P4 header */}
-          <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"14px 16px 16px",flexShrink:0}}>
+          <div style={{background:G.bg,padding:"16px 16px 10px",flexShrink:0}}>
             <div style={{
               background:`linear-gradient(135deg, ${p4HeaderTone.bg1} 0%, ${p4HeaderTone.bg2} 74%)`,
               border:`1px solid ${p4HeaderTone.edge}`,
-              borderRadius:22,
-              padding:"18px 18px 16px",
-              boxShadow:reduceEffects?"none":"0 12px 26px rgba(15,23,42,0.06)",
+              borderRadius:26,
+              padding:"20px 20px 18px",
+              boxShadow:reduceEffects?"none":"0 18px 34px rgba(15,23,42,0.08)",
               position:"relative",
               overflow:"hidden",
             }}>
@@ -7582,7 +7621,7 @@ function AdminPanelInner({user}){
               </div>
 
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap",marginTop:18,position:"relative"}}>
-                <div style={{flex:1,minWidth:0,background:"rgba(255,255,255,0.78)",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:16,padding:"12px 14px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.75)"}}>
+                <div style={{flex:1,minWidth:0,background:"rgba(255,255,255,0.82)",border:`1px solid ${p4HeaderTone.edge}`,borderRadius:20,padding:"12px 14px",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.75)"}}>
                   <PeriodSelector
                     period={period}
                     onChangePeriod={handlePeriodChange}
@@ -7604,7 +7643,7 @@ function AdminPanelInner({user}){
             </div>
           </div>
           {/* Entries body */}
-          <div style={{flex:1,overflowY:"auto",padding:"14px 16px 32px"}}>
+          <div style={{flex:1,overflowY:"auto",padding:"10px 16px 32px"}}>
             {!selP3&&!isAggregateSelection&&!isScopedFullView&&renderOverviewPanel()}
             {isScopedFullView&&renderFullViewEntries(false)}
             {isAggregateSelection&&renderAggregateEntries(false)}
