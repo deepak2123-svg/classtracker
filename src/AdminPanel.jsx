@@ -5,6 +5,7 @@ import {
   getAllInstituteSections, saveInstituteGradeGroups, deleteInstituteGradeGroup,
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData, deleteClassNotes,
+  trashClassInTeacherData, restoreClassFromTeacherTrash,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute,
   repairTeacherIndex, saveProfileName, saveUserData,
 } from "./firebase";
@@ -4285,19 +4286,41 @@ function AdminPanelInner({user}){
     confirmDelete({
       title: `Delete class "${className}"?`,
       lines: [
-        `This permanently deletes the class and ALL its entries from ${teacherName}'s account.`,
-        "This cannot be undone. The teacher will lose all entries for this class.",
+        `This moves the class and all its entries from ${teacherName}'s account into the recycle bin.`,
+        "You can restore it later from the admin recycle bin.",
       ],
-      confirmLabel: "Delete Class Forever",
+      confirmLabel: "Move to Recycle Bin",
       onConfirm: async () => {
         setDeleteBusy(true);
-        // Save to admin recycle bin before deleting
-        setAdminBin(b=>[...b,{type:"class",name:className,teacherName,teacherUid,classId,institute:selInst,deletedAt:Date.now(),deletedBy:user.uid}]);
-        await deleteClassFromTeacherData(teacherUid, classId);
-        // Refresh this teacher's full data
-        const fresh = await getTeacherFullData(teacherUid);
-        if (fresh) setFullData(prev => ({ ...prev, [teacherUid]: fresh }));
-        if (selP3?.classId === classId) setSelP3(null);
+        try {
+          const trashedClass = await trashClassInTeacherData(teacherUid, classId, {
+            deletedByAdmin: true,
+            deletedBy: user.uid,
+          });
+          if (!trashedClass) {
+            throw new Error("Class snapshot could not be moved to trash.");
+          }
+
+          const fresh = await getTeacherFullData(teacherUid);
+          if (fresh) setFullData(prev => ({ ...prev, [teacherUid]: fresh }));
+          setAdminBin(b=>[
+            ...b,
+            {
+              type:"class",
+              name:className,
+              teacherName,
+              teacherUid,
+              classId,
+              institute:trashedClass.institute || selInst,
+              deletedAt:trashedClass.deletedAt || Date.now(),
+              deletedBy:user.uid,
+            },
+          ]);
+          if (selP3?.classId === classId) setSelP3(null);
+          showAdminToast(`Moved "${className}" to the recycle bin.`);
+        } catch (e) {
+          showAdminToast("Failed to delete class: " + e.message);
+        }
         setDeleteBusy(false); setDeleteModal(null);
       },
     });
@@ -5758,6 +5781,7 @@ function AdminPanelInner({user}){
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   {byClass.map((item,i)=>{
                     const dl=daysLeft(item.deletedAt);
+                    const binIdx=adminBin.findIndex(x=>x.type==="class"&&x.teacherUid===item.teacherUid&&x.classId===item.classId&&x.deletedAt===item.deletedAt);
                     return(
                       <div key={i} style={{background:G.bg,borderRadius:12,padding:"13px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"flex-start",gap:12}}>
                         <div style={{fontSize:22,flexShrink:0}}>📚</div>
@@ -5773,7 +5797,18 @@ function AdminPanelInner({user}){
                         </div>
                         <button
                           onClick={()=>adminConfirmDialog(`Restore class "${item.name}" for ${item.teacherName}? This will re-add the class to their account.`,"Restore",async()=>{
-                            setAdminBin(b=>b.filter((_,j)=>j!==i));
+                            try {
+                              const restored = await restoreClassFromTeacherTrash(item.teacherUid, item.classId);
+                              if (!restored) {
+                                throw new Error("The class snapshot is no longer available in trash.");
+                              }
+                              const fresh = await getTeacherFullData(item.teacherUid);
+                              if (fresh) setFullData(prev => ({ ...prev, [item.teacherUid]: fresh }));
+                              if (binIdx >= 0) setAdminBin(b=>b.filter((_,j)=>j!==binIdx));
+                              showAdminToast(`Restored class "${item.name}".`);
+                            } catch (e) {
+                              showAdminToast("Failed to restore class: " + e.message);
+                            }
                           })}
                           style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>
                           ↩ Restore
@@ -6716,6 +6751,7 @@ function AdminPanelInner({user}){
                   if(card&&card.dataset.inst!==dragInstRef.current) setDragOverInst(card.dataset.inst);
                 }}
                 onTouchEnd={e=>{
+                  e.preventDefault();
                   clearTimeout(e.currentTarget._longPressTimer);
                   if(dragInstRef.current&&dragOverInst&&dragOverInst!==dragInstRef.current){
                     const from=institutes.indexOf(dragInstRef.current);
@@ -6729,6 +6765,12 @@ function AdminPanelInner({user}){
                   } else if(!dragInstRef.current){
                     onSelectInstitute(inst);
                   }
+                  e.currentTarget.style.boxShadow="";
+                  e.currentTarget.style.transform="";
+                  setDragInst(null);setDragOverInst(null);dragInstRef.current=null;
+                }}
+                onTouchCancel={e=>{
+                  clearTimeout(e.currentTarget._longPressTimer);
                   e.currentTarget.style.boxShadow="";
                   e.currentTarget.style.transform="";
                   setDragInst(null);setDragOverInst(null);dragInstRef.current=null;

@@ -556,6 +556,92 @@ export async function deleteClassFromTeacherData(uid, classId) {
   } catch (e) { console.error("deleteClassFromTeacherData", e); }
 }
 
+export async function trashClassInTeacherData(uid, classId, extraTrashFields = {}) {
+  try {
+    const data = await loadUserData(uid);
+    if (!data) return null;
+    const cls = (data.classes || []).find(c => c.id === classId);
+    if (!cls) {
+      return (data.trash?.classes || []).find(c => c.id === classId) || null;
+    }
+
+    const trashedClass = {
+      ...cls,
+      deletedAt: Date.now(),
+      savedNotes: (data.notes || {})[classId] || {},
+      ...extraTrashFields,
+    };
+
+    const updatedClasses = (data.classes || []).filter(c => c.id !== classId);
+    const updatedNotes = Object.fromEntries(
+      Object.entries(data.notes || {}).filter(([k]) => k !== classId)
+    );
+    const updatedTrash = {
+      ...(data.trash || {}),
+      classes: [
+        ...(data.trash?.classes || []).filter(c => c.id !== classId),
+        trashedClass,
+      ],
+    };
+
+    await saveUserData(uid, {
+      ...data,
+      classes: updatedClasses,
+      notes: updatedNotes,
+      trash: updatedTrash,
+    });
+    try { await deleteClassNotes(uid, classId); } catch {}
+    return trashedClass;
+  } catch (e) {
+    console.error("trashClassInTeacherData", e);
+    return null;
+  }
+}
+
+export async function restoreClassFromTeacherTrash(uid, classId) {
+  try {
+    const data = await loadUserData(uid);
+    if (!data) return null;
+    const trashedClass = (data.trash?.classes || []).find(c => c.id === classId);
+    if (!trashedClass) return null;
+
+    const {
+      deletedAt,
+      savedNotes,
+      deletedBy,
+      deletedByAdmin,
+      deletedByUid,
+      deletedByName,
+      ...restoredClass
+    } = trashedClass;
+
+    const updatedClasses = [
+      ...(data.classes || []).filter(c => c.id !== classId),
+      restoredClass,
+    ];
+    const updatedTrash = {
+      ...(data.trash || {}),
+      classes: (data.trash?.classes || []).filter(c => c.id !== classId),
+    };
+    const updatedNotes = {
+      ...(data.notes || {}),
+      [classId]: savedNotes || {},
+    };
+
+    await saveUserData(uid, {
+      ...data,
+      classes: updatedClasses,
+      notes: updatedNotes,
+      trash: updatedTrash,
+    });
+
+    return { ...restoredClass, savedNotes: savedNotes || {} };
+  } catch (e) {
+    console.error("restoreClassFromTeacherTrash", e);
+    return null;
+  }
+}
+
 // ── Global institutes (admin-controlled) ──────────────────────────────────────
 // config/institutes = { list: ["KIS", "Genesis Karnal", ...] }
 
