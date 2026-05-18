@@ -78,7 +78,7 @@ function buildPendingAdminClassNotice(kind, cls, extra = {}) {
     "Admin"
   ).trim() || "Admin";
   return {
-    id: `${kind}_${String(cls?.id || "class")}_${eventAt}`,
+    id: String(extra.id || `${kind}_${String(cls?.id || "class")}_${eventAt}`),
     kind,
     classId: String(cls?.id || ""),
     section: String(cls?.section || "").trim(),
@@ -86,6 +86,12 @@ function buildPendingAdminClassNotice(kind, cls, extra = {}) {
     subject: String(cls?.subject || "").trim(),
     adminName,
     eventAt,
+    promptedAt: Number(extra.promptedAt || 0) || null,
+    oldSection: String(extra.oldSection || "").trim(),
+    newSection: String(extra.newSection || "").trim(),
+    timetableChanged: !!extra.timetableChanged,
+    entitySingular: String(extra.entitySingular || "").trim(),
+    entityPlural: String(extra.entityPlural || "").trim(),
   };
 }
 
@@ -93,10 +99,18 @@ function withPendingAdminClassNotice(data, notice) {
   const pending = Array.isArray(data?._meta?.pendingAdminClassNotices)
     ? data._meta.pendingAdminClassNotices
     : [];
+  const nextClassId = String(notice?.classId || "");
+  const nextId = String(notice?.id || "");
   const nextPending = [
-    ...pending.filter(item => String(item?.classId || "") !== String(notice?.classId || "")),
+    ...pending.filter(item => {
+      const itemClassId = String(item?.classId || "");
+      const itemId = String(item?.id || "");
+      if (nextClassId && itemClassId === nextClassId) return false;
+      if (nextId && itemId === nextId) return false;
+      return true;
+    }),
     notice,
-  ].slice(-12);
+  ].slice(-20);
   return {
     ...(data?._meta || {}),
     pendingAdminClassNotices: nextPending,

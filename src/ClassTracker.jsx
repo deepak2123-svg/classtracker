@@ -1735,6 +1735,39 @@ function getInstituteSectionChangeEvents(instData) {
     .filter(event => Array.isArray(event?.changes) && event.changes.length > 0)
     .sort((a,b)=>(a?.createdAt || 0) - (b?.createdAt || 0));
 }
+function mergePendingAdminNoticeItems(existingItems, nextItems) {
+  const merged = new Map();
+  [...(existingItems || []), ...(nextItems || [])]
+    .filter(Boolean)
+    .forEach(item => {
+      const key = String(item?.classId || item?.id || "");
+      if (!key) return;
+      merged.set(key, item);
+    });
+  return [...merged.values()]
+    .sort((a, b) => (a?.eventAt || 0) - (b?.eventAt || 0))
+    .slice(-20);
+}
+function normaliseSectionRenameNotice(item, fallbackEventAt = Date.now()) {
+  const classId = String(item?.classId || "");
+  const eventId = String(item?.eventId || item?.id || "");
+  return {
+    id:`section_renamed_${classId || "class"}_${eventId || fallbackEventAt}`,
+    kind:"section_renamed",
+    classId,
+    section:String(item?.newSection || item?.section || "").trim(),
+    institute:String(item?.institute || "").trim(),
+    subject:String(item?.subject || "").trim(),
+    oldSection:String(item?.oldSection || "").trim(),
+    newSection:String(item?.newSection || item?.section || "").trim(),
+    adminName:String(item?.adminName || "Admin").trim() || "Admin",
+    eventAt:Number(item?.eventAt || fallbackEventAt || Date.now()),
+    promptedAt:Number(item?.promptedAt || 0) || null,
+    timetableChanged:!!item?.timetableChanged,
+    entitySingular:String(item?.entitySingular || "").trim(),
+    entityPlural:String(item?.entityPlural || "").trim(),
+  };
+}
 function buildSectionChangeApplication(classes, instituteSections, seenEventIds) {
   const seen = new Set((seenEventIds || []).map(id => String(id || "")));
   const notices = [];
@@ -1758,12 +1791,17 @@ function buildSectionChangeApplication(classes, instituteSections, seenEventIds)
       if (!match) return;
       const mappedSection = String(match.newSection || "").trim();
       notices.push({
-        eventId,
+        id:`section_renamed_${String(cls.id || "class")}_${eventId}`,
+        kind:"section_renamed",
         classId: cls.id,
+        section: mappedSection || cls.section || "",
         institute: cls.institute || "",
         subject: cls.subject || "",
         oldSection: String(match.oldSection || nextSection || "").trim(),
         newSection: mappedSection,
+        adminName:"Admin",
+        eventAt:Number(event?.createdAt || Date.now()),
+        promptedAt:null,
         timetableChanged: !!event.timetableChanged,
         entitySingular: entityLabels.singular,
         entityPlural: entityLabels.plural,
@@ -2007,88 +2045,86 @@ function capitalizeWord(value) {
   return text ? text[0].toUpperCase() + text.slice(1) : "";
 }
 
-function describeSectionChangeSubject(items) {
-  const singulars = [...new Set((items || []).map(item => String(item?.entitySingular || "section")).filter(Boolean))];
-  if (singulars.length === 1) {
-    const singular = singulars[0];
+function getTeacherNoticeCopy(item) {
+  const kind = String(item?.kind || "");
+  const entityLabel = capitalizeWord(item?.entitySingular || "class");
+
+  if (kind === "class_deleted") {
+    const entryLabel = item?.entryCount === 1 ? "entry remains" : "entries remain";
     return {
-      singular,
-      plural: String(items?.[0]?.entityPlural || `${singular}s`),
+      icon:"🗑",
+      badge:"Moved to recycle bin",
+      badgeBg:G.redL,
+      badgeColor:G.red,
+      title:item.section || "Untitled class",
+      summary:"Admin moved this class out of your active list.",
+      detail:item?.entryCount > 0
+        ? `${item.entryCount} saved ${entryLabel} attached to this class in the recycle bin.`
+        : "No saved entries were found for this class.",
     };
   }
-  return { singular:"class name", plural:"class names" };
+
+  if (kind === "class_restored") {
+    return {
+      icon:"↩",
+      badge:"Restored to active list",
+      badgeBg:G.greenL,
+      badgeColor:G.green,
+      title:item.section || "Untitled class",
+      summary:"Admin restored this class to your active teaching list.",
+      detail:item?.entryCount > 0
+        ? `${item.entryCount} saved ${item.entryCount === 1 ? "entry is" : "entries are"} ready under this class again.`
+        : "This class is back in your list and ready for new entries.",
+    };
+  }
+
+  if (kind === "section_renamed") {
+    return {
+      icon:"✳",
+      badge:"Class name updated",
+      badgeBg:"rgba(59,130,246,0.12)",
+      badgeColor:"#1D4ED8",
+      title:item.newSection || item.section || "Updated class",
+      summary:`${entityLabel} changed from ${item.oldSection || "the old name"} to ${item.newSection || item.section || "the new name"}.`,
+      detail:item.timetableChanged
+        ? "Future timetable slots were also updated for this class."
+        : "Only the displayed class name changed. Your future timetable stays the same.",
+    };
+  }
+
+  return {
+    icon:"🔔",
+    badge:"Admin update",
+    badgeBg:"rgba(15,23,42,0.06)",
+    badgeColor:G.textM,
+    title:item.section || "Updated class",
+    summary:"Admin made a change to this class.",
+    detail:"Open the notification panel to review the latest details.",
+  };
 }
 
-function SectionChangeNoticeModal({ items, onClose }) {
-  const groupedItems = (items || []).reduce((list, item) => {
-    const key = [item.eventId, item.classId, item.oldSection, item.newSection].join("|");
-    if (list.some(row => row.key === key)) return list;
-    list.push({ ...item, key });
-    return list;
-  }, []);
-  const many = groupedItems.length > 1;
-  const subject = describeSectionChangeSubject(groupedItems);
-  const badgeLabel = subject.singular === "class name" ? "Rename update" : `${capitalizeWord(subject.singular)} rename`;
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)"}}>
-      <div style={{background:G.surface,borderRadius:24,width:"100%",maxWidth:520,maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.28)"}}>
-        <div style={{padding:"22px 20px 16px",borderBottom:`1px solid ${G.border}`}}>
-          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:G.greenL,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:G.green,fontFamily:G.mono,letterSpacing:0.3,marginBottom:12}}>
-            {badgeLabel}
-          </div>
-          <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:6}}>
-            {many ? `Your ${subject.plural} were renamed` : `Your ${subject.singular} was renamed`}
-          </div>
-          <div style={{fontSize:14,color:G.textM,lineHeight:1.65}}>
-            {many
-              ? `Your admin renamed some ${subject.plural}. We've kept your class history safe and updated the names below for future logging.`
-              : `Your admin renamed a ${subject.singular}. We've kept your class history safe and updated the name below for future logging.`}
-          </div>
-        </div>
-        <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
-          {groupedItems.map(item=>(
-            <div key={item.key} style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:8}}>
-                <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display}}>
-                  {item.oldSection} → {item.newSection}
-                </div>
-                <span style={{fontSize:11,fontWeight:700,fontFamily:G.mono,borderRadius:999,padding:"5px 10px",background:item.timetableChanged?"#FEF3C7":G.greenL,color:item.timetableChanged?"#92400E":G.green}}>
-                  {item.timetableChanged ? "Future timetable updated" : "Timetable unchanged"}
-                </span>
-              </div>
-              <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
-                {`${capitalizeWord(item.entitySingular || "section")} rename · 🏫 ${item.institute}${item.subject ? ` · ${item.subject}` : ""}`}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div style={{padding:"12px 20px 22px",display:"flex",justifyContent:"flex-end",borderTop:`1px solid ${G.border}`}}>
-          <button onClick={onClose}
-            style={{padding:"12px 20px",borderRadius:12,border:"none",background:G.forest,fontSize:15,fontWeight:800,cursor:"pointer",color:"#fff",fontFamily:G.sans}}>
-            Got it
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminClassNoticeModal({ items, onClose, onViewTrash }) {
+function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications }) {
   const rows = [...(items || [])]
-    .filter(item => item?.classId)
+    .filter(item => item?.id)
     .sort((a, b) => (b.eventAt || 0) - (a.eventAt || 0));
   const hasDeleted = rows.some(item => item.kind === "class_deleted");
   const hasRestored = rows.some(item => item.kind === "class_restored");
+  const hasRenamed = rows.some(item => item.kind === "section_renamed");
   const many = rows.length > 1;
-  let title = "Admin updated your class list";
-  let subtitle = "Please review the latest class changes below.";
+  let title = "Review class changes from admin";
+  let subtitle = "These updates are now saved in your Notification Panel. Review them there, then mark each notice read when you are done.";
 
-  if (hasDeleted && !hasRestored) {
+  if (hasRenamed && !hasDeleted && !hasRestored) {
+    title = many ? "Class names were updated" : "Class name was updated";
+    subtitle = many
+      ? "Your admin renamed some classes. We updated the names below so future logging stays aligned."
+      : "Your admin renamed a class. We updated the name below so future logging stays aligned.";
+  } else if (hasDeleted && !hasRestored && !hasRenamed) {
     title = many ? "Classes moved to recycle bin" : "Class moved to recycle bin";
     subtitle = many
-      ? "Your admin moved these classes out of your active list. You can restore them any time from the recycle bin."
-      : "Your admin moved this class out of your active list. You can restore it any time from the recycle bin.";
-  } else if (hasRestored && !hasDeleted) {
+      ? "Your admin moved these classes out of your active list. Review the affected classes in Notifications."
+      : "Your admin moved this class out of your active list. Review the affected class in Notifications.";
+  } else if (hasRestored && !hasDeleted && !hasRenamed) {
     title = many ? "Classes restored to your list" : "Class restored to your list";
     subtitle = many
       ? "Your admin restored these classes back into your active teaching list."
@@ -2099,8 +2135,8 @@ function AdminClassNoticeModal({ items, onClose, onViewTrash }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)"}}>
       <div style={{background:G.surface,borderRadius:24,width:"100%",maxWidth:520,maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.28)"}}>
         <div style={{padding:"22px 20px 16px",borderBottom:`1px solid ${G.border}`}}>
-          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:hasDeleted && !hasRestored ? G.redL : G.greenL,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:hasDeleted && !hasRestored ? G.red : G.green,fontFamily:G.mono,letterSpacing:0.3,marginBottom:12}}>
-            {hasDeleted && !hasRestored ? "Admin removal" : hasRestored && !hasDeleted ? "Admin restore" : "Admin update"}
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(59,130,246,0.10)",border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:"#1D4ED8",fontFamily:G.mono,letterSpacing:0.3,marginBottom:12}}>
+            New teacher notifications
           </div>
           <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:6}}>
             {title}
@@ -2112,24 +2148,30 @@ function AdminClassNoticeModal({ items, onClose, onViewTrash }) {
 
         <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
           {rows.map(item => {
-            const isDeleted = item.kind === "class_deleted";
+            const copy = getTeacherNoticeCopy(item);
             return (
-              <div key={item.id || `${item.kind}_${item.classId}`} style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
+              <div key={item.id} style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-                    <span style={{fontSize:20,lineHeight:1}}>{isDeleted ? "🗑" : "↩"}</span>
+                    <span style={{fontSize:20,lineHeight:1}}>{copy.icon}</span>
                     <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,minWidth:0}}>
-                      {item.section || "Untitled class"}
+                      {copy.title}
                     </div>
                   </div>
-                  <span style={{fontSize:11,fontWeight:700,fontFamily:G.mono,borderRadius:999,padding:"5px 10px",background:isDeleted ? G.redL : G.greenL,color:isDeleted ? G.red : G.green}}>
-                    {isDeleted ? "In recycle bin" : "Restored"}
+                  <span style={{fontSize:11,fontWeight:700,fontFamily:G.mono,borderRadius:999,padding:"5px 10px",background:copy.badgeBg,color:copy.badgeColor}}>
+                    {copy.badge}
                   </span>
                 </div>
                 <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
+                  {copy.summary}
+                </div>
+                <div style={{fontSize:12,color:G.textL,lineHeight:1.65,marginTop:6}}>
+                  {copy.detail}
+                </div>
+                <div style={{fontSize:12,color:G.textL,lineHeight:1.6,marginTop:8}}>
                   {`${item.institute || "No institute"}${item.subject ? ` · ${item.subject}` : ""}`}
                 </div>
-                <div style={{fontSize:12,color:G.textL,lineHeight:1.6,marginTop:6}}>
+                <div style={{fontSize:12,color:G.textL,lineHeight:1.6,marginTop:4}}>
                   {`${item.adminName || "Admin"} · ${fmtAdminNoticeStamp(item.eventAt)}`}
                 </div>
               </div>
@@ -2138,13 +2180,8 @@ function AdminClassNoticeModal({ items, onClose, onViewTrash }) {
         </div>
 
         <div style={{padding:"12px 20px 22px",display:"flex",justifyContent:"flex-end",gap:10,borderTop:`1px solid ${G.border}`,flexWrap:"wrap"}}>
-          {hasDeleted && (
-            <GhostBtn onClick={onViewTrash}>Open recycle bin</GhostBtn>
-          )}
-          <button onClick={onClose}
-            style={{padding:"12px 20px",borderRadius:12,border:"none",background:G.forest,fontSize:15,fontWeight:800,cursor:"pointer",color:"#fff",fontFamily:G.sans}}>
-            Got it
-          </button>
+          <GhostBtn onClick={onClose}>Close</GhostBtn>
+          <PrimaryBtn onClick={onOpenNotifications}>Open notifications</PrimaryBtn>
         </div>
       </div>
     </div>
@@ -2195,7 +2232,7 @@ function ClassTrackerInner({user}){
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups}}
   const [unlinkedClasses,   setUnlinkedClasses]   = useState([]);  // classes needing link
-  const [sectionChangeNotice, setSectionChangeNotice] = useState(null);
+  const [teacherNoticePrompt, setTeacherNoticePrompt] = useState(null);
   // Use sessionStorage so "Remind later" hides for this session only — shows again on next app open
   const [linkingDone,       setLinkingDone]        = useState(()=>sessionStorage.getItem("linkDismissed")==="1");
   const pendingSaveKey = `classlog_pending_${user.uid}`;
@@ -2229,6 +2266,25 @@ function ClassTrackerInner({user}){
       })
       .sort((a,b)=>(b.eventAt||0)-(a.eventAt||0))
   ), [pendingAdminClassNotices, data.classes, data.trash, data.notes]);
+  const adminPromptNoticeItems = useMemo(() => (
+    adminNoticeItems.filter(item => !item.promptedAt)
+  ), [adminNoticeItems]);
+  const markAdminNoticesPrompted = React.useCallback((ids) => {
+    const idSet = new Set((Array.isArray(ids) ? ids : [ids]).map(id => String(id || "")).filter(Boolean));
+    if(!idSet.size) return;
+    const promptedAt = Date.now();
+    setData(d => ({
+      ...d,
+      _meta: {
+        ...(d._meta || {}),
+        pendingAdminClassNotices: (Array.isArray(d?._meta?.pendingAdminClassNotices) ? d._meta.pendingAdminClassNotices : [])
+          .map(item => idSet.has(String(item?.id || "")) && !item?.promptedAt
+            ? { ...item, promptedAt }
+            : item
+          ),
+      },
+    }));
+  }, []);
 
   const normaliseLoadedData = React.useCallback((incoming, { forceProfileBlank = false } = {}) => {
     const fallbackName = forceProfileBlank ? "" : user.displayName;
@@ -2523,7 +2579,20 @@ function ClassTrackerInner({user}){
     }));
   }
 
-  function openAdminNoticeClass(item, { edit = false, history = false } = {}){
+  function closeTeacherNoticePrompt(){
+    const ids = (teacherNoticePrompt?.items || []).map(item => item?.id).filter(Boolean);
+    if(ids.length) markAdminNoticesPrompted(ids);
+    setTeacherNoticePrompt(null);
+  }
+
+  function openTeacherNotificationPanel(){
+    const ids = (teacherNoticePrompt?.items || []).map(item => item?.id).filter(Boolean);
+    if(ids.length) markAdminNoticesPrompted(ids);
+    setTeacherNoticePrompt(null);
+    safeNav("notifications");
+  }
+
+  function openAdminNoticeClass(item, { history = false } = {}){
     const cls = (data.classes || []).find(entry => String(entry?.id || "") === String(item?.classId || ""));
     if(!cls){
       showInlineToast("This class is not active right now. Check the recycle bin.");
@@ -2536,56 +2605,7 @@ function ClassTrackerInner({user}){
       safeNav(isMobile ? "classDetail" : "home");
       return;
     }
-    if(edit){
-      setEditingClass(cls);
-      safeNav(isMobile ? "classDetail" : "home");
-      return;
-    }
     safeNav(isMobile ? "classDetail" : "home");
-  }
-
-  function restoreAdminNoticeClass(item, { openAfter = false } = {}){
-    const tc = (data.trash?.classes || []).find(entry => String(entry?.id || "") === String(item?.classId || ""));
-    if(!tc){
-      showInlineToast("This class is no longer in the recycle bin.");
-      dismissAdminNotices(item?.id);
-      return;
-    }
-    restoreClass(tc);
-    showInlineToast(`Restored "${tc.section || "class"}".`);
-    if(openAfter){
-      const { deletedAt, savedNotes, ...cls } = tc;
-      setActiveClass(cls);
-      setSelectedDate(item?.lastDateKey || todayKey());
-      safeNav(isMobile ? "classDetail" : "home");
-    }
-  }
-
-  function deleteAdminNoticeForever(item){
-    const tc = (data.trash?.classes || []).find(entry => String(entry?.id || "") === String(item?.classId || ""));
-    if(!tc){
-      dismissAdminNotices(item?.id);
-      showInlineToast("This class is already gone from the recycle bin.");
-      return;
-    }
-    setConfirmModal({
-      message:`Permanently delete "${tc.section}" and its saved entries? This cannot be undone.`,
-      label:"Delete Forever",
-      onConfirm:()=>{
-        permDeleteClass(tc.id);
-        dismissAdminNotices(item?.id);
-      },
-    });
-  }
-
-  function moveAdminNoticeClassToTrash(item){
-    const cls = (data.classes || []).find(entry => String(entry?.id || "") === String(item?.classId || ""));
-    if(!cls){
-      showInlineToast("This class is no longer active.");
-      dismissAdminNotices(item?.id);
-      return;
-    }
-    setLeaveModal(cls.id);
   }
 
   const retryCloudLoad = React.useCallback(()=>{
@@ -2673,38 +2693,47 @@ function ClassTrackerInner({user}){
 
   // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
   useEffect(()=>{
-    if(loading || !Object.keys(instituteSections).length || sectionChangeNotice) return;
-    const pendingNotice = data?._meta?.pendingSectionChangeNotice;
-    if(pendingNotice?.items?.length){
-      (pendingNotice.eventIds || []).forEach(id=>sectionChangeSessionSeenRef.current.add(String(id || "")));
-      setSectionChangeNotice(pendingNotice);
-      return;
-    }
+    if(loading || !Object.keys(instituteSections).length) return;
+    const legacyPrompt = data?._meta?.pendingSectionChangeNotice;
+    const legacyPromptItems = Array.isArray(legacyPrompt?.items)
+      ? legacyPrompt.items.map(item => normaliseSectionRenameNotice(item))
+      : [];
+    const legacyEventIds = Array.isArray(legacyPrompt?.eventIds)
+      ? legacyPrompt.eventIds.map(id => String(id || "")).filter(Boolean)
+      : [];
     const persisted = Array.isArray(data?._meta?.seenSectionChangeEvents) ? data._meta.seenSectionChangeEvents : [];
     const seenIds = [...persisted, ...sectionChangeSessionSeenRef.current];
     const result = buildSectionChangeApplication(data.classes || [], instituteSections, seenIds);
-    if(!result.appliedAny && !result.notices.length) return;
-    if(result.appliedAny || result.notices.length){
-      const nextNotice = result.notices.length ? { items: result.notices, eventIds: result.eventIds } : null;
-      setData(d=>({
+    if(!legacyPromptItems.length && !result.appliedAny && !result.notices.length) return;
+    const mergedEventIds = [...new Set([
+      ...legacyEventIds,
+      ...(result.eventIds || []).map(id => String(id || "")).filter(Boolean),
+    ])];
+    mergedEventIds.forEach(id=>sectionChangeSessionSeenRef.current.add(String(id || "")));
+    if(legacyPromptItems.length || result.notices.length){
+      setUnlinkedClasses([]);
+    }
+    setData(d=>{
+      const existingSeen = Array.isArray(d?._meta?.seenSectionChangeEvents) ? d._meta.seenSectionChangeEvents : [];
+      const existingNotices = Array.isArray(d?._meta?.pendingAdminClassNotices) ? d._meta.pendingAdminClassNotices : [];
+      return {
         ...d,
         classes: result.appliedAny ? result.updatedClasses : d.classes,
-        _meta: nextNotice ? {
+        _meta: {
           ...(d._meta || {}),
-          pendingSectionChangeNotice: nextNotice,
-        } : d._meta,
-      }));
-    }
-    if(result.notices.length){
-      result.eventIds.forEach(id=>sectionChangeSessionSeenRef.current.add(String(id)));
-      setUnlinkedClasses([]);
-      setSectionChangeNotice({ items: result.notices, eventIds: result.eventIds });
-    }
-  },[loading, instituteSections, data.classes, data?._meta?.seenSectionChangeEvents, data?._meta?.pendingSectionChangeNotice, sectionChangeNotice]);
+          seenSectionChangeEvents: [...new Set([...existingSeen, ...mergedEventIds])],
+          pendingAdminClassNotices: legacyPromptItems.length || result.notices.length
+            ? mergePendingAdminNoticeItems(existingNotices, [...legacyPromptItems, ...result.notices])
+            : existingNotices,
+          pendingSectionChangeNotice: null,
+        },
+      };
+    });
+  },[loading, instituteSections, data.classes, data?._meta?.seenSectionChangeEvents, data?._meta?.pendingSectionChangeNotice]);
 
   // After both data and sections load, find classes that don't match admin sections
   useEffect(()=>{
-    if(loading || !Object.keys(instituteSections).length || linkingDone || sectionChangeNotice) return;
+    if(loading || !Object.keys(instituteSections).length || linkingDone || teacherNoticePrompt) return;
     const unlinked=(data.classes||[]).filter(cls=>{
       if(cls.left) return false;
       const instData=getInstituteSectionConfig(instituteSections, cls.institute);
@@ -2714,28 +2743,18 @@ function ClassTrackerInner({user}){
       return !allSections.includes(cls.section);
     });
     setUnlinkedClasses(unlinked);
-  },[loading,instituteSections,data.classes,linkingDone,sectionChangeNotice]);
+  },[loading,instituteSections,data.classes,linkingDone,teacherNoticePrompt]);
 
-  const acknowledgeSectionChangeNotice = React.useCallback(() => {
-    if(!sectionChangeNotice?.eventIds?.length){
-      setSectionChangeNotice(null);
-      return;
-    }
-    const noticeIds = sectionChangeNotice.eventIds.map(id => String(id || "")).filter(Boolean);
-    setData(d => {
-      const existing = Array.isArray(d?._meta?.seenSectionChangeEvents) ? d._meta.seenSectionChangeEvents : [];
-      const merged = [...new Set([...existing, ...noticeIds])];
-      return {
-        ...d,
-        _meta: {
-          ...(d._meta || {}),
-          seenSectionChangeEvents: merged,
-          pendingSectionChangeNotice: null,
-        },
-      };
-    });
-    setSectionChangeNotice(null);
-  }, [sectionChangeNotice]);
+  useEffect(()=>{
+    if(view!=="notifications" || !adminPromptNoticeItems.length) return;
+    markAdminNoticesPrompted(adminPromptNoticeItems.map(item => item.id));
+    setTeacherNoticePrompt(null);
+  },[view, adminPromptNoticeItems, markAdminNoticesPrompted]);
+
+  useEffect(()=>{
+    if(loading || view==="notifications" || teacherNoticePrompt || !adminPromptNoticeItems.length) return;
+    setTeacherNoticePrompt({ items: adminPromptNoticeItems });
+  },[loading, view, teacherNoticePrompt, adminPromptNoticeItems]);
 
   const allNoteDates = useMemo(()=>{
     const map={};
@@ -3016,10 +3035,11 @@ function ClassTrackerInner({user}){
             : <><span>🧩</span> We found {dataWarning.count} unattached class note file{dataWarning.count===1?"":"s"}. If anything looks missing, do not create duplicate classes — contact admin first.</>}
         </div>
       )}
-      {sectionChangeNotice?.items?.length > 0 && (
-        <SectionChangeNoticeModal
-          items={sectionChangeNotice.items}
-          onClose={acknowledgeSectionChangeNotice}
+      {teacherNoticePrompt?.items?.length > 0 && (
+        <TeacherNotificationPromptModal
+          items={teacherNoticePrompt.items}
+          onClose={closeTeacherNoticePrompt}
+          onOpenNotifications={openTeacherNotificationPanel}
         />
       )}
       {/* In-app toast — replaces alert() */}
@@ -3033,7 +3053,7 @@ function ClassTrackerInner({user}){
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
       {historyClassId && (()=>{const cls=data.classes.find(c=>c.id===historyClassId);return cls?<HistoryModal cls={cls} classNotes={data.notes[historyClassId]||{}} selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={()=>setHistoryClassId(null)}/>:null;})()}
-      {unlinkedClasses.length>0&&!linkingDone&&!sectionChangeNotice&&(
+      {unlinkedClasses.length>0&&!linkingDone&&!teacherNoticePrompt&&(
         <SectionLinkingModal
           unlinkedClasses={unlinkedClasses}
           instituteSections={instituteSections}
@@ -3053,6 +3073,9 @@ function ClassTrackerInner({user}){
 
   if(view==="notifications"){
     const hasTrashLinkedNotice = adminNoticeItems.some(item => item.status === "trash");
+    const renamedNoticeCount = adminNoticeItems.filter(item => item.kind === "section_renamed").length;
+    const deletedNoticeCount = adminNoticeItems.filter(item => item.kind === "class_deleted").length;
+    const restoredNoticeCount = adminNoticeItems.filter(item => item.kind === "class_restored").length;
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
         {sharedModals}
@@ -3074,7 +3097,7 @@ function ClassTrackerInner({user}){
             <div>
               <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Teacher notifications</div>
               <h2 style={{fontSize:30,fontFamily:G.display,letterSpacing:-0.6,color:G.text,marginBottom:6}}>Notification Panel</h2>
-              <p style={{fontSize:15,color:G.textM,lineHeight:1.65,maxWidth:640}}>Admin changes to your classes land here. Open the class, restore it, move it back to the recycle bin, delete it forever, or clear the notice after reading.</p>
+              <p style={{fontSize:15,color:G.textM,lineHeight:1.65,maxWidth:640}}>Admin changes to your classes land here. Review what changed, open the related class or recycle bin if needed, then clear the notice when you are done.</p>
             </div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               {hasTrashLinkedNotice && <GhostBtn onClick={()=>safeNav("trash")}>Open recycle bin</GhostBtn>}
@@ -3088,12 +3111,12 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:30,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{notificationCount}</div>
             </div>
             <div style={{...card,padding:"16px 18px"}}>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Classes in bin</div>
-              <div style={{fontSize:30,fontWeight:800,color:G.red,fontFamily:G.display,lineHeight:1}}>{adminNoticeItems.filter(item=>item.status==="trash").length}</div>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Renamed classes</div>
+              <div style={{fontSize:30,fontWeight:800,color:"#1D4ED8",fontFamily:G.display,lineHeight:1}}>{renamedNoticeCount}</div>
             </div>
             <div style={{...card,padding:"16px 18px"}}>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Active classes</div>
-              <div style={{fontSize:30,fontWeight:800,color:G.green,fontFamily:G.display,lineHeight:1}}>{adminNoticeItems.filter(item=>item.status==="active").length}</div>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Bin / restored</div>
+              <div style={{fontSize:30,fontWeight:800,color:G.green,fontFamily:G.display,lineHeight:1}}>{deletedNoticeCount + restoredNoticeCount}</div>
             </div>
           </div>
 
@@ -3106,6 +3129,7 @@ function ClassTrackerInner({user}){
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
               {adminNoticeItems.map(item=>{
+                const copy = getTeacherNoticeCopy(item);
                 const isTrash=item.status==="trash";
                 const isActive=item.status==="active";
                 const statusLabel=isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
@@ -3116,8 +3140,9 @@ function ClassTrackerInner({user}){
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap",marginBottom:12}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}>
-                          <span style={{fontSize:18,lineHeight:1}}>{item.kind==="class_deleted"?"🗑":"↩"}</span>
-                          <span style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2}}>{item.section}</span>
+                          <span style={{fontSize:18,lineHeight:1}}>{copy.icon}</span>
+                          <span style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2}}>{copy.title}</span>
+                          <span style={{fontSize:11,fontWeight:800,fontFamily:G.mono,borderRadius:999,padding:"5px 9px",background:copy.badgeBg,color:copy.badgeColor}}>{copy.badge}</span>
                           <span style={{fontSize:11,fontWeight:800,fontFamily:G.mono,borderRadius:999,padding:"5px 9px",background:statusBg,color:statusColor}}>{statusLabel}</span>
                         </div>
                         <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:8}}>
@@ -3127,6 +3152,15 @@ function ClassTrackerInner({user}){
                           {item.activeDays>0&&<span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.activeDays} {item.activeDays===1?"day":"days"}</span>}
                         </div>
                         <div style={{fontSize:13,color:G.textM,lineHeight:1.7}}>
+                          {copy.summary} {copy.detail}
+                        </div>
+                        {item.kind==="section_renamed" && item.oldSection && item.newSection && (
+                          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10,marginBottom:2}}>
+                            <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM}}>From {item.oldSection}</span>
+                            <span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>Now {item.newSection}</span>
+                          </div>
+                        )}
+                        <div style={{fontSize:13,color:G.textM,lineHeight:1.7,marginTop:10}}>
                           {item.lastDateKey ? `Last log ${formatDateLabel(item.lastDateKey)}.` : "No saved entries were found for this class."} {item.latestEntryText ? `Latest note: ${item.latestEntryText}` : ""}
                         </div>
                       </div>
@@ -3136,15 +3170,9 @@ function ClassTrackerInner({user}){
                     </div>
 
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      {isTrash && <PrimaryBtn onClick={()=>restoreAdminNoticeClass(item)} style={{padding:"10px 16px"}}>Restore</PrimaryBtn>}
-                      {isTrash && <GhostBtn onClick={()=>restoreAdminNoticeClass(item,{openAfter:true})} style={{padding:"10px 16px"}}>Restore & open</GhostBtn>}
-                      {isTrash && <GhostBtn onClick={()=>safeNav("trash")} style={{padding:"10px 16px"}}>Open recycle bin</GhostBtn>}
-                      {isTrash && <button onClick={()=>deleteAdminNoticeForever(item)} style={{background:"rgba(220,38,38,0.08)",border:"1px solid rgba(220,38,38,0.2)",borderRadius:10,padding:"10px 16px",fontSize:14,fontWeight:700,color:G.red,cursor:"pointer",fontFamily:G.sans}}>Delete forever</button>}
-
                       {isActive && <PrimaryBtn onClick={()=>openAdminNoticeClass(item)} style={{padding:"10px 16px"}}>Open class</PrimaryBtn>}
-                      {isActive && <GhostBtn onClick={()=>openAdminNoticeClass(item,{edit:true})} style={{padding:"10px 16px"}}>Edit class</GhostBtn>}
                       {isActive && item.entryCount>0 && <GhostBtn onClick={()=>openAdminNoticeClass(item,{history:true})} style={{padding:"10px 16px"}}>View history</GhostBtn>}
-                      {isActive && <button onClick={()=>moveAdminNoticeClassToTrash(item)} style={{background:"rgba(220,38,38,0.08)",border:"1px solid rgba(220,38,38,0.2)",borderRadius:10,padding:"10px 16px",fontSize:14,fontWeight:700,color:G.red,cursor:"pointer",fontFamily:G.sans}}>Move to bin</button>}
+                      {isTrash && <GhostBtn onClick={()=>safeNav("trash")} style={{padding:"10px 16px"}}>Open recycle bin</GhostBtn>}
 
                       <GhostBtn onClick={()=>dismissAdminNotices(item.id)} style={{padding:"10px 16px"}}>{isActive||isTrash?"Mark as read":"Remove notice"}</GhostBtn>
                     </div>
