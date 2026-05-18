@@ -436,7 +436,7 @@ function OverflowMenu({ items = [], buttonSize = 36 }) {
 }
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
-function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,trashCount,data}){
+function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,onViewNotifications,trashCount,notificationCount=0,data}){
   const shortName=(teacherName||"").split(" ")[0];
   const [profileOpen, setProfileOpen] = React.useState(false);
 
@@ -466,6 +466,21 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
         <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,minWidth:0}}>
           {right}
 
+          {onViewNotifications && (
+            <button onClick={onViewNotifications}
+              style={{height:38,minWidth:38,padding:"0 11px",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,cursor:"pointer",color:"rgba(255,255,255,0.9)",position:"relative",WebkitTapHighlightColor:"transparent",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 01-3.46 0"/>
+              </svg>
+              {notificationCount > 0 && (
+                <span style={{position:"absolute",top:-5,right:-4,minWidth:18,height:18,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 6px 16px rgba(220,38,38,0.3)"}}>
+                  {notificationCount > 9 ? "9+" : notificationCount}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Clickable profile pill */}
           <div style={{position:"relative",flexShrink:0}}>
             <div onClick={()=>setProfileOpen(o=>!o)}
@@ -494,6 +509,15 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
                 </div>
 
                 <div style={{padding:"8px"}}>
+                  {onViewNotifications && (
+                    <button onClick={()=>{setProfileOpen(false);onViewNotifications();}}
+                      style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.84)",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                      Notifications
+                      {notificationCount>0&&<span style={{marginLeft:"auto",background:"rgba(59,130,246,0.2)",color:"#DBEAFE",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>{notificationCount}</span>}
+                    </button>
+                  )}
+
                   {/* Stats */}
                   <button onClick={()=>{setProfileOpen(false);onViewStats();}}
                     style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(59,130,246,0.14)",border:"1px solid rgba(59,130,246,0.24)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#BFDBFE",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
@@ -950,6 +974,36 @@ function fmtAdminNoticeStamp(ts){
     hour:"numeric",
     minute:"2-digit",
   });
+}
+
+function buildClassEntrySummary(noteMap = {}) {
+  const rows = Object.entries(noteMap || {})
+    .filter(([, arr]) => Array.isArray(arr) && arr.length > 0)
+    .sort(([a], [b]) => b.localeCompare(a));
+  const entryCount = rows.reduce((sum, [, arr]) => sum + arr.length, 0);
+  const activeDays = rows.length;
+  const lastDateKey = rows[0]?.[0] || "";
+  let latestEntry = null;
+  rows.forEach(([dateKey, arr]) => {
+    arr.forEach(note => {
+      const stamp = Number(note?.created || 0) || new Date(dateKey).getTime();
+      if (!latestEntry || stamp > latestEntry.stamp) {
+        latestEntry = { ...note, dateKey, stamp };
+      }
+    });
+  });
+  const latestText = String(
+    latestEntry?.title ||
+    latestEntry?.body ||
+    latestEntry?.timeStart ||
+    ""
+  ).trim();
+  return {
+    entryCount,
+    activeDays,
+    lastDateKey,
+    latestEntryText: latestText ? (latestText.length > 72 ? `${latestText.slice(0,69)}...` : latestText) : "",
+  };
 }
 
 function dataFingerprint(payload){
@@ -2142,7 +2196,6 @@ function ClassTrackerInner({user}){
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups}}
   const [unlinkedClasses,   setUnlinkedClasses]   = useState([]);  // classes needing link
   const [sectionChangeNotice, setSectionChangeNotice] = useState(null);
-  const [adminClassNotice, setAdminClassNotice] = useState(null);
   // Use sessionStorage so "Remind later" hides for this session only — shows again on next app open
   const [linkingDone,       setLinkingDone]        = useState(()=>sessionStorage.getItem("linkDismissed")==="1");
   const pendingSaveKey = `classlog_pending_${user.uid}`;
@@ -2155,6 +2208,27 @@ function ClassTrackerInner({user}){
       ? data._meta.pendingAdminClassNotices.filter(Boolean)
       : []
   ), [data?._meta?.pendingAdminClassNotices]);
+  const notificationCount = pendingAdminClassNotices.length;
+  const adminNoticeItems = useMemo(() => (
+    pendingAdminClassNotices
+      .map(item => {
+        const activeClass = (data.classes || []).find(cls => String(cls?.id || "") === String(item?.classId || "")) || null;
+        const trashedClass = (data.trash?.classes || []).find(cls => String(cls?.id || "") === String(item?.classId || "")) || null;
+        const record = activeClass || trashedClass || item || {};
+        const noteMap = activeClass ? (data.notes?.[record.id] || {}) : (trashedClass?.savedNotes || {});
+        return {
+          ...item,
+          ...buildClassEntrySummary(noteMap),
+          section: record.section || item.section || "Untitled class",
+          institute: record.institute || item.institute || "",
+          subject: record.subject || item.subject || "",
+          activeClass,
+          trashedClass,
+          status: activeClass ? "active" : trashedClass ? "trash" : "missing",
+        };
+      })
+      .sort((a,b)=>(b.eventAt||0)-(a.eventAt||0))
+  ), [pendingAdminClassNotices, data.classes, data.trash, data.notes]);
 
   const normaliseLoadedData = React.useCallback((incoming, { forceProfileBlank = false } = {}) => {
     const fallbackName = forceProfileBlank ? "" : user.displayName;
@@ -2426,7 +2500,20 @@ function ClassTrackerInner({user}){
     inlineToastTimer.current=setTimeout(()=>setInlineToast(null),3000);
   }
 
-  function acknowledgeAdminClassNotice(nextView = null){
+  function dismissAdminNotices(ids){
+    const idSet = new Set((Array.isArray(ids) ? ids : [ids]).map(id => String(id || "")).filter(Boolean));
+    if(!idSet.size) return;
+    setData(d=>({
+      ...d,
+      _meta: {
+        ...(d._meta || {}),
+        pendingAdminClassNotices: (Array.isArray(d?._meta?.pendingAdminClassNotices) ? d._meta.pendingAdminClassNotices : [])
+          .filter(item => !idSet.has(String(item?.id || ""))),
+      },
+    }));
+  }
+
+  function dismissAllAdminNotices(){
     setData(d=>({
       ...d,
       _meta: {
@@ -2434,8 +2521,71 @@ function ClassTrackerInner({user}){
         pendingAdminClassNotices: [],
       },
     }));
-    setAdminClassNotice(null);
-    if(nextView) safeNav(nextView);
+  }
+
+  function openAdminNoticeClass(item, { edit = false, history = false } = {}){
+    const cls = (data.classes || []).find(entry => String(entry?.id || "") === String(item?.classId || ""));
+    if(!cls){
+      showInlineToast("This class is not active right now. Check the recycle bin.");
+      return;
+    }
+    setActiveClass(cls);
+    setSelectedDate(item?.lastDateKey || todayKey());
+    if(history && item?.entryCount > 0){
+      setHistoryClassId(cls.id);
+      safeNav(isMobile ? "classDetail" : "home");
+      return;
+    }
+    if(edit){
+      setEditingClass(cls);
+      safeNav(isMobile ? "classDetail" : "home");
+      return;
+    }
+    safeNav(isMobile ? "classDetail" : "home");
+  }
+
+  function restoreAdminNoticeClass(item, { openAfter = false } = {}){
+    const tc = (data.trash?.classes || []).find(entry => String(entry?.id || "") === String(item?.classId || ""));
+    if(!tc){
+      showInlineToast("This class is no longer in the recycle bin.");
+      dismissAdminNotices(item?.id);
+      return;
+    }
+    restoreClass(tc);
+    showInlineToast(`Restored "${tc.section || "class"}".`);
+    if(openAfter){
+      const { deletedAt, savedNotes, ...cls } = tc;
+      setActiveClass(cls);
+      setSelectedDate(item?.lastDateKey || todayKey());
+      safeNav(isMobile ? "classDetail" : "home");
+    }
+  }
+
+  function deleteAdminNoticeForever(item){
+    const tc = (data.trash?.classes || []).find(entry => String(entry?.id || "") === String(item?.classId || ""));
+    if(!tc){
+      dismissAdminNotices(item?.id);
+      showInlineToast("This class is already gone from the recycle bin.");
+      return;
+    }
+    setConfirmModal({
+      message:`Permanently delete "${tc.section}" and its saved entries? This cannot be undone.`,
+      label:"Delete Forever",
+      onConfirm:()=>{
+        permDeleteClass(tc.id);
+        dismissAdminNotices(item?.id);
+      },
+    });
+  }
+
+  function moveAdminNoticeClassToTrash(item){
+    const cls = (data.classes || []).find(entry => String(entry?.id || "") === String(item?.classId || ""));
+    if(!cls){
+      showInlineToast("This class is no longer active.");
+      dismissAdminNotices(item?.id);
+      return;
+    }
+    setLeaveModal(cls.id);
   }
 
   const retryCloudLoad = React.useCallback(()=>{
@@ -2523,15 +2673,7 @@ function ClassTrackerInner({user}){
 
   // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
   useEffect(()=>{
-    if(loading || sectionChangeNotice || adminClassNotice) return;
-    if(!pendingAdminClassNotices.length) return;
-    setAdminClassNotice(
-      [...pendingAdminClassNotices].sort((a,b)=>(b.eventAt||0)-(a.eventAt||0))
-    );
-  },[loading, pendingAdminClassNotices, sectionChangeNotice, adminClassNotice]);
-
-  useEffect(()=>{
-    if(loading || !Object.keys(instituteSections).length || sectionChangeNotice || adminClassNotice || pendingAdminClassNotices.length) return;
+    if(loading || !Object.keys(instituteSections).length || sectionChangeNotice) return;
     const pendingNotice = data?._meta?.pendingSectionChangeNotice;
     if(pendingNotice?.items?.length){
       (pendingNotice.eventIds || []).forEach(id=>sectionChangeSessionSeenRef.current.add(String(id || "")));
@@ -2558,11 +2700,11 @@ function ClassTrackerInner({user}){
       setUnlinkedClasses([]);
       setSectionChangeNotice({ items: result.notices, eventIds: result.eventIds });
     }
-  },[loading, instituteSections, data.classes, data?._meta?.seenSectionChangeEvents, data?._meta?.pendingSectionChangeNotice, sectionChangeNotice, adminClassNotice, pendingAdminClassNotices.length]);
+  },[loading, instituteSections, data.classes, data?._meta?.seenSectionChangeEvents, data?._meta?.pendingSectionChangeNotice, sectionChangeNotice]);
 
   // After both data and sections load, find classes that don't match admin sections
   useEffect(()=>{
-    if(loading || !Object.keys(instituteSections).length || linkingDone || sectionChangeNotice || adminClassNotice || pendingAdminClassNotices.length) return;
+    if(loading || !Object.keys(instituteSections).length || linkingDone || sectionChangeNotice) return;
     const unlinked=(data.classes||[]).filter(cls=>{
       if(cls.left) return false;
       const instData=getInstituteSectionConfig(instituteSections, cls.institute);
@@ -2572,7 +2714,7 @@ function ClassTrackerInner({user}){
       return !allSections.includes(cls.section);
     });
     setUnlinkedClasses(unlinked);
-  },[loading,instituteSections,data.classes,linkingDone,sectionChangeNotice,adminClassNotice,pendingAdminClassNotices.length]);
+  },[loading,instituteSections,data.classes,linkingDone,sectionChangeNotice]);
 
   const acknowledgeSectionChangeNotice = React.useCallback(() => {
     if(!sectionChangeNotice?.eventIds?.length){
@@ -2747,7 +2889,7 @@ function ClassTrackerInner({user}){
     });
     setNewClass({institute:"",section:"",subject:""});setView("home");
   };
-  const deleteClass=(id,leaveReason,leaveReasonLabel)=>{setData(d=>{const cls=d.classes.find(c=>c.id===id);if(!cls)return d;const tc={...cls,deletedAt:Date.now(),savedNotes:d.notes[id]||{},leaveReason:leaveReason||"",leaveReasonLabel:leaveReasonLabel||""};return{...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id)),trash:{...d.trash,classes:[...(d.trash?.classes||[]),tc]}};});if(activeClass?.id===id){setActiveClass(null);setView("home");}};
+  const deleteClass=(id,leaveReason,leaveReasonLabel)=>{setData(d=>{const cls=d.classes.find(c=>c.id===id);if(!cls)return d;const tc={...cls,deletedAt:Date.now(),savedNotes:d.notes[id]||{},leaveReason:leaveReason||"",leaveReasonLabel:leaveReasonLabel||""};const pending=Array.isArray(d?._meta?.pendingAdminClassNotices)?d._meta.pendingAdminClassNotices:[];return{...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id)),trash:{...d.trash,classes:[...(d.trash?.classes||[]),tc]},_meta:{...(d._meta||{}),pendingAdminClassNotices:pending.filter(item=>String(item?.classId||"")!==String(id||""))}};});if(activeClass?.id===id){setActiveClass(null);setView("home");}};
   const updateClass=(id,updates)=>{
     setData(d=>{
       const inst=(updates.institute||"").trim();
@@ -2874,13 +3016,6 @@ function ClassTrackerInner({user}){
             : <><span>🧩</span> We found {dataWarning.count} unattached class note file{dataWarning.count===1?"":"s"}. If anything looks missing, do not create duplicate classes — contact admin first.</>}
         </div>
       )}
-      {adminClassNotice?.length > 0 && (
-        <AdminClassNoticeModal
-          items={adminClassNotice}
-          onClose={()=>acknowledgeAdminClassNotice()}
-          onViewTrash={()=>acknowledgeAdminClassNotice("trash")}
-        />
-      )}
       {sectionChangeNotice?.items?.length > 0 && (
         <SectionChangeNoticeModal
           items={sectionChangeNotice.items}
@@ -2915,6 +3050,113 @@ function ClassTrackerInner({user}){
       {leaveModal && (()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);setActiveClass(null);setView("home");}} onClose={()=>setLeaveModal(null)}/>:null;})()}
     </>
   );
+
+  if(view==="notifications"){
+    const hasTrashLinkedNotice = adminNoticeItems.some(item => item.status === "trash");
+    return(
+      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
+        {sharedModals}
+        <TopNav
+          user={user}
+          teacherName={teacherName}
+          data={data}
+          onLogoClick={()=>safeNav("home")}
+          onSignOut={()=>setSignOutPrompt(true)}
+          onViewStats={()=>safeNav("stats")}
+          onViewTrash={()=>safeNav("trash")}
+          onViewNotifications={()=>safeNav("notifications")}
+          trashCount={trashCount}
+          notificationCount={notificationCount}
+          right={<GhostBtn onClick={()=>safeNav("home")}>← Back</GhostBtn>}
+        />
+        <div style={{maxWidth:960,margin:"0 auto",padding:"28px 16px 72px"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,flexWrap:"wrap",marginBottom:22}}>
+            <div>
+              <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Teacher notifications</div>
+              <h2 style={{fontSize:30,fontFamily:G.display,letterSpacing:-0.6,color:G.text,marginBottom:6}}>Notification Panel</h2>
+              <p style={{fontSize:15,color:G.textM,lineHeight:1.65,maxWidth:640}}>Admin changes to your classes land here. Open the class, restore it, move it back to the recycle bin, delete it forever, or clear the notice after reading.</p>
+            </div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              {hasTrashLinkedNotice && <GhostBtn onClick={()=>safeNav("trash")}>Open recycle bin</GhostBtn>}
+              <PrimaryBtn onClick={dismissAllAdminNotices} disabled={!notificationCount}>Mark all read</PrimaryBtn>
+            </div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(0,1fr))",gap:12,marginBottom:20}}>
+            <div style={{...card,padding:"16px 18px"}}>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Unread notices</div>
+              <div style={{fontSize:30,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{notificationCount}</div>
+            </div>
+            <div style={{...card,padding:"16px 18px"}}>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Classes in bin</div>
+              <div style={{fontSize:30,fontWeight:800,color:G.red,fontFamily:G.display,lineHeight:1}}>{adminNoticeItems.filter(item=>item.status==="trash").length}</div>
+            </div>
+            <div style={{...card,padding:"16px 18px"}}>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Active classes</div>
+              <div style={{fontSize:30,fontWeight:800,color:G.green,fontFamily:G.display,lineHeight:1}}>{adminNoticeItems.filter(item=>item.status==="active").length}</div>
+            </div>
+          </div>
+
+          {adminNoticeItems.length===0 ? (
+            <div style={{...card,padding:"68px 24px",textAlign:"center"}}>
+              <div style={{fontSize:42,marginBottom:12}}>🔔</div>
+              <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:8}}>No new notifications</div>
+              <div style={{fontSize:15,color:G.textM,lineHeight:1.65}}>When an admin restores, removes, or updates one of your classes, the notice will show here with the related class details and actions.</div>
+            </div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {adminNoticeItems.map(item=>{
+                const isTrash=item.status==="trash";
+                const isActive=item.status==="active";
+                const statusLabel=isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
+                const statusBg=isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
+                const statusColor=isTrash?G.red:isActive?G.green:G.textM;
+                return(
+                  <div key={item.id} style={{...card,padding:isMobile?"16px 16px 14px":"18px 18px 16px"}}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap",marginBottom:12}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}>
+                          <span style={{fontSize:18,lineHeight:1}}>{item.kind==="class_deleted"?"🗑":"↩"}</span>
+                          <span style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2}}>{item.section}</span>
+                          <span style={{fontSize:11,fontWeight:800,fontFamily:G.mono,borderRadius:999,padding:"5px 9px",background:statusBg,color:statusColor}}>{statusLabel}</span>
+                        </div>
+                        <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:8}}>
+                          <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textS}}>{item.institute||"No institute"}</span>
+                          {item.subject&&<span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>{item.subject}</span>}
+                          <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.entryCount} {item.entryCount===1?"entry":"entries"}</span>
+                          {item.activeDays>0&&<span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.activeDays} {item.activeDays===1?"day":"days"}</span>}
+                        </div>
+                        <div style={{fontSize:13,color:G.textM,lineHeight:1.7}}>
+                          {item.lastDateKey ? `Last log ${formatDateLabel(item.lastDateKey)}.` : "No saved entries were found for this class."} {item.latestEntryText ? `Latest note: ${item.latestEntryText}` : ""}
+                        </div>
+                      </div>
+                      <div style={{fontSize:12,color:G.textL,lineHeight:1.6,whiteSpace:isMobile?"normal":"nowrap"}}>
+                        {`${item.adminName || "Admin"} · ${fmtAdminNoticeStamp(item.eventAt)}`}
+                      </div>
+                    </div>
+
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      {isTrash && <PrimaryBtn onClick={()=>restoreAdminNoticeClass(item)} style={{padding:"10px 16px"}}>Restore</PrimaryBtn>}
+                      {isTrash && <GhostBtn onClick={()=>restoreAdminNoticeClass(item,{openAfter:true})} style={{padding:"10px 16px"}}>Restore & open</GhostBtn>}
+                      {isTrash && <GhostBtn onClick={()=>safeNav("trash")} style={{padding:"10px 16px"}}>Open recycle bin</GhostBtn>}
+                      {isTrash && <button onClick={()=>deleteAdminNoticeForever(item)} style={{background:"rgba(220,38,38,0.08)",border:"1px solid rgba(220,38,38,0.2)",borderRadius:10,padding:"10px 16px",fontSize:14,fontWeight:700,color:G.red,cursor:"pointer",fontFamily:G.sans}}>Delete forever</button>}
+
+                      {isActive && <PrimaryBtn onClick={()=>openAdminNoticeClass(item)} style={{padding:"10px 16px"}}>Open class</PrimaryBtn>}
+                      {isActive && <GhostBtn onClick={()=>openAdminNoticeClass(item,{edit:true})} style={{padding:"10px 16px"}}>Edit class</GhostBtn>}
+                      {isActive && item.entryCount>0 && <GhostBtn onClick={()=>openAdminNoticeClass(item,{history:true})} style={{padding:"10px 16px"}}>View history</GhostBtn>}
+                      {isActive && <button onClick={()=>moveAdminNoticeClassToTrash(item)} style={{background:"rgba(220,38,38,0.08)",border:"1px solid rgba(220,38,38,0.2)",borderRadius:10,padding:"10px 16px",fontSize:14,fontWeight:700,color:G.red,cursor:"pointer",fontFamily:G.sans}}>Move to bin</button>}
+
+                      <GhostBtn onClick={()=>dismissAdminNotices(item.id)} style={{padding:"10px 16px"}}>{isActive||isTrash?"Mark as read":"Remove notice"}</GhostBtn>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ══════════════════════════════════════════════════════════════════════
   // PAGE 1 — HOME: class list
@@ -3448,7 +3690,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} trashCount={trashCount} right={NavRight}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={NavRight}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
       </div>
     );
@@ -3468,7 +3710,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
         <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
@@ -3592,7 +3834,7 @@ function ClassTrackerInner({user}){
       .slice(0,4);
     return(
     <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
-      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
         right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
       <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px 80px"}}>
         <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:6,textTransform:"uppercase",fontWeight:600}}>New Class</p>
@@ -3718,7 +3960,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
           right={<button onClick={()=>setView("home")} style={navBtnStyle}>← Back</button>}/>
 
         <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"16px 14px 48px",maxWidth:680,margin:"0 auto",width:"100%"}}>
@@ -3826,7 +4068,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>safeNav("stats")} onViewTrash={()=>setView("trash")} trashCount={trashCount} right={<GhostBtn onClick={()=>safeNav("home")}>← Back</GhostBtn>}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>safeNav("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={<GhostBtn onClick={()=>safeNav("home")}>← Back</GhostBtn>}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>
@@ -3928,7 +4170,7 @@ function ClassTrackerInner({user}){
 
     return(
       <div style={{height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans}}>
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
           right={<>
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
           </>}
