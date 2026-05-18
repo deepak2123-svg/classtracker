@@ -69,6 +69,40 @@ function uniqueTrimmed(values) {
   return [...new Set((values || []).map(v => (v || "").trim()).filter(Boolean))];
 }
 
+function buildPendingAdminClassNotice(kind, cls, extra = {}) {
+  const eventAt = Number(extra.eventAt || Date.now());
+  const adminName = String(
+    extra.adminName ||
+    extra.deletedByName ||
+    extra.restoredByName ||
+    "Admin"
+  ).trim() || "Admin";
+  return {
+    id: `${kind}_${String(cls?.id || "class")}_${eventAt}`,
+    kind,
+    classId: String(cls?.id || ""),
+    section: String(cls?.section || "").trim(),
+    institute: String(cls?.institute || "").trim(),
+    subject: String(cls?.subject || "").trim(),
+    adminName,
+    eventAt,
+  };
+}
+
+function withPendingAdminClassNotice(data, notice) {
+  const pending = Array.isArray(data?._meta?.pendingAdminClassNotices)
+    ? data._meta.pendingAdminClassNotices
+    : [];
+  const nextPending = [
+    ...pending.filter(item => String(item?.classId || "") !== String(notice?.classId || "")),
+    notice,
+  ].slice(-12);
+  return {
+    ...(data?._meta || {}),
+    pendingAdminClassNotices: nextPending,
+  };
+}
+
 function buildTeacherIdentityPatch(uid) {
   const currentUser = auth.currentUser;
   if (currentUser?.uid !== uid) return {};
@@ -583,12 +617,20 @@ export async function trashClassInTeacherData(uid, classId, extraTrashFields = {
         trashedClass,
       ],
     };
+    const updatedMeta = withPendingAdminClassNotice(
+      data,
+      buildPendingAdminClassNotice("class_deleted", trashedClass, {
+        eventAt: trashedClass.deletedAt,
+        deletedByName: extraTrashFields.deletedByName,
+      })
+    );
 
     await saveUserData(uid, {
       ...data,
       classes: updatedClasses,
       notes: updatedNotes,
       trash: updatedTrash,
+      _meta: updatedMeta,
     });
     try { await deleteClassNotes(uid, classId); } catch {}
     return trashedClass;
@@ -598,7 +640,7 @@ export async function trashClassInTeacherData(uid, classId, extraTrashFields = {
   }
 }
 
-export async function restoreClassFromTeacherTrash(uid, classId) {
+export async function restoreClassFromTeacherTrash(uid, classId, extraRestoreFields = {}) {
   try {
     const data = await loadUserData(uid);
     if (!data) return null;
@@ -627,12 +669,20 @@ export async function restoreClassFromTeacherTrash(uid, classId) {
       ...(data.notes || {}),
       [classId]: savedNotes || {},
     };
+    const updatedMeta = withPendingAdminClassNotice(
+      data,
+      buildPendingAdminClassNotice("class_restored", restoredClass, {
+        eventAt: Date.now(),
+        restoredByName: extraRestoreFields.restoredByName,
+      })
+    );
 
     await saveUserData(uid, {
       ...data,
       classes: updatedClasses,
       notes: updatedNotes,
       trash: updatedTrash,
+      _meta: updatedMeta,
     });
 
     return { ...restoredClass, savedNotes: savedNotes || {} };

@@ -4296,6 +4296,7 @@ function AdminPanelInner({user}){
           const trashedClass = await trashClassInTeacherData(teacherUid, classId, {
             deletedByAdmin: true,
             deletedBy: user.uid,
+            deletedByName: user.displayName || user.email || "Admin",
           });
           if (!trashedClass) {
             throw new Error("Class snapshot could not be moved to trash.");
@@ -5798,7 +5799,9 @@ function AdminPanelInner({user}){
                         <button
                           onClick={()=>adminConfirmDialog(`Restore class "${item.name}" for ${item.teacherName}? This will re-add the class to their account.`,"Restore",async()=>{
                             try {
-                              const restored = await restoreClassFromTeacherTrash(item.teacherUid, item.classId);
+                              const restored = await restoreClassFromTeacherTrash(item.teacherUid, item.classId, {
+                                restoredByName: user.displayName || user.email || "Admin",
+                              });
                               if (!restored) {
                                 throw new Error("The class snapshot is no longer available in trash.");
                               }

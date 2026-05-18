@@ -942,6 +942,16 @@ function fmtRecoveryStamp(ts){
   });
 }
 
+function fmtAdminNoticeStamp(ts){
+  if(!ts) return "";
+  return new Date(ts).toLocaleString("en-IN",{
+    day:"numeric",
+    month:"short",
+    hour:"numeric",
+    minute:"2-digit",
+  });
+}
+
 function dataFingerprint(payload){
   try{
     const meta = payload?._meta || {};
@@ -2009,6 +2019,84 @@ function SectionChangeNoticeModal({ items, onClose }) {
   );
 }
 
+function AdminClassNoticeModal({ items, onClose, onViewTrash }) {
+  const rows = [...(items || [])]
+    .filter(item => item?.classId)
+    .sort((a, b) => (b.eventAt || 0) - (a.eventAt || 0));
+  const hasDeleted = rows.some(item => item.kind === "class_deleted");
+  const hasRestored = rows.some(item => item.kind === "class_restored");
+  const many = rows.length > 1;
+  let title = "Admin updated your class list";
+  let subtitle = "Please review the latest class changes below.";
+
+  if (hasDeleted && !hasRestored) {
+    title = many ? "Classes moved to recycle bin" : "Class moved to recycle bin";
+    subtitle = many
+      ? "Your admin moved these classes out of your active list. You can restore them any time from the recycle bin."
+      : "Your admin moved this class out of your active list. You can restore it any time from the recycle bin.";
+  } else if (hasRestored && !hasDeleted) {
+    title = many ? "Classes restored to your list" : "Class restored to your list";
+    subtitle = many
+      ? "Your admin restored these classes back into your active teaching list."
+      : "Your admin restored this class back into your active teaching list.";
+  }
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)"}}>
+      <div style={{background:G.surface,borderRadius:24,width:"100%",maxWidth:520,maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.28)"}}>
+        <div style={{padding:"22px 20px 16px",borderBottom:`1px solid ${G.border}`}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:hasDeleted && !hasRestored ? G.redL : G.greenL,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:hasDeleted && !hasRestored ? G.red : G.green,fontFamily:G.mono,letterSpacing:0.3,marginBottom:12}}>
+            {hasDeleted && !hasRestored ? "Admin removal" : hasRestored && !hasDeleted ? "Admin restore" : "Admin update"}
+          </div>
+          <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:6}}>
+            {title}
+          </div>
+          <div style={{fontSize:14,color:G.textM,lineHeight:1.65}}>
+            {subtitle}
+          </div>
+        </div>
+
+        <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
+          {rows.map(item => {
+            const isDeleted = item.kind === "class_deleted";
+            return (
+              <div key={item.id || `${item.kind}_${item.classId}`} style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                    <span style={{fontSize:20,lineHeight:1}}>{isDeleted ? "🗑" : "↩"}</span>
+                    <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,minWidth:0}}>
+                      {item.section || "Untitled class"}
+                    </div>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:700,fontFamily:G.mono,borderRadius:999,padding:"5px 10px",background:isDeleted ? G.redL : G.greenL,color:isDeleted ? G.red : G.green}}>
+                    {isDeleted ? "In recycle bin" : "Restored"}
+                  </span>
+                </div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
+                  {`${item.institute || "No institute"}${item.subject ? ` · ${item.subject}` : ""}`}
+                </div>
+                <div style={{fontSize:12,color:G.textL,lineHeight:1.6,marginTop:6}}>
+                  {`${item.adminName || "Admin"} · ${fmtAdminNoticeStamp(item.eventAt)}`}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{padding:"12px 20px 22px",display:"flex",justifyContent:"flex-end",gap:10,borderTop:`1px solid ${G.border}`,flexWrap:"wrap"}}>
+          {hasDeleted && (
+            <GhostBtn onClick={onViewTrash}>Open recycle bin</GhostBtn>
+          )}
+          <button onClick={onClose}
+            style={{padding:"12px 20px",borderRadius:12,border:"none",background:G.forest,fontSize:15,fontWeight:800,cursor:"pointer",color:"#fff",fontFamily:G.sans}}>
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 function ClassTrackerInner({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
@@ -2054,6 +2142,7 @@ function ClassTrackerInner({user}){
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups}}
   const [unlinkedClasses,   setUnlinkedClasses]   = useState([]);  // classes needing link
   const [sectionChangeNotice, setSectionChangeNotice] = useState(null);
+  const [adminClassNotice, setAdminClassNotice] = useState(null);
   // Use sessionStorage so "Remind later" hides for this session only — shows again on next app open
   const [linkingDone,       setLinkingDone]        = useState(()=>sessionStorage.getItem("linkDismissed")==="1");
   const pendingSaveKey = `classlog_pending_${user.uid}`;
@@ -2061,6 +2150,11 @@ function ClassTrackerInner({user}){
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
   const [mobileClassLimit, setMobileClassLimit] = useState(mobileBatchSize);
   const sectionChangeSessionSeenRef = useRef(new Set());
+  const pendingAdminClassNotices = useMemo(() => (
+    Array.isArray(data?._meta?.pendingAdminClassNotices)
+      ? data._meta.pendingAdminClassNotices.filter(Boolean)
+      : []
+  ), [data?._meta?.pendingAdminClassNotices]);
 
   const normaliseLoadedData = React.useCallback((incoming, { forceProfileBlank = false } = {}) => {
     const fallbackName = forceProfileBlank ? "" : user.displayName;
@@ -2332,6 +2426,18 @@ function ClassTrackerInner({user}){
     inlineToastTimer.current=setTimeout(()=>setInlineToast(null),3000);
   }
 
+  function acknowledgeAdminClassNotice(nextView = null){
+    setData(d=>({
+      ...d,
+      _meta: {
+        ...(d._meta || {}),
+        pendingAdminClassNotices: [],
+      },
+    }));
+    setAdminClassNotice(null);
+    if(nextView) safeNav(nextView);
+  }
+
   const retryCloudLoad = React.useCallback(()=>{
     setRestoringBackup(false);
     setLoadIssue(null);
@@ -2417,7 +2523,15 @@ function ClassTrackerInner({user}){
 
   // ── Must be before any conditional returns (Rules of Hooks) ─────────────────
   useEffect(()=>{
-    if(loading || !Object.keys(instituteSections).length || sectionChangeNotice) return;
+    if(loading || sectionChangeNotice || adminClassNotice) return;
+    if(!pendingAdminClassNotices.length) return;
+    setAdminClassNotice(
+      [...pendingAdminClassNotices].sort((a,b)=>(b.eventAt||0)-(a.eventAt||0))
+    );
+  },[loading, pendingAdminClassNotices, sectionChangeNotice, adminClassNotice]);
+
+  useEffect(()=>{
+    if(loading || !Object.keys(instituteSections).length || sectionChangeNotice || adminClassNotice || pendingAdminClassNotices.length) return;
     const pendingNotice = data?._meta?.pendingSectionChangeNotice;
     if(pendingNotice?.items?.length){
       (pendingNotice.eventIds || []).forEach(id=>sectionChangeSessionSeenRef.current.add(String(id || "")));
@@ -2444,11 +2558,11 @@ function ClassTrackerInner({user}){
       setUnlinkedClasses([]);
       setSectionChangeNotice({ items: result.notices, eventIds: result.eventIds });
     }
-  },[loading, instituteSections, data.classes, data?._meta?.seenSectionChangeEvents, data?._meta?.pendingSectionChangeNotice, sectionChangeNotice]);
+  },[loading, instituteSections, data.classes, data?._meta?.seenSectionChangeEvents, data?._meta?.pendingSectionChangeNotice, sectionChangeNotice, adminClassNotice, pendingAdminClassNotices.length]);
 
   // After both data and sections load, find classes that don't match admin sections
   useEffect(()=>{
-    if(loading || !Object.keys(instituteSections).length || linkingDone || sectionChangeNotice) return;
+    if(loading || !Object.keys(instituteSections).length || linkingDone || sectionChangeNotice || adminClassNotice || pendingAdminClassNotices.length) return;
     const unlinked=(data.classes||[]).filter(cls=>{
       if(cls.left) return false;
       const instData=getInstituteSectionConfig(instituteSections, cls.institute);
@@ -2458,7 +2572,7 @@ function ClassTrackerInner({user}){
       return !allSections.includes(cls.section);
     });
     setUnlinkedClasses(unlinked);
-  },[loading,instituteSections,data.classes,linkingDone,sectionChangeNotice]);
+  },[loading,instituteSections,data.classes,linkingDone,sectionChangeNotice,adminClassNotice,pendingAdminClassNotices.length]);
 
   const acknowledgeSectionChangeNotice = React.useCallback(() => {
     if(!sectionChangeNotice?.eventIds?.length){
@@ -2650,8 +2764,36 @@ function ClassTrackerInner({user}){
     if(activeClass?.id===id)setActiveClass(ac=>({...ac,...updates}));
     setEditingClass(null);
   };
-  const restoreClass=(tc)=>{setData(d=>{const{deletedAt,savedNotes,...cls}=tc;return{...d,classes:[...d.classes,cls],notes:{...d.notes,[cls.id]:savedNotes||{}},trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==cls.id)}};});};
-  const permDeleteClass=(id)=>{deleteClassNotes(user.uid,id).catch(()=>{});setData(d=>({...d,trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==id)}}));};
+  const restoreClass=(tc)=>{
+    setData(d=>{
+      const { deletedAt, savedNotes, ...cls } = tc;
+      const pending = Array.isArray(d?._meta?.pendingAdminClassNotices) ? d._meta.pendingAdminClassNotices : [];
+      return {
+        ...d,
+        classes:[...d.classes,cls],
+        notes:{...d.notes,[cls.id]:savedNotes||{}},
+        trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==cls.id)},
+        _meta:{
+          ...(d._meta||{}),
+          pendingAdminClassNotices: pending.filter(item => String(item?.classId || "") !== String(cls.id || "")),
+        },
+      };
+    });
+  };
+  const permDeleteClass=(id)=>{
+    deleteClassNotes(user.uid,id).catch(()=>{});
+    setData(d=>{
+      const pending = Array.isArray(d?._meta?.pendingAdminClassNotices) ? d._meta.pendingAdminClassNotices : [];
+      return {
+        ...d,
+        trash:{...d.trash,classes:(d.trash?.classes||[]).filter(c=>c.id!==id)},
+        _meta:{
+          ...(d._meta||{}),
+          pendingAdminClassNotices: pending.filter(item => String(item?.classId || "") !== String(id || "")),
+        },
+      };
+    });
+  };
 
   const getClassNotes=(cid)=>data.notes[cid]||{};
   const getDateNotes=(cid,dk)=>{ const arr=(data.notes[cid]||{})[dk]; return Array.isArray(arr)?arr:[]; };
@@ -2731,6 +2873,13 @@ function ClassTrackerInner({user}){
             ? <><span>🗂</span> We found an older unsynced browser draft from {fmtRecoveryStamp(dataWarning.savedAt)}. The latest cloud classes are showing so nothing newer gets overwritten.</>
             : <><span>🧩</span> We found {dataWarning.count} unattached class note file{dataWarning.count===1?"":"s"}. If anything looks missing, do not create duplicate classes — contact admin first.</>}
         </div>
+      )}
+      {adminClassNotice?.length > 0 && (
+        <AdminClassNoticeModal
+          items={adminClassNotice}
+          onClose={()=>acknowledgeAdminClassNotice()}
+          onViewTrash={()=>acknowledgeAdminClassNotice("trash")}
+        />
       )}
       {sectionChangeNotice?.items?.length > 0 && (
         <SectionChangeNoticeModal
