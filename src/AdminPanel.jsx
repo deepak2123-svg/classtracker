@@ -6787,10 +6787,36 @@ function AdminPanelInner({user}){
                       <div style={{fontSize:13,color:G.textL,lineHeight:1.6,marginBottom:12}}>
                         These {sectionLabels.plural} are now official, but they are not attached to any timetable group yet. Add them to a group whenever you want shared slots.
                       </div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                        {standaloneSections.map(section=>(
-                          <span key={section} style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{section}</span>
-                        ))}
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {standaloneSections.map(section=>{
+                          const affectedTeachers = teachers.filter(t=>teacherBelongsToInstitute(t,instDetailView)&&(()=>{const d=fullData[t.uid];return d&&(d.classes||[]).some(c=>normaliseSectionKey(c.section)===normaliseSectionKey(section)&&sameInstituteName(c.institute,instDetailView));})());
+                          const affectedClassCount = affectedTeachers.reduce((sum,t)=>{const d=fullData[t.uid];return sum+(d?(d.classes||[]).filter(c=>normaliseSectionKey(c.section)===normaliseSectionKey(section)&&sameInstituteName(c.institute,instDetailView)).length:0);},0);
+                          const standaloneItem = {section, affectedClassCount, affectedTeacherCount:affectedTeachers.length, subjects:[], teacherNames:affectedTeachers.map(t=>t.displayName||t.email||"").filter(Boolean)};
+                          return(
+                            <div key={section} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                              <div style={{flex:"1 1 200px",minWidth:0}}>
+                                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{section}</span>
+                                {affectedClassCount>0&&(
+                                  <div style={{fontSize:12,color:G.textL,marginTop:6}}>
+                                    {affectedClassCount} class{affectedClassCount!==1?"es":""} across {affectedTeachers.length} teacher{affectedTeachers.length!==1?"s":""}
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{display:"flex",gap:8,flexShrink:0}}>
+                                <button
+                                  disabled={pendingSectionBusy}
+                                  onClick={()=>openPendingInstituteSectionRename(instDetailView,section)}
+                                  style={{...pill(G.blueL,G.blue,G.borderM),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}
+                                >Rename</button>
+                                <button
+                                  disabled={pendingSectionBusy}
+                                  onClick={()=>handleDeletePendingInstituteSection(instDetailView,standaloneItem)}
+                                  style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}
+                                >Delete</button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
