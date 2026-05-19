@@ -828,15 +828,19 @@ function ReadOnlyDropdown({value, onChange, options, placeholder, emptyMsg}){
 }
 
 
-function MultiValueField({ label, values, onChange, suggestions = [], placeholder, hint }) {
+function MultiValueField({ label, values, onChange, suggestions = [], placeholder, hint, allowCustom = true, lockedHint = "" }) {
   const [draft, setDraft] = useState("");
+  const suggestionValues = React.useMemo(() => uniqueChoiceValues(suggestions), [suggestions]);
 
   const addValue = React.useCallback((rawValue) => {
     const nextValue = String(rawValue || "").trim().replace(/\s+/g, " ");
     if (!nextValue) return;
+    if (!allowCustom && !suggestionValues.some(item => normaliseChoiceKey(item) === normaliseChoiceKey(nextValue))) {
+      return;
+    }
     onChange(mergeChoiceValues(values, [nextValue]));
     setDraft("");
-  }, [onChange, values]);
+  }, [allowCustom, onChange, suggestionValues, values]);
 
   const removeValue = React.useCallback((value) => {
     const removeKey = normaliseChoiceKey(value);
@@ -844,8 +848,8 @@ function MultiValueField({ label, values, onChange, suggestions = [], placeholde
   }, [onChange, values]);
 
   const availableSuggestions = React.useMemo(() => (
-    uniqueChoiceValues(suggestions).filter(item => !values.some(value => normaliseChoiceKey(value) === normaliseChoiceKey(item)))
-  ), [suggestions, values]);
+    suggestionValues.filter(item => !values.some(value => normaliseChoiceKey(value) === normaliseChoiceKey(item)))
+  ), [suggestionValues, values]);
 
   return (
     <div style={{marginBottom:16}}>
@@ -864,29 +868,35 @@ function MultiValueField({ label, values, onChange, suggestions = [], placeholde
           ))}
         </div>
       )}
-      <div style={{display:"flex",gap:8}}>
-        <input
-          value={draft}
-          onChange={e=>setDraft(e.target.value)}
-          onKeyDown={e=>{
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault();
-              addValue(draft);
-            } else if (e.key === "Backspace" && !draft && values.length) {
-              e.preventDefault();
-              removeValue(values[values.length - 1]);
-            }
-          }}
-          placeholder={placeholder}
-          style={{...inp,marginBottom:0,background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff"}}
-        />
-        <button
-          type="button"
-          onClick={()=>addValue(draft)}
-          style={{padding:"0 16px",borderRadius:11,border:"none",background:"rgba(59,130,246,0.2)",color:"#DBEAFE",fontSize:14,fontFamily:G.sans,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-          Add
-        </button>
-      </div>
+      {allowCustom ? (
+        <div style={{display:"flex",gap:8}}>
+          <input
+            value={draft}
+            onChange={e=>setDraft(e.target.value)}
+            onKeyDown={e=>{
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                addValue(draft);
+              } else if (e.key === "Backspace" && !draft && values.length) {
+                e.preventDefault();
+                removeValue(values[values.length - 1]);
+              }
+            }}
+            placeholder={placeholder}
+            style={{...inp,marginBottom:0,background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff"}}
+          />
+          <button
+            type="button"
+            onClick={()=>addValue(draft)}
+            style={{padding:"0 16px",borderRadius:11,border:"none",background:"rgba(59,130,246,0.2)",color:"#DBEAFE",fontSize:14,fontFamily:G.sans,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+            Add
+          </button>
+        </div>
+      ) : (
+        <div style={{padding:"12px 14px",borderRadius:12,border:"1px dashed rgba(255,255,255,0.18)",background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.58)",fontSize:13,lineHeight:1.6}}>
+          {lockedHint || "Choose from the official institute list below. Only admins can create or rename institutes."}
+        </div>
+      )}
       {availableSuggestions.length > 0 && (
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
           {availableSuggestions.map(item => (
@@ -898,6 +908,11 @@ function MultiValueField({ label, values, onChange, suggestions = [], placeholde
               + {item}
             </button>
           ))}
+        </div>
+      )}
+      {!allowCustom && suggestionValues.length === 0 && (
+        <div style={{marginTop:10,padding:"12px 14px",borderRadius:12,border:"1px solid rgba(255,255,255,0.12)",background:"rgba(255,255,255,0.05)",color:"rgba(255,255,255,0.6)",fontSize:13,lineHeight:1.6}}>
+          No official institutes are available yet. Ask your admin to create one first.
         </div>
       )}
       {hint && (
@@ -915,8 +930,14 @@ function ProfileSetup({user, initialProfile, subjectSuggestions = [], instituteS
   const initial = normaliseProfile(initialProfile, user.displayName || "");
   const [name,setName]=useState(initial.name);
   const [subjects,setSubjects]=useState(initial.subjects);
-  const [institutes,setInstitutes]=useState(initial.institutes);
-  const canContinue = !!name.trim() && subjects.length > 0 && institutes.length > 0;
+  const officialInstitutes = useMemo(() => uniqueChoiceValues(instituteSuggestions), [instituteSuggestions]);
+  const [institutes,setInstitutes]=useState(() => initial.institutes);
+  useEffect(() => {
+    if (!officialInstitutes.length) return;
+    const officialKeys = new Set(officialInstitutes.map(normaliseChoiceKey));
+    setInstitutes(curr => curr.filter(value => officialKeys.has(normaliseChoiceKey(value))));
+  }, [officialInstitutes]);
+  const canContinue = !!name.trim() && subjects.length > 0 && institutes.length > 0 && officialInstitutes.length > 0;
   return(
     <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
       <div style={{width:"100%",maxWidth:420}}>
@@ -941,9 +962,10 @@ function ProfileSetup({user, initialProfile, subjectSuggestions = [], instituteS
             label="Institutes where you teach"
             values={institutes}
             onChange={setInstitutes}
-            suggestions={instituteSuggestions}
-            placeholder="Type an institute, then press Enter"
-            hint="Pick from the official list if it appears. Add every institute where you currently teach."
+            suggestions={officialInstitutes}
+            allowCustom={false}
+            lockedHint="Select every institute you teach at from the official admin-created list below."
+            hint="Teachers can only use institutes that an admin has already created."
           />
           <button onClick={()=>canContinue&&onSave({ name:name.trim(), subjects, institutes })} disabled={!canContinue} onPointerDown={e=>rpl(e,true)}
             style={{width:"100%",padding:"13px",background:canContinue?G.greenV:"rgba(255,255,255,0.1)",color:canContinue?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:canContinue?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:canContinue?`0 4px 16px rgba(59,130,246,0.26)`:"none"}}>
@@ -2049,6 +2071,23 @@ function getTeacherNoticeCopy(item) {
   const kind = String(item?.kind || "");
   const entityLabel = capitalizeWord(item?.entitySingular || "class");
 
+  if (kind === "institute_renamed") {
+    const oldInstitute = item.oldInstitute || "your old institute";
+    const newInstitute = item.newInstitute || item.institute || "your updated institute";
+    const impactedClassCount = Number(item?.impactedClassCount || 0);
+    return {
+      icon:"🏫",
+      badge:"Institute renamed",
+      badgeBg:"rgba(245,158,11,0.14)",
+      badgeColor:"#B45309",
+      title:newInstitute,
+      summary:`Your admin renamed ${oldInstitute} to ${newInstitute}.`,
+      detail:impactedClassCount > 0
+        ? `${impactedClassCount} active ${impactedClassCount === 1 ? "class was" : "classes were"} updated automatically.`
+        : "We updated your saved institute list to the new name automatically.",
+    };
+  }
+
   if (kind === "class_deleted") {
     const entryLabel = item?.entryCount === 1 ? "entry remains" : "entries remain";
     return {
@@ -2109,16 +2148,28 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
     .sort((a, b) => (b.eventAt || 0) - (a.eventAt || 0));
   const hasDeleted = rows.some(item => item.kind === "class_deleted");
   const hasRestored = rows.some(item => item.kind === "class_restored");
-  const hasRenamed = rows.some(item => item.kind === "section_renamed");
+  const hasClassRenamed = rows.some(item => item.kind === "section_renamed");
+  const hasInstituteRenamed = rows.some(item => item.kind === "institute_renamed");
+  const hasRenamed = hasClassRenamed || hasInstituteRenamed;
   const many = rows.length > 1;
   let title = "Review class changes from admin";
   let subtitle = "These updates are now saved in your Notification Panel. Review them there, then mark each notice read when you are done.";
 
-  if (hasRenamed && !hasDeleted && !hasRestored) {
+  if (hasInstituteRenamed && !hasDeleted && !hasRestored && !hasClassRenamed) {
+    title = many ? "Institutes were updated" : "Institute was updated";
+    subtitle = many
+      ? "Your admin renamed some institutes. We updated those names automatically across your teacher account."
+      : "Your admin renamed one of your institutes. We updated that name automatically across your teacher account.";
+  } else if (hasClassRenamed && !hasDeleted && !hasRestored && !hasInstituteRenamed) {
     title = many ? "Class names were updated" : "Class name was updated";
     subtitle = many
       ? "Your admin renamed some classes. We updated the names below so future logging stays aligned."
       : "Your admin renamed a class. We updated the name below so future logging stays aligned.";
+  } else if (hasRenamed && !hasDeleted && !hasRestored) {
+    title = many ? "Names were updated" : "Name was updated";
+    subtitle = many
+      ? "Your admin renamed classes or institutes. We updated those names automatically so your future logging stays aligned."
+      : "Your admin renamed a class or institute. We updated the name automatically so your future logging stays aligned.";
   } else if (hasDeleted && !hasRestored && !hasRenamed) {
     title = many ? "Classes moved to recycle bin" : "Class moved to recycle bin";
     subtitle = many
@@ -2168,6 +2219,12 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
                 <div style={{fontSize:12,color:G.textL,lineHeight:1.65,marginTop:6}}>
                   {copy.detail}
                 </div>
+                {item.kind==="institute_renamed" && item.oldInstitute && item.newInstitute && (
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                    <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM}}>From {item.oldInstitute}</span>
+                    <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309"}}>Now {item.newInstitute}</span>
+                  </div>
+                )}
                 <div style={{fontSize:12,color:G.textL,lineHeight:1.6,marginTop:8}}>
                   {`${item.institute || "No institute"}${item.subject ? ` · ${item.subject}` : ""}`}
                 </div>
@@ -2249,19 +2306,24 @@ function ClassTrackerInner({user}){
   const adminNoticeItems = useMemo(() => (
     pendingAdminClassNotices
       .map(item => {
+        const isInstituteRename = item?.kind === "institute_renamed";
         const activeClass = (data.classes || []).find(cls => String(cls?.id || "") === String(item?.classId || "")) || null;
         const trashedClass = (data.trash?.classes || []).find(cls => String(cls?.id || "") === String(item?.classId || "")) || null;
-        const record = activeClass || trashedClass || item || {};
-        const noteMap = activeClass ? (data.notes?.[record.id] || {}) : (trashedClass?.savedNotes || {});
+        const record = isInstituteRename ? (item || {}) : (activeClass || trashedClass || item || {});
+        const noteMap = !isInstituteRename && activeClass
+          ? (data.notes?.[record.id] || {})
+          : !isInstituteRename && trashedClass
+            ? (trashedClass?.savedNotes || {})
+            : {};
         return {
           ...item,
           ...buildClassEntrySummary(noteMap),
-          section: record.section || item.section || "Untitled class",
+          section: isInstituteRename ? "" : (record.section || item.section || "Untitled class"),
           institute: record.institute || item.institute || "",
           subject: record.subject || item.subject || "",
-          activeClass,
-          trashedClass,
-          status: activeClass ? "active" : trashedClass ? "trash" : "missing",
+          activeClass: isInstituteRename ? null : activeClass,
+          trashedClass: isInstituteRename ? null : trashedClass,
+          status: isInstituteRename ? "info" : activeClass ? "active" : trashedClass ? "trash" : "missing",
         };
       })
       .sort((a,b)=>(b.eventAt||0)-(a.eventAt||0))
@@ -2473,6 +2535,47 @@ function ClassTrackerInner({user}){
 
     return ()=>{ cancelled = true; };
   },[user.uid,loadAttempt,normaliseLoadedData,pendingSaveKey]);
+  const refreshCloudState = React.useCallback(async () => {
+    try {
+      const [latestInstitutes, latestSections] = await Promise.all([
+        getGlobalInstitutes(),
+        getAllInstituteSections(),
+      ]);
+      setGlobalInstitutes(latestInstitutes || []);
+      setInstituteSections(latestSections || {});
+
+      if (loading || !allowCloudSync) return;
+      if (dataFingerprint(data) !== lastSyncedFingerprint.current) return;
+
+      const result = await loadUserDataState(user.uid);
+      if (result?.status !== "ok") return;
+
+      const liveData = normaliseLoadedData(result.data);
+      const liveRevision = Number(liveData?._meta?.revision || 0);
+      if (liveRevision <= cloudRevision) return;
+
+      lastSyncedFingerprint.current = dataFingerprint(liveData);
+      setCloudRevision(liveRevision);
+      setData(liveData);
+    } catch {}
+  }, [allowCloudSync, cloudRevision, data, loading, normaliseLoadedData, user.uid]);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        refreshCloudState();
+      }
+    };
+    const intervalId = window.setInterval(() => {
+      refreshCloudState();
+    }, 45000);
+    window.addEventListener("focus", refreshCloudState);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshCloudState);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refreshCloudState]);
   useEffect(()=>{
     if(loading||!allowCloudSync)return;
     const nextFingerprint = dataFingerprint(data);
@@ -2849,14 +2952,14 @@ function ClassTrackerInner({user}){
       user={user}
       initialProfile={data.profile}
       subjectSuggestions={data.subjects}
-      instituteSuggestions={mergeChoiceValues(globalInstitutes, data.institutes)}
+      instituteSuggestions={globalInstitutes}
       onSave={profile=>{
         const nextProfile = normaliseProfile(profile);
         setData(d=>({
           ...d,
           profile: nextProfile,
           subjects: mergeChoiceValues(d.subjects, nextProfile.subjects),
-          institutes: mergeChoiceValues(d.institutes, nextProfile.institutes),
+          institutes: mergeChoiceValues((d.classes || []).map(cls => cls.institute), nextProfile.institutes),
         }));
       }}
     />
@@ -3073,7 +3176,7 @@ function ClassTrackerInner({user}){
 
   if(view==="notifications"){
     const hasTrashLinkedNotice = adminNoticeItems.some(item => item.status === "trash");
-    const renamedNoticeCount = adminNoticeItems.filter(item => item.kind === "section_renamed").length;
+    const renamedNoticeCount = adminNoticeItems.filter(item => item.kind === "section_renamed" || item.kind === "institute_renamed").length;
     const deletedNoticeCount = adminNoticeItems.filter(item => item.kind === "class_deleted").length;
     const restoredNoticeCount = adminNoticeItems.filter(item => item.kind === "class_restored").length;
     return(
@@ -3097,7 +3200,7 @@ function ClassTrackerInner({user}){
             <div>
               <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Teacher notifications</div>
               <h2 style={{fontSize:30,fontFamily:G.display,letterSpacing:-0.6,color:G.text,marginBottom:6}}>Notification Panel</h2>
-              <p style={{fontSize:15,color:G.textM,lineHeight:1.65,maxWidth:640}}>Admin changes to your classes land here. Review what changed, open the related class or recycle bin if needed, then clear the notice when you are done.</p>
+              <p style={{fontSize:15,color:G.textM,lineHeight:1.65,maxWidth:640}}>Admin changes to your classes and institutes land here. Review what changed, open the related class or recycle bin if needed, then clear the notice when you are done.</p>
             </div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               {hasTrashLinkedNotice && <GhostBtn onClick={()=>safeNav("trash")}>Open recycle bin</GhostBtn>}
@@ -3111,7 +3214,7 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:30,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{notificationCount}</div>
             </div>
             <div style={{...card,padding:"16px 18px"}}>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Renamed classes</div>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Renamed updates</div>
               <div style={{fontSize:30,fontWeight:800,color:"#1D4ED8",fontFamily:G.display,lineHeight:1}}>{renamedNoticeCount}</div>
             </div>
             <div style={{...card,padding:"16px 18px"}}>
@@ -3124,17 +3227,19 @@ function ClassTrackerInner({user}){
             <div style={{...card,padding:"68px 24px",textAlign:"center"}}>
               <div style={{fontSize:42,marginBottom:12}}>🔔</div>
               <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:8}}>No new notifications</div>
-              <div style={{fontSize:15,color:G.textM,lineHeight:1.65}}>When an admin restores, removes, or updates one of your classes, the notice will show here with the related class details and actions.</div>
+              <div style={{fontSize:15,color:G.textM,lineHeight:1.65}}>When an admin restores, removes, or renames one of your classes or institutes, the notice will show here with the related details and actions.</div>
             </div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
               {adminNoticeItems.map(item=>{
                 const copy = getTeacherNoticeCopy(item);
+                const isInstituteRename = item.kind==="institute_renamed";
                 const isTrash=item.status==="trash";
                 const isActive=item.status==="active";
-                const statusLabel=isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
-                const statusBg=isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
-                const statusColor=isTrash?G.red:isActive?G.green:G.textM;
+                const statusLabel=isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
+                const statusBg=isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
+                const statusColor=isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
+                const dismissLabel=isInstituteRename||isActive||isTrash?"Mark as read":"Remove notice";
                 return(
                   <div key={item.id} style={{...card,padding:isMobile?"16px 16px 14px":"18px 18px 16px"}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap",marginBottom:12}}>
@@ -3147,9 +3252,14 @@ function ClassTrackerInner({user}){
                         </div>
                         <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:8}}>
                           <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textS}}>{item.institute||"No institute"}</span>
-                          {item.subject&&<span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>{item.subject}</span>}
-                          <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.entryCount} {item.entryCount===1?"entry":"entries"}</span>
-                          {item.activeDays>0&&<span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.activeDays} {item.activeDays===1?"day":"days"}</span>}
+                          {!isInstituteRename && item.subject&&<span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>{item.subject}</span>}
+                          {!isInstituteRename && <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.entryCount} {item.entryCount===1?"entry":"entries"}</span>}
+                          {!isInstituteRename && item.activeDays>0&&<span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.activeDays} {item.activeDays===1?"day":"days"}</span>}
+                          {isInstituteRename && Number(item.impactedClassCount || 0) > 0 && (
+                            <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309",fontFamily:G.mono}}>
+                              {item.impactedClassCount} {item.impactedClassCount===1?"class":"classes"} updated
+                            </span>
+                          )}
                         </div>
                         <div style={{fontSize:13,color:G.textM,lineHeight:1.7}}>
                           {copy.summary} {copy.detail}
@@ -3160,9 +3270,17 @@ function ClassTrackerInner({user}){
                             <span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>Now {item.newSection}</span>
                           </div>
                         )}
-                        <div style={{fontSize:13,color:G.textM,lineHeight:1.7,marginTop:10}}>
-                          {item.lastDateKey ? `Last log ${formatDateLabel(item.lastDateKey)}.` : "No saved entries were found for this class."} {item.latestEntryText ? `Latest note: ${item.latestEntryText}` : ""}
-                        </div>
+                        {item.kind==="institute_renamed" && item.oldInstitute && item.newInstitute && (
+                          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10,marginBottom:2}}>
+                            <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM}}>From {item.oldInstitute}</span>
+                            <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309"}}>Now {item.newInstitute}</span>
+                          </div>
+                        )}
+                        {!isInstituteRename && (
+                          <div style={{fontSize:13,color:G.textM,lineHeight:1.7,marginTop:10}}>
+                            {item.lastDateKey ? `Last log ${formatDateLabel(item.lastDateKey)}.` : "No saved entries were found for this class."} {item.latestEntryText ? `Latest note: ${item.latestEntryText}` : ""}
+                          </div>
+                        )}
                       </div>
                       <div style={{fontSize:12,color:G.textL,lineHeight:1.6,whiteSpace:isMobile?"normal":"nowrap"}}>
                         {`${item.adminName || "Admin"} · ${fmtAdminNoticeStamp(item.eventAt)}`}
@@ -3170,11 +3288,11 @@ function ClassTrackerInner({user}){
                     </div>
 
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      {isActive && <PrimaryBtn onClick={()=>openAdminNoticeClass(item)} style={{padding:"10px 16px"}}>Open class</PrimaryBtn>}
-                      {isActive && item.entryCount>0 && <GhostBtn onClick={()=>openAdminNoticeClass(item,{history:true})} style={{padding:"10px 16px"}}>View history</GhostBtn>}
-                      {isTrash && <GhostBtn onClick={()=>safeNav("trash")} style={{padding:"10px 16px"}}>Open recycle bin</GhostBtn>}
+                      {!isInstituteRename && isActive && <PrimaryBtn onClick={()=>openAdminNoticeClass(item)} style={{padding:"10px 16px"}}>Open class</PrimaryBtn>}
+                      {!isInstituteRename && isActive && item.entryCount>0 && <GhostBtn onClick={()=>openAdminNoticeClass(item,{history:true})} style={{padding:"10px 16px"}}>View history</GhostBtn>}
+                      {!isInstituteRename && isTrash && <GhostBtn onClick={()=>safeNav("trash")} style={{padding:"10px 16px"}}>Open recycle bin</GhostBtn>}
 
-                      <GhostBtn onClick={()=>dismissAdminNotices(item.id)} style={{padding:"10px 16px"}}>{isActive||isTrash?"Mark as read":"Remove notice"}</GhostBtn>
+                      <GhostBtn onClick={()=>dismissAdminNotices(item.id)} style={{padding:"10px 16px"}}>{dismissLabel}</GhostBtn>
                     </div>
                   </div>
                 );

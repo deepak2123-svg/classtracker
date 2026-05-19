@@ -6,7 +6,7 @@ import {
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData, deleteClassNotes,
   trashClassInTeacherData, restoreClassFromTeacherTrash,
-  getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute,
+  getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute, renameGlobalInstitute,
   repairTeacherIndex, saveProfileName, saveUserData,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES } from "./shared.jsx";
@@ -443,6 +443,108 @@ function exportClassMeta(name){
 }
 function sameInstituteName(a,b){
   return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase();
+}
+function replaceInstituteNameLocal(value, oldName, newName) {
+  const label = String(value || "").trim();
+  if (!label) return "";
+  return sameInstituteName(label, oldName) ? String(newName || "").trim() : label;
+}
+function replaceInstituteListLocal(values, oldName, newName) {
+  const seen = new Set();
+  const next = [];
+  (values || []).forEach(value => {
+    const label = replaceInstituteNameLocal(value, oldName, newName);
+    const key = label.toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    next.push(label);
+  });
+  return next;
+}
+function renameInstituteInsideLocalNotices(notices, oldName, newName) {
+  return (Array.isArray(notices) ? notices : []).map(item => {
+    if (!item) return item;
+    const institute = replaceInstituteNameLocal(item.institute, oldName, newName);
+    const preserveHistoricalRename = item.kind === "institute_renamed";
+    const oldInstitute = preserveHistoricalRename
+      ? String(item.oldInstitute || "").trim()
+      : replaceInstituteNameLocal(item.oldInstitute, oldName, newName);
+    const newInstitute = preserveHistoricalRename
+      ? String(item.newInstitute || "").trim()
+      : replaceInstituteNameLocal(item.newInstitute, oldName, newName);
+    if (
+      institute === String(item.institute || "").trim() &&
+      oldInstitute === String(item.oldInstitute || "").trim() &&
+      newInstitute === String(item.newInstitute || "").trim()
+    ) {
+      return item;
+    }
+    return {
+      ...item,
+      institute,
+      oldInstitute,
+      newInstitute,
+    };
+  });
+}
+function renameInstituteInsideLocalTeacherData(data, oldName, newName) {
+  if (!data) return data;
+  const nextClasses = (data.classes || []).map(cls =>
+    sameInstituteName(cls?.institute, oldName)
+      ? { ...cls, institute: String(newName || "").trim() }
+      : cls
+  );
+  const nextInstitutes = replaceInstituteListLocal(data.institutes, oldName, newName);
+  const nextProfileInstitutes = replaceInstituteListLocal(data.profile?.institutes, oldName, newName);
+  const nextTrashClasses = (data.trash?.classes || []).map(cls =>
+    sameInstituteName(cls?.institute, oldName)
+      ? { ...cls, institute: String(newName || "").trim() }
+      : cls
+  );
+  const nextTrashNotes = (data.trash?.notes || []).map(note =>
+    sameInstituteName(note?.institute, oldName)
+      ? { ...note, institute: String(newName || "").trim() }
+      : note
+  );
+  const nextPendingNotices = renameInstituteInsideLocalNotices(data?._meta?.pendingAdminClassNotices, oldName, newName);
+  const legacyNotice = data?._meta?.pendingSectionChangeNotice;
+  const nextLegacyItems = renameInstituteInsideLocalNotices(legacyNotice?.items, oldName, newName);
+
+  return {
+    ...data,
+    classes: nextClasses,
+    institutes: nextInstitutes,
+    profile: {
+      ...(data.profile || {}),
+      institutes: nextProfileInstitutes,
+    },
+    trash: {
+      ...(data.trash || {}),
+      classes: nextTrashClasses,
+      notes: nextTrashNotes,
+    },
+    _meta: {
+      ...(data._meta || {}),
+      pendingAdminClassNotices: nextPendingNotices,
+      ...(legacyNotice ? {
+        pendingSectionChangeNotice: {
+          ...legacyNotice,
+          items: nextLegacyItems,
+        },
+      } : {}),
+    },
+  };
+}
+function renameInstituteInsideLocalSectionsMap(instituteSections, oldName, newName) {
+  if (!instituteSections) return instituteSections;
+  const currentKey = Object.keys(instituteSections).find(name => sameInstituteName(name, oldName));
+  const nextKey = String(newName || "").trim();
+  if (!currentKey || !nextKey) return instituteSections;
+  const nextSections = { ...instituteSections };
+  const payload = nextSections[currentKey];
+  delete nextSections[currentKey];
+  nextSections[nextKey] = payload;
+  return nextSections;
 }
 function getInstituteSectionConfigKey(instituteSections, instituteName){
   if(!instituteSections || !instituteName) return instituteName || "";
@@ -4107,22 +4209,47 @@ function AdminPanelInner({user}){
   };
 
   const handleRenameInstitute = async (oldName, newName) => {
-    if (!newName.trim() || newName.trim() === oldName) { setRenamingInst(null); return; }
+    const nextName = String(newName || "").trim();
+    if (!nextName) { setRenamingInst(null); return; }
+    if (sameInstituteName(nextName, oldName) && nextName === String(oldName || "").trim()) {
+      setRenamingInst(null);
+      return;
+    }
     try {
-      // Get current list, replace old with new
-      const current = await getGlobalInstitutes();
-      const updated = current.map(i => i === oldName ? newName.trim() : i);
-      const { doc, setDoc } = await import("firebase/firestore");
-      const { db: fdb } = await import("./firebase");
-      await setDoc(doc(fdb, "config", "institutes"), { list: updated });
-      setGlobalInstList(updated);
-      // Also update deletedInstitutes set if it was there
+      const result = await renameGlobalInstitute(oldName, nextName, {
+        adminName: user.displayName || user.email || "Admin",
+      });
+      setGlobalInstList(result.list || []);
+      setInstSectionsAll(prev => renameInstituteInsideLocalSectionsMap(prev, oldName, result.newLabel));
+      setTeachers(prev => prev.map(teacher => ({
+        ...teacher,
+        institutes: replaceInstituteListLocal(teacher.institutes, oldName, result.newLabel),
+      })));
+      setFullData(prev => Object.fromEntries(
+        Object.entries(prev).map(([uid, teacherData]) => [
+          uid,
+          renameInstituteInsideLocalTeacherData(teacherData, oldName, result.newLabel),
+        ])
+      ));
       setDeletedInstitutes(s => {
         if (!s.has(oldName)) return s;
-        const n = new Set(s); n.delete(oldName); n.add(newName.trim()); return n;
+        const n = new Set(s);
+        n.delete(oldName);
+        n.add(result.newLabel);
+        return n;
       });
+      setSelInst(curr => sameInstituteName(curr, oldName) ? result.newLabel : curr);
+      setInstDetailView(curr => sameInstituteName(curr, oldName) ? result.newLabel : curr);
+      setOpenTeacherInstitute(curr => sameInstituteName(curr, oldName) ? result.newLabel : curr);
+      setOpenAdminInstitute(curr => sameInstituteName(curr, oldName) ? result.newLabel : curr);
+      setRenameInstVal("");
       setRenamingInst(null);
-      // success — UI updates automatically
+      const teacherCount = result.affectedTeacherCount || 0;
+      showAdminToast(
+        teacherCount
+          ? `Renamed "${result.oldLabel}" to "${result.newLabel}" and updated ${teacherCount} teacher${teacherCount !== 1 ? "s" : ""}.`
+          : `Renamed "${result.oldLabel}" to "${result.newLabel}".`
+      );
     } catch(e) { showAdminToast("Failed: " + e.message); }
   };
 

@@ -69,6 +69,195 @@ function uniqueTrimmed(values) {
   return [...new Set((values || []).map(v => (v || "").trim()).filter(Boolean))];
 }
 
+function normaliseInstituteKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function sameInstituteLabel(a, b) {
+  return normaliseInstituteKey(a) === normaliseInstituteKey(b);
+}
+
+function replaceInstituteLabel(value, oldName, newName) {
+  const label = String(value || "").trim().replace(/\s+/g, " ");
+  if (!label) return "";
+  return sameInstituteLabel(label, oldName) ? String(newName || "").trim() : label;
+}
+
+function replaceInstituteList(values, oldName, newName) {
+  return uniqueTrimmed((values || []).map(value => replaceInstituteLabel(value, oldName, newName)));
+}
+
+function buildInstituteRenameNotice(oldName, newName, extra = {}) {
+  const eventAt = Number(extra.eventAt || Date.now());
+  const adminName = String(extra.adminName || "Admin").trim() || "Admin";
+  const impactedClassCount = Number(extra.impactedClassCount || 0);
+  return {
+    id: String(
+      extra.id ||
+      `institute_renamed_${normaliseInstituteKey(oldName) || "institute"}_${eventAt}`
+    ),
+    kind: "institute_renamed",
+    classId: "",
+    section: "",
+    institute: String(newName || "").trim(),
+    subject: "",
+    adminName,
+    eventAt,
+    promptedAt: Number(extra.promptedAt || 0) || null,
+    oldInstitute: String(oldName || "").trim(),
+    newInstitute: String(newName || "").trim(),
+    impactedClassCount,
+  };
+}
+
+function replaceInstituteInsidePendingNotices(notices, oldName, newName) {
+  return (Array.isArray(notices) ? notices : []).map(item => {
+    if (!item) return item;
+    const nextInstitute = replaceInstituteLabel(item.institute, oldName, newName);
+    const preserveHistoricalRename = item.kind === "institute_renamed";
+    const nextOldInstitute = preserveHistoricalRename
+      ? String(item.oldInstitute || "").trim()
+      : replaceInstituteLabel(item.oldInstitute, oldName, newName);
+    const nextNewInstitute = preserveHistoricalRename
+      ? String(item.newInstitute || "").trim()
+      : replaceInstituteLabel(item.newInstitute, oldName, newName);
+    const changed =
+      nextInstitute !== String(item.institute || "").trim() ||
+      nextOldInstitute !== String(item.oldInstitute || "").trim() ||
+      nextNewInstitute !== String(item.newInstitute || "").trim();
+    return changed
+      ? {
+          ...item,
+          institute: nextInstitute,
+          oldInstitute: nextOldInstitute,
+          newInstitute: nextNewInstitute,
+        }
+      : item;
+  });
+}
+
+function applyInstituteRenameToTeacherData(data, oldName, newName, extra = {}) {
+  if (!data) return { data, changed: false, noticeAdded: false };
+
+  const oldLabel = String(oldName || "").trim();
+  const nextLabel = String(newName || "").trim();
+  if (!oldLabel || !nextLabel) return { data, changed: false, noticeAdded: false };
+
+  let changed = false;
+  let impactedClassCount = 0;
+  let matchedAssociation = false;
+
+  const nextClasses = (data.classes || []).map(cls => {
+    if (!sameInstituteLabel(cls?.institute, oldLabel)) return cls;
+    changed = true;
+    matchedAssociation = true;
+    impactedClassCount += 1;
+    return { ...cls, institute: nextLabel };
+  });
+
+  const nextTrashClasses = (data.trash?.classes || []).map(cls => {
+    if (!sameInstituteLabel(cls?.institute, oldLabel)) return cls;
+    changed = true;
+    matchedAssociation = true;
+    return { ...cls, institute: nextLabel };
+  });
+
+  const nextTrashNotes = (data.trash?.notes || []).map(note => {
+    if (!sameInstituteLabel(note?.institute, oldLabel)) return note;
+    changed = true;
+    matchedAssociation = true;
+    return { ...note, institute: nextLabel };
+  });
+
+  const nextDataInstitutes = replaceInstituteList(data.institutes, oldLabel, nextLabel);
+  const nextProfileInstitutes = replaceInstituteList(data.profile?.institutes, oldLabel, nextLabel);
+  const currentInstitutes = uniqueTrimmed(data.institutes || []);
+  const currentProfileInstitutes = uniqueTrimmed(data.profile?.institutes || []);
+  if (
+    nextDataInstitutes.length !== currentInstitutes.length ||
+    nextDataInstitutes.some((value, index) => value !== currentInstitutes[index])
+  ) {
+    changed = true;
+    matchedAssociation = true;
+  }
+  if (
+    nextProfileInstitutes.length !== currentProfileInstitutes.length ||
+    nextProfileInstitutes.some((value, index) => value !== currentProfileInstitutes[index])
+  ) {
+    changed = true;
+    matchedAssociation = true;
+  }
+
+  const existingNotices = Array.isArray(data?._meta?.pendingAdminClassNotices)
+    ? data._meta.pendingAdminClassNotices
+    : [];
+  const nextPendingNotices = replaceInstituteInsidePendingNotices(existingNotices, oldLabel, nextLabel);
+  if (
+    nextPendingNotices.length !== existingNotices.length ||
+    nextPendingNotices.some((item, index) => item !== existingNotices[index])
+  ) {
+    changed = true;
+  }
+
+  const legacyNotice = data?._meta?.pendingSectionChangeNotice;
+  const currentLegacyItems = Array.isArray(legacyNotice?.items) ? legacyNotice.items : [];
+  const nextLegacyItems = replaceInstituteInsidePendingNotices(currentLegacyItems, oldLabel, nextLabel);
+  const legacyChanged =
+    nextLegacyItems.length !== currentLegacyItems.length ||
+    nextLegacyItems.some((item, index) => item !== currentLegacyItems[index]);
+  if (legacyChanged) {
+    changed = true;
+  }
+
+  if (!changed && !matchedAssociation) {
+    return { data, changed: false, noticeAdded: false };
+  }
+
+  let nextMeta = {
+    ...(data._meta || {}),
+    pendingAdminClassNotices: nextPendingNotices,
+  };
+
+  if (legacyNotice && legacyChanged) {
+    nextMeta.pendingSectionChangeNotice = {
+      ...legacyNotice,
+      items: nextLegacyItems,
+    };
+  }
+
+  let noticeAdded = false;
+  if (matchedAssociation) {
+    nextMeta = withPendingAdminClassNotice(
+      { _meta: nextMeta },
+      buildInstituteRenameNotice(oldLabel, nextLabel, {
+        ...extra,
+        impactedClassCount,
+      })
+    );
+    noticeAdded = true;
+  }
+
+  return {
+    changed: true,
+    noticeAdded,
+    data: {
+      ...data,
+      classes: nextClasses,
+      institutes: nextDataInstitutes,
+      profile: {
+        ...(data.profile || {}),
+        institutes: nextProfileInstitutes,
+      },
+      trash: {
+        ...(data.trash || {}),
+        classes: nextTrashClasses,
+        notes: nextTrashNotes,
+      },
+      _meta: nextMeta,
+    },
+  };
+}
+
 function buildPendingAdminClassNotice(kind, cls, extra = {}) {
   const eventAt = Number(extra.eventAt || Date.now());
   const adminName = String(
@@ -730,6 +919,143 @@ export async function deleteGlobalInstitute(name) {
   const existing = await getGlobalInstitutes();
   const filtered = existing.filter(i => i.toLowerCase() !== name.trim().toLowerCase());
   await setDoc(doc(db, "config", "institutes"), { list: filtered });
+}
+
+export async function renameGlobalInstitute(oldName, newName, extra = {}) {
+  const oldLabel = String(oldName || "").trim();
+  const nextLabel = String(newName || "").trim();
+  if (!oldLabel || !nextLabel) {
+    throw new Error("Enter both the current institute name and the new institute name.");
+  }
+
+  const eventAt = Number(extra.eventAt || Date.now());
+  const adminName = String(extra.adminName || "Admin").trim() || "Admin";
+  const institutesRef = doc(db, "config", "institutes");
+  const sectionsRef = doc(db, "config", "sections");
+
+  const configResult = await runTransaction(db, async tx => {
+    const [institutesSnap, sectionsSnap] = await Promise.all([
+      tx.get(institutesRef),
+      tx.get(sectionsRef),
+    ]);
+
+    const currentList = institutesSnap.exists() && Array.isArray(institutesSnap.data()?.list)
+      ? institutesSnap.data().list
+      : [];
+    const currentSections = sectionsSnap.exists() ? (sectionsSnap.data() || {}) : {};
+
+    const currentLabel = currentList.find(item => sameInstituteLabel(item, oldLabel));
+    if (!currentLabel) {
+      throw new Error("That institute no longer exists in the admin directory.");
+    }
+
+    const conflictingInstitute = currentList.find(item =>
+      sameInstituteLabel(item, nextLabel) && !sameInstituteLabel(item, currentLabel)
+    );
+    if (conflictingInstitute) {
+      throw new Error(`"${nextLabel}" already exists in the institute directory.`);
+    }
+
+    const sectionKeys = Object.keys(currentSections || {});
+    const oldSectionKey = sectionKeys.find(key => sameInstituteLabel(key, currentLabel)) || null;
+    const conflictingSectionKey = sectionKeys.find(key =>
+      sameInstituteLabel(key, nextLabel) && !sameInstituteLabel(key, oldSectionKey)
+    );
+    if (conflictingSectionKey) {
+      throw new Error(`Section settings already exist for "${nextLabel}".`);
+    }
+
+    const nextList = uniqueTrimmed(
+      currentList.map(item => replaceInstituteLabel(item, currentLabel, nextLabel))
+    );
+
+    const nextSections = { ...(currentSections || {}) };
+    if (oldSectionKey) {
+      const payload = nextSections[oldSectionKey];
+      delete nextSections[oldSectionKey];
+      nextSections[nextLabel] = payload;
+    }
+
+    tx.set(institutesRef, { list: nextList });
+    if (Object.keys(nextSections).length) {
+      tx.set(sectionsRef, nextSections);
+    } else {
+      tx.delete(sectionsRef);
+    }
+
+    return {
+      oldLabel: currentLabel,
+      newLabel: nextLabel,
+      list: nextList,
+      renamedSectionConfig: !!oldSectionKey,
+    };
+  });
+
+  const mainDocsSnap = await getDocs(query(collectionGroup(db, "appdata"), where(documentId(), "==", "main")));
+  let affectedTeacherCount = 0;
+  let notifiedTeacherCount = 0;
+  const updatedMainUids = new Set();
+
+  for (const snap of mainDocsSnap.docs) {
+    const uid = snap.ref.parent.parent?.id;
+    if (!uid) continue;
+
+    let currentData = snap.data();
+    let attempt = 0;
+    while (attempt < 2) {
+      const transformed = applyInstituteRenameToTeacherData(
+        currentData,
+        configResult.oldLabel,
+        configResult.newLabel,
+        { adminName, eventAt }
+      );
+
+      if (!transformed.changed) break;
+
+      try {
+        await saveUserData(uid, transformed.data, {
+          expectedRevision: safeRevision(currentData?._meta?.revision),
+          source: "adminRenameInstitute",
+        });
+        affectedTeacherCount += 1;
+        if (transformed.noticeAdded) notifiedTeacherCount += 1;
+        updatedMainUids.add(uid);
+        break;
+      } catch (error) {
+        if (error?.code === "revision-conflict" && attempt === 0) {
+          const latestSnap = await getDoc(userDocRef(uid));
+          if (!latestSnap.exists()) break;
+          currentData = latestSnap.data();
+          attempt += 1;
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  const teacherIndexSnap = await getDocs(collection(db, "teachers"));
+  let indexOnlyCount = 0;
+  for (const snap of teacherIndexSnap.docs) {
+    if (updatedMainUids.has(snap.id)) continue;
+    const currentInstitutes = uniqueTrimmed(snap.data()?.institutes || []);
+    const nextInstitutes = replaceInstituteList(currentInstitutes, configResult.oldLabel, configResult.newLabel);
+    if (
+      nextInstitutes.length === currentInstitutes.length &&
+      nextInstitutes.every((value, index) => value === currentInstitutes[index])
+    ) {
+      continue;
+    }
+    await setDoc(doc(db, "teachers", snap.id), { institutes: nextInstitutes }, { merge: true });
+    indexOnlyCount += 1;
+  }
+
+  return {
+    ...configResult,
+    affectedTeacherCount,
+    notifiedTeacherCount,
+    indexOnlyCount,
+  };
 }
 
 // ── Institute sections (admin-managed) ────────────────────────────────────────
