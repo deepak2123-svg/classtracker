@@ -3253,6 +3253,7 @@ function AdminPanelInner({user}){
   const [pendingSectionRename, setPendingSectionRename] = useState(null); // null | { institute, oldSection, nextValue }
   const [pendingSectionBusy, setPendingSectionBusy] = useState(false);
   const [pendingSectionError, setPendingSectionError] = useState("");
+  const [moveToGroupModal, setMoveToGroupModal] = useState(null); // null | { institute, section, selectedGroupId }
   const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
   const fullDataRequestRef = React.useRef({});
   const warmupJobRef = React.useRef(0);
@@ -3908,6 +3909,47 @@ function AdminPanelInner({user}){
       },
     });
   }, [applyPendingInstituteSectionAction, showAdminToast]);
+
+  const handleMoveStandaloneToGroup = React.useCallback(async ({ institute, section, groupId, newGroupLabel }) => {
+    setPendingSectionBusy(true);
+    try {
+      const instKey = getInstituteSectionConfigKey(instSectionsAll, institute);
+      const instData = getInstituteSectionConfig(instSectionsAll, instKey) || {};
+      const existingGroups = instData.gradeGroups || [];
+      let updatedGroups;
+      if (groupId === "__new__" && newGroupLabel) {
+        const newGroup = {
+          id: `grp_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+          label: newGroupLabel.trim(),
+          sections: [section],
+          slots: [],
+        };
+        updatedGroups = [...existingGroups, newGroup];
+      } else {
+        updatedGroups = existingGroups.map(g =>
+          g.id === groupId
+            ? { ...g, sections: uniqueSectionNames([...(g.sections || []), section]) }
+            : g
+        );
+      }
+      // Remove from extraSections
+      const nextExtraSections = (instData.extraSections || []).filter(
+        s => normaliseSectionKey(s) !== normaliseSectionKey(section)
+      );
+      await saveInstituteGradeGroups(instKey, updatedGroups);
+      await saveInstituteExtraSections(instKey, nextExtraSections);
+      setInstSectionsAll(a => ({
+        ...a,
+        [instKey]: { ...(a[instKey] || {}), gradeGroups: updatedGroups, extraSections: nextExtraSections },
+      }));
+      setMoveToGroupModal(null);
+      showAdminToast(`Moved "${section}" into ${groupId === "__new__" ? `new group "${newGroupLabel}"` : "timetable group"}.`);
+    } catch(e) {
+      showAdminToast("Error moving section: " + (e?.message || String(e)));
+    } finally {
+      setPendingSectionBusy(false);
+    }
+  }, [instSectionsAll, showAdminToast]);
 
   const openPendingInstituteSectionRename = React.useCallback((instituteName, sectionName) => {
     setPendingSectionRename({
@@ -6687,16 +6729,8 @@ function AdminPanelInner({user}){
               const existing=instData.gradeGroups||[];
               const updated=grpModal.mode==="edit"?existing.map(g=>g.id===savedGroup.id?savedGroup:g):[...existing,savedGroup];
               const nextEvents = mergeInstituteSectionChangeEvents(instData.sectionChangeEvents, changeMeta?.sectionChangeEvents);
-              // Prune extraSections: remove any section now claimed by a group
-              const allGroupSectionKeys = new Set(
-                updated.flatMap(g => g.sections || []).map(normaliseSectionKey)
-              );
-              const prunedExtraSections = (instData.extraSections || []).filter(
-                s => !allGroupSectionKeys.has(normaliseSectionKey(s))
-              );
               await saveInstituteGradeGroups(instKey,updated,{
                 sectionChangeEvents: nextEvents,
-                extraSections: prunedExtraSections,
               });
               if(changeMeta?.sectionChangeEvents?.length){
                 setFullData(prev => Object.fromEntries(
@@ -6711,7 +6745,6 @@ function AdminPanelInner({user}){
                 [instKey]:{
                   ...(a[instKey] || {}),
                   gradeGroups:updated,
-                  extraSections: prunedExtraSections,
                   sectionChangeEvents: nextEvents,
                 }
               }));
@@ -6726,14 +6759,7 @@ function AdminPanelInner({user}){
           const instData=getInstituteSectionConfig(instSectionsAll, instDetailView)||{};
           const groups=instData.gradeGroups||[];
           const sectionLabels = getInstituteEntityLabels(instData.type);
-          const groupSectionKeys = new Set(
-            groups.flatMap(g => g.sections || []).map(normaliseSectionKey)
-          );
-          const standaloneSections = uniqueSectionNames(
-            (instData.extraSections || []).filter(
-              s => !groupSectionKeys.has(normaliseSectionKey(s))
-            )
-          );
+          const standaloneSections = uniqueSectionNames(instData.extraSections || []);
           const pendingSections = collectPendingInstituteSections(fullData, teachers, instDetailView, instSectionsAll);
           const sortedGroups = [...groups].sort((a,b)=>exportTextSorter.compare(a?.label || "", b?.label || ""));
           const addButtonLabel = "+ Add Timetable Group";
@@ -6803,10 +6829,41 @@ function AdminPanelInner({user}){
                       <div style={{fontSize:13,color:G.textL,lineHeight:1.6,marginBottom:12}}>
                         These {sectionLabels.plural} are now official, but they are not attached to any timetable group yet. Add them to a group whenever you want shared slots.
                       </div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                        {standaloneSections.map(section=>(
-                          <span key={section} style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{section}</span>
-                        ))}
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {standaloneSections.map(section=>{
+                          const affectedTeachers = teachers.filter(t=>teacherBelongsToInstitute(t,instDetailView)&&(()=>{const d=fullData[t.uid];return d&&(d.classes||[]).some(c=>normaliseSectionKey(c.section)===normaliseSectionKey(section)&&sameInstituteName(c.institute,instDetailView));})());
+                          const affectedClassCount = affectedTeachers.reduce((sum,t)=>{const d=fullData[t.uid];return sum+(d?(d.classes||[]).filter(c=>normaliseSectionKey(c.section)===normaliseSectionKey(section)&&sameInstituteName(c.institute,instDetailView)).length:0);},0);
+                          const standaloneItem = {section, affectedClassCount, affectedTeacherCount:affectedTeachers.length, subjects:[], teacherNames:affectedTeachers.map(t=>t.displayName||t.email||"").filter(Boolean)};
+                          return(
+                            <div key={section} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                              <div style={{flex:"1 1 200px",minWidth:0}}>
+                                <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{section}</span>
+                                {affectedClassCount>0&&(
+                                  <div style={{fontSize:12,color:G.textL,marginTop:6}}>
+                                    {affectedClassCount} class{affectedClassCount!==1?"es":""} across {affectedTeachers.length} teacher{affectedTeachers.length!==1?"s":""}
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{display:"flex",gap:8,flexShrink:0}}>
+                                <button
+                                  disabled={pendingSectionBusy}
+                                  onClick={()=>setMoveToGroupModal({institute:instDetailView, section, selectedGroupId: groups.length>0 ? groups[0].id : "__new__", newGroupLabel:""})}
+                                  style={{...pill("#F0FDF4","#16A34A","#BBF7D0"),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}
+                                >↑ Add to Group</button>
+                                <button
+                                  disabled={pendingSectionBusy}
+                                  onClick={()=>openPendingInstituteSectionRename(instDetailView,section)}
+                                  style={{...pill(G.blueL,G.blue,G.borderM),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}
+                                >Rename</button>
+                                <button
+                                  disabled={pendingSectionBusy}
+                                  onClick={()=>handleDeletePendingInstituteSection(instDetailView,standaloneItem)}
+                                  style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}
+                                >Delete</button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -8103,6 +8160,62 @@ function AdminPanelInner({user}){
         />
       )}
       {pendingSectionRenameModal}
+      {moveToGroupModal&&(()=>{
+        const mInst = moveToGroupModal.institute;
+        const mSection = moveToGroupModal.section;
+        const mInstKey = getInstituteSectionConfigKey(instSectionsAll, mInst);
+        const mInstData = getInstituteSectionConfig(instSectionsAll, mInstKey) || {};
+        const mGroups = mInstData.gradeGroups || [];
+        const isNew = moveToGroupModal.selectedGroupId === "__new__";
+        return(
+          <div style={{position:"fixed",inset:0,zIndex:800,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"28px 26px",width:"100%",maxWidth:420,boxShadow:"0 8px 40px rgba(0,0,0,0.18)"}}>
+              <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Add to Timetable Group</div>
+              <div style={{fontSize:13,color:G.textL,marginBottom:20}}>
+                Move <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 9px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{mSection}</span> into a timetable group so it shares slots with other sections.
+              </div>
+              <div style={{marginBottom:16}}>
+                <label style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Choose group</label>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {mGroups.map(g=>(
+                    <label key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1.5px solid ${moveToGroupModal.selectedGroupId===g.id?G.blue:G.border}`,borderRadius:10,cursor:"pointer",background:moveToGroupModal.selectedGroupId===g.id?G.blueL:G.bg,transition:"all 0.12s"}}>
+                      <input type="radio" name="groupSelect" value={g.id} checked={moveToGroupModal.selectedGroupId===g.id} onChange={()=>setMoveToGroupModal(m=>({...m,selectedGroupId:g.id}))} style={{accentColor:G.blue}} />
+                      <div>
+                        <div style={{fontSize:14,fontWeight:600,color:G.text}}>{g.label||"Untitled group"}</div>
+                        <div style={{fontSize:11,color:G.textL}}>{uniqueSectionNames(g.sections||[]).length} sections</div>
+                      </div>
+                    </label>
+                  ))}
+                  <label style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1.5px solid ${isNew?G.blue:G.border}`,borderRadius:10,cursor:"pointer",background:isNew?G.blueL:G.bg,transition:"all 0.12s"}}>
+                    <input type="radio" name="groupSelect" value="__new__" checked={isNew} onChange={()=>setMoveToGroupModal(m=>({...m,selectedGroupId:"__new__"}))} style={{accentColor:G.blue}} />
+                    <div style={{fontSize:14,fontWeight:600,color:G.text}}>+ Create new group</div>
+                  </label>
+                </div>
+              </div>
+              {isNew&&(
+                <div style={{marginBottom:16}}>
+                  <label style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>New group name</label>
+                  <input
+                    autoFocus
+                    value={moveToGroupModal.newGroupLabel||""}
+                    onChange={e=>setMoveToGroupModal(m=>({...m,newGroupLabel:e.target.value}))}
+                    placeholder="e.g. Senior Wing"
+                    style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${G.border}`,fontSize:14,color:G.text,background:G.bg,fontFamily:G.sans,boxSizing:"border-box",outline:"none"}}
+                  />
+                </div>
+              )}
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+                <button disabled={pendingSectionBusy} onClick={()=>setMoveToGroupModal(null)} style={{...pill(G.bg,G.textS,G.borderM),fontSize:14,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}>Cancel</button>
+                <button
+                  disabled={pendingSectionBusy||(isNew&&!(moveToGroupModal.newGroupLabel||"").trim())}
+                  onClick={()=>handleMoveStandaloneToGroup({institute:mInst,section:mSection,groupId:moveToGroupModal.selectedGroupId,newGroupLabel:moveToGroupModal.newGroupLabel})}
+                  style={{...pill("#F0FDF4","#16A34A","#BBF7D0"),fontSize:14,...((pendingSectionBusy||(isNew&&!(moveToGroupModal.newGroupLabel||"").trim()))?{opacity:0.5,cursor:"not-allowed"}:{})}}
+                >{pendingSectionBusy?"Moving…":"Move to Group"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <AdminToastBanner message={adminToast} />
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
       {mobileStep>0&&(
