@@ -7,6 +7,7 @@ import {
   deleteEntryFromTeacherData, deleteClassFromTeacherData, deleteClassNotes,
   trashClassInTeacherData, restoreClassFromTeacherTrash,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute, renameGlobalInstitute, saveInstituteExtraSections,
+  getDeletedInstitutesList, addToDeletedInstitutesList, removeFromDeletedInstitutesList,
   repairTeacherIndex, saveProfileName, saveUserData,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES } from "./shared.jsx";
@@ -3129,8 +3130,10 @@ function AdminPanelInner({user}){
   useEffect(()=>{
     (async()=>{
       // Load index + roles + global institutes list in parallel
-      const [t,r,gInst]=await Promise.all([getAllTeachers(),getAllRoles(),getGlobalInstitutes()]);
+      const [t,r,gInst,gDeleted]=await Promise.all([getAllTeachers(),getAllRoles(),getGlobalInstitutes(),getDeletedInstitutesList()]);
       setTeachers(t); setRoles(r);
+      // Restore persisted deleted-institutes set so page refresh doesn't un-hide them
+      if(gDeleted.length>0) setDeletedInstitutes(new Set(gDeleted.map(i=>i.trim())));
 
       if(gInst.length>0){
         // Config doc exists and has institutes — use it
@@ -4740,6 +4743,8 @@ function AdminPanelInner({user}){
         try {
           // 1. Remove from config/institutes (the authoritative global list)
           await deleteGlobalInstitute(inst);
+          // 1b. Persist to deleted list so UI survives page refresh
+          await addToDeletedInstitutesList(inst);
           // 2. Remove from every teacher's index entry
           await removeInstituteFromIndex(inst);
           // 3. Update local state immediately so UI reflects change
@@ -6322,14 +6327,38 @@ function AdminPanelInner({user}){
                             <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>Deleted {new Date(item.deletedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</span>
                           </div>
                         </div>
-                        <button
-                          onClick={()=>{
-                            setDeletedInstitutes(s=>{const n=new Set(s);n.delete(item.name.trim());return n;});
-                            setAdminBin(b=>b.filter((_,j)=>j!==binIdx));
-                          }}
-                          style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>
-                          ↩ Restore
-                        </button>
+                        <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+                          <button
+                            onClick={async()=>{
+                              try{
+                                await saveGlobalInstitute(item.name);
+                                await removeFromDeletedInstitutesList(item.name);
+                                setGlobalInstList(prev=>{
+                                  const lower=prev.map(i=>i.toLowerCase());
+                                  if(lower.includes(item.name.trim().toLowerCase())) return prev;
+                                  return [...prev,item.name.trim()];
+                                });
+                                setDeletedInstitutes(s=>{const n=new Set(s);n.delete(item.name.trim());return n;});
+                                setAdminBin(b=>b.filter((_,j)=>j!==binIdx));
+                                showAdminToast(`Restored "${item.name}".`);
+                              }catch(e){showAdminToast("Restore failed: "+e.message);}
+                            }}
+                            style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,whiteSpace:"nowrap"}}>
+                            ↩ Restore
+                          </button>
+                          <button
+                            onClick={async()=>{
+                              if(!window.confirm(`Permanently delete "${item.name}"? This cannot be undone.`)) return;
+                              try{
+                                await removeFromDeletedInstitutesList(item.name);
+                                setAdminBin(b=>b.filter((_,j)=>j!==binIdx));
+                                showAdminToast(`"${item.name}" permanently deleted.`);
+                              }catch(e){showAdminToast("Delete failed: "+e.message);}
+                            }}
+                            style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:600,whiteSpace:"nowrap"}}>
+                            🗑 Delete Forever
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

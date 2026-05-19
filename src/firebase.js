@@ -918,7 +918,38 @@ export async function saveGlobalInstitute(name) {
 export async function deleteGlobalInstitute(name) {
   const existing = await getGlobalInstitutes();
   const filtered = existing.filter(i => i.toLowerCase() !== name.trim().toLowerCase());
-  await setDoc(doc(db, "config", "institutes"), { list: filtered });
+  // Keep any existing deletedList when overwriting list
+  const snap = await getDoc(doc(db, "config", "institutes"));
+  const currentDeletedList = snap.exists() ? (snap.data().deletedList || []) : [];
+  await setDoc(doc(db, "config", "institutes"), { list: filtered, deletedList: currentDeletedList });
+}
+
+// ── Deleted institutes list (persisted so UI survives page refresh) ────────────
+export async function getDeletedInstitutesList() {
+  try {
+    const snap = await getDoc(doc(db, "config", "institutes"));
+    if (snap.exists()) return snap.data().deletedList || [];
+    return [];
+  } catch { return []; }
+}
+
+export async function addToDeletedInstitutesList(name) {
+  try {
+    const snap = await getDoc(doc(db, "config", "institutes"));
+    const existing = snap.exists() ? (snap.data().deletedList || []) : [];
+    const norm = name.trim().toLowerCase();
+    if (existing.some(i => i.toLowerCase() === norm)) return;
+    await setDoc(doc(db, "config", "institutes"), { deletedList: [...existing, name.trim()] }, { merge: true });
+  } catch (e) { console.error("addToDeletedInstitutesList", e); }
+}
+
+export async function removeFromDeletedInstitutesList(name) {
+  try {
+    const snap = await getDoc(doc(db, "config", "institutes"));
+    const existing = snap.exists() ? (snap.data().deletedList || []) : [];
+    const filtered = existing.filter(i => i.toLowerCase() !== name.trim().toLowerCase());
+    await setDoc(doc(db, "config", "institutes"), { deletedList: filtered }, { merge: true });
+  } catch (e) { console.error("removeFromDeletedInstitutesList", e); }
 }
 
 export async function renameGlobalInstitute(oldName, newName, extra = {}) {
