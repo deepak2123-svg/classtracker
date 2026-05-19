@@ -2388,7 +2388,6 @@ function DurStepper({ value, onChange, compact = false }) {
 
 // ── Copy Group to Other Institutes Modal ──────────────────────────────────────
 function CopyGroupToInstitutesModal({ sourceInst, group, allInstitutes, instSectionsAll, getInstituteSectionConfig, getInstituteSectionConfigKey, onCopy, onClose }) {
-  const G = useGlobals();
   const otherInstitutes = allInstitutes.filter(i => i !== sourceInst);
   const [selected, setSelected] = React.useState({});
   const [conflicts, setConflicts] = React.useState(null); // null | [{inst, conflictingGroup}]
