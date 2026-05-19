@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, Component } from "react";
+import ReactDOM from "react-dom";
 import {
   logout, getAllTeachers, getTeacherFullData,
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
@@ -57,6 +58,14 @@ const PANEL_RAIL_THEMES = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// ── ModalPortal — renders children into document.body to escape any stacking context ──
+function ModalPortal({ children }) {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
+  if (!mounted || !children) return null;
+  return ReactDOM.createPortal(children, document.body);
+}
+
 function currentSession(){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;
   return m>=4?`${y}-${String(y+1).slice(2)}`:`${y-1}-${String(y).slice(2)}`;
@@ -7676,7 +7685,7 @@ function AdminPanelInner({user}){
             onConfirm={applyLegacySectionRepair}
           />
         )}
-        {pendingSectionRenameModal}
+        <ModalPortal>{pendingSectionRenameModal}</ModalPortal>
         <MobileNav/><MobileBreadcrumb/>
         <div style={{padding:"12px 14px 40px"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:14}}>
@@ -8159,8 +8168,8 @@ function AdminPanelInner({user}){
           onConfirm={applyLegacySectionRepair}
         />
       )}
-      {pendingSectionRenameModal}
-      {moveToGroupModal&&(()=>{
+      <ModalPortal>{pendingSectionRenameModal}</ModalPortal>
+      {moveToGroupModal&&ReactDOM.createPortal((()=>{
         const mInst = moveToGroupModal.institute;
         const mSection = moveToGroupModal.section;
         const mInstKey = getInstituteSectionConfigKey(instSectionsAll, mInst);
@@ -8215,7 +8224,7 @@ function AdminPanelInner({user}){
             </div>
           </div>
         );
-      })()}
+      })(), document.body)}
       <AdminToastBanner message={adminToast} />
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
       {mobileStep>0&&(
