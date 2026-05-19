@@ -1145,16 +1145,20 @@ function EditNameModal({current,onSave,onClose}){
   );
 }
 
-function EditClassModal({cls,data,onSave,onClose,sortedByUsage,globalInstitutes,addSectionName,addSubjectName}){
+function EditClassModal({cls,data,onSave,onClose,sortedByUsage,globalInstitutes,instituteSections,addSectionName,addSubjectName}){
   const [section,setSection]=useState(cls.section||"");
   const [institute,setInstitute]=useState(cls.institute||"");
   const [subject,setSubject]=useState(cls.subject||"");
+  const sectionOptions = sortedByUsage(
+    getInstituteSectionOptions(data.classes || [], data.sections || [], instituteSections, institute),
+    "section"
+  );
   return(
     <Modal title="Edit class" subtitle="Update the details for this class" onClose={onClose}>
       <label style={lbl}>Institute</label>
       <ReadOnlyDropdown value={institute} onChange={setInstitute} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select institute"/>
       <label style={{...lbl,marginTop:8}}>Class / Section</label>
-      <CreatableDropdown value={section} onChange={setSection} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
+      <CreatableDropdown value={section} onChange={setSection} options={sectionOptions} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
       <label style={{...lbl,marginTop:8}}>Subject</label>
       <CreatableDropdown value={subject} onChange={setSubject} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics" addPlaceholder="Type subject…"/>
       <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
@@ -1743,7 +1747,25 @@ function normaliseSectionKey(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 function getInstituteSectionNames(instData) {
-  return [...new Set((instData?.gradeGroups || []).flatMap(group => group.sections || []).map(section => String(section || "").trim()).filter(Boolean))];
+  return uniqueChoiceValues([
+    ...((instData?.gradeGroups || []).flatMap(group => group.sections || [])),
+    ...(instData?.extraSections || []),
+  ]);
+}
+function getInstituteSectionOptions(classes, storedSections, instituteSections, instituteName) {
+  const instituteKey = normaliseChoiceKey(instituteName);
+  const localSections = (classes || [])
+    .filter(cls => {
+      if (!cls || cls.left) return false;
+      if (!instituteKey) return true;
+      return normaliseChoiceKey(cls.institute) === instituteKey;
+    })
+    .map(cls => cls.section);
+  return mergeChoiceValues(
+    getInstituteSectionNames(getInstituteSectionConfig(instituteSections, instituteName)),
+    localSections,
+    storedSections
+  );
 }
 function getInstituteSectionEntityLabels(instData) {
   const type = String(instData?.type || "").trim();
@@ -2287,11 +2309,8 @@ function ClassTrackerInner({user}){
   const lastSyncedFingerprint = useRef("");
 
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
-  const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups}}
-  const [unlinkedClasses,   setUnlinkedClasses]   = useState([]);  // classes needing link
+  const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups,extraSections}}
   const [teacherNoticePrompt, setTeacherNoticePrompt] = useState(null);
-  // Use sessionStorage so "Remind later" hides for this session only — shows again on next app open
-  const [linkingDone,       setLinkingDone]        = useState(()=>sessionStorage.getItem("linkDismissed")==="1");
   const pendingSaveKey = `classlog_pending_${user.uid}`;
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
@@ -2813,9 +2832,6 @@ function ClassTrackerInner({user}){
       ...(result.eventIds || []).map(id => String(id || "")).filter(Boolean),
     ])];
     mergedEventIds.forEach(id=>sectionChangeSessionSeenRef.current.add(String(id || "")));
-    if(legacyPromptItems.length || result.notices.length){
-      setUnlinkedClasses([]);
-    }
     setData(d=>{
       const existingSeen = Array.isArray(d?._meta?.seenSectionChangeEvents) ? d._meta.seenSectionChangeEvents : [];
       const existingNotices = Array.isArray(d?._meta?.pendingAdminClassNotices) ? d._meta.pendingAdminClassNotices : [];
@@ -2833,20 +2849,6 @@ function ClassTrackerInner({user}){
       };
     });
   },[loading, instituteSections, data.classes, data?._meta?.seenSectionChangeEvents, data?._meta?.pendingSectionChangeNotice]);
-
-  // After both data and sections load, find classes that don't match admin sections
-  useEffect(()=>{
-    if(loading || !Object.keys(instituteSections).length || linkingDone || teacherNoticePrompt) return;
-    const unlinked=(data.classes||[]).filter(cls=>{
-      if(cls.left) return false;
-      const instData=getInstituteSectionConfig(instituteSections, cls.institute);
-      if(!instData) return false;
-      const allSections=(instData.gradeGroups||[]).flatMap(g=>g.sections||[]);
-      if(!allSections.length) return false;
-      return !allSections.includes(cls.section);
-    });
-    setUnlinkedClasses(unlinked);
-  },[loading,instituteSections,data.classes,linkingDone,teacherNoticePrompt]);
 
   useEffect(()=>{
     if(view!=="notifications" || !adminPromptNoticeItems.length) return;
@@ -2990,9 +2992,9 @@ function ClassTrackerInner({user}){
     }
     return base;
   };
-  const addSubjectName  =(s)=>setData(d=>({...d,subjects:[...(d.subjects||[]),s]}));
-  const addInstituteName=(s)=>setData(d=>({...d,institutes:[...(d.institutes||[]),s]}));
-  const addSectionName  =(s)=>setData(d=>({...d,sections:[...(d.sections||[]),s]}));
+  const addSubjectName  =(s)=>setData(d=>({...d,subjects:mergeChoiceValues(d.subjects || [], [s])}));
+  const addInstituteName=(s)=>setData(d=>({...d,institutes:mergeChoiceValues(d.institutes || [], [s])}));
+  const addSectionName  =(s)=>setData(d=>({...d,sections:mergeChoiceValues(d.sections || [], [s])}));
 
   const addClass=()=>{
     if(!newClass.institute.trim()||!newClass.section.trim())return;
@@ -3004,9 +3006,9 @@ function ClassTrackerInner({user}){
         ...d,
         classes:[...d.classes,{id,institute:inst,section:sec,subject:subj,colorIdx:d.classes.length%COLORS.length,created:createdAt}],
         notes:{...d.notes,[id]:{}},
-        institutes:(d.institutes||[]).includes(inst)?d.institutes||[]:[...(d.institutes||[]),inst],
-        sections:(d.sections||[]).includes(sec)?d.sections||[]:[...(d.sections||[]),sec],
-        subjects:subj&&!(d.subjects||[]).includes(subj)?[...(d.subjects||[]),subj]:d.subjects||[]
+        institutes:mergeChoiceValues(d.institutes || [], [inst]),
+        sections:mergeChoiceValues(d.sections || [], [sec]),
+        subjects:subj ? mergeChoiceValues(d.subjects || [], [subj]) : (d.subjects || [])
       };
     });
     setNewClass({institute:"",section:"",subject:""});setView("home");
@@ -3020,9 +3022,9 @@ function ClassTrackerInner({user}){
       return{
         ...d,
         classes:d.classes.map(c=>c.id===id?{...c,...updates}:c),
-        institutes:inst&&!(d.institutes||[]).includes(inst)?[...(d.institutes||[]),inst]:d.institutes||[],
-        sections:sec&&!(d.sections||[]).includes(sec)?[...(d.sections||[]),sec]:d.sections||[],
-        subjects:subj&&!(d.subjects||[]).includes(subj)?[...(d.subjects||[]),subj]:d.subjects||[],
+        institutes:inst ? mergeChoiceValues(d.institutes || [], [inst]) : (d.institutes || []),
+        sections:sec ? mergeChoiceValues(d.sections || [], [sec]) : (d.sections || []),
+        subjects:subj ? mergeChoiceValues(d.subjects || [], [subj]) : (d.subjects || []),
       };
     });
     if(activeClass?.id===id)setActiveClass(ac=>({...ac,...updates}));
@@ -3156,20 +3158,7 @@ function ClassTrackerInner({user}){
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
       {historyClassId && (()=>{const cls=data.classes.find(c=>c.id===historyClassId);return cls?<HistoryModal cls={cls} classNotes={data.notes[historyClassId]||{}} selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={()=>setHistoryClassId(null)}/>:null;})()}
-      {unlinkedClasses.length>0&&!linkingDone&&!teacherNoticePrompt&&(
-        <SectionLinkingModal
-          unlinkedClasses={unlinkedClasses}
-          instituteSections={instituteSections}
-          onConfirm={(renames)=>{
-            setData(d=>({...d,classes:(d.classes||[]).map(cls=>renames[cls.id]?{...cls,section:renames[cls.id]}:cls)}));
-            sessionStorage.removeItem("linkDismissed");
-            setLinkingDone(true);
-            setUnlinkedClasses([]);
-          }}
-          onLater={()=>{sessionStorage.setItem("linkDismissed","1");setLinkingDone(true);}}
-        />
-      )}
-      {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
+      {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} instituteSections={instituteSections} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal && (()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);setActiveClass(null);setView("home");}} onClose={()=>setLeaveModal(null)}/>:null;})()}
     </>
   );
@@ -3978,6 +3967,11 @@ function ClassTrackerInner({user}){
     const comboSuggestions = recentClassCombos
       .filter(combo=>!selectedInstitute || combo.institute===selectedInstitute)
       .slice(0,4);
+    const sectionOptions = sortedByUsage(
+      getInstituteSectionOptions(data.classes || [], data.sections || [], instituteSections, selectedInstitute),
+      "section"
+    );
+    const hasOfficialSections = getInstituteSectionNames(getInstituteSectionConfig(instituteSections, selectedInstitute)).length > 0;
     return(
     <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
       <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
@@ -3995,12 +3989,12 @@ function ClassTrackerInner({user}){
             <div style={{fontSize:12,color:G.green,fontWeight:700,marginTop:-3,marginBottom:10}}>Using your most common institute to save time.</div>
           )}
           <label style={{...lbl,marginTop:10}}>Class / Section</label>
-          {(()=>{
-            const adminSecs=(getInstituteSectionConfig(instituteSections, newClass.institute)?.gradeGroups||[]).flatMap(g=>g.sections||[]);
-            return adminSecs.length>0
-              ? <ReadOnlyDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={adminSecs} placeholder="Select section" emptyMsg="Ask your admin to add sections."/>
-              : <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sortedByUsage(data.sections||[],"section")} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>;
-          })()}
+          <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sectionOptions} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
+          {hasOfficialSections&&(
+            <div style={{fontSize:12,color:G.textL,marginTop:8,lineHeight:1.6}}>
+              Official admin sections are suggested here. If the class is missing, type it and save it now so the admin can review it later.
+            </div>
+          )}
           <label style={{...lbl,marginTop:10}}>Subject</label>
           <CreatableDropdown value={newClass.subject} onChange={s=>setNewClass(c=>({...c,subject:s}))} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics, Geography" addPlaceholder="Type subject…"/>
           {comboSuggestions.length>0&&(

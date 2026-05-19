@@ -6,7 +6,7 @@ import {
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData, deleteClassNotes,
   trashClassInTeacherData, restoreClassFromTeacherTrash,
-  getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute, renameGlobalInstitute,
+  getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute, renameGlobalInstitute, saveInstituteExtraSections,
   repairTeacherIndex, saveProfileName, saveUserData,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES } from "./shared.jsx";
@@ -434,6 +434,7 @@ function classNum(name){const m=(name||"").match(/(\d+)/);return m?parseInt(m[1]
 const ALL_CLASSES_KEY = "__all_classes__";
 const ALL_TEACHERS_KEY = "__all_teachers__";
 const DELETE_SECTION_ACTION = "__delete_section__";
+const KEEP_SECTION_ACTION = "__keep_section__";
 const exportTextSorter = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 function exportClassMeta(name){
   const clean = (name || "").trim();
@@ -546,6 +547,19 @@ function renameInstituteInsideLocalSectionsMap(instituteSections, oldName, newNa
   nextSections[nextKey] = payload;
   return nextSections;
 }
+function updateInstituteExtraSectionsLocal(instituteSections, instituteName, updater) {
+  if (!instituteSections || !instituteName || typeof updater !== "function") return instituteSections;
+  const currentKey = getInstituteSectionConfigKey(instituteSections, instituteName) || String(instituteName || "").trim();
+  const currentData = instituteSections[currentKey] || {};
+  const nextExtraSections = uniqueSectionNames(updater(currentData.extraSections || []));
+  return {
+    ...instituteSections,
+    [currentKey]: {
+      ...currentData,
+      extraSections: nextExtraSections,
+    },
+  };
+}
 function getInstituteSectionConfigKey(instituteSections, instituteName){
   if(!instituteSections || !instituteName) return instituteName || "";
   if(Object.prototype.hasOwnProperty.call(instituteSections, instituteName)) return instituteName;
@@ -616,8 +630,10 @@ function normaliseSectionKey(value){
 }
 function getInstituteSectionNames(instData){
   return [...new Set(
-    (instData?.gradeGroups || [])
-      .flatMap(group => group.sections || [])
+    [
+      ...(instData?.gradeGroups || []).flatMap(group => group.sections || []),
+      ...(instData?.extraSections || []),
+    ]
       .map(section => String(section || "").trim())
       .filter(Boolean)
   )];
@@ -998,6 +1014,57 @@ function collectAllLegacySectionRepairItems(fullDataByUid, teachers, instituteNa
     exportTextSorter.compare(a.institute || "", b.institute || "") ||
     exportTextSorter.compare(a.oldSection || "", b.oldSection || "")
   );
+}
+function collectPendingInstituteSections(fullDataByUid, teachers, instituteName, instituteSections){
+  const currentSections = getInstituteSectionNames(getInstituteSectionConfig(instituteSections, instituteName));
+  const currentLookup = new Set(currentSections.map(normaliseSectionKey));
+  const bySection = new Map();
+
+  (teachers || []).forEach(teacher => {
+    const data = fullDataByUid?.[teacher.uid];
+    if(!data) return;
+    const teacherName = data.profile?.name || teacher.name || "Teacher";
+    (data.classes || []).forEach(cls => {
+      if(!cls || cls.left || !sameInstituteName(cls.institute, instituteName)) return;
+      const rawSection = String(cls.section || "").trim();
+      const rawKey = normaliseSectionKey(rawSection);
+      if(!rawKey || currentLookup.has(rawKey)) return;
+      if(!bySection.has(rawKey)){
+        bySection.set(rawKey, {
+          section: rawSection,
+          teacherNames: new Set(),
+          subjects: new Set(),
+          classRefs: [],
+        });
+      }
+      const bucket = bySection.get(rawKey);
+      bucket.teacherNames.add(teacherName);
+      if(cls.subject) bucket.subjects.add(String(cls.subject || "").trim());
+      bucket.classRefs.push({
+        uid: teacher.uid,
+        classId: cls.id,
+        section: rawSection,
+        teacherName,
+        subject: String(cls.subject || "").trim(),
+        institute: cls.institute || instituteName,
+      });
+    });
+  });
+
+  return Array.from(bySection.values())
+    .map(item => {
+      const teacherNames = Array.from(item.teacherNames).sort(exportTextSorter.compare);
+      const subjects = Array.from(item.subjects).sort(exportTextSorter.compare);
+      return {
+        section: item.section,
+        teacherNames,
+        subjects,
+        classRefs: item.classRefs,
+        affectedClassCount: item.classRefs.length,
+        affectedTeacherCount: teacherNames.length,
+      };
+    })
+    .sort((a,b)=>exportTextSorter.compare(a.section || "", b.section || ""));
 }
 function mergeEntryDateMaps(existingMap, incomingMap){
   const next = {};
@@ -2975,10 +3042,12 @@ function AdminPanelInner({user}){
   const [activeProgramFilter, setActiveProgramFilter] = useState(null);
   const [repairingTeacherUid, setRepairingTeacherUid] = useState(null);
   const [instClassificationOpen, setInstClassificationOpen] = useState({});
+  const [pendingSectionRename, setPendingSectionRename] = useState(null); // null | { institute, oldSection, nextValue }
+  const [pendingSectionBusy, setPendingSectionBusy] = useState(false);
+  const [pendingSectionError, setPendingSectionError] = useState("");
   const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
   const fullDataRequestRef = React.useRef({});
   const warmupJobRef = React.useRef(0);
-  const repairPromptSeenRef = React.useRef(new Set());
   const historyReadyRef = React.useRef(false);
   const historyRestoreRef = React.useRef(false);
   const lastHistoryKeyRef = React.useRef("");
@@ -3181,15 +3250,10 @@ function AdminPanelInner({user}){
   },[fullData]);
 
   const getInstituteTeacherUids = React.useCallback((inst) => {
-    const norm = s => (s || "").trim().toLowerCase();
     return teachers
-      .filter(t => {
-        const d = fullData[t.uid];
-        if (d) return (d.classes || []).some(c => norm(c.institute) === norm(inst));
-        return (t.institutes || []).some(i => norm(i) === norm(inst));
-      })
+      .filter(t => teacherBelongsToInstitute(t, inst))
       .map(t => t.uid);
-  }, [teachers, fullData]);
+  }, [teacherBelongsToInstitute, teachers]);
 
   const warmTeacherUids = React.useCallback(async (uids, instLabel = null) => {
     const requestId = ++warmupJobRef.current;
@@ -3221,6 +3285,12 @@ function AdminPanelInner({user}){
   const warmInstitute = React.useCallback((inst) => {
     warmTeacherUids(getInstituteTeacherUids(inst), inst);
   }, [getInstituteTeacherUids, warmTeacherUids]);
+
+  React.useEffect(()=>{
+    if(instDetailView){
+      warmInstitute(instDetailView);
+    }
+  },[instDetailView, warmInstitute]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
@@ -3284,6 +3354,7 @@ function AdminPanelInner({user}){
       });
       Object.values(fullData).forEach(data => {
         (data.classes || []).forEach(cls => { if(cls?.institute) instituteSet.add(String(cls.institute).trim()); });
+        (data.profile?.institutes || []).forEach(inst => { if(inst) instituteSet.add(String(inst).trim()); });
       });
       deletedInstitutes.forEach(inst => instituteSet.delete(inst));
       const instituteNames = [
@@ -3415,6 +3486,268 @@ function AdminPanelInner({user}){
     } : prev);
   }, []);
 
+  const saveInstituteExtraSectionsForReview = React.useCallback(async (instituteName, nextSections) => {
+    const instKey = getInstituteSectionConfigKey(instSectionsAll, instituteName);
+    const instData = getInstituteSectionConfig(instSectionsAll, instKey) || {};
+    const groupedLookup = new Set(
+      (instData.gradeGroups || [])
+        .flatMap(group => group.sections || [])
+        .map(normaliseSectionKey)
+        .filter(Boolean)
+    );
+    const sanitisedSections = uniqueSectionNames(nextSections).filter(section => !groupedLookup.has(normaliseSectionKey(section)));
+    await saveInstituteExtraSections(instKey, sanitisedSections);
+    setInstSectionsAll(prev => updateInstituteExtraSectionsLocal(prev, instKey, () => sanitisedSections));
+    return instKey;
+  }, [instSectionsAll]);
+
+  const refreshTeacherIndexState = React.useCallback(async () => {
+    const latestTeachers = await getAllTeachers();
+    setTeachers(latestTeachers);
+  }, []);
+
+  const applyPendingInstituteSectionAction = React.useCallback(async ({ instituteName, oldSection, nextSection = "", action }) => {
+    const targetInstitute = String(instituteName || "").trim();
+    const sourceSection = String(oldSection || "").trim();
+    if(!targetInstitute || !sourceSection) return;
+
+    if(action === KEEP_SECTION_ACTION){
+      const instData = getInstituteSectionConfig(instSectionsAll, targetInstitute) || {};
+      const nextExtraSections = uniqueSectionNames([...(instData.extraSections || []), sourceSection]);
+      await saveInstituteExtraSectionsForReview(targetInstitute, nextExtraSections);
+      showAdminToast(`Kept "${sourceSection}" as an accepted section in ${targetInstitute}.`);
+      return;
+    }
+
+    const actionValue = action === DELETE_SECTION_ACTION ? DELETE_SECTION_ACTION : String(nextSection || "").trim();
+    if(!actionValue) return;
+
+    const targetUids = [...new Set(
+      teachers
+        .filter(teacher => teacherBelongsToInstitute(teacher, targetInstitute))
+        .map(teacher => teacher.uid)
+        .filter(Boolean)
+    )];
+    const loadedEntries = await Promise.allSettled(
+      targetUids.map(async uid => [uid, await ensureFullData(uid)])
+    );
+    const snapshot = {
+      ...fullData,
+      ...Object.fromEntries(
+        loadedEntries
+          .filter(result => result.status === "fulfilled" && result.value?.[1])
+          .map(result => result.value)
+      ),
+    };
+
+    const updatedEntries = [];
+    const removedClasses = [];
+    let changedTeachers = 0;
+
+    for (const uid of targetUids) {
+      const latest = snapshot[uid] || await getTeacherFullData(uid);
+      if(!latest) continue;
+      const result = applyInstituteSectionActionsToTeacherData(latest, targetInstitute, {
+        [sourceSection]: actionValue,
+      });
+      if(!result.changed) continue;
+
+      const saved = await saveUserData(uid, result.data, {
+        expectedRevision: Number(latest?._meta?.revision || 0),
+        source: "adminPendingSectionReview",
+      });
+      updatedEntries.push([uid, saved.data]);
+      (result.removedClassIds || []).forEach(classId => {
+        if(classId) removedClasses.push({ uid, classId });
+      });
+      changedTeachers += 1;
+    }
+
+    const uniqueRemovedClasses = Array.from(
+      new Map(removedClasses.map(item => [`${item.uid}::${item.classId}`, item])).values()
+    );
+    if(uniqueRemovedClasses.length){
+      await Promise.all(
+        uniqueRemovedClasses.map(item => deleteClassNotes(item.uid, item.classId).catch(()=>{}))
+      );
+    }
+
+    setFullData(prev => ({
+      ...prev,
+      ...Object.fromEntries(updatedEntries.filter(([, data]) => !!data)),
+    }));
+
+    const instData = getInstituteSectionConfig(instSectionsAll, targetInstitute) || {};
+    const nextExtraSections = action === DELETE_SECTION_ACTION
+      ? (instData.extraSections || []).filter(section => normaliseSectionKey(section) !== normaliseSectionKey(sourceSection))
+      : uniqueSectionNames([
+          ...(instData.extraSections || []).filter(section => normaliseSectionKey(section) !== normaliseSectionKey(sourceSection)),
+          actionValue,
+        ]);
+    await saveInstituteExtraSectionsForReview(targetInstitute, nextExtraSections);
+    await refreshTeacherIndexState();
+
+    if(action === DELETE_SECTION_ACTION){
+      setAdminBin(bin => [
+        ...bin,
+        {
+          type: "section",
+          name: sourceSection,
+          institute: targetInstitute,
+          teacherCount: changedTeachers,
+          classCount: uniqueRemovedClasses.length,
+          deletedAt: Date.now(),
+          deletedBy: user.uid,
+        },
+      ]);
+      showAdminToast(
+        changedTeachers
+          ? `Deleted "${sourceSection}" from ${changedTeachers} teacher${changedTeachers!==1?"s":""}.`
+          : `Removed "${sourceSection}" from the section list.`
+      );
+      return;
+    }
+
+    showAdminToast(
+      changedTeachers
+        ? `Renamed "${sourceSection}" to "${actionValue}" for ${changedTeachers} teacher${changedTeachers!==1?"s":""}.`
+        : `Saved "${actionValue}" in ${targetInstitute}.`
+    );
+  }, [
+    ensureFullData,
+    fullData,
+    instSectionsAll,
+    refreshTeacherIndexState,
+    saveInstituteExtraSectionsForReview,
+    showAdminToast,
+    teacherBelongsToInstitute,
+    teachers,
+    user.uid,
+  ]);
+
+  const handleKeepPendingInstituteSection = React.useCallback(async (instituteName, sectionName) => {
+    setPendingSectionBusy(true);
+    try {
+      await applyPendingInstituteSectionAction({
+        instituteName,
+        oldSection: sectionName,
+        action: KEEP_SECTION_ACTION,
+      });
+    } catch (e) {
+      showAdminToast("Could not keep section: " + (e?.message || "Unknown error"));
+    } finally {
+      setPendingSectionBusy(false);
+    }
+  }, [applyPendingInstituteSectionAction, showAdminToast]);
+
+  const handleDeletePendingInstituteSection = React.useCallback((instituteName, item) => {
+    if(!item?.section) return;
+    confirmDelete({
+      title: `Delete section "${item.section}"?`,
+      lines: [
+        `This will permanently delete ${item.affectedClassCount || 0} class record${item.affectedClassCount===1?"":"s"} across ${item.affectedTeacherCount || 0} teacher${item.affectedTeacherCount===1?"":"s"}.`,
+        "All entries under this section will also be removed.",
+        "This cannot be undone.",
+      ],
+      confirmLabel: "Delete Section",
+      onConfirm: async () => {
+        setDeleteBusy(true);
+        setPendingSectionBusy(true);
+        try {
+          await applyPendingInstituteSectionAction({
+            instituteName,
+            oldSection: item.section,
+            action: DELETE_SECTION_ACTION,
+          });
+        } catch (e) {
+          showAdminToast("Could not delete section: " + (e?.message || "Unknown error"));
+        }
+        setPendingSectionBusy(false);
+        setDeleteBusy(false);
+        setDeleteModal(null);
+      },
+    });
+  }, [applyPendingInstituteSectionAction, showAdminToast]);
+
+  const openPendingInstituteSectionRename = React.useCallback((instituteName, sectionName) => {
+    setPendingSectionRename({
+      institute: instituteName,
+      oldSection: sectionName,
+      nextValue: sectionName,
+    });
+    setPendingSectionError("");
+  }, []);
+
+  const confirmPendingInstituteSectionRename = React.useCallback(async () => {
+    if(pendingSectionBusy) return;
+    const instituteName = String(pendingSectionRename?.institute || "").trim();
+    const oldSection = String(pendingSectionRename?.oldSection || "").trim();
+    const nextValue = String(pendingSectionRename?.nextValue || "").trim();
+    if(!instituteName || !oldSection){
+      setPendingSectionRename(null);
+      return;
+    }
+    if(!nextValue){
+      setPendingSectionError("Enter a section name.");
+      return;
+    }
+    if(normaliseSectionKey(nextValue) === normaliseSectionKey(oldSection)){
+      setPendingSectionBusy(true);
+      setPendingSectionError("");
+      try {
+        await applyPendingInstituteSectionAction({
+          instituteName,
+          oldSection,
+          action: KEEP_SECTION_ACTION,
+        });
+        setPendingSectionRename(null);
+      } catch (e) {
+        setPendingSectionError(e?.message || "Save failed.");
+      } finally {
+        setPendingSectionBusy(false);
+      }
+      return;
+    }
+
+    setPendingSectionBusy(true);
+    setPendingSectionError("");
+    try {
+      await applyPendingInstituteSectionAction({
+        instituteName,
+        oldSection,
+        nextSection: nextValue,
+        action: "rename",
+      });
+      setPendingSectionRename(null);
+    } catch (e) {
+      setPendingSectionError(e?.message || "Rename failed.");
+    } finally {
+      setPendingSectionBusy(false);
+    }
+  }, [applyPendingInstituteSectionAction, pendingSectionBusy, pendingSectionRename]);
+
+  const pendingSectionRenameTerm = pendingSectionRename
+    ? getInstituteEntityLabels(getInstituteSectionConfig(instSectionsAll, pendingSectionRename.institute)?.type).singular
+    : "section";
+  const pendingSectionRenameModal = pendingSectionRename ? (
+    <SectionQuickRenameModal
+      term={pendingSectionRenameTerm}
+      originalValue={pendingSectionRename.oldSection}
+      value={pendingSectionRename.nextValue}
+      error={pendingSectionError}
+      onChange={nextValue => {
+        setPendingSectionError("");
+        setPendingSectionRename(curr => curr ? { ...curr, nextValue } : curr);
+      }}
+      onClose={() => {
+        if(pendingSectionBusy) return;
+        setPendingSectionRename(null);
+        setPendingSectionError("");
+      }}
+      onSave={confirmPendingInstituteSectionRename}
+    />
+  ) : null;
+
   const clampPanelWidth = React.useCallback((key, nextWidth) => {
     const limits = PANEL_LIMITS[key];
     if(!limits) return nextWidth;
@@ -3480,6 +3813,7 @@ function AdminPanelInner({user}){
     // Supplement: fullData for any institute added after last index sync
     Object.values(fullData).forEach(d=>{
       (d.classes||[]).forEach(c=>{ if(c.institute) set.add(c.institute.trim()); });
+      (d.profile?.institutes||[]).forEach(i=>{ if(i) set.add(String(i).trim()); });
     });
     // Remove locally deleted institutes
     deletedInstitutes.forEach(i=>set.delete(i));
@@ -3522,9 +3856,8 @@ function AdminPanelInner({user}){
               if(key) classKeys.add(key);
             });
           }
-          return;
         }
-        if((t.institutes||[]).some(i=>sameInstituteName(i, inst))){
+        if(getTeacherInstituteList(t).some(i=>sameInstituteName(i, inst))){
           teacherUids.add(t.uid);
         }
       });
@@ -3534,34 +3867,20 @@ function AdminPanelInner({user}){
       };
       return acc;
     }, {});
-  },[institutes,teachers,fullData,instSectionsAll]);
+  },[getTeacherInstituteList, institutes,teachers,fullData,instSectionsAll]);
 
   // ── Teachers at selected institute ────────────────────────────────────────
   const instTeachers=useMemo(()=>{
     if(!selInst) return [];
-    const norm = s => (s||"").trim().toLowerCase();
-    return teachers.filter(t=>{
-      const d=fullData[t.uid];
-      if(d){
-        // fullData loaded — use it as ground truth (handles stale index)
-        return (d.classes||[]).some(c=>norm(c.institute)===norm(selInst));
-      }
-      // fullData not yet loaded — use index as approximation
-      return (t.institutes||[]).some(i=>norm(i)===norm(selInst));
-    });
-  },[selInst,teachers,fullData]);
+    return teachers.filter(t=>teacherBelongsToInstitute(t, selInst));
+  },[selInst, teacherBelongsToInstitute, teachers]);
 
   // ── Classes at selected institute ─────────────────────────────────────────
   const instClasses=useMemo(()=>{
     if(!selInst) return [];
     const map={};
-    // Use teachers that belong to this institute (from index or fullData)
-    const normI = s => (s||"").trim().toLowerCase();
-    const relevantTeachers=teachers.filter(t=>{
-      const d=fullData[t.uid];
-      if(d) return (d.classes||[]).some(c=>normI(c.institute)===normI(selInst));
-      return (t.institutes||[]).some(i=>normI(i)===normI(selInst));
-    });
+    // Use teachers that belong to this institute (from profile, index, or class data)
+    const relevantTeachers=teachers.filter(t=>teacherBelongsToInstitute(t, selInst));
     const norm = s => (s||"").trim().toLowerCase();
     relevantTeachers.forEach(t=>{
       const d=fullData[t.uid];
@@ -4014,7 +4333,7 @@ function AdminPanelInner({user}){
         .filter(c=>sameInstituteName(c.institute, selInst))
         .reduce((classSum,c)=>classSum + Object.values((d.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
     },0);
-  },[selInst,teachers,fullData]);
+  },[selInst,teacherBelongsToInstitute,teachers,fullData]);
 
   const selectedInstitutePeriodCount = useMemo(()=>{
     if(!selInst) return 0;
@@ -4562,11 +4881,6 @@ function AdminPanelInner({user}){
     setActiveProgramFilter(null);
     setMobileStep(1);
     warmInstitute(inst);
-    const instKey = normaliseSectionKey(inst);
-    if(instKey && !repairPromptSeenRef.current.has(instKey)){
-      repairPromptSeenRef.current.add(instKey);
-      void openLegacySectionRepairForInstitute(inst, { silent:true });
-    }
   };
 
   const openMobileInstituteOverview = () => {
@@ -5845,6 +6159,7 @@ function AdminPanelInner({user}){
     };
     (teacher?.institutes || []).forEach(add);
     const data = fullData[teacher?.uid];
+    (data?.profile?.institutes || []).forEach(add);
     (data?.classes || []).forEach(cls => add(cls?.institute));
     return list;
   }, [fullData]);
@@ -6147,6 +6462,9 @@ function AdminPanelInner({user}){
           const instKey = getInstituteSectionConfigKey(instSectionsAll, instDetailView);
           const instData=getInstituteSectionConfig(instSectionsAll, instDetailView)||{};
           const groups=instData.gradeGroups||[];
+          const sectionLabels = getInstituteEntityLabels(instData.type);
+          const standaloneSections = uniqueSectionNames(instData.extraSections || []);
+          const pendingSections = collectPendingInstituteSections(fullData, teachers, instDetailView, instSectionsAll);
           const sortedGroups = [...groups].sort((a,b)=>exportTextSorter.compare(a?.label || "", b?.label || ""));
           const addButtonLabel = "+ Add Timetable Group";
           const fmtSlotPill=s=>{const[h,m]=s.start.split(":").map(Number);const e=s.end?.split(":").map(Number)||[0,0];const f=(hh,mm)=>`${hh%12||12}:${String(mm).padStart(2,"0")} ${hh>=12?"PM":"AM"}`;return`${f(h,m)}–${f(e[0],e[1])}`;};
@@ -6159,6 +6477,71 @@ function AdminPanelInner({user}){
                   <div style={{fontSize:13,color:G.textM,marginTop:4}}>Create named timetable groups. Every section inside one group will share the same slots.</div>
                 </div>
               </div>
+              {(pendingSections.length>0 || standaloneSections.length>0)&&(
+                <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:18}}>
+                  {pendingSections.length>0&&(
+                    <div style={{background:"#FFF7ED",border:`1px solid #FED7AA`,borderRadius:16,padding:"18px"}}>
+                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:12}}>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:700,color:"#9A3412",textTransform:"uppercase",letterSpacing:0.6,fontFamily:G.mono,marginBottom:6}}>
+                            Pending {sectionLabels.plural}
+                          </div>
+                          <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
+                            Teacher-created {sectionLabels.plural} waiting for review
+                          </div>
+                          <div style={{fontSize:13,color:G.textM,lineHeight:1.6,maxWidth:700}}>
+                            If an admin list did not exist yet, teachers could still create their own {sectionLabels.plural}. Keep them, rename them, or delete them from here.
+                          </div>
+                        </div>
+                        {pendingSectionBusy&&(
+                          <div style={{fontSize:12,fontWeight:700,color:"#9A3412",fontFamily:G.mono}}>Saving…</div>
+                        )}
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        {pendingSections.map(item=>(
+                          <div key={item.section} style={{background:"#FFFFFF",border:"1px solid #FED7AA",borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                            <div style={{flex:"1 1 320px",minWidth:0}}>
+                              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{item.section}</div>
+                              <div style={{fontSize:13,color:G.textM,marginTop:4}}>
+                                {item.affectedClassCount} class{item.affectedClassCount!==1?"es":""} across {item.affectedTeacherCount} teacher{item.affectedTeacherCount!==1?"s":""}
+                              </div>
+                              {item.subjects.length>0&&(
+                                <div style={{fontSize:12,color:G.textL,marginTop:6}}>Subjects: {item.subjects.join(", ")}</div>
+                              )}
+                              {item.teacherNames.length>0&&(
+                                <div style={{fontSize:12,color:G.textL,marginTop:4}}>Teachers: {item.teacherNames.join(", ")}</div>
+                              )}
+                            </div>
+                            <div style={{display:"flex",gap:8,flexWrap:"wrap",flexShrink:0}}>
+                              <button disabled={pendingSectionBusy} onClick={()=>handleKeepPendingInstituteSection(instDetailView, item.section)} style={{...pill("#ECFDF3","#047857","#A7F3D0"),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}>Keep</button>
+                              <button disabled={pendingSectionBusy} onClick={()=>openPendingInstituteSectionRename(instDetailView, item.section)} style={{...pill(G.blueL,G.blue,G.borderM),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}>Rename</button>
+                              <button disabled={pendingSectionBusy} onClick={()=>handleDeletePendingInstituteSection(instDetailView, item)} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}>Delete</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {standaloneSections.length>0&&(
+                    <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"18px"}}>
+                      <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.6,fontFamily:G.mono,marginBottom:6}}>
+                        Accepted standalone {sectionLabels.plural}
+                      </div>
+                      <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
+                        Saved outside timetable groups
+                      </div>
+                      <div style={{fontSize:13,color:G.textL,lineHeight:1.6,marginBottom:12}}>
+                        These {sectionLabels.plural} are now official, but they are not attached to any timetable group yet. Add them to a group whenever you want shared slots.
+                      </div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                        {standaloneSections.map(section=>(
+                          <span key={section} style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"4px 11px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{section}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               {groups.length===0&&(
                 <div style={{background:G.surface,borderRadius:14,border:`2px dashed ${G.border}`,padding:"36px 20px",textAlign:"center",marginBottom:16}}>
                   <div style={{fontSize:32,marginBottom:10}}>🗂</div>
@@ -6289,7 +6672,7 @@ function AdminPanelInner({user}){
             ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No institutes yet. Create one above.</div>
             :<div style={{display:"flex",flexDirection:"column",gap:10}}>
               {institutes.map((inst,instIdx)=>{
-                const instTeacherList=teachers.filter(t=>{const d=fullData[t.uid];if(d)return(d.classes||[]).some(c=>(c.institute||"").trim()===inst.trim());return(t.institutes||[]).some(i=>i.trim()===inst.trim());});
+                const instTeacherList=teachers.filter(t=>teacherBelongsToInstitute(t, inst));
                 const clsCount=instituteStats[inst]?.classCount || instTeacherList.length;
                 return(
                   <div key={inst}
@@ -6965,6 +7348,7 @@ function AdminPanelInner({user}){
             onConfirm={applyLegacySectionRepair}
           />
         )}
+        {pendingSectionRenameModal}
         <MobileNav/><MobileBreadcrumb/>
         <div style={{padding:"12px 14px 40px"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:14}}>
@@ -7447,6 +7831,7 @@ function AdminPanelInner({user}){
           onConfirm={applyLegacySectionRepair}
         />
       )}
+      {pendingSectionRenameModal}
       <AdminToastBanner message={adminToast} />
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
       {mobileStep>0&&(

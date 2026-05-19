@@ -1087,6 +1087,18 @@ export async function saveInstituteType(instituteName, type) {
   });
 }
 
+export async function saveInstituteExtraSections(instituteName, extraSections) {
+  const snap = await getDoc(doc(db, "config", "sections"));
+  const existing = snap.exists() ? snap.data() : {};
+  await setDoc(doc(db, "config", "sections"), {
+    ...existing,
+    [instituteName]: {
+      ...(existing[instituteName] || {}),
+      extraSections: uniqueTrimmed(extraSections),
+    }
+  });
+}
+
 export async function deleteInstituteGradeGroup(instituteName, groupId) {
   const snap = await getDoc(doc(db, "config", "sections"));
   const existing = snap.exists() ? snap.data() : {};
