@@ -3249,6 +3249,36 @@ function AdminPanelInner({user}){
     return pending;
   },[fullData]);
 
+  const getTeacherInstituteList = React.useCallback((teacher) => {
+    const list = [];
+    const add = (value) => {
+      const next = String(value || "").trim();
+      if(!next) return;
+      if(list.some(existing => sameInstituteName(existing, next))) return;
+      list.push(next);
+    };
+    (teacher?.institutes || []).forEach(add);
+    const data = fullData[teacher?.uid];
+    (data?.profile?.institutes || []).forEach(add);
+    (data?.classes || []).forEach(cls => add(cls?.institute));
+    return list;
+  }, [fullData]);
+
+  const teacherBelongsToInstitute = React.useCallback((teacher, instituteName) => {
+    if(!teacher || !instituteName) return false;
+    return getTeacherInstituteList(teacher).some(inst => sameInstituteName(inst, instituteName));
+  }, [getTeacherInstituteList]);
+
+  const getTeacherDisplayName = React.useCallback((teacher) => {
+    const data = fullData[teacher?.uid];
+    return data?.profile?.name || teacher?.name || "Unknown";
+  }, [fullData]);
+
+  const getTeacherEmail = React.useCallback((teacher) => {
+    const data = fullData[teacher?.uid];
+    return String(data?.profile?.email || teacher?.email || "").trim();
+  }, [fullData]);
+
   const getInstituteTeacherUids = React.useCallback((inst) => {
     return teachers
       .filter(t => teacherBelongsToInstitute(t, inst))
@@ -6146,38 +6176,6 @@ function AdminPanelInner({user}){
       </div>
     );
   };
-
-
-  // ── Hooks that must be above the loading guard ────────────────────────────
-  const getTeacherInstituteList = React.useCallback((teacher) => {
-    const list = [];
-    const add = (value) => {
-      const next = String(value || "").trim();
-      if(!next) return;
-      if(list.some(existing => sameInstituteName(existing, next))) return;
-      list.push(next);
-    };
-    (teacher?.institutes || []).forEach(add);
-    const data = fullData[teacher?.uid];
-    (data?.profile?.institutes || []).forEach(add);
-    (data?.classes || []).forEach(cls => add(cls?.institute));
-    return list;
-  }, [fullData]);
-
-  const teacherBelongsToInstitute = React.useCallback((teacher, instituteName) => {
-    if(!teacher || !instituteName) return false;
-    return getTeacherInstituteList(teacher).some(inst => sameInstituteName(inst, instituteName));
-  }, [getTeacherInstituteList]);
-
-  const getTeacherDisplayName = React.useCallback((teacher) => {
-    const data = fullData[teacher?.uid];
-    return data?.profile?.name || teacher?.name || "Unknown";
-  }, [fullData]);
-
-  const getTeacherEmail = React.useCallback((teacher) => {
-    const data = fullData[teacher?.uid];
-    return String(data?.profile?.email || teacher?.email || "").trim();
-  }, [fullData]);
 
   if(loading) return(
     <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.sans}}>
