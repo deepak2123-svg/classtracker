@@ -76,7 +76,7 @@ function normaliseProfile(profile, fallbackName = "") {
 
 function hasCompleteProfile(profile) {
   const current = normaliseProfile(profile);
-  return !!current.name && current.subjects.length > 0 && current.institutes.length > 0;
+  return !!current.name && current.subjects.length > 0;
 }
 
 const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:normaliseProfile(),trash:{classes:[],notes:[]}};
@@ -764,13 +764,13 @@ function CreatableDropdown({value,onChange,options,onAddOption,placeholder,addPl
               </div>);})}
           </div>
           <div style={{borderTop:`1px solid ${G.border}`}}>
-            {!adding
+            {onAddOption && (!adding
               ?<div onClick={()=>setAdding(true)} style={{padding:"11px 16px",cursor:"pointer",fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:6,transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=G.greenL} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>＋ Add new option</div>
               :<div style={{padding:"8px 10px",display:"flex",gap:6,alignItems:"center"}}>
                 <input ref={inputRef} value={newVal} onChange={e=>setNewVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmAdd();if(e.key==="Escape"){setAdding(false);setNewVal("");}}} placeholder={addPlaceholder} style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1.5px solid ${G.green}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
                 <button onClick={confirmAdd} style={{background:G.green,color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:600}}>Add</button>
                 <button onClick={()=>{setAdding(false);setNewVal("");}} style={{background:G.bg,color:G.textM,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 10px",fontSize:14,cursor:"pointer"}}>✕</button>
-              </div>}
+              </div>)}
           </div>
         </div>
       )}
@@ -912,7 +912,7 @@ function MultiValueField({ label, values, onChange, suggestions = [], placeholde
       )}
       {!allowCustom && suggestionValues.length === 0 && (
         <div style={{marginTop:10,padding:"12px 14px",borderRadius:12,border:"1px solid rgba(255,255,255,0.12)",background:"rgba(255,255,255,0.05)",color:"rgba(255,255,255,0.6)",fontSize:13,lineHeight:1.6}}>
-          No official institutes are available yet. Ask your admin to create one first.
+          No institutes have been created yet. Contact your admin to get your institute added — you can select it here once it's available.
         </div>
       )}
       {hint && (
@@ -937,7 +937,7 @@ function ProfileSetup({user, initialProfile, subjectSuggestions = [], instituteS
     const officialKeys = new Set(officialInstitutes.map(normaliseChoiceKey));
     setInstitutes(curr => curr.filter(value => officialKeys.has(normaliseChoiceKey(value))));
   }, [officialInstitutes]);
-  const canContinue = !!name.trim() && subjects.length > 0 && institutes.length > 0 && officialInstitutes.length > 0;
+  const canContinue = !!name.trim() && subjects.length > 0;
   return(
     <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
       <div style={{width:"100%",maxWidth:420}}>
@@ -964,8 +964,8 @@ function ProfileSetup({user, initialProfile, subjectSuggestions = [], instituteS
             onChange={setInstitutes}
             suggestions={officialInstitutes}
             allowCustom={false}
-            lockedHint="Select every institute you teach at from the official admin-created list below."
-            hint="Teachers can only use institutes that an admin has already created."
+            lockedHint="Select every institute you teach at from the list below. Only admins can create institutes."
+            hint={officialInstitutes.length > 0 ? "Can't find your institute? Ask your admin to add it — you can update this later." : undefined}
           />
           <button onClick={()=>canContinue&&onSave({ name:name.trim(), subjects, institutes })} disabled={!canContinue} onPointerDown={e=>rpl(e,true)}
             style={{width:"100%",padding:"13px",background:canContinue?G.greenV:"rgba(255,255,255,0.1)",color:canContinue?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:canContinue?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:canContinue?`0 4px 16px rgba(59,130,246,0.26)`:"none"}}>
@@ -1156,9 +1156,9 @@ function EditClassModal({cls,data,onSave,onClose,sortedByUsage,globalInstitutes,
   return(
     <Modal title="Edit class" subtitle="Update the details for this class" onClose={onClose}>
       <label style={lbl}>Institute</label>
-      <ReadOnlyDropdown value={institute} onChange={setInstitute} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select institute"/>
+      <ReadOnlyDropdown value={institute} onChange={setInstitute} options={globalInstitutes} placeholder="Select institute" emptyMsg="No institutes yet — contact your admin."/>
       <label style={{...lbl,marginTop:8}}>Class / Section</label>
-      <CreatableDropdown value={section} onChange={setSection} options={sectionOptions} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
+      <CreatableDropdown value={section} onChange={setSection} options={sectionOptions} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
       <label style={{...lbl,marginTop:8}}>Subject</label>
       <CreatableDropdown value={subject} onChange={setSubject} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics" addPlaceholder="Type subject…"/>
       <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
@@ -4027,7 +4027,12 @@ function ClassTrackerInner({user}){
             <span>👤</span><span>Logged in as: <strong>{teacherName}</strong></span>
           </div>
           <label style={lbl}>Institute</label>
-          <ReadOnlyDropdown value={newClass.institute} onChange={handleInstituteChange} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select your institute"/>
+          <ReadOnlyDropdown value={newClass.institute} onChange={handleInstituteChange} options={globalInstitutes} placeholder="Select your institute" emptyMsg="No institutes yet — contact your admin to get one added."/>
+          {globalInstitutes.length === 0 && (
+            <div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"#FFF7ED",border:"1px solid #FED7AA",fontSize:13,color:"#9A3412",lineHeight:1.6}}>
+              Your admin hasn't created any institutes yet. Contact them to get your institute added before you can create a class.
+            </div>
+          )}
           {preferredInstitute&&newClass.institute===preferredInstitute&&(
             <div style={{fontSize:12,color:G.green,fontWeight:700,marginTop:-3,marginBottom:10}}>Using your most common institute to save time.</div>
           )}
@@ -4087,13 +4092,12 @@ function ClassTrackerInner({user}){
                 value={newClass.section}
                 onChange={s=>setNewClass(c=>({...c,section:s}))}
                 options={sectionOptions}
-                onAddOption={addSectionName}
                 placeholder={`e.g. ${sectionOptions[0]||"9th A, 10th B"}`}
                 addPlaceholder="Type class or section…"
               />
               {hasOfficialSections&&(
                 <div style={{fontSize:12,color:G.textL,marginTop:8,lineHeight:1.6}}>
-                  Official admin sections are suggested here. If missing, type it to submit it for review.
+                  Only admin-created sections are shown. If your section is missing, contact your admin.
                 </div>
               )}
             </>
@@ -4122,7 +4126,7 @@ function ClassTrackerInner({user}){
               </div>
             </div>
           )}
-          <PrimaryBtn onClick={addClass} disabled={!newClass.institute.trim()||!newClass.section.trim()} onPointerDown={e=>rpl(e,true)} style={{marginTop:16,width:"100%",padding:"13px",fontSize:16}}>Add Class</PrimaryBtn>
+          <PrimaryBtn onClick={addClass} disabled={!newClass.institute.trim()||!newClass.section.trim()||globalInstitutes.length===0} onPointerDown={e=>rpl(e,true)} style={{marginTop:16,width:"100%",padding:"13px",fontSize:16}}>Add Class</PrimaryBtn>
         </div>
       </div>
     </div>

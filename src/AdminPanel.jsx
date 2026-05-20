@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, Component } from "react";
-import ReactDOM from "react-dom";
 import {
   logout, getAllTeachers, getTeacherFullData,
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
@@ -58,14 +57,6 @@ const PANEL_RAIL_THEMES = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-// ── ModalPortal — renders children into document.body to escape any stacking context ──
-function ModalPortal({ children }) {
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
-  if (!mounted || !children) return null;
-  return ReactDOM.createPortal(children, document.body);
-}
-
 function currentSession(){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;
   return m>=4?`${y}-${String(y+1).slice(2)}`:`${y-1}-${String(y).slice(2)}`;
@@ -3262,7 +3253,6 @@ function AdminPanelInner({user}){
   const [pendingSectionRename, setPendingSectionRename] = useState(null); // null | { institute, oldSection, nextValue }
   const [pendingSectionBusy, setPendingSectionBusy] = useState(false);
   const [pendingSectionError, setPendingSectionError] = useState("");
-  const [moveToGroupModal, setMoveToGroupModal] = useState(null); // null | { institute, section, selectedGroupId }
   const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
   const fullDataRequestRef = React.useRef({});
   const warmupJobRef = React.useRef(0);
@@ -3918,47 +3908,6 @@ function AdminPanelInner({user}){
       },
     });
   }, [applyPendingInstituteSectionAction, showAdminToast]);
-
-  const handleMoveStandaloneToGroup = React.useCallback(async ({ institute, section, groupId, newGroupLabel }) => {
-    setPendingSectionBusy(true);
-    try {
-      const instKey = getInstituteSectionConfigKey(instSectionsAll, institute);
-      const instData = getInstituteSectionConfig(instSectionsAll, instKey) || {};
-      const existingGroups = instData.gradeGroups || [];
-      let updatedGroups;
-      if (groupId === "__new__" && newGroupLabel) {
-        const newGroup = {
-          id: `grp_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
-          label: newGroupLabel.trim(),
-          sections: [section],
-          slots: [],
-        };
-        updatedGroups = [...existingGroups, newGroup];
-      } else {
-        updatedGroups = existingGroups.map(g =>
-          g.id === groupId
-            ? { ...g, sections: uniqueSectionNames([...(g.sections || []), section]) }
-            : g
-        );
-      }
-      // Remove from extraSections
-      const nextExtraSections = (instData.extraSections || []).filter(
-        s => normaliseSectionKey(s) !== normaliseSectionKey(section)
-      );
-      await saveInstituteGradeGroups(instKey, updatedGroups);
-      await saveInstituteExtraSections(instKey, nextExtraSections);
-      setInstSectionsAll(a => ({
-        ...a,
-        [instKey]: { ...(a[instKey] || {}), gradeGroups: updatedGroups, extraSections: nextExtraSections },
-      }));
-      setMoveToGroupModal(null);
-      showAdminToast(`Moved "${section}" into ${groupId === "__new__" ? `new group "${newGroupLabel}"` : "timetable group"}.`);
-    } catch(e) {
-      showAdminToast("Error moving section: " + (e?.message || String(e)));
-    } finally {
-      setPendingSectionBusy(false);
-    }
-  }, [instSectionsAll, showAdminToast]);
 
   const openPendingInstituteSectionRename = React.useCallback((instituteName, sectionName) => {
     setPendingSectionRename({
@@ -6785,39 +6734,43 @@ function AdminPanelInner({user}){
               {(pendingSections.length>0 || standaloneSections.length>0)&&(
                 <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:18}}>
                   {pendingSections.length>0&&(
-                    <div style={{background:"#FFF7ED",border:`1px solid #FED7AA`,borderRadius:16,padding:"18px"}}>
-                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:12}}>
+                    <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:16,padding:"18px"}}>
+                      {/* Header */}
+                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
                         <div>
-                          <div style={{fontSize:12,fontWeight:700,color:"#9A3412",textTransform:"uppercase",letterSpacing:0.6,fontFamily:G.mono,marginBottom:6}}>
-                            Pending {sectionLabels.plural}
+                          <div style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:999,padding:"4px 11px",fontSize:11,fontWeight:700,color:"#92400E",fontFamily:G.mono,letterSpacing:0.4,marginBottom:8}}>
+                            Teacher Submissions
                           </div>
                           <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
-                            Teacher-created {sectionLabels.plural} waiting for review
+                            {sectionLabels.plural.charAt(0).toUpperCase()+sectionLabels.plural.slice(1)} submitted by teachers
                           </div>
                           <div style={{fontSize:13,color:G.textM,lineHeight:1.6,maxWidth:700}}>
-                            If an admin list did not exist yet, teachers could still create their own {sectionLabels.plural}. Keep them, rename them, or delete them from here.
+                            Teachers added these {sectionLabels.plural} directly. Keep them to move to a group, rename them, or delete them.
                           </div>
                         </div>
                         {pendingSectionBusy&&(
                           <div style={{fontSize:12,fontWeight:700,color:"#9A3412",fontFamily:G.mono}}>Saving…</div>
                         )}
                       </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      {/* Section rows */}
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
                         {pendingSections.map(item=>(
-                          <div key={item.section} style={{background:"#FFFFFF",border:"1px solid #FED7AA",borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-                            <div style={{flex:"1 1 320px",minWidth:0}}>
-                              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display}}>{item.section}</div>
-                              <div style={{fontSize:13,color:G.textM,marginTop:4}}>
-                                {item.affectedClassCount} class{item.affectedClassCount!==1?"es":""} across {item.affectedTeacherCount} teacher{item.affectedTeacherCount!==1?"s":""}
+                          <div key={item.section} style={{background:"#FFFFFF",border:"1px solid #FED7AA",borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                            <div style={{flex:"1 1 260px",minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                                <span style={{background:"#FEF9C3",color:"#92400E",borderRadius:20,padding:"4px 11px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{item.section}</span>
+                                <span style={{fontSize:12,color:G.textL}}>{item.affectedClassCount} class{item.affectedClassCount!==1?"es":""}</span>
                               </div>
-                              {item.subjects.length>0&&(
-                                <div style={{fontSize:12,color:G.textL,marginTop:6}}>Subjects: {item.subjects.join(", ")}</div>
-                              )}
-                              {item.teacherNames.length>0&&(
-                                <div style={{fontSize:12,color:G.textL,marginTop:4}}>Teachers: {item.teacherNames.join(", ")}</div>
-                              )}
+                              <div style={{fontSize:12,color:G.textL,marginTop:6,lineHeight:1.5}}>
+                                {item.teacherNames.length>0&&(
+                                  <span>By: {item.teacherNames.join(", ")}</span>
+                                )}
+                                {item.subjects.length>0&&(
+                                  <span style={{marginLeft:item.teacherNames.length>0?10:0}}>· {item.subjects.join(", ")}</span>
+                                )}
+                              </div>
                             </div>
-                            <div style={{display:"flex",gap:8,flexWrap:"wrap",flexShrink:0}}>
+                            <div style={{display:"flex",gap:8,flexWrap:"wrap",flexShrink:0,alignItems:"center"}}>
                               <button disabled={pendingSectionBusy} onClick={()=>handleKeepPendingInstituteSection(instDetailView, item.section)} style={{...pill("#ECFDF3","#047857","#A7F3D0"),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}>Keep</button>
                               <button disabled={pendingSectionBusy} onClick={()=>openPendingInstituteSectionRename(instDetailView, item.section)} style={{...pill(G.blueL,G.blue,G.borderM),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}>Rename</button>
                               <button disabled={pendingSectionBusy} onClick={()=>handleDeletePendingInstituteSection(instDetailView, item)} style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}>Delete</button>
@@ -6854,11 +6807,6 @@ function AdminPanelInner({user}){
                                 )}
                               </div>
                               <div style={{display:"flex",gap:8,flexShrink:0}}>
-                                <button
-                                  disabled={pendingSectionBusy}
-                                  onClick={()=>setMoveToGroupModal({institute:instDetailView, section, selectedGroupId: groups.length>0 ? groups[0].id : "__new__", newGroupLabel:""})}
-                                  style={{...pill("#F0FDF4","#16A34A","#BBF7D0"),fontSize:13,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}
-                                >↑ Add to Group</button>
                                 <button
                                   disabled={pendingSectionBusy}
                                   onClick={()=>openPendingInstituteSectionRename(instDetailView,section)}
@@ -7685,7 +7633,7 @@ function AdminPanelInner({user}){
             onConfirm={applyLegacySectionRepair}
           />
         )}
-        <ModalPortal>{pendingSectionRenameModal}</ModalPortal>
+        {pendingSectionRenameModal}
         <MobileNav/><MobileBreadcrumb/>
         <div style={{padding:"12px 14px 40px"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:14}}>
@@ -8168,63 +8116,7 @@ function AdminPanelInner({user}){
           onConfirm={applyLegacySectionRepair}
         />
       )}
-      <ModalPortal>{pendingSectionRenameModal}</ModalPortal>
-      {moveToGroupModal&&ReactDOM.createPortal((()=>{
-        const mInst = moveToGroupModal.institute;
-        const mSection = moveToGroupModal.section;
-        const mInstKey = getInstituteSectionConfigKey(instSectionsAll, mInst);
-        const mInstData = getInstituteSectionConfig(instSectionsAll, mInstKey) || {};
-        const mGroups = mInstData.gradeGroups || [];
-        const isNew = moveToGroupModal.selectedGroupId === "__new__";
-        return(
-          <div style={{position:"fixed",inset:0,zIndex:800,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"28px 26px",width:"100%",maxWidth:420,boxShadow:"0 8px 40px rgba(0,0,0,0.18)"}}>
-              <div style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Add to Timetable Group</div>
-              <div style={{fontSize:13,color:G.textL,marginBottom:20}}>
-                Move <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 9px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>{mSection}</span> into a timetable group so it shares slots with other sections.
-              </div>
-              <div style={{marginBottom:16}}>
-                <label style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:8}}>Choose group</label>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {mGroups.map(g=>(
-                    <label key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1.5px solid ${moveToGroupModal.selectedGroupId===g.id?G.blue:G.border}`,borderRadius:10,cursor:"pointer",background:moveToGroupModal.selectedGroupId===g.id?G.blueL:G.bg,transition:"all 0.12s"}}>
-                      <input type="radio" name="groupSelect" value={g.id} checked={moveToGroupModal.selectedGroupId===g.id} onChange={()=>setMoveToGroupModal(m=>({...m,selectedGroupId:g.id}))} style={{accentColor:G.blue}} />
-                      <div>
-                        <div style={{fontSize:14,fontWeight:600,color:G.text}}>{g.label||"Untitled group"}</div>
-                        <div style={{fontSize:11,color:G.textL}}>{uniqueSectionNames(g.sections||[]).length} sections</div>
-                      </div>
-                    </label>
-                  ))}
-                  <label style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1.5px solid ${isNew?G.blue:G.border}`,borderRadius:10,cursor:"pointer",background:isNew?G.blueL:G.bg,transition:"all 0.12s"}}>
-                    <input type="radio" name="groupSelect" value="__new__" checked={isNew} onChange={()=>setMoveToGroupModal(m=>({...m,selectedGroupId:"__new__"}))} style={{accentColor:G.blue}} />
-                    <div style={{fontSize:14,fontWeight:600,color:G.text}}>+ Create new group</div>
-                  </label>
-                </div>
-              </div>
-              {isNew&&(
-                <div style={{marginBottom:16}}>
-                  <label style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:6}}>New group name</label>
-                  <input
-                    autoFocus
-                    value={moveToGroupModal.newGroupLabel||""}
-                    onChange={e=>setMoveToGroupModal(m=>({...m,newGroupLabel:e.target.value}))}
-                    placeholder="e.g. Senior Wing"
-                    style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1.5px solid ${G.border}`,fontSize:14,color:G.text,background:G.bg,fontFamily:G.sans,boxSizing:"border-box",outline:"none"}}
-                  />
-                </div>
-              )}
-              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
-                <button disabled={pendingSectionBusy} onClick={()=>setMoveToGroupModal(null)} style={{...pill(G.bg,G.textS,G.borderM),fontSize:14,...(pendingSectionBusy?{opacity:0.6,cursor:"not-allowed"}:{})}}>Cancel</button>
-                <button
-                  disabled={pendingSectionBusy||(isNew&&!(moveToGroupModal.newGroupLabel||"").trim())}
-                  onClick={()=>handleMoveStandaloneToGroup({institute:mInst,section:mSection,groupId:moveToGroupModal.selectedGroupId,newGroupLabel:moveToGroupModal.newGroupLabel})}
-                  style={{...pill("#F0FDF4","#16A34A","#BBF7D0"),fontSize:14,...((pendingSectionBusy||(isNew&&!(moveToGroupModal.newGroupLabel||"").trim()))?{opacity:0.5,cursor:"not-allowed"}:{})}}
-                >{pendingSectionBusy?"Moving…":"Move to Group"}</button>
-              </div>
-            </div>
-          </div>
-        );
-      })(), document.body)}
+      {pendingSectionRenameModal}
       <AdminToastBanner message={adminToast} />
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
       {mobileStep>0&&(
