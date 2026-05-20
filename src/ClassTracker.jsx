@@ -2279,6 +2279,7 @@ function ClassTrackerInner({user}){
   const [newNote,setNewNote]   = useState({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});
   const [editNote,setEditNote] = useState(null);
   const [newClass,setNewClass] = useState({institute:"",section:"",subject:""});
+  const [selectedGroup,setSelectedGroup] = useState(null); // null | gradeGroup object | "other"
   const [showNoteDetails,setShowNoteDetails] = useState(false);
   const [search,setSearch]     = useState("");
   // Name editing removed — name set from Google/signup only
@@ -3011,7 +3012,7 @@ function ClassTrackerInner({user}){
         subjects:subj ? mergeChoiceValues(d.subjects || [], [subj]) : (d.subjects || [])
       };
     });
-    setNewClass({institute:"",section:"",subject:""});setView("home");
+    setNewClass({institute:"",section:"",subject:""});setSelectedGroup(null);setView("home");
   };
   const deleteClass=(id,leaveReason,leaveReasonLabel)=>{setData(d=>{const cls=d.classes.find(c=>c.id===id);if(!cls)return d;const tc={...cls,deletedAt:Date.now(),savedNotes:d.notes[id]||{},leaveReason:leaveReason||"",leaveReasonLabel:leaveReasonLabel||""};const pending=Array.isArray(d?._meta?.pendingAdminClassNotices)?d._meta.pendingAdminClassNotices:[];return{...d,classes:d.classes.filter(c=>c.id!==id),notes:Object.fromEntries(Object.entries(d.notes).filter(([k])=>k!==id)),trash:{...d.trash,classes:[...(d.trash?.classes||[]),tc]},_meta:{...(d._meta||{}),pendingAdminClassNotices:pending.filter(item=>String(item?.classId||"")!==String(id||""))}};});if(activeClass?.id===id){setActiveClass(null);setView("home");}};
   const updateClass=(id,updates)=>{
@@ -3967,15 +3968,57 @@ function ClassTrackerInner({user}){
     const comboSuggestions = recentClassCombos
       .filter(combo=>!selectedInstitute || combo.institute===selectedInstitute)
       .slice(0,4);
-    const sectionOptions = sortedByUsage(
-      getInstituteSectionOptions(data.classes || [], data.sections || [], instituteSections, selectedInstitute),
-      "section"
-    );
-    const hasOfficialSections = getInstituteSectionNames(getInstituteSectionConfig(instituteSections, selectedInstitute)).length > 0;
+
+    // ── Group-aware section logic ──────────────────────────────────────────
+    const instData = getInstituteSectionConfig(instituteSections, selectedInstitute);
+    const gradeGroups = (instData?.gradeGroups || []).filter(g=>(g.sections||[]).length>0);
+    const extraSections = instData?.extraSections || [];
+    const hasGroups = gradeGroups.length > 0;
+
+    // Sections to show in the dropdown, depending on selected group pill
+    let sectionOptions;
+    if (!hasGroups) {
+      // No groups → flat list (legacy behaviour)
+      sectionOptions = sortedByUsage(
+        getInstituteSectionOptions(data.classes || [], data.sections || [], instituteSections, selectedInstitute),
+        "section"
+      );
+    } else if (!selectedGroup) {
+      // Groups exist but none chosen yet → show nothing (force picking a group first)
+      sectionOptions = [];
+    } else if (selectedGroup === "other") {
+      // "Other" pill → standalone extraSections + locally saved sections
+      const localSections = (data.classes||[])
+        .filter(c=>c.institute===selectedInstitute)
+        .map(c=>c.section)
+        .filter(Boolean);
+      const allGroupSectionKeys = new Set(gradeGroups.flatMap(g=>g.sections||[]).map(s=>s.trim().toLowerCase()));
+      const standalones = [...new Set([...extraSections,...localSections])]
+        .filter(s=>!allGroupSectionKeys.has(s.trim().toLowerCase()));
+      sectionOptions = standalones;
+    } else {
+      // Specific group pill chosen → only that group's sections
+      sectionOptions = selectedGroup.sections || [];
+    }
+
+    const hasOfficialSections = getInstituteSectionNames(instData).length > 0;
+    const sectionLabel = getInstituteSectionEntityLabels(instData);
+
+    // Reset section when institute changes
+    const handleInstituteChange = s => {
+      setNewClass(c=>({...c,institute:s,section:""}));
+      setSelectedGroup(null);
+    };
+    // Reset section when group changes
+    const handleGroupChange = grp => {
+      setSelectedGroup(grp);
+      setNewClass(c=>({...c,section:""}));
+    };
+
     return(
     <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
-      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
-        right={<GhostBtn onClick={()=>setView("home")}>← Back</GhostBtn>}/>
+      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>{setSelectedGroup(null);setView("home");}} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
+        right={<GhostBtn onClick={()=>{setSelectedGroup(null);setView("home");}}>← Back</GhostBtn>}/>
       <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px 80px"}}>
         <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:6,textTransform:"uppercase",fontWeight:600}}>New Class</p>
         <h2 style={{marginBottom:28,fontSize:30,letterSpacing:-0.5,fontFamily:G.display}}>Add a class</h2>
@@ -3984,18 +4027,79 @@ function ClassTrackerInner({user}){
             <span>👤</span><span>Logged in as: <strong>{teacherName}</strong></span>
           </div>
           <label style={lbl}>Institute</label>
-          <ReadOnlyDropdown value={newClass.institute} onChange={s=>setNewClass(c=>({...c,institute:s}))} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select your institute"/>
+          <ReadOnlyDropdown value={newClass.institute} onChange={handleInstituteChange} options={globalInstitutes.length>0?globalInstitutes:sortedByUsage(data.institutes||[],"institute")} placeholder="Select your institute"/>
           {preferredInstitute&&newClass.institute===preferredInstitute&&(
             <div style={{fontSize:12,color:G.green,fontWeight:700,marginTop:-3,marginBottom:10}}>Using your most common institute to save time.</div>
           )}
-          <label style={{...lbl,marginTop:10}}>Class / Section</label>
-          <CreatableDropdown value={newClass.section} onChange={s=>setNewClass(c=>({...c,section:s}))} options={sectionOptions} onAddOption={addSectionName} placeholder="e.g. 9th A, 10th B" addPlaceholder="Type class or section…"/>
-          {hasOfficialSections&&(
-            <div style={{fontSize:12,color:G.textL,marginTop:8,lineHeight:1.6}}>
-              Official admin sections are suggested here. If the class is missing, type it and save it now so the admin can review it later.
+
+          {/* ── Group pill selector (only when institute has groups) ── */}
+          {hasGroups&&selectedInstitute&&(
+            <div style={{marginTop:14,marginBottom:2}}>
+              <label style={lbl}>Stream / Group</label>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:6}}>
+                {gradeGroups.map(grp=>{
+                  const isActive = selectedGroup && selectedGroup!=="other" && selectedGroup.id===grp.id;
+                  return(
+                    <button key={grp.id} type="button"
+                      onClick={()=>handleGroupChange(isActive?null:grp)}
+                      style={{
+                        padding:"8px 16px",borderRadius:999,border:`1.5px solid ${isActive?G.blue:G.border}`,
+                        background:isActive?G.blue:"#fff",
+                        color:isActive?"#fff":G.textM,
+                        fontSize:13,fontWeight:isActive?700:500,
+                        cursor:"pointer",fontFamily:G.sans,
+                        transition:"all 0.15s",
+                        WebkitTapHighlightColor:"transparent",
+                      }}>
+                      {grp.label}
+                    </button>
+                  );
+                })}
+                {extraSections.length>0&&(
+                  <button type="button"
+                    onClick={()=>handleGroupChange(selectedGroup==="other"?null:"other")}
+                    style={{
+                      padding:"8px 16px",borderRadius:999,border:`1.5px solid ${selectedGroup==="other"?G.textM:G.border}`,
+                      background:selectedGroup==="other"?G.textS:"#fff",
+                      color:selectedGroup==="other"?"#fff":G.textM,
+                      fontSize:13,fontWeight:selectedGroup==="other"?700:500,
+                      cursor:"pointer",fontFamily:G.sans,
+                      transition:"all 0.15s",
+                      WebkitTapHighlightColor:"transparent",
+                    }}>
+                    Other
+                  </button>
+                )}
+              </div>
+              {!selectedGroup&&(
+                <div style={{fontSize:12,color:G.textL,marginTop:8,lineHeight:1.5}}>
+                  Select a stream above to see its {sectionLabel.plural}.
+                </div>
+              )}
             </div>
           )}
-          <label style={{...lbl,marginTop:10}}>Subject</label>
+
+          {/* ── Section dropdown ── */}
+          {(!hasGroups || selectedGroup) && (
+            <>
+              <label style={{...lbl,marginTop:14}}>{sectionLabel.singular.charAt(0).toUpperCase()+sectionLabel.singular.slice(1)} / Section</label>
+              <CreatableDropdown
+                value={newClass.section}
+                onChange={s=>setNewClass(c=>({...c,section:s}))}
+                options={sectionOptions}
+                onAddOption={addSectionName}
+                placeholder={`e.g. ${sectionOptions[0]||"9th A, 10th B"}`}
+                addPlaceholder="Type class or section…"
+              />
+              {hasOfficialSections&&(
+                <div style={{fontSize:12,color:G.textL,marginTop:8,lineHeight:1.6}}>
+                  Official admin sections are suggested here. If missing, type it to submit it for review.
+                </div>
+              )}
+            </>
+          )}
+
+          <label style={{...lbl,marginTop:14}}>Subject</label>
           <CreatableDropdown value={newClass.subject} onChange={s=>setNewClass(c=>({...c,subject:s}))} options={sortedByUsage(data.subjects||[],"subject")} onAddOption={addSubjectName} placeholder="e.g. Mathematics, Geography" addPlaceholder="Type subject…"/>
           {comboSuggestions.length>0&&(
             <div style={{marginTop:4}}>
@@ -4003,12 +4107,14 @@ function ClassTrackerInner({user}){
               <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
                 {comboSuggestions.map((combo,idx)=>(
                   <button key={`${combo.institute}-${combo.section}-${combo.subject}-${idx}`} type="button"
-                    onClick={()=>setNewClass(c=>({
-                      ...c,
-                      institute:combo.institute||c.institute,
-                      section:combo.section,
-                      subject:combo.subject,
-                    }))}
+                    onClick={()=>{
+                      // When picking a combo, also auto-select the matching group
+                      if(hasGroups){
+                        const matchGroup = gradeGroups.find(g=>(g.sections||[]).some(s=>s.trim().toLowerCase()===combo.section.trim().toLowerCase()));
+                        setSelectedGroup(matchGroup || (extraSections.some(s=>s.trim().toLowerCase()===combo.section.trim().toLowerCase()) ? "other" : null));
+                      }
+                      setNewClass(c=>({...c,institute:combo.institute||c.institute,section:combo.section,subject:combo.subject}));
+                    }}
                     style={{padding:"8px 12px",borderRadius:20,border:`1px solid ${G.border}`,background:G.surface,color:G.textM,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
                     {combo.section||"Untitled class"}{combo.subject?` · ${combo.subject}`:""}
                   </button>
