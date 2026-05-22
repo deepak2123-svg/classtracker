@@ -1041,16 +1041,18 @@ export async function renameGlobalInstitute(oldName, newName, extra = {}) {
     };
   });
 
-  const mainDocsSnap = await getDocs(query(collectionGroup(db, "appdata"), where(documentId(), "==", "main")));
+  // Walk all teacher main docs using uid-based fetch (collectionGroup+documentId is invalid in Firestore)
+  const teacherIndexForRename = await getDocs(collection(db, "teachers"));
+  const renameUids = [...new Set(teacherIndexForRename.docs.map(d => d.id))].filter(Boolean);
   let affectedTeacherCount = 0;
   let notifiedTeacherCount = 0;
   const updatedMainUids = new Set();
 
-  for (const snap of mainDocsSnap.docs) {
-    const uid = snap.ref.parent.parent?.id;
-    if (!uid) continue;
+  for (const uid of renameUids) {
+    const mainSnapR = await getDoc(userDocRef(uid));
+    if (!mainSnapR.exists()) continue;
 
-    let currentData = snap.data();
+    let currentData = mainSnapR.data();
     let attempt = 0;
     while (attempt < 2) {
       const transformed = applyInstituteRenameToTeacherData(
