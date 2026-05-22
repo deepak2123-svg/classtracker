@@ -1205,13 +1205,20 @@ export async function deleteInstituteCompletely(instituteName, extra = {}) {
   });
 
   // 2. Walk all teacher main docs and strip classes + notify
+  // (collectionGroup + documentId("main") is invalid in Firestore — fetch by UID from index instead)
   let affectedTeacherCount = 0;
-  const mainDocsSnap = await getDocs(query(collectionGroup(db, "appdata"), where(documentId(), "==", "main")));
   const classNotesDeleteQueue = []; // [{uid, classId}]
 
-  for (const snap of mainDocsSnap.docs) {
-    const uid = snap.ref.parent.parent?.id;
-    if (!uid) continue;
+  const teacherIndexSnap2 = await getDocs(collection(db, "teachers"));
+  const allUids = [...new Set([
+    ...teacherIndexSnap2.docs.map(d => d.id),
+  ])].filter(Boolean);
+
+  for (const uid of allUids) {
+    const mainRef = userDocRef(uid);
+    const mainSnap2 = await getDoc(mainRef);
+    if (!mainSnap2.exists()) continue;
+    const snap = mainSnap2;
 
     let currentData = snap.data();
     const hasMatch =
@@ -1382,17 +1389,19 @@ export async function deleteInstituteAndMigrate(fromInstituteName, toInstituteNa
     }
   });
 
-  // Step 2: Rename all teacher data from → to (reuses the same battle-tested function)
-  const mainDocsSnap = await getDocs(query(collectionGroup(db, "appdata"), where(documentId(), "==", "main")));
+  // Step 2: Rename all teacher data from → to using uid-based fetch
+  const teacherIndexSnap3 = await getDocs(collection(db, "teachers"));
+  const allUids2 = [...new Set(teacherIndexSnap3.docs.map(d => d.id))].filter(Boolean);
   let affectedTeacherCount = 0;
   let notifiedTeacherCount = 0;
   const updatedUids = new Set();
 
-  for (const snap of mainDocsSnap.docs) {
-    const uid = snap.ref.parent.parent?.id;
-    if (!uid) continue;
+  for (const uid of allUids2) {
+    const mainRef = userDocRef(uid);
+    const mainSnap3 = await getDoc(mainRef);
+    if (!mainSnap3.exists()) continue;
 
-    let currentData = snap.data();
+    let currentData = mainSnap3.data();
     let attempt = 0;
     while (attempt < 2) {
       const transformed = applyInstituteRenameToTeacherData(currentData, fromLabel, toLabel, { adminName, eventAt });
