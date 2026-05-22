@@ -2110,6 +2110,39 @@ function getTeacherNoticeCopy(item) {
     };
   }
 
+  if (kind === "institute_deleted") {
+    const oldInstitute = item.oldInstitute || "your institute";
+    const impactedClassCount = Number(item?.impactedClassCount || 0);
+    return {
+      icon:"🗑️",
+      badge:"Institute deleted",
+      badgeBg:"rgba(220,38,38,0.10)",
+      badgeColor:"#B91C1C",
+      title:oldInstitute,
+      summary:`Your admin permanently deleted the institute "${oldInstitute}".`,
+      detail:impactedClassCount > 0
+        ? `${impactedClassCount} ${impactedClassCount === 1 ? "class" : "classes"} under this institute have been removed from your account.`
+        : "No active classes were affected.",
+    };
+  }
+
+  if (kind === "institute_deleted_migrated") {
+    const oldInstitute = item.oldInstitute || "the old institute";
+    const newInstitute = item.newInstitute || "a new institute";
+    const impactedClassCount = Number(item?.impactedClassCount || 0);
+    return {
+      icon:"🏫",
+      badge:"Institute deleted & moved",
+      badgeBg:"rgba(124,58,237,0.10)",
+      badgeColor:"#6D28D9",
+      title:newInstitute,
+      summary:`Your admin deleted "${oldInstitute}" and moved your classes to "${newInstitute}".`,
+      detail:impactedClassCount > 0
+        ? `${impactedClassCount} ${impactedClassCount === 1 ? "class was" : "classes were"} automatically moved to "${newInstitute}".`
+        : "Your institute list has been updated to reflect this change.",
+    };
+  }
+
   if (kind === "class_deleted") {
     const entryLabel = item?.entryCount === 1 ? "entry remains" : "entries remain";
     return {
@@ -2172,12 +2205,27 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
   const hasRestored = rows.some(item => item.kind === "class_restored");
   const hasClassRenamed = rows.some(item => item.kind === "section_renamed");
   const hasInstituteRenamed = rows.some(item => item.kind === "institute_renamed");
+  const hasInstituteDeleted = rows.some(item => item.kind === "institute_deleted");
+  const hasInstituteDeletedMigrated = rows.some(item => item.kind === "institute_deleted_migrated");
   const hasRenamed = hasClassRenamed || hasInstituteRenamed;
   const many = rows.length > 1;
   let title = "Review class changes from admin";
   let subtitle = "These updates are now saved in your Notification Panel. Review them there, then mark each notice read when you are done.";
 
-  if (hasInstituteRenamed && !hasDeleted && !hasRestored && !hasClassRenamed) {
+  if (hasInstituteDeleted && !hasInstituteDeletedMigrated && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
+    title = many ? "Institutes were deleted" : "Institute was deleted";
+    subtitle = many
+      ? "Your admin deleted some institutes. Classes under those institutes have been permanently removed from your account."
+      : "Your admin deleted an institute. Classes under it have been permanently removed from your account.";
+  } else if (hasInstituteDeletedMigrated && !hasInstituteDeleted && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
+    title = many ? "Institutes deleted & classes moved" : "Institute deleted & classes moved";
+    subtitle = many
+      ? "Your admin deleted some institutes and moved your classes to new institutes. Your active classes are unchanged."
+      : "Your admin deleted an institute and moved your classes to a new one. Your active classes are unchanged.";
+  } else if ((hasInstituteDeleted || hasInstituteDeletedMigrated) && !hasDeleted && !hasRestored && !hasRenamed) {
+    title = "Institute changes from admin";
+    subtitle = "Your admin made changes to institutes on your account. Check the Notification Panel for full details.";
+  } else if (hasInstituteRenamed && !hasDeleted && !hasRestored && !hasClassRenamed) {
     title = many ? "Institutes were updated" : "Institute was updated";
     subtitle = many
       ? "Your admin renamed some institutes. We updated those names automatically across your teacher account."
@@ -2245,6 +2293,17 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
                     <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM}}>From {item.oldInstitute}</span>
                     <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309"}}>Now {item.newInstitute}</span>
+                  </div>
+                )}
+                {item.kind==="institute_deleted_migrated" && item.oldInstitute && item.newInstitute && (
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                    <span style={{background:"rgba(220,38,38,0.07)",border:"1px solid rgba(220,38,38,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B91C1C"}}>🗑 Deleted: {item.oldInstitute}</span>
+                    <span style={{background:"rgba(124,58,237,0.08)",border:"1px solid rgba(124,58,237,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#6D28D9"}}>Moved to: {item.newInstitute}</span>
+                  </div>
+                )}
+                {item.kind==="institute_deleted" && item.oldInstitute && (
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                    <span style={{background:"rgba(220,38,38,0.07)",border:"1px solid rgba(220,38,38,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B91C1C"}}>🗑 Permanently deleted: {item.oldInstitute}</span>
                   </div>
                 )}
                 <div style={{fontSize:12,color:G.textL,lineHeight:1.6,marginTop:8}}>
@@ -2327,23 +2386,25 @@ function ClassTrackerInner({user}){
     pendingAdminClassNotices
       .map(item => {
         const isInstituteRename = item?.kind === "institute_renamed";
+        const isInstituteDeleted = item?.kind === "institute_deleted" || item?.kind === "institute_deleted_migrated";
+        const isInstituteAction = isInstituteRename || isInstituteDeleted;
         const activeClass = (data.classes || []).find(cls => String(cls?.id || "") === String(item?.classId || "")) || null;
         const trashedClass = (data.trash?.classes || []).find(cls => String(cls?.id || "") === String(item?.classId || "")) || null;
-        const record = isInstituteRename ? (item || {}) : (activeClass || trashedClass || item || {});
-        const noteMap = !isInstituteRename && activeClass
+        const record = isInstituteAction ? (item || {}) : (activeClass || trashedClass || item || {});
+        const noteMap = !isInstituteAction && activeClass
           ? (data.notes?.[record.id] || {})
-          : !isInstituteRename && trashedClass
+          : !isInstituteAction && trashedClass
             ? (trashedClass?.savedNotes || {})
             : {};
         return {
           ...item,
           ...buildClassEntrySummary(noteMap),
-          section: isInstituteRename ? "" : (record.section || item.section || "Untitled class"),
+          section: isInstituteAction ? "" : (record.section || item.section || "Untitled class"),
           institute: record.institute || item.institute || "",
           subject: record.subject || item.subject || "",
-          activeClass: isInstituteRename ? null : activeClass,
-          trashedClass: isInstituteRename ? null : trashedClass,
-          status: isInstituteRename ? "info" : activeClass ? "active" : trashedClass ? "trash" : "missing",
+          activeClass: isInstituteAction ? null : activeClass,
+          trashedClass: isInstituteAction ? null : trashedClass,
+          status: isInstituteAction ? "info" : activeClass ? "active" : trashedClass ? "trash" : "missing",
         };
       })
       .sort((a,b)=>(b.eventAt||0)-(a.eventAt||0))
@@ -3167,6 +3228,7 @@ function ClassTrackerInner({user}){
   if(view==="notifications"){
     const hasTrashLinkedNotice = adminNoticeItems.some(item => item.status === "trash");
     const renamedNoticeCount = adminNoticeItems.filter(item => item.kind === "section_renamed" || item.kind === "institute_renamed").length;
+    const instituteActionCount = adminNoticeItems.filter(item => item.kind === "institute_deleted" || item.kind === "institute_deleted_migrated").length;
     const deletedNoticeCount = adminNoticeItems.filter(item => item.kind === "class_deleted").length;
     const restoredNoticeCount = adminNoticeItems.filter(item => item.kind === "class_restored").length;
     return(
@@ -3224,12 +3286,15 @@ function ClassTrackerInner({user}){
               {adminNoticeItems.map(item=>{
                 const copy = getTeacherNoticeCopy(item);
                 const isInstituteRename = item.kind==="institute_renamed";
+                const isInstituteDeleted = item.kind==="institute_deleted";
+                const isInstituteDeletedMigrated = item.kind==="institute_deleted_migrated";
+                const isInstituteAction = isInstituteRename || isInstituteDeleted || isInstituteDeletedMigrated;
                 const isTrash=item.status==="trash";
                 const isActive=item.status==="active";
-                const statusLabel=isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
-                const statusBg=isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
-                const statusColor=isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
-                const dismissLabel=isInstituteRename||isActive||isTrash?"Mark as read":"Remove notice";
+                const statusLabel=isInstituteDeletedMigrated?"Classes moved":isInstituteDeleted?"Institute removed":isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
+                const statusBg=isInstituteDeletedMigrated?"rgba(124,58,237,0.10)":isInstituteDeleted?"rgba(220,38,38,0.10)":isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
+                const statusColor=isInstituteDeletedMigrated?"#6D28D9":isInstituteDeleted?"#B91C1C":isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
+                const dismissLabel=isInstituteAction||isActive||isTrash?"Mark as read":"Remove notice";
                 return(
                   <div key={item.id} style={{...card,padding:isMobile?"16px 16px 14px":"18px 18px 16px"}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap",marginBottom:12}}>
@@ -3242,12 +3307,17 @@ function ClassTrackerInner({user}){
                         </div>
                         <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:8}}>
                           <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textS}}>{item.institute||"No institute"}</span>
-                          {!isInstituteRename && item.subject&&<span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>{item.subject}</span>}
-                          {!isInstituteRename && <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.entryCount} {item.entryCount===1?"entry":"entries"}</span>}
-                          {!isInstituteRename && item.activeDays>0&&<span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.activeDays} {item.activeDays===1?"day":"days"}</span>}
+                          {!isInstituteAction && item.subject&&<span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>{item.subject}</span>}
+                          {!isInstituteAction && <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.entryCount} {item.entryCount===1?"entry":"entries"}</span>}
+                          {!isInstituteAction && item.activeDays>0&&<span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.activeDays} {item.activeDays===1?"day":"days"}</span>}
                           {isInstituteRename && Number(item.impactedClassCount || 0) > 0 && (
                             <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309",fontFamily:G.mono}}>
                               {item.impactedClassCount} {item.impactedClassCount===1?"class":"classes"} updated
+                            </span>
+                          )}
+                          {(isInstituteDeleted||isInstituteDeletedMigrated) && Number(item.impactedClassCount || 0) > 0 && (
+                            <span style={{background:"rgba(220,38,38,0.07)",border:"1px solid rgba(220,38,38,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B91C1C",fontFamily:G.mono}}>
+                              {item.impactedClassCount} {item.impactedClassCount===1?"class":"classes"} affected
                             </span>
                           )}
                         </div>
@@ -3266,9 +3336,20 @@ function ClassTrackerInner({user}){
                             <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309"}}>Now {item.newInstitute}</span>
                           </div>
                         )}
-                        {!isInstituteRename && (
+                        {!isInstituteAction && (
                           <div style={{fontSize:13,color:G.textM,lineHeight:1.7,marginTop:10}}>
                             {item.lastDateKey ? `Last log ${formatDateLabel(item.lastDateKey)}.` : "No saved entries were found for this class."} {item.latestEntryText ? `Latest note: ${item.latestEntryText}` : ""}
+                          </div>
+                        )}
+                        {item.kind==="institute_deleted_migrated" && item.oldInstitute && item.newInstitute && (
+                          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10,marginBottom:2}}>
+                            <span style={{background:"rgba(220,38,38,0.07)",border:"1px solid rgba(220,38,38,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B91C1C"}}>🗑 Deleted: {item.oldInstitute}</span>
+                            <span style={{background:"rgba(124,58,237,0.08)",border:"1px solid rgba(124,58,237,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#6D28D9"}}>Moved to: {item.newInstitute}</span>
+                          </div>
+                        )}
+                        {item.kind==="institute_deleted" && item.oldInstitute && (
+                          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10,marginBottom:2}}>
+                            <span style={{background:"rgba(220,38,38,0.07)",border:"1px solid rgba(220,38,38,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B91C1C"}}>🗑 Permanently deleted: {item.oldInstitute}</span>
                           </div>
                         )}
                       </div>

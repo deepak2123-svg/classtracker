@@ -9,6 +9,8 @@ import {
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute, renameGlobalInstitute, saveInstituteExtraSections,
   getDeletedInstitutesList, addToDeletedInstitutesList, removeFromDeletedInstitutesList,
   repairTeacherIndex, saveProfileName, saveUserData,
+  deleteInstituteCompletely, deleteInstituteAndMigrate,
+  getAdminBin, saveAdminBin,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES } from "./shared.jsx";
 
@@ -3237,6 +3239,7 @@ function AdminPanelInner({user}){
   const [renameVal,    setRenameVal]    = useState("");
   const [deleteModal, setDeleteModal] = useState(null); // {type,label,lines,onConfirm}
   const [deleteBusy,  setDeleteBusy]  = useState(false);
+  const [instDeleteModal, setInstDeleteModal] = useState(null); // null | {inst, step, migrateTarget, busy, error}
   const [deletedInstitutes, setDeletedInstitutes] = useState(new Set());
   const [globalInstList, setGlobalInstList] = useState([]); // from config/institutes
   const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
@@ -3337,10 +3340,12 @@ function AdminPanelInner({user}){
   useEffect(()=>{
     (async()=>{
       // Load index + roles + global institutes list in parallel
-      const [t,r,gInst,gDeleted]=await Promise.all([getAllTeachers(),getAllRoles(),getGlobalInstitutes(),getDeletedInstitutesList()]);
+      const [t,r,gInst,gDeleted,savedBin]=await Promise.all([getAllTeachers(),getAllRoles(),getGlobalInstitutes(),getDeletedInstitutesList(),getAdminBin()]);
       setTeachers(t); setRoles(r);
       // Restore persisted deleted-institutes set so page refresh doesn't un-hide them
       if(gDeleted.length>0) setDeletedInstitutes(new Set(gDeleted.map(i=>i.trim())));
+      // Restore persisted admin recycle bin
+      if(savedBin.length>0) setAdminBin(savedBin);
 
       if(gInst.length>0){
         // Config doc exists and has institutes — use it
@@ -3361,6 +3366,15 @@ function AdminPanelInner({user}){
       setLoading(false);
     })();
   },[]);
+
+  // Persist bin to Firestore whenever it changes
+  const persistAdminBin = React.useCallback(async (updater) => {
+    setAdminBin(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      saveAdminBin(next).catch(()=>{});
+      return next;
+    });
+  }, []);
 
   const showAdminToast = React.useCallback((message) => {
     if(!message) return;
@@ -3828,7 +3842,7 @@ function AdminPanelInner({user}){
     await refreshTeacherIndexState();
 
     if(action === DELETE_SECTION_ACTION){
-      setAdminBin(bin => [
+      persistAdminBin(bin => [
         ...bin,
         {
           type: "section",
@@ -4938,36 +4952,7 @@ function AdminPanelInner({user}){
   };
 
   const handleDeleteInstitute = (inst) => {
-    confirmDelete({
-      title: `Delete "${inst}"?`,
-      lines: [
-        "This removes the institute from all teacher records and the admin panel.",
-        "Teachers and their entries are NOT deleted — they just won't appear under this institute.",
-      ],
-      confirmLabel: "Delete Institute",
-      onConfirm: async () => {
-        setDeleteBusy(true);
-        try {
-          // 1. Remove from config/institutes (the authoritative global list)
-          await deleteGlobalInstitute(inst);
-          // 1b. Persist to deleted list so UI survives page refresh
-          await addToDeletedInstitutesList(inst);
-          // 2. Remove from every teacher's index entry
-          await removeInstituteFromIndex(inst);
-          // 3. Update local state immediately so UI reflects change
-          setGlobalInstList(prev => prev.filter(i => i.trim().toLowerCase() !== inst.trim().toLowerCase()));
-          setDeletedInstitutes(s => new Set([...s, inst.trim()]));
-          setTeachers(ts => ts.map(t => ({
-            ...t,
-            institutes: (t.institutes||[]).filter(i => i.trim().toLowerCase() !== inst.trim().toLowerCase()),
-          })));
-          if (selInst === inst) { setSelInst(null); resetNav(); }
-          // 4. Save to admin recycle bin
-          setAdminBin(b=>[...b,{type:"institute",name:inst,deletedAt:Date.now(),deletedBy:user.uid}]);
-        } catch(e) { showAdminToast("Failed to delete: " + e.message); }
-        setDeleteBusy(false); setDeleteModal(null);
-      },
-    });
+    setInstDeleteModal({ inst, step: "choose", migrateTarget: "", busy: false, error: "" });
   };
 
   const handleDeleteClass = (teacherUid, classId, className, teacherName) => {
@@ -4992,7 +4977,7 @@ function AdminPanelInner({user}){
 
           const fresh = await getTeacherFullData(teacherUid);
           if (fresh) setFullData(prev => ({ ...prev, [teacherUid]: fresh }));
-          setAdminBin(b=>[
+          persistAdminBin(b=>[
             ...b,
             {
               type:"class",
@@ -5055,7 +5040,7 @@ function AdminPanelInner({user}){
             ...prev,
             ...Object.fromEntries(refreshedEntries.filter(([, data]) => !!data)),
           }));
-          setAdminBin(bin => [
+          persistAdminBin(bin => [
             ...bin,
             {
               type: "section",
@@ -6459,7 +6444,7 @@ function AdminPanelInner({user}){
                               }
                               const fresh = await getTeacherFullData(item.teacherUid);
                               if (fresh) setFullData(prev => ({ ...prev, [item.teacherUid]: fresh }));
-                              if (binIdx >= 0) setAdminBin(b=>b.filter((_,j)=>j!==binIdx));
+                              if (binIdx >= 0) persistAdminBin(b=>b.filter((_,j)=>j!==binIdx));
                               showAdminToast(`Restored class "${item.name}".`);
                             } catch (e) {
                               showAdminToast("Failed to restore class: " + e.message);
@@ -6502,7 +6487,7 @@ function AdminPanelInner({user}){
                           </div>
                         </div>
                         <button
-                          onClick={()=>setAdminBin(b=>b.filter((_,j)=>j!==binIdx))}
+                          onClick={()=>persistAdminBin(b=>b.filter((_,j)=>j!==binIdx))}
                           style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.textM,fontFamily:G.sans,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>
                           Dismiss
                         </button>
@@ -6523,47 +6508,57 @@ function AdminPanelInner({user}){
                   {byInst.map((item,i)=>{
                     const dl=daysLeft(item.deletedAt);
                     const binIdx=adminBin.findIndex(x=>x.type==="institute"&&x.name===item.name);
+                    const isMigrated = item.action==="migrated";
+                    const isDeletedCompletely = item.action==="deleted_completely";
+                    const actionLabel = isMigrated
+                      ? `Classes moved to "${item.migratedTo||"another institute"}"`
+                      : isDeletedCompletely
+                        ? "All data permanently deleted"
+                        : "Institute removed from directory";
                     return(
                       <div key={i} style={{background:G.bg,borderRadius:12,padding:"13px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"flex-start",gap:12}}>
-                        <div style={{fontSize:22,flexShrink:0}}>🏫</div>
+                        <div style={{fontSize:22,flexShrink:0}}>{isDeletedCompletely?"🗑️":"🏫"}</div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{item.name}</div>
-                          <div style={{fontSize:13,color:G.textM,marginTop:2}}>Institute removed from directory</div>
+                          <div style={{fontSize:13,color:G.textM,marginTop:2}}>{actionLabel}</div>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap"}}>
                             <span style={{fontSize:12,color:dl<=7?G.red:G.textM,fontFamily:G.mono}}>⏳ {dl}d left</span>
                             <span style={{fontSize:12,color:G.textL,fontFamily:G.mono}}>Deleted {new Date(item.deletedAt).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</span>
                           </div>
                         </div>
                         <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+                          {/* Restore is only useful if institute was soft-deleted (not fully wiped) */}
+                          {!isDeletedCompletely && (
+                            <button
+                              onClick={async()=>{
+                                try{
+                                  await saveGlobalInstitute(item.name);
+                                  await removeFromDeletedInstitutesList(item.name);
+                                  setGlobalInstList(prev=>{
+                                    const lower=prev.map(i=>i.toLowerCase());
+                                    if(lower.includes(item.name.trim().toLowerCase())) return prev;
+                                    return [...prev,item.name.trim()];
+                                  });
+                                  setDeletedInstitutes(s=>{const n=new Set(s);n.delete(item.name.trim());return n;});
+                                  persistAdminBin(b=>b.filter((_,j)=>j!==binIdx));
+                                  showAdminToast(`Restored "${item.name}".`);
+                                }catch(e){showAdminToast("Restore failed: "+e.message);}
+                              }}
+                              style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,whiteSpace:"nowrap"}}>
+                              ↩ Restore
+                            </button>
+                          )}
                           <button
                             onClick={async()=>{
-                              try{
-                                await saveGlobalInstitute(item.name);
-                                await removeFromDeletedInstitutesList(item.name);
-                                setGlobalInstList(prev=>{
-                                  const lower=prev.map(i=>i.toLowerCase());
-                                  if(lower.includes(item.name.trim().toLowerCase())) return prev;
-                                  return [...prev,item.name.trim()];
-                                });
-                                setDeletedInstitutes(s=>{const n=new Set(s);n.delete(item.name.trim());return n;});
-                                setAdminBin(b=>b.filter((_,j)=>j!==binIdx));
-                                showAdminToast(`Restored "${item.name}".`);
-                              }catch(e){showAdminToast("Restore failed: "+e.message);}
-                            }}
-                            style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:600,whiteSpace:"nowrap"}}>
-                            ↩ Restore
-                          </button>
-                          <button
-                            onClick={async()=>{
-                              if(!window.confirm(`Permanently delete "${item.name}"? This cannot be undone.`)) return;
+                              if(!window.confirm(`Remove "${item.name}" from the recycle bin? ${isDeletedCompletely?"":"The institute data has already been deleted — this just clears this log entry."}`)) return;
                               try{
                                 await removeFromDeletedInstitutesList(item.name);
-                                setAdminBin(b=>b.filter((_,j)=>j!==binIdx));
-                                showAdminToast(`"${item.name}" permanently deleted.`);
-                              }catch(e){showAdminToast("Delete failed: "+e.message);}
+                                persistAdminBin(b=>b.filter((_,j)=>j!==binIdx));
+                                showAdminToast(`"${item.name}" removed from bin.`);
+                              }catch(e){showAdminToast("Failed: "+e.message);}
                             }}
                             style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:600,whiteSpace:"nowrap"}}>
-                            🗑 Delete Forever
+                            {isDeletedCompletely ? "✕ Clear log" : "🗑 Delete Forever"}
                           </button>
                         </div>
                       </div>
@@ -6633,11 +6628,293 @@ function AdminPanelInner({user}){
     </button>
   );
 
+  // ── INSTITUTE DELETE MODAL ────────────────────────────────────────────────
+  const InstDeleteModal = () => {
+    if (!instDeleteModal) return null;
+    const { inst, step, migrateTarget, busy, error } = instDeleteModal;
+    const update = (patch) => setInstDeleteModal(prev => prev ? { ...prev, ...patch } : prev);
+
+    // Build the list of valid target institutes (exclude the one being deleted)
+    const availableInstitutes = globalInstList.filter(i => !sameInstituteName(i, inst));
+
+    const overlay = {
+      position:"fixed",inset:0,background:"rgba(15,23,42,0.55)",zIndex:9990,
+      display:"flex",alignItems:"center",justifyContent:"center",padding:16,
+    };
+    const box = {
+      background:G.surface,borderRadius:20,boxShadow:"0 24px 80px rgba(15,23,42,0.22)",
+      padding:"28px 28px 24px",maxWidth:480,width:"100%",position:"relative",
+    };
+    const btn = (bg,color,border="transparent") => ({
+      background:bg,color,border:`1.5px solid ${border}`,borderRadius:10,
+      padding:"11px 20px",fontSize:14,fontWeight:700,cursor:busy?"not-allowed":"pointer",
+      fontFamily:G.sans,opacity:busy?0.6:1,transition:"opacity 0.15s",
+    });
+
+    // ── Step 1: choose action ──────────────────────────────────────────────
+    if (step === "choose") {
+      return (
+        <div style={overlay} onClick={e => { if(e.target===e.currentTarget && !busy) setInstDeleteModal(null); }}>
+          <div style={box}>
+            <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:6}}>
+              Delete institute
+            </div>
+            <div style={{fontSize:14,color:G.textM,marginBottom:22,lineHeight:1.6}}>
+              You are deleting <strong style={{color:G.text}}>"{inst}"</strong>. What should happen to the classes and entries belonging to this institute?
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:22}}>
+              {/* Option A: migrate */}
+              <button
+                onClick={() => !busy && update({ step: "migrate" })}
+                style={{
+                  background:G.blueL,border:`2px solid #BFDBFE`,borderRadius:12,
+                  padding:"14px 16px",cursor:"pointer",textAlign:"left",
+                }}
+              >
+                <div style={{fontSize:14,fontWeight:700,color:G.blue,marginBottom:3}}>↗ Move classes to another institute</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.5}}>
+                  All classes under <strong>"{inst}"</strong> will be migrated to a target institute you choose.
+                  Sections with the same name will be merged. Teachers will be notified.
+                </div>
+              </button>
+              {/* Option B: delete completely */}
+              <button
+                onClick={() => !busy && update({ step: "confirm_delete" })}
+                style={{
+                  background:"#FEF2F2",border:"2px solid #FECACA",borderRadius:12,
+                  padding:"14px 16px",cursor:"pointer",textAlign:"left",
+                }}
+              >
+                <div style={{fontSize:14,fontWeight:700,color:G.red,marginBottom:3}}>🗑 Delete everything permanently</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.5}}>
+                  All classes, entries, and notes under <strong>"{inst}"</strong> will be permanently wiped from every teacher's account.
+                  This cannot be undone. Teachers will be notified.
+                </div>
+              </button>
+            </div>
+            <div style={{display:"flex",justifyContent:"flex-end"}}>
+              <button onClick={() => !busy && setInstDeleteModal(null)} style={btn(G.surface,G.textM,G.border)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Step 2a: pick migration target ────────────────────────────────────
+    if (step === "migrate") {
+      const [newInstName, setNewInstName] = React.useState("");
+      const [creatingNew, setCreatingNew] = React.useState(false);
+
+      const handleMigrateConfirm = async () => {
+        const target = (migrateTarget || "").trim();
+        if (!target) { update({ error: "Please select or create a target institute." }); return; }
+        update({ busy: true, error: "" });
+        try {
+          const result = await deleteInstituteAndMigrate(inst, target, {
+            adminName: user.displayName || user.email || "Admin",
+            eventAt: Date.now(),
+          });
+          // Reflect changes locally
+          setGlobalInstList(prev => {
+            const withoutOld = prev.filter(i => !sameInstituteName(i, inst));
+            const hasTarget = withoutOld.some(i => sameInstituteName(i, target));
+            return hasTarget ? withoutOld : [...withoutOld, target];
+          });
+          setInstSectionsAll(prev => renameInstituteInsideLocalSectionsMap(prev, inst, target));
+          setTeachers(prev => prev.map(t => ({
+            ...t,
+            institutes: replaceInstituteListLocal(t.institutes, inst, target),
+          })));
+          setFullData(prev => Object.fromEntries(
+            Object.entries(prev).map(([uid, td]) => [uid, renameInstituteInsideLocalTeacherData(td, inst, target)])
+          ));
+          setDeletedInstitutes(s => { const n = new Set(s); n.add(inst.trim()); return n; });
+          if (selInst === inst) { setSelInst(target); }
+          persistAdminBin(b => [...b, { type:"institute", name:inst, deletedAt:Date.now(), deletedBy:user.uid, action:"migrated", migratedTo:target }]);
+          setInstDeleteModal(null);
+          showAdminToast(
+            result.affectedTeacherCount
+              ? `Deleted "${inst}" — moved classes to "${target}". ${result.affectedTeacherCount} teacher${result.affectedTeacherCount!==1?"s":""} notified.`
+              : `Deleted "${inst}" and moved classes to "${target}".`
+          );
+        } catch(e) {
+          update({ busy: false, error: e.message || "Something went wrong." });
+        }
+      };
+
+      return (
+        <div style={overlay} onClick={e => { if(e.target===e.currentTarget && !busy) setInstDeleteModal(null); }}>
+          <div style={box}>
+            <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:6}}>
+              Move classes to another institute
+            </div>
+            <div style={{fontSize:14,color:G.textM,marginBottom:20,lineHeight:1.6}}>
+              Choose where to move all classes from <strong style={{color:G.text}}>"{inst}"</strong>.
+            </div>
+
+            {/* Existing institutes */}
+            {availableInstitutes.length > 0 && (
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,marginBottom:8}}>Existing institutes</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {availableInstitutes.map(i => (
+                    <button
+                      key={i}
+                      onClick={() => !busy && update({ migrateTarget: i })}
+                      style={{
+                        border:`2px solid ${migrateTarget===i ? G.blue : G.border}`,
+                        background: migrateTarget===i ? G.blueL : G.bg,
+                        color: migrateTarget===i ? G.blue : G.text,
+                        borderRadius:999,padding:"7px 16px",fontSize:13,fontWeight:600,
+                        cursor:"pointer",transition:"all 0.15s",
+                      }}
+                    >
+                      {migrateTarget===i ? "✓ " : ""}{i}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Create new */}
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,marginBottom:8}}>Or create a new institute</div>
+              <div style={{display:"flex",gap:8}}>
+                <input
+                  value={newInstName}
+                  onChange={e => setNewInstName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key==="Enter" && newInstName.trim()) {
+                      update({ migrateTarget: newInstName.trim() });
+                      setNewInstName("");
+                      setCreatingNew(false);
+                    }
+                  }}
+                  placeholder="New institute name…"
+                  style={{
+                    flex:1,height:38,borderRadius:9,border:`1.5px solid ${G.border}`,
+                    background:G.bg,padding:"0 12px",fontSize:14,color:G.text,
+                    outline:"none",fontFamily:G.sans,
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (newInstName.trim()) {
+                      update({ migrateTarget: newInstName.trim() });
+                      setNewInstName("");
+                    }
+                  }}
+                  style={btn(G.blue,"#fff")}
+                >
+                  Use
+                </button>
+              </div>
+              {migrateTarget && !availableInstitutes.includes(migrateTarget) && (
+                <div style={{fontSize:13,color:G.blue,marginTop:6,fontWeight:600}}>
+                  ✦ Will create new institute: "{migrateTarget}"
+                </div>
+              )}
+            </div>
+
+            {error && <div style={{fontSize:13,color:G.red,marginBottom:14,fontWeight:600}}>{error}</div>}
+
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
+              <button onClick={() => !busy && update({ step:"choose", error:"" })} style={btn(G.surface,G.textM,G.border)} disabled={busy}>
+                ← Back
+              </button>
+              <button
+                onClick={handleMigrateConfirm}
+                disabled={busy || !migrateTarget.trim()}
+                style={btn(G.blue,"#fff")}
+              >
+                {busy ? "Moving…" : `Move to "${migrateTarget || "…"}"`}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Step 2b: confirm complete delete ─────────────────────────────────
+    if (step === "confirm_delete") {
+      const handleDeleteConfirm = async () => {
+        update({ busy: true, error: "" });
+        try {
+          const result = await deleteInstituteCompletely(inst, {
+            adminName: user.displayName || user.email || "Admin",
+            eventAt: Date.now(),
+          });
+          setGlobalInstList(prev => prev.filter(i => !sameInstituteName(i, inst)));
+          setDeletedInstitutes(s => { const n = new Set(s); n.add(inst.trim()); return n; });
+          setTeachers(prev => prev.map(t => ({
+            ...t,
+            institutes: (t.institutes||[]).filter(i => !sameInstituteName(i, inst)),
+          })));
+          setFullData(prev => {
+            const next = { ...prev };
+            Object.keys(next).forEach(uid => {
+              const td = next[uid];
+              if (!td) return;
+              next[uid] = {
+                ...td,
+                classes: (td.classes||[]).filter(c => !sameInstituteName(c?.institute, inst)),
+                institutes: (td.institutes||[]).filter(i => !sameInstituteName(i, inst)),
+              };
+            });
+            return next;
+          });
+          if (selInst === inst) { setSelInst(null); resetNav(); }
+          persistAdminBin(b => [...b, { type:"institute", name:inst, deletedAt:Date.now(), deletedBy:user.uid, action:"deleted_completely" }]);
+          setInstDeleteModal(null);
+          showAdminToast(
+            result.affectedTeacherCount
+              ? `"${inst}" permanently deleted. ${result.affectedTeacherCount} teacher${result.affectedTeacherCount!==1?"s":""} notified.`
+              : `"${inst}" permanently deleted.`
+          );
+        } catch(e) {
+          update({ busy: false, error: e.message || "Something went wrong." });
+        }
+      };
+
+      return (
+        <div style={overlay} onClick={e => { if(e.target===e.currentTarget && !busy) setInstDeleteModal(null); }}>
+          <div style={box}>
+            <div style={{fontSize:20,fontWeight:800,color:G.red,fontFamily:G.display,marginBottom:6}}>
+              Permanently delete "{inst}"?
+            </div>
+            <div style={{
+              background:"#FEF2F2",border:"1.5px solid #FECACA",borderRadius:12,
+              padding:"14px 16px",marginBottom:20,
+            }}>
+              <div style={{fontSize:13,color:"#7F1D1D",lineHeight:1.7}}>
+                ⚠️ <strong>This cannot be undone.</strong> All classes, attendance entries, and notes under "{inst}" will be <strong>permanently wiped</strong> from every teacher's account.
+                Teachers who have classes in this institute will receive a deletion notification.
+              </div>
+            </div>
+            {error && <div style={{fontSize:13,color:G.red,marginBottom:14,fontWeight:600}}>{error}</div>}
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
+              <button onClick={() => !busy && update({ step:"choose", error:"" })} style={btn(G.surface,G.textM,G.border)} disabled={busy}>
+                ← Back
+              </button>
+              <button onClick={handleDeleteConfirm} disabled={busy} style={btn(G.red,"#fff")}>
+                {busy ? "Deleting…" : "Yes, delete permanently"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   // ── MANAGE ACCESS VIEW ────────────────────────────────────────────────────
   if(view==="manage") return(
     <div style={{minHeight:"100svh",background:G.bg,fontFamily:G.sans,overflowX:"hidden"}}>
       {binView&&<AdminBinModal/>}
-      {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+      {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       <AdminToastBanner message={adminToast} />
       {/* nav */}
       <div style={{background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
@@ -7493,7 +7770,7 @@ function AdminPanelInner({user}){
     if(mobileStep===0) return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         {binView&&<AdminBinModal/>}
-        {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         <MobileNav/>
         <MobileStats/>
         <div style={{padding:"12px 14px 40px"}}>
@@ -7619,7 +7896,7 @@ function AdminPanelInner({user}){
     if(mobileStep===1) return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         {binView&&<AdminBinModal/>}
-        {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         {legacySectionRepair&&(
           <LegacySectionRepairModal
@@ -7760,7 +8037,7 @@ function AdminPanelInner({user}){
     if(mobileStep===2) return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
         {binView&&<AdminBinModal/>}
-        {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         <MobileNav/><MobileBreadcrumb/>
         <div style={{padding:"12px 14px 40px"}}>
@@ -7832,7 +8109,7 @@ function AdminPanelInner({user}){
       return(
         <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
           {binView&&<AdminBinModal/>}
-          {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+          {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
           {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
           <MobileNav/><MobileBreadcrumb/>
           <div style={{padding:"12px 14px 40px"}}>
@@ -7967,7 +8244,7 @@ function AdminPanelInner({user}){
   return(
     <div style={{minHeight:"100svh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
       {binView&&<AdminBinModal/>}
-      {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+      {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
       {adminConfirm&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>

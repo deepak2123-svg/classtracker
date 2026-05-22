@@ -952,6 +952,25 @@ export async function removeFromDeletedInstitutesList(name) {
   } catch (e) { console.error("removeFromDeletedInstitutesList", e); }
 }
 
+// ── Admin Recycle Bin persistence ─────────────────────────────────────────────
+export async function getAdminBin() {
+  try {
+    const snap = await getDoc(doc(db, "config", "adminBin"));
+    if (!snap.exists()) return [];
+    return snap.data().items || [];
+  } catch { return []; }
+}
+
+export async function saveAdminBin(items) {
+  try {
+    // Keep only the last 200 items and prune items older than 30 days
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const pruned = (items || []).filter(i => (i.deletedAt || 0) > cutoff).slice(-200);
+    await setDoc(doc(db, "config", "adminBin"), { items: pruned, updatedAt: Date.now() });
+    return pruned;
+  } catch (e) { console.error("saveAdminBin", e); return items; }
+}
+
 export async function renameGlobalInstitute(oldName, newName, extra = {}) {
   const oldLabel = String(oldName || "").trim();
   const nextLabel = String(newName || "").trim();
@@ -1139,4 +1158,289 @@ export async function deleteInstituteGradeGroup(instituteName, groupId) {
     ...existing,
     [instituteName]: { ...(existing[instituteName] || {}), gradeGroups: updated }
   });
+}
+
+// ── Delete institute completely — wipes all classes/notes from every teacher ──
+// Steps:
+//   1. Remove from config/institutes list
+//   2. Remove sections config for this institute
+//   3. For every teacher that has classes under this institute:
+//      - hard-delete those classes and their notes docs from appdata
+//      - strip institute from teacher's profile.institutes / data.institutes
+//      - send a pending notice (institute_deleted kind)
+//   4. Remove from teacher index entries
+//   5. Add to deletedList for recycle-bin tracking
+
+export async function deleteInstituteCompletely(instituteName, extra = {}) {
+  const instLabel = String(instituteName || "").trim();
+  if (!instLabel) throw new Error("Institute name is required.");
+
+  const adminName = String(extra.adminName || "Admin").trim() || "Admin";
+  const eventAt = Number(extra.eventAt || Date.now());
+
+  // 1. Remove from config/institutes and sections
+  const institutesRef = doc(db, "config", "institutes");
+  const sectionsRef = doc(db, "config", "sections");
+  await runTransaction(db, async tx => {
+    const [instSnap, sectSnap] = await Promise.all([tx.get(institutesRef), tx.get(sectionsRef)]);
+    const currentList = instSnap.exists() ? (instSnap.data().list || []) : [];
+    const currentDeleted = instSnap.exists() ? (instSnap.data().deletedList || []) : [];
+    const filtered = currentList.filter(i => normaliseInstituteKey(i) !== normaliseInstituteKey(instLabel));
+    const normDel = normaliseInstituteKey(instLabel);
+    const newDeleted = currentDeleted.some(i => normaliseInstituteKey(i) === normDel)
+      ? currentDeleted
+      : [...currentDeleted, instLabel];
+    tx.set(institutesRef, { list: filtered, deletedList: newDeleted });
+
+    if (sectSnap.exists()) {
+      const sectData = sectSnap.data() || {};
+      const matchKey = Object.keys(sectData).find(k => sameInstituteLabel(k, instLabel));
+      if (matchKey) {
+        const next = { ...sectData };
+        delete next[matchKey];
+        if (Object.keys(next).length) tx.set(sectionsRef, next);
+        else tx.delete(sectionsRef);
+      }
+    }
+  });
+
+  // 2. Walk all teacher main docs and strip classes + notify
+  let affectedTeacherCount = 0;
+  const mainDocsSnap = await getDocs(query(collectionGroup(db, "appdata"), where(documentId(), "==", "main")));
+  const classNotesDeleteQueue = []; // [{uid, classId}]
+
+  for (const snap of mainDocsSnap.docs) {
+    const uid = snap.ref.parent.parent?.id;
+    if (!uid) continue;
+
+    let currentData = snap.data();
+    const hasMatch =
+      (currentData.classes || []).some(c => sameInstituteLabel(c?.institute, instLabel)) ||
+      (currentData.trash?.classes || []).some(c => sameInstituteLabel(c?.institute, instLabel)) ||
+      (currentData.institutes || []).some(i => sameInstituteLabel(i, instLabel)) ||
+      (currentData.profile?.institutes || []).some(i => sameInstituteLabel(i, instLabel));
+    if (!hasMatch) continue;
+
+    const classesToDelete = (currentData.classes || []).filter(c => sameInstituteLabel(c?.institute, instLabel));
+    classesToDelete.forEach(c => classNotesDeleteQueue.push({ uid, classId: c.id }));
+
+    let attempt = 0;
+    while (attempt < 2) {
+      const currentClasses = currentData.classes || [];
+      const deletedClassIds = new Set(
+        currentClasses.filter(c => sameInstituteLabel(c?.institute, instLabel)).map(c => c.id)
+      );
+      const nextClasses = currentClasses.filter(c => !deletedClassIds.has(c.id));
+      const nextTrashClasses = (currentData.trash?.classes || []).filter(c => !sameInstituteLabel(c?.institute, instLabel));
+      const nextTrashNotes = (currentData.trash?.notes || []).filter(n => !sameInstituteLabel(n?.institute, instLabel));
+      const nextNotes = Object.fromEntries(
+        Object.entries(currentData.notes || {}).filter(([k]) => !deletedClassIds.has(k))
+      );
+      const nextInstitutes = uniqueTrimmed((currentData.institutes || []).filter(i => !sameInstituteLabel(i, instLabel)));
+      const nextProfileInstitutes = uniqueTrimmed((currentData.profile?.institutes || []).filter(i => !sameInstituteLabel(i, instLabel)));
+
+      // Build a deletion notice
+      const notice = {
+        id: `institute_deleted_${normaliseInstituteKey(instLabel)}_${eventAt}`,
+        kind: "institute_deleted",
+        classId: "",
+        section: "",
+        institute: "",
+        subject: "",
+        adminName,
+        eventAt,
+        promptedAt: null,
+        oldInstitute: instLabel,
+        newInstitute: "",
+        impactedClassCount: deletedClassIds.size,
+      };
+      const existingNotices = Array.isArray(currentData?._meta?.pendingAdminClassNotices)
+        ? currentData._meta.pendingAdminClassNotices : [];
+      const nextNotices = [
+        ...existingNotices.filter(n => String(n?.id || "") !== notice.id),
+        notice,
+      ].slice(-20);
+
+      const patchedData = {
+        ...currentData,
+        classes: nextClasses,
+        notes: nextNotes,
+        institutes: nextInstitutes,
+        profile: { ...(currentData.profile || {}), institutes: nextProfileInstitutes },
+        trash: { ...(currentData.trash || {}), classes: nextTrashClasses, notes: nextTrashNotes },
+        _meta: { ...(currentData._meta || {}), pendingAdminClassNotices: nextNotices },
+      };
+
+      try {
+        await saveUserData(uid, patchedData, {
+          expectedRevision: safeRevision(currentData?._meta?.revision),
+          source: "adminDeleteInstituteCompletely",
+        });
+        affectedTeacherCount += 1;
+        break;
+      } catch (err) {
+        if (err?.code === "revision-conflict" && attempt === 0) {
+          const latest = await getDoc(userDocRef(uid));
+          if (!latest.exists()) break;
+          currentData = latest.data();
+          attempt += 1;
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  // 3. Delete orphaned notes sub-docs
+  await Promise.allSettled(
+    classNotesDeleteQueue.map(({ uid, classId }) =>
+      deleteDoc(doc(db, "users", uid, "appdata", `notes_${classId}`)).catch(() => {})
+    )
+  );
+
+  // 4. Remove from teacher index
+  await removeInstituteFromIndex(instLabel);
+
+  return { affectedTeacherCount, classesDeleted: classNotesDeleteQueue.length };
+}
+
+// ── Delete institute and migrate its classes/sections to another institute ────
+// If targetInstituteName is null/empty this creates a new entry in config.
+// Section configs with the same name are merged; unique ones are carried over.
+// Teachers are notified via institute_renamed notice (which has full UI support).
+
+export async function deleteInstituteAndMigrate(fromInstituteName, toInstituteName, extra = {}) {
+  const fromLabel = String(fromInstituteName || "").trim();
+  const toLabel = String(toInstituteName || "").trim();
+  if (!fromLabel) throw new Error("Source institute name is required.");
+  if (!toLabel) throw new Error("Target institute name is required.");
+  if (sameInstituteLabel(fromLabel, toLabel)) throw new Error("Source and target are the same institute.");
+
+  const adminName = String(extra.adminName || "Admin").trim() || "Admin";
+  const eventAt = Number(extra.eventAt || Date.now());
+
+  // Step 1: Rename in config/institutes (adds target if missing) + merge sections
+  const institutesRef = doc(db, "config", "institutes");
+  const sectionsRef = doc(db, "config", "sections");
+
+  await runTransaction(db, async tx => {
+    const [instSnap, sectSnap] = await Promise.all([tx.get(institutesRef), tx.get(sectionsRef)]);
+    const currentList = instSnap.exists() ? (instSnap.data().list || []) : [];
+    const currentDeleted = instSnap.exists() ? (instSnap.data().deletedList || []) : [];
+
+    // Remove fromLabel, ensure toLabel exists
+    const withoutFrom = currentList.filter(i => !sameInstituteLabel(i, fromLabel));
+    const targetExists = withoutFrom.some(i => sameInstituteLabel(i, toLabel));
+    const nextList = targetExists ? withoutFrom : [...withoutFrom, toLabel];
+
+    // Add fromLabel to deletedList
+    const normFrom = normaliseInstituteKey(fromLabel);
+    const newDeleted = currentDeleted.some(i => normaliseInstituteKey(i) === normFrom)
+      ? currentDeleted
+      : [...currentDeleted, fromLabel];
+
+    tx.set(institutesRef, { list: nextList, deletedList: newDeleted });
+
+    // Merge sections config
+    if (sectSnap.exists()) {
+      const sectData = sectSnap.data() || {};
+      const fromKey = Object.keys(sectData).find(k => sameInstituteLabel(k, fromLabel));
+      const toKey = Object.keys(sectData).find(k => sameInstituteLabel(k, toLabel));
+
+      if (fromKey) {
+        const fromConfig = sectData[fromKey] || {};
+        const toConfig = sectData[toKey] || {};
+        const next = { ...sectData };
+        delete next[fromKey];
+
+        // Merge grade groups: keep toLabel's existing ones, add any from fromLabel that don't conflict by label
+        const toGroups = toConfig.gradeGroups || [];
+        const fromGroups = fromConfig.gradeGroups || [];
+        const toGroupLabels = new Set(toGroups.map(g => (g.label || "").toLowerCase()));
+        const mergedGroups = [
+          ...toGroups,
+          ...fromGroups.filter(g => !toGroupLabels.has((g.label || "").toLowerCase())),
+        ];
+
+        // Merge extraSections
+        const mergedExtra = uniqueTrimmed([
+          ...(toConfig.extraSections || []),
+          ...(fromConfig.extraSections || []),
+        ]);
+
+        next[toLabel] = {
+          ...toConfig,
+          ...fromConfig,
+          ...toConfig, // toLabel wins on overlapping keys
+          gradeGroups: mergedGroups,
+          extraSections: mergedExtra,
+        };
+
+        if (Object.keys(next).length) tx.set(sectionsRef, next);
+        else tx.delete(sectionsRef);
+      }
+    }
+  });
+
+  // Step 2: Rename all teacher data from → to (reuses the same battle-tested function)
+  const mainDocsSnap = await getDocs(query(collectionGroup(db, "appdata"), where(documentId(), "==", "main")));
+  let affectedTeacherCount = 0;
+  let notifiedTeacherCount = 0;
+  const updatedUids = new Set();
+
+  for (const snap of mainDocsSnap.docs) {
+    const uid = snap.ref.parent.parent?.id;
+    if (!uid) continue;
+
+    let currentData = snap.data();
+    let attempt = 0;
+    while (attempt < 2) {
+      const transformed = applyInstituteRenameToTeacherData(currentData, fromLabel, toLabel, { adminName, eventAt });
+      if (!transformed.changed) break;
+
+      // Override the notice kind to institute_deleted_migrated so teacher sees better copy
+      const nextNotices = (transformed.data?._meta?.pendingAdminClassNotices || []).map(n => {
+        if (n?.kind === "institute_renamed" && sameInstituteLabel(n?.oldInstitute, fromLabel)) {
+          return { ...n, kind: "institute_deleted_migrated", oldInstitute: fromLabel, newInstitute: toLabel };
+        }
+        return n;
+      });
+      const patchedData = {
+        ...transformed.data,
+        _meta: { ...(transformed.data._meta || {}), pendingAdminClassNotices: nextNotices },
+      };
+
+      try {
+        await saveUserData(uid, patchedData, {
+          expectedRevision: safeRevision(currentData?._meta?.revision),
+          source: "adminDeleteInstituteAndMigrate",
+        });
+        affectedTeacherCount += 1;
+        if (transformed.noticeAdded) notifiedTeacherCount += 1;
+        updatedUids.add(uid);
+        break;
+      } catch (err) {
+        if (err?.code === "revision-conflict" && attempt === 0) {
+          const latest = await getDoc(userDocRef(uid));
+          if (!latest.exists()) break;
+          currentData = latest.data();
+          attempt += 1;
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  // Step 3: Update teacher index entries that weren't touched above
+  const teacherIndexSnap = await getDocs(collection(db, "teachers"));
+  for (const snap of teacherIndexSnap.docs) {
+    if (updatedUids.has(snap.id)) continue;
+    const curr = uniqueTrimmed(snap.data()?.institutes || []);
+    const next = replaceInstituteList(curr, fromLabel, toLabel);
+    if (next.length === curr.length && next.every((v, i) => v === curr[i])) continue;
+    await setDoc(doc(db, "teachers", snap.id), { institutes: next }, { merge: true });
+  }
+
+  return { affectedTeacherCount, notifiedTeacherCount };
 }
