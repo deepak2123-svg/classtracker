@@ -55,16 +55,30 @@ export function formatDateLabel(dk){
 export function Spinner({ text="Loading…" }) {
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(180deg, #F8FAFC 0%, #EEF4FF 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:20,padding:"24px 16px"}}>
-      <div style={{position:"relative",width:116,height:84,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <div style={{position:"absolute",bottom:0,width:92,height:12,borderRadius:999,background:"rgba(15,23,42,0.08)",filter:"blur(5px)"}}/>
-        <div className="book-loader-shell" style={{position:"relative",width:96,height:68,perspective:"1200px"}}>
-          <div className="book-loader-cover book-loader-cover-left"/>
-          <div className="book-loader-cover book-loader-cover-right"/>
-          <div className="book-loader-page book-loader-page-a"/>
-          <div className="book-loader-page book-loader-page-b"/>
-          <div className="book-loader-page book-loader-page-c"/>
-          <div className="book-loader-spine"/>
-        </div>
+      <div style={{position:"relative",width:132,height:96,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{position:"absolute",bottom:2,width:108,height:14,borderRadius:999,background:"rgba(15,23,42,0.1)",filter:"blur(7px)"}}/>
+        <svg className="book-loader-shell" viewBox="0 0 180 120" aria-hidden="true" style={{width:132,height:96,overflow:"visible"}}>
+          <path className="book-loader-base book-loader-base-left" d="M90 90 C68 83 39 84 14 94 L18 100 C42 91 66 92 89 101 Z"/>
+          <path className="book-loader-base book-loader-base-right" d="M90 90 C112 83 141 84 166 94 L162 100 C138 91 114 92 91 101 Z"/>
+          <path className="book-loader-stack" d="M92 84 C116 78 143 79 167 88"/>
+          <path className="book-loader-stack" d="M93 88 C118 82 144 83 166 91"/>
+          <path className="book-loader-stack book-loader-stack-left" d="M88 84 C64 78 37 79 13 88"/>
+          <path className="book-loader-stack book-loader-stack-left" d="M87 88 C62 82 36 83 14 91"/>
+          <g className="book-loader-leaf book-loader-leaf-a">
+            <path d="M89 88 C92 65 101 41 118 21 C110 23 102 28 95 35 C86 45 82 61 82 84 Z"/>
+          </g>
+          <g className="book-loader-leaf book-loader-leaf-b">
+            <path d="M89 88 C93 61 104 35 128 12 C117 16 107 22 98 32 C88 44 83 60 82 85 Z"/>
+          </g>
+          <g className="book-loader-leaf book-loader-leaf-c">
+            <path d="M89 88 C94 58 110 31 139 10 C126 13 114 20 103 30 C91 42 84 60 82 85 Z"/>
+          </g>
+          <g className="book-loader-leaf book-loader-leaf-d">
+            <path d="M89 88 C95 55 114 28 149 12 C136 13 123 19 110 30 C96 42 86 60 82 85 Z"/>
+          </g>
+          <path className="book-loader-spine" d="M84 87 C85 98 87 108 90 114 C93 108 95 98 96 87"/>
+          <path className="book-loader-crease" d="M90 88 C89 95 89 102 90 110"/>
+        </svg>
       </div>
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
         <div style={{fontSize:14,fontWeight:800,letterSpacing:1.1,textTransform:"uppercase",color:"#2563EB",fontFamily:"'Inter',sans-serif"}}>Loading Ledgr</div>
@@ -72,54 +86,88 @@ export function Spinner({ text="Loading…" }) {
       </div>
       <style>{`
         .book-loader-shell{
-          transform-style:preserve-3d;
+          overflow:visible;
+          animation:book-shell-float 2.3s ease-in-out infinite;
         }
-        .book-loader-cover,
-        .book-loader-page,
+        .book-loader-base{
+          fill:#FFFFFF;
+          stroke:#CBD5E1;
+          stroke-width:1.8;
+          filter:drop-shadow(0 10px 18px rgba(37,99,235,0.08));
+        }
+        .book-loader-base-left{
+          fill:#F8FAFC;
+        }
+        .book-loader-base-right{
+          fill:#EFF6FF;
+        }
+        .book-loader-stack{
+          fill:none;
+          stroke:rgba(148,163,184,0.65);
+          stroke-width:1.7;
+          stroke-linecap:round;
+        }
+        .book-loader-stack-left{
+          stroke:rgba(148,163,184,0.52);
+        }
+        .book-loader-leaf{
+          fill:#FFFFFF;
+          stroke:#DBEAFE;
+          stroke-width:1.25;
+          transform-box:view-box;
+          transform-origin:90px 88px;
+          filter:drop-shadow(0 8px 12px rgba(37,99,235,0.12));
+          will-change:transform, opacity;
+          opacity:0;
+        }
+        .book-loader-leaf path{
+          fill:rgba(255,255,255,0.96);
+        }
+        .book-loader-leaf-a{ animation:book-side-page-turn 1.8s cubic-bezier(.2,.75,.25,1) infinite; }
+        .book-loader-leaf-b{ animation:book-side-page-turn 1.8s cubic-bezier(.2,.75,.25,1) infinite 0.18s; }
+        .book-loader-leaf-c{ animation:book-side-page-turn 1.8s cubic-bezier(.2,.75,.25,1) infinite 0.36s; }
+        .book-loader-leaf-d{ animation:book-side-page-turn 1.8s cubic-bezier(.2,.75,.25,1) infinite 0.54s; }
         .book-loader-spine{
-          position:absolute;
-          inset:0;
-          border-radius:16px;
+          fill:none;
+          stroke:#2563EB;
+          stroke-width:3.4;
+          stroke-linecap:round;
+          opacity:0.92;
         }
-        .book-loader-cover-left{
-          background:linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
-          box-shadow:0 18px 32px rgba(15,23,42,0.18);
-          transform:translateZ(0);
+        .book-loader-crease{
+          fill:none;
+          stroke:rgba(37,99,235,0.28);
+          stroke-width:1.8;
+          stroke-linecap:round;
         }
-        .book-loader-cover-right{
-          background:linear-gradient(180deg, #2563EB 0%, #3B82F6 100%);
-          box-shadow:inset 0 1px 0 rgba(255,255,255,0.18);
-          transform-origin:left center;
-          animation:book-cover-turn 1.6s ease-in-out infinite;
+        @keyframes book-shell-float{
+          0%, 100% { transform:translateY(0px); }
+          50% { transform:translateY(-2px); }
         }
-        .book-loader-page{
-          inset:5px 6px 5px 42px;
-          border-radius:12px;
-          background:linear-gradient(180deg, #FFFFFF 0%, #EFF6FF 100%);
-          transform-origin:left center;
-          box-shadow:0 4px 10px rgba(37,99,235,0.08);
-        }
-        .book-loader-page-a{ animation:book-page-turn 1.6s ease-in-out infinite 0.12s; }
-        .book-loader-page-b{ animation:book-page-turn 1.6s ease-in-out infinite 0.26s; }
-        .book-loader-page-c{ animation:book-page-turn 1.6s ease-in-out infinite 0.4s; }
-        .book-loader-spine{
-          width:10px;
-          left:37px;
-          right:auto;
-          border-radius:8px;
-          background:linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 100%);
-          box-shadow:inset -1px 0 0 rgba(255,255,255,0.16);
-        }
-        @keyframes book-cover-turn{
-          0%, 18% { transform:rotateY(0deg); }
-          48%, 72% { transform:rotateY(-152deg); }
-          100% { transform:rotateY(0deg); }
-        }
-        @keyframes book-page-turn{
-          0%, 22% { transform:rotateY(0deg); opacity:0.96; }
-          48% { transform:rotateY(-168deg); opacity:0.88; }
-          75% { transform:rotateY(-176deg); opacity:0.32; }
-          100% { transform:rotateY(0deg); opacity:0.96; }
+        @keyframes book-side-page-turn{
+          0%{
+            transform:rotate(18deg) translateY(2px) scale(0.9);
+            opacity:0;
+          }
+          12%{
+            opacity:0.94;
+          }
+          36%{
+            transform:rotate(4deg) translateY(-1px) scale(0.97);
+            opacity:1;
+          }
+          62%{
+            transform:rotate(-20deg) translateY(-4px) scale(1.03);
+            opacity:0.96;
+          }
+          82%{
+            transform:rotate(-36deg) translateY(-6px) scale(1.05);
+            opacity:0.52;
+          }
+          100%{
+            transform:rotate(-48deg) translateY(-7px) scale(1.02);
+            opacity:0;
+          }
         }
       `}</style>
     </div>
