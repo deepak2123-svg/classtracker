@@ -3182,7 +3182,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
 
 // ── Daily Centre Summary ──────────────────────────────────────────────────────
-function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, onSelectInstitute, period = "today", onChangePeriod, customRange = {}, onChangeRangeStart, onChangeRangeEnd }) {
+function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, onSelectInstitute, period = "today", onChangePeriod, customRange = {}, onChangeRangeStart, onChangeRangeEnd, summaryLoad = { status: "idle", loaded: 0, total: 0 }, onLoadAll }) {
   const [filter, setFilter] = React.useState("all");
   const [copied, setCopied] = React.useState(false);
 
@@ -3325,6 +3325,54 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
         </button>
       </div>
 
+      {/* Load all data banner */}
+      {summaryLoad.status !== "done" && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+          background: summaryLoad.status === "loading" ? "#EEF4FF" : "#FFF8ED",
+          border: `1px solid ${summaryLoad.status === "loading" ? "#C7D7F5" : "#FED7AA"}`,
+          borderRadius: 12, padding: "12px 16px",
+        }}>
+          {summaryLoad.status === "idle" ? (
+            <>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#92400E", fontFamily: G.sans }}>Data not loaded yet</div>
+                <div style={{ fontSize: 12, color: "#B45309", marginTop: 2 }}>
+                  Centre counts will be empty until you load all teacher data. This uses ~{teachers.length} Firestore reads.
+                </div>
+              </div>
+              <button
+                onClick={onLoadAll}
+                style={{
+                  background: G.navy, color: "#fff", border: "none", borderRadius: 9,
+                  padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  fontFamily: G.sans, flexShrink: 0, whiteSpace: "nowrap",
+                }}>
+                Load all centre data
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1E3A8A", fontFamily: G.sans }}>
+                  Loading centre data… {summaryLoad.loaded}/{summaryLoad.total} teachers
+                </div>
+                <div style={{ marginTop: 6, height: 6, borderRadius: 999, background: "#DBEAFE", overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%", borderRadius: 999, background: G.blue,
+                    width: `${summaryLoad.total > 0 ? Math.round(summaryLoad.loaded / summaryLoad.total * 100) : 0}%`,
+                    transition: "width 0.3s ease",
+                  }} />
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: "#3B82F6", fontWeight: 700, fontFamily: G.mono, flexShrink: 0 }}>
+                {summaryLoad.total > 0 ? Math.round(summaryLoad.loaded / summaryLoad.total * 100) : 0}%
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Metric cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 10 }}>
         {[
@@ -3437,6 +3485,7 @@ function AdminPanelInner({user}){
   const [roles,       setRoles]       = useState({});
   const [loading,     setLoading]     = useState(true);
   const [loadingUids, setLoadingUids] = useState(new Set());
+  const [summaryLoad, setSummaryLoad] = useState({ status: "idle", loaded: 0, total: 0 }); // idle | loading | done
   const [view,        setView]        = useState("main"); // main | manage
   const [inviteLink,  setInviteLink]  = useState(null);
   const [inviteLoading,setInviteLoading]=useState(false);
@@ -3609,6 +3658,7 @@ function AdminPanelInner({user}){
         }
       }
       setLoading(false);
+
     })();
   },[]);
 
@@ -3784,6 +3834,28 @@ function AdminPanelInner({user}){
   const warmInstitute = React.useCallback((inst) => {
     warmTeacherUids(getInstituteTeacherUids(inst), inst);
   }, [getInstituteTeacherUids, warmTeacherUids]);
+
+  const loadAllCentreData = React.useCallback(async () => {
+    const allUids = teachers.map(t => t.uid).filter(Boolean);
+    const missing = allUids.filter(uid => !fullData[uid]);
+    if (!missing.length) { setSummaryLoad({ status: "done", loaded: allUids.length, total: allUids.length }); return; }
+    setSummaryLoad({ status: "loading", loaded: allUids.length - missing.length, total: allUids.length });
+    const BATCH = 6;
+    const DELAY = 100;
+    let loaded = allUids.length - missing.length;
+    for (let i = 0; i < missing.length; i += BATCH) {
+      const chunk = missing.slice(i, i + BATCH);
+      await Promise.all(chunk.map(uid =>
+        getTeacherFullData(uid)
+          .then(d => { if (d) setFullData(prev => prev[uid] ? prev : { ...prev, [uid]: d }); })
+          .catch(() => {})
+      ));
+      loaded = Math.min(loaded + chunk.length, allUids.length);
+      setSummaryLoad(prev => ({ ...prev, loaded }));
+      if (i + BATCH < missing.length) await new Promise(r => window.setTimeout(r, DELAY));
+    }
+    setSummaryLoad({ status: "done", loaded: allUids.length, total: allUids.length });
+  }, [teachers, fullData]);
 
   React.useEffect(()=>{
     if(instDetailView){
@@ -6108,6 +6180,8 @@ function AdminPanelInner({user}){
           customRange={customRange}
           onChangeRangeStart={handleRangeStartChange}
           onChangeRangeEnd={handleRangeEndChange}
+          summaryLoad={summaryLoad}
+          onLoadAll={loadAllCentreData}
         />
       );
     }
