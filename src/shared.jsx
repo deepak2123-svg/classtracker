@@ -54,10 +54,74 @@ export function formatDateLabel(dk){
 
 export function Spinner({ text="Loading…" }) {
   return (
-    <div style={{minHeight:"100vh",background:"#F7F8F6",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14}}>
-      <div style={{width:36,height:36,borderRadius:"50%",border:"3px solid #E5E5E5",borderTopColor:"#1B8A4C",animation:"spin 0.8s linear infinite"}}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{color:"#aaa",fontSize:15,fontFamily:"'Inter',sans-serif"}}>{text}</div>
+    <div style={{minHeight:"100vh",background:"linear-gradient(180deg, #F8FAFC 0%, #EEF4FF 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:20,padding:"24px 16px"}}>
+      <div style={{position:"relative",width:116,height:84,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{position:"absolute",bottom:0,width:92,height:12,borderRadius:999,background:"rgba(15,23,42,0.08)",filter:"blur(5px)"}}/>
+        <div className="book-loader-shell" style={{position:"relative",width:96,height:68,perspective:"1200px"}}>
+          <div className="book-loader-cover book-loader-cover-left"/>
+          <div className="book-loader-cover book-loader-cover-right"/>
+          <div className="book-loader-page book-loader-page-a"/>
+          <div className="book-loader-page book-loader-page-b"/>
+          <div className="book-loader-page book-loader-page-c"/>
+          <div className="book-loader-spine"/>
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+        <div style={{fontSize:14,fontWeight:800,letterSpacing:1.1,textTransform:"uppercase",color:"#2563EB",fontFamily:"'Inter',sans-serif"}}>Loading ClassTracker</div>
+        <div style={{color:"#64748B",fontSize:15,fontFamily:"'Inter',sans-serif",textAlign:"center"}}>{text}</div>
+      </div>
+      <style>{`
+        .book-loader-shell{
+          transform-style:preserve-3d;
+        }
+        .book-loader-cover,
+        .book-loader-page,
+        .book-loader-spine{
+          position:absolute;
+          inset:0;
+          border-radius:16px;
+        }
+        .book-loader-cover-left{
+          background:linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
+          box-shadow:0 18px 32px rgba(15,23,42,0.18);
+          transform:translateZ(0);
+        }
+        .book-loader-cover-right{
+          background:linear-gradient(180deg, #2563EB 0%, #3B82F6 100%);
+          box-shadow:inset 0 1px 0 rgba(255,255,255,0.18);
+          transform-origin:left center;
+          animation:book-cover-turn 1.6s ease-in-out infinite;
+        }
+        .book-loader-page{
+          inset:5px 6px 5px 42px;
+          border-radius:12px;
+          background:linear-gradient(180deg, #FFFFFF 0%, #EFF6FF 100%);
+          transform-origin:left center;
+          box-shadow:0 4px 10px rgba(37,99,235,0.08);
+        }
+        .book-loader-page-a{ animation:book-page-turn 1.6s ease-in-out infinite 0.12s; }
+        .book-loader-page-b{ animation:book-page-turn 1.6s ease-in-out infinite 0.26s; }
+        .book-loader-page-c{ animation:book-page-turn 1.6s ease-in-out infinite 0.4s; }
+        .book-loader-spine{
+          width:10px;
+          left:37px;
+          right:auto;
+          border-radius:8px;
+          background:linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 100%);
+          box-shadow:inset -1px 0 0 rgba(255,255,255,0.16);
+        }
+        @keyframes book-cover-turn{
+          0%, 18% { transform:rotateY(0deg); }
+          48%, 72% { transform:rotateY(-152deg); }
+          100% { transform:rotateY(0deg); }
+        }
+        @keyframes book-page-turn{
+          0%, 22% { transform:rotateY(0deg); opacity:0.96; }
+          48% { transform:rotateY(-168deg); opacity:0.88; }
+          75% { transform:rotateY(-176deg); opacity:0.32; }
+          100% { transform:rotateY(0deg); opacity:0.96; }
+        }
+      `}</style>
     </div>
   );
 }

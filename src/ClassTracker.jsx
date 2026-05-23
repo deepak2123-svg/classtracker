@@ -1351,6 +1351,57 @@ function LeaveClassModal({cls,onConfirm,onClose}){
   );
 }
 
+function TeacherClassQuickSheet({cls,entryCount=0,onOpenHistory,onDelete,onClose}){
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.44)",zIndex:9998,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:460,background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:"26px 26px 22px 22px",boxShadow:"0 28px 72px rgba(15,23,42,0.26)",overflow:"hidden",border:`1px solid ${G.border}`}}>
+        <div style={{padding:"10px 18px 4px",display:"flex",justifyContent:"center"}}>
+          <span style={{width:42,height:5,borderRadius:999,background:"rgba(148,163,184,0.34)"}}/>
+        </div>
+        <div style={{padding:"8px 20px 18px"}}>
+          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Class actions</div>
+          <div style={{fontSize:23,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.05}}>{cls.section}</div>
+          <div style={{fontSize:14,color:G.textM,marginTop:6,lineHeight:1.5}}>
+            {cls.institute}
+            {cls.subject ? ` · ${cls.subject}` : ""}
+          </div>
+          <div style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:10,background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.14)",borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:"#1D4ED8"}}>
+            {entryCount} {entryCount===1 ? "saved entry" : "saved entries"}
+          </div>
+        </div>
+        <div style={{padding:"0 14px 14px",display:"flex",flexDirection:"column",gap:10}}>
+          <button
+            type="button"
+            onClick={onOpenHistory}
+            disabled={entryCount===0}
+            style={{width:"100%",background:entryCount===0?"#F8FAFC":"#FFFFFF",border:`1px solid ${entryCount===0?G.border:"#BFDBFE"}`,borderRadius:18,padding:"15px 16px",display:"flex",alignItems:"center",gap:14,textAlign:"left",cursor:entryCount===0?"not-allowed":"pointer",color:entryCount===0?G.textL:G.text,boxShadow:G.shadowSm,WebkitTapHighlightColor:"transparent"}}>
+            <div style={{width:44,height:44,borderRadius:15,background:entryCount===0?"rgba(148,163,184,0.12)":"#EFF6FF",border:`1px solid ${entryCount===0?G.border:"#BFDBFE"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>🕘</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:17,fontWeight:800,fontFamily:G.display,lineHeight:1.15}}>History</div>
+              <div style={{fontSize:13.5,color:entryCount===0?G.textL:G.textM,marginTop:4,lineHeight:1.45}}>
+                {entryCount===0 ? "No saved entries yet for this class." : "Open saved dates and jump into older entries."}
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            style={{width:"100%",background:"linear-gradient(180deg, #FFFFFF 0%, #FFF7F7 100%)",border:"1px solid #FECACA",borderRadius:18,padding:"15px 16px",display:"flex",alignItems:"center",gap:14,textAlign:"left",cursor:"pointer",color:"#B91C1C",boxShadow:G.shadowSm,WebkitTapHighlightColor:"transparent"}}>
+            <div style={{width:44,height:44,borderRadius:15,background:"#FEF2F2",border:"1px solid #FECACA",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>🗑</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:17,fontWeight:800,fontFamily:G.display,lineHeight:1.15}}>Delete class</div>
+              <div style={{fontSize:13.5,color:"#B91C1C",marginTop:4,lineHeight:1.45}}>
+                Move this class into the class recycle flow.
+              </div>
+            </div>
+          </button>
+          <GhostBtn onClick={onClose} style={{width:"100%",padding:"13px 16px"}}>Close</GhostBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HistoryModal({cls,classNotes={},selectedDate,onSelectDate,onClose}){
   const [query,setQuery]=useState("");
 
@@ -2494,6 +2545,7 @@ function ClassTrackerInner({user}){
   }, [data.classes, instFilter]);
   const [leaveModal,setLeaveModal]     = useState(null);
   const [historyClassId,setHistoryClassId] = useState(null);
+  const [mobileClassSheetId,setMobileClassSheetId] = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
   const [exportOpen,setExportOpen]       = useState(false);
   const [statPeriod,setStatPeriod]       = useState("month");
@@ -2514,6 +2566,7 @@ function ClassTrackerInner({user}){
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
   const lastSyncedFingerprint = useRef("");
+  const classSwipeStartRef = useRef(null);
 
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups,extraSections}}
@@ -2530,6 +2583,12 @@ function ClassTrackerInner({user}){
       : []
   ), [data?._meta?.pendingAdminClassNotices]);
   const notificationCount = pendingAdminClassNotices.length;
+  const teacherActiveClasses = useMemo(() => (
+    [...(data.classes || []).filter(c => !c.left)].sort((a,b)=>(b.created||0)-(a.created||0))
+  ), [data.classes]);
+  const teacherVisibleClasses = useMemo(() => (
+    instFilter==="all" ? teacherActiveClasses : teacherActiveClasses.filter(c=>c.institute===instFilter)
+  ), [teacherActiveClasses, instFilter]);
   const adminNoticeItems = useMemo(() => (
     pendingAdminClassNotices
       .map(item => {
@@ -2893,6 +2952,21 @@ function ClassTrackerInner({user}){
       action ? action() : setView(destination);
     }
   }
+
+  const navigateSiblingClass = React.useCallback((direction) => {
+    const currentId = String(activeClass?.id || "");
+    if(!currentId) return false;
+    const pool = teacherVisibleClasses.some(cls => String(cls?.id || "") === currentId)
+      ? teacherVisibleClasses
+      : teacherActiveClasses;
+    if(pool.length < 2) return false;
+    const currentIndex = pool.findIndex(cls => String(cls?.id || "") === currentId);
+    if(currentIndex < 0) return false;
+    const nextIndex = (currentIndex + direction + pool.length) % pool.length;
+    if(nextIndex === currentIndex) return false;
+    setActiveClass(pool[nextIndex]);
+    return true;
+  }, [activeClass?.id, teacherActiveClasses, teacherVisibleClasses]);
 
   function showInlineToast(msg){
     setInlineToast(msg);
@@ -3380,6 +3454,7 @@ function ClassTrackerInner({user}){
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
       {historyClassId && (()=>{const cls=data.classes.find(c=>c.id===historyClassId);return cls?<HistoryModal cls={cls} classNotes={data.notes[historyClassId]||{}} selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={()=>setHistoryClassId(null)}/>:null;})()}
+      {mobileClassSheetId && (()=>{const cls=data.classes.find(c=>c.id===mobileClassSheetId);const entryCount=cls?Object.values(data.notes?.[mobileClassSheetId]||{}).reduce((sum,arr)=>sum+(Array.isArray(arr)?arr.length:0),0):0;return cls?<TeacherClassQuickSheet cls={cls} entryCount={entryCount} onOpenHistory={()=>{setMobileClassSheetId(null);setHistoryClassId(cls.id);}} onDelete={()=>{setMobileClassSheetId(null);setLeaveModal(cls.id);}} onClose={()=>setMobileClassSheetId(null)}/>:null;})()}
       {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} instituteSections={instituteSections} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal && (()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);setActiveClass(null);setView("home");}} onClose={()=>setLeaveModal(null)}/>:null;})()}
     </>
@@ -3589,11 +3664,11 @@ function ClassTrackerInner({user}){
   // Tablet+: left sidebar + right entries panel (split view)
   // ══════════════════════════════════════════════════════════════════════
   if(view==="home"){
-    const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
+    const activeClasses=teacherActiveClasses;
     // Only show institutes that have at least one active (non-trashed) class.
     // Empty institutes (all classes deleted) are hidden from filter and header count.
     const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
-    const filtered=instFilter==="all"?activeClasses:activeClasses.filter(c=>c.institute===instFilter);
+    const filtered=teacherVisibleClasses;
     const visibleMobileClasses=filtered.slice(0,mobileClassLimit);
     const hasMoreMobileClasses=filtered.length>visibleMobileClasses.length;
     const quickHomeSummary=(()=>{
@@ -3627,10 +3702,13 @@ function ClassTrackerInner({user}){
     </> : null;
 
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
-    const ClassCard = ({cls, onClick, compact = false, onDelete = null}) => {
+    const ClassCard = ({cls, onClick, compact = false, onDelete = null, onHold = null}) => {
       const ic=instColor(cls.institute);
       const classNotes=data.notes?.[cls.id]||{};
       const total=Object.values(classNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+      const holdTimerRef = React.useRef(null);
+      const holdStartRef = React.useRef(null);
+      const holdTriggeredRef = React.useRef(false);
       // This-month entries
       const now=new Date();
       const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
@@ -3645,6 +3723,14 @@ function ClassTrackerInner({user}){
         .map(([dk])=>dk)
         .sort()
         .pop();
+      const clearHold = React.useCallback(() => {
+        if(holdTimerRef.current){
+          window.clearTimeout(holdTimerRef.current);
+          holdTimerRef.current = null;
+        }
+        holdStartRef.current = null;
+      }, []);
+      React.useEffect(() => () => clearHold(), [clearHold]);
       // Truncate long institute names with ellipsis
       const instFull=cls.institute||"";
       const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
@@ -3668,9 +3754,41 @@ function ClassTrackerInner({user}){
           <span>{value}</span>
         </span>
       );
+      const beginHold = e => {
+        if(!compact || !onHold || !e.touches?.length) return;
+        const touch = e.touches[0];
+        holdTriggeredRef.current = false;
+        clearHold();
+        holdStartRef.current = { x:touch.clientX, y:touch.clientY };
+        holdTimerRef.current = window.setTimeout(() => {
+          holdTriggeredRef.current = true;
+          if(typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(14);
+          onHold();
+        }, 420);
+      };
+      const moveHold = e => {
+        if(!holdStartRef.current || !e.touches?.length) return;
+        const touch = e.touches[0];
+        const dx = Math.abs(touch.clientX - holdStartRef.current.x);
+        const dy = Math.abs(touch.clientY - holdStartRef.current.y);
+        if(dx > 10 || dy > 10) clearHold();
+      };
+      const handleCardClick = e => {
+        if(holdTriggeredRef.current){
+          holdTriggeredRef.current = false;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        onClick?.();
+      };
       return(
-        <div onClick={onClick}
-          style={{background:`linear-gradient(180deg, #FFFFFF 0%, #FAFBFD 100%)`,borderRadius:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:compact||reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:compact||reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
+        <div onClick={handleCardClick}
+          onTouchStart={beginHold}
+          onTouchMove={moveHold}
+          onTouchEnd={clearHold}
+          onTouchCancel={clearHold}
+          style={{background:`linear-gradient(180deg, #FFFFFF 0%, #FAFBFD 100%)`,borderRadius:compact?22:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:compact?G.shadowMd:(reduceEffects?G.shadowSm:G.shadowMd),cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:compact||reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
           onPointerDown={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";e.currentTarget.style.borderColor=`${ic.bg}33`;})}
           onPointerUp={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}
           onPointerCancel={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}>
@@ -3685,9 +3803,7 @@ function ClassTrackerInner({user}){
                 <div style={{fontSize:compact?15:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,lineHeight:1.2}}>{cls.section}</div>
                 {compact&&<div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                   <span style={{display:"inline-flex",alignItems:"center",gap:5,background:todayN>0?G.greenL:"rgba(15,23,42,0.05)",border:todayN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.08)`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,color:todayN>0?G.green:G.textL,whiteSpace:"nowrap"}}>{todayN} today</span>
-                  {onDelete&&<OverflowMenu buttonSize={30} items={[
-                    { icon:"🗑", label:"Delete class", danger:true, onClick:onDelete },
-                  ]}/>}
+                  <span style={{width:30,height:30,borderRadius:10,background:"rgba(15,23,42,0.04)",border:"1px solid rgba(15,23,42,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:G.textL,flexShrink:0}}>⋯</span>
                 </div>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -3704,7 +3820,7 @@ function ClassTrackerInner({user}){
                   <StatChip label="Total" value={total}/>
                 </div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:7}}>
-                  <span style={{fontSize:11.5,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{lastLoggedKey?`Last log ${formatDateLabel(lastLoggedKey)}`:"No logs yet"}</span>
+                  <span style={{fontSize:11.5,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{lastLoggedKey?`Last log ${formatDateLabel(lastLoggedKey)}`:"Hold for history or delete"}</span>
                   <span style={{display:"inline-flex",alignItems:"center",gap:5,background:`${ic.bg}10`,color:ic.bg,border:`1px solid ${ic.bg}1F`,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>Open ↗</span>
                 </div>
                 </>
@@ -3800,32 +3916,15 @@ function ClassTrackerInner({user}){
     // ── MOBILE VIEW: full-page class list ────────────────────────────────────
     const MobileHome = () => (
       <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-        <div style={{padding:"8px 12px 6px"}}>
-          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:14,padding:"10px 13px",boxShadow:reduceEffects?"none":"0 10px 22px rgba(15,23,42,0.14)"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-              <div>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
-                  <h1 style={{fontSize:18,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.4,lineHeight:1}}>{teacherName}</h1>
-                  <span style={{fontSize:11,color:"rgba(255,255,255,0.55)",fontFamily:G.mono}}>{currentSession()}</span>
-                </div>
-              </div>
-            </div>
-            <div style={{display:"flex",gap:5,paddingTop:8,flexWrap:"wrap"}}>
-              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#DBEAFE"}}>{quickHomeSummary.loggedToday} today</span>
-              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#FFFFFF"}}>{quickHomeSummary.monthEntries} this month</span>
-              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#E2E8F0"}}>{quickHomeSummary.active} classes</span>
-            </div>
-          </div>
-        </div>
         {institutes.length>1&&(
-          <div style={{padding:mobileLiteMode?"0 12px 8px":"0 14px 10px"}}>
+          <div style={{padding:mobileLiteMode?"10px 12px 8px":"12px 14px 10px"}}>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"8px 8px 6px",boxShadow:G.shadowSm}}>
               <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6,padding:"0 4px"}}>Institute filter</div>
               <InstFilter columns="repeat(2,minmax(0,1fr))" compact/>
             </div>
           </div>
         )}
-        <div style={{padding:mobileLiteMode?"0 12px 8px":"0 14px 10px"}}>
+        <div style={{padding:institutes.length>1?(mobileLiteMode?"0 12px 8px":"0 14px 10px"):(mobileLiteMode?"12px 12px 8px":"12px 14px 10px")}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
             <div>
               <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55}}>Your classes</div>
@@ -3834,6 +3933,11 @@ function ClassTrackerInner({user}){
             <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,color:G.textS,fontFamily:G.mono}}>
               {Math.min(filtered.length, visibleMobileClasses.length)}/{filtered.length} shown
             </span>
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            <span style={{background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:"#1D4ED8"}}>{quickHomeSummary.loggedToday} today</span>
+            <span style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:G.textM}}>{quickHomeSummary.monthEntries} this month</span>
+            <span style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:G.textM}}>{quickHomeSummary.active} classes</span>
           </div>
         </div>
         {/* Class list */}
@@ -3848,7 +3952,7 @@ function ClassTrackerInner({user}){
           ):(
             <div style={{display:"flex",flexDirection:"column",gap:mobileLiteMode?8:10}}>
               {visibleMobileClasses.map(cls=>(
-                <ClassCard key={cls.id} cls={cls} compact={mobileLiteMode} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}} onDelete={()=>setLeaveModal(cls.id)}/>
+                <ClassCard key={cls.id} cls={cls} compact={mobileLiteMode} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}} onDelete={()=>setLeaveModal(cls.id)} onHold={()=>setMobileClassSheetId(cls.id)}/>
               ))}
               {hasMoreMobileClasses&&(
                 <button onClick={()=>setMobileClassLimit(limit=>Math.min(filtered.length, limit + mobileBatchSize))}
@@ -4131,8 +4235,31 @@ function ClassTrackerInner({user}){
     const totalCount=Object.values(classNotes||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
     const noteDates=Object.fromEntries(Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
     const activeDays=Object.keys(noteDates).length;
+    const swipePool = teacherVisibleClasses.some(entry => String(entry?.id || "") === String(cls.id || ""))
+      ? teacherVisibleClasses
+      : teacherActiveClasses;
+    const handleDetailTouchStart = e => {
+      if(!isMobile || e.touches?.length !== 1) return;
+      if(e.target?.closest?.("button, input, textarea, select")) return;
+      const touch = e.touches[0];
+      const viewportWidth = window.innerWidth || 0;
+      if(touch.clientX < 24 || (viewportWidth && touch.clientX > viewportWidth - 24)) return;
+      classSwipeStartRef.current = { x:touch.clientX, y:touch.clientY, at:Date.now() };
+    };
+    const handleDetailTouchEnd = e => {
+      const start = classSwipeStartRef.current;
+      classSwipeStartRef.current = null;
+      if(!start || e.changedTouches?.length !== 1) return;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      const dt = Date.now() - start.at;
+      if(Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.15 || dt > 700) return;
+      if(dx > 0) navigateSiblingClass(1);
+      else navigateSiblingClass(-1);
+    };
     return(
-      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
+      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}} onTouchStart={handleDetailTouchStart} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
@@ -4167,6 +4294,7 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
               <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</div>
               <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:700,marginTop:3,fontFamily:G.mono}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
+              {isMobile && swipePool.length > 1 && <div style={{fontSize:12,color:G.textL,marginTop:5}}>Swipe right for next class</div>}
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
               <button
