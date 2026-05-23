@@ -620,6 +620,7 @@ function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger
 
   return(
     <button
+      className="ledgr-card ledgr-pressable"
       type="button"
       onClick={onClick}
       style={{
@@ -657,8 +658,8 @@ function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger
 
 function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount,trashCount,onOpenStats,onOpenNotifications,onOpenTrash,onOpenExport,onSignOut}){
   return(
-    <div style={{flex:1,overflowY:"auto",padding:"12px 14px calc(104px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch"}}>
-      <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:26,padding:"18px 18px 16px",boxShadow:"0 16px 32px rgba(15,23,42,0.18)",marginBottom:16}}>
+    <div className="ledgr-page" style={{flex:1,overflowY:"auto",padding:"12px 14px calc(104px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch"}}>
+      <div className="ledgr-card" style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:26,padding:"18px 18px 16px",boxShadow:"0 16px 32px rgba(15,23,42,0.18)",marginBottom:16}}>
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
           <div style={{width:58,height:58,borderRadius:18,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <Avatar user={user} size={44}/>
@@ -1354,7 +1355,7 @@ function LeaveClassModal({cls,onConfirm,onClose}){
 function TeacherClassQuickSheet({cls,entryCount=0,onOpenHistory,onDelete,onClose}){
   return(
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.44)",zIndex:9998,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:460,background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:"26px 26px 22px 22px",boxShadow:"0 28px 72px rgba(15,23,42,0.26)",overflow:"hidden",border:`1px solid ${G.border}`}}>
+      <div className="ledgr-sheet" onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:460,background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:"26px 26px 22px 22px",boxShadow:"0 28px 72px rgba(15,23,42,0.26)",overflow:"hidden",border:`1px solid ${G.border}`}}>
         <div style={{padding:"10px 18px 4px",display:"flex",justifyContent:"center"}}>
           <span style={{width:42,height:5,borderRadius:999,background:"rgba(148,163,184,0.34)"}}/>
         </div>
@@ -2967,6 +2968,15 @@ function ClassTrackerInner({user}){
     setActiveClass(pool[nextIndex]);
     return true;
   }, [activeClass?.id, teacherActiveClasses, teacherVisibleClasses]);
+  const triggerAppHaptic = React.useCallback((kind="light") => {
+    if(!isMobile || typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return false;
+    const pattern = kind==="entry" ? [14, 24, 18] : kind==="swipe" ? [10] : [12];
+    try{
+      return navigator.vibrate(pattern);
+    }catch{
+      return false;
+    }
+  }, [isMobile]);
 
   function showInlineToast(msg){
     setInlineToast(msg);
@@ -3389,6 +3399,7 @@ function ClassTrackerInner({user}){
 
     const note={id:Date.now().toString(),...newNote,status:newNote.status||"",teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
+    triggerAppHaptic("entry");
     setShowNoteDetails(false);
     setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});setView("classDetail");
   };
@@ -3420,8 +3431,43 @@ function ClassTrackerInner({user}){
   // ══════════════════════════════════════════════════════════════════════
   // SHARED MODALS — used in both pages
   // ══════════════════════════════════════════════════════════════════════
+  const motionStyles = reduceEffects ? `
+    .ledgr-page,.ledgr-card,.ledgr-sheet,.ledgr-pressable{animation:none!important;transition:none!important;}
+  ` : `
+    @keyframes ledgrPageRise{
+      0%{opacity:0;transform:translateY(14px) scale(0.992);}
+      100%{opacity:1;transform:translateY(0) scale(1);}
+    }
+    @keyframes ledgrCardRise{
+      0%{opacity:0;transform:translateY(10px);}
+      100%{opacity:1;transform:translateY(0);}
+    }
+    @keyframes ledgrSheetRise{
+      0%{opacity:0;transform:translateY(24px) scale(0.985);}
+      100%{opacity:1;transform:translateY(0) scale(1);}
+    }
+    .ledgr-page{
+      animation:ledgrPageRise .30s cubic-bezier(.22,.8,.24,1) both;
+    }
+    .ledgr-card{
+      animation:ledgrCardRise .34s cubic-bezier(.22,.8,.24,1) both;
+      transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease, opacity .22s ease;
+      will-change:transform, opacity;
+    }
+    .ledgr-sheet{
+      animation:ledgrSheetRise .24s cubic-bezier(.22,.8,.24,1) both;
+    }
+    .ledgr-pressable{
+      transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease, opacity .18s ease;
+      will-change:transform;
+    }
+    .ledgr-pressable:active{
+      transform:translateY(1px) scale(0.992);
+    }
+  `;
   const sharedModals = (
     <>
+      <style>{motionStyles}</style>
       <SaveBadge/>
       {/* Offline banner */}
       {isOffline&&(
@@ -3467,7 +3513,7 @@ function ClassTrackerInner({user}){
     const deletedNoticeCount = adminNoticeItems.filter(item => item.kind === "class_deleted").length;
     const restoredNoticeCount = adminNoticeItems.filter(item => item.kind === "class_restored").length;
     return(
-      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
+      <div className="ledgr-page" style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
         {sharedModals}
         <TopNav
           user={user}
@@ -3783,7 +3829,8 @@ function ClassTrackerInner({user}){
         onClick?.();
       };
       return(
-        <div onClick={handleCardClick}
+        <div className="ledgr-card"
+          onClick={handleCardClick}
           onTouchStart={beginHold}
           onTouchMove={moveHold}
           onTouchEnd={clearHold}
@@ -3915,10 +3962,10 @@ function ClassTrackerInner({user}){
 
     // ── MOBILE VIEW: full-page class list ────────────────────────────────────
     const MobileHome = () => (
-      <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+      <div className="ledgr-page" style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
         {institutes.length>1&&(
           <div style={{padding:mobileLiteMode?"10px 12px 8px":"12px 14px 10px"}}>
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"8px 8px 6px",boxShadow:G.shadowSm}}>
+            <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"8px 8px 6px",boxShadow:G.shadowSm}}>
               <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6,padding:"0 4px"}}>Institute filter</div>
               <InstFilter columns="repeat(2,minmax(0,1fr))" compact/>
             </div>
@@ -3956,11 +4003,13 @@ function ClassTrackerInner({user}){
               ))}
               {hasMoreMobileClasses&&(
                 <button onClick={()=>setMobileClassLimit(limit=>Math.min(filtered.length, limit + mobileBatchSize))}
+                  className="ledgr-card ledgr-pressable"
                   style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 16px",fontSize:14,fontWeight:700,color:G.textS,fontFamily:G.sans,cursor:"pointer",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}>
                   Load {Math.min(mobileBatchSize, filtered.length - visibleMobileClasses.length)} more classes
                 </button>
               )}
-              <div onClick={()=>setView("addClass")}
+              <div className="ledgr-card"
+                onClick={()=>setView("addClass")}
                 style={{borderRadius:18,border:`2px dashed ${G.border}`,padding:"20px",display:"flex",alignItems:"center",justifyContent:"center",gap:12,cursor:"pointer",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}
                 onPointerDown={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.borderColor=G.green;}}
                 onPointerUp={e=>{e.currentTarget.style.background="linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)";e.currentTarget.style.borderColor=G.border;}}
@@ -4255,16 +4304,19 @@ function ClassTrackerInner({user}){
       const dy = touch.clientY - start.y;
       const dt = Date.now() - start.at;
       if(Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.15 || dt > 700) return;
-      if(dx > 0) navigateSiblingClass(1);
-      else navigateSiblingClass(-1);
+      if(dx > 0){
+        if(navigateSiblingClass(1)) triggerAppHaptic("swipe");
+      }else{
+        if(navigateSiblingClass(-1)) triggerAppHaptic("swipe");
+      }
     };
     return(
-      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}} onTouchStart={handleDetailTouchStart} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;}}>
+      <div key={cls.id} className="ledgr-page" style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}} onTouchStart={handleDetailTouchStart} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
-        <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
+        <div className="ledgr-card" style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
           {/* Compact single-line class identity */}
           <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
             <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(180deg, ${color.bg} 0%, ${color.bg}CC 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",fontFamily:G.mono}}>
@@ -4289,7 +4341,7 @@ function ClassTrackerInner({user}){
         </div>
         {/* Entries scroll area */}
         <div style={{flex:1,overflowY:"auto",padding:`14px 16px ${isMobile ? mobileBottomNavPad : "16px"}`,WebkitOverflowScrolling:"touch"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8,background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 14px",boxShadow:G.shadowSm}}>
+          <div className="ledgr-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8,background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 14px",boxShadow:G.shadowSm}}>
             <div>
               <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
               <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</div>
@@ -4349,7 +4401,7 @@ function ClassTrackerInner({user}){
               {dateNotes.map(note=>{
                 const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
                 return(
-                  <div key={note.id} style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
+                  <div key={note.id} className="ledgr-card" style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
                     <div style={{height:4,background:tag.bg}}/>
                     <div style={{padding:"14px 15px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
