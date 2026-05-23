@@ -443,25 +443,30 @@ function getPrimaryTeacherTab(view){
 function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,onViewNotifications,trashCount,notificationCount=0,data,showProfileMenu=true}){
   const shortName=(teacherName||"").split(" ")[0];
   const [profileOpen, setProfileOpen] = React.useState(false);
+  const compactHeader = !showProfileMenu;
+  const navHeight = compactHeader ? 58 : 64;
+  const logoSize = compactHeader ? 36 : 38;
+  const logoRadius = compactHeader ? 13 : 12;
+  const subLabel = compactHeader ? "TEACHER" : "TEACHER PANEL";
 
   return(
-    <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06), 0 14px 28px rgba(15,23,42,0.16)",paddingTop:"env(safe-area-inset-top, 0px)"}}>
-      <div style={{height:64,display:"flex",alignItems:"center",padding:"0 12px",gap:8,overflow:"visible"}}>
+    <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:compactHeader?"0 1px 0 rgba(255,255,255,0.06), 0 10px 24px rgba(15,23,42,0.18)":"0 1px 0 rgba(255,255,255,0.06), 0 14px 28px rgba(15,23,42,0.16)",paddingTop:"env(safe-area-inset-top, 0px)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)"}}>
+      <div style={{height:navHeight,display:"flex",alignItems:"center",padding:compactHeader?"0 14px":"0 12px",gap:compactHeader?10:8,overflow:"visible"}}>
 
         {/* Ledgr logo */}
         <div onClick={onLogoClick}
-          style={{display:"flex",alignItems:"center",gap:7,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
+          style={{display:"flex",alignItems:"center",gap:compactHeader?8:7,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
           onPointerDown={e=>{e.currentTarget.style.opacity="0.7";}}
           onPointerUp={e=>{e.currentTarget.style.opacity="1";}}
           onPointerCancel={e=>{e.currentTarget.style.opacity="1";}}>
-          <div style={{width:38,height:38,borderRadius:12,background:"linear-gradient(180deg, #4A93FF 0%, #3376F0 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 16px rgba(20,51,103,0.24)"}}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <div style={{width:logoSize,height:logoSize,borderRadius:logoRadius,background:"linear-gradient(180deg, #4A93FF 0%, #3376F0 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 18px rgba(20,51,103,0.28)"}}>
+            <svg width={compactHeader ? 17 : 18} height={compactHeader ? 17 : 18} viewBox="0 0 18 18" fill="none">
               <path d="M4 3H7V13H14V16H4V3Z" fill="white"/>
             </svg>
           </div>
           <div style={{display:"flex",flexDirection:"column",justifyContent:"center",gap:1}}>
-            <span style={{fontFamily:G.display,fontWeight:800,fontSize:19,color:"#fff",letterSpacing:-0.5,lineHeight:1}}>Ledgr</span>
-            <span style={{fontFamily:G.mono,fontWeight:600,fontSize:10,color:"rgba(255,255,255,0.46)",letterSpacing:1.3,lineHeight:1.1}}>TEACHER PANEL</span>
+            <span style={{fontFamily:G.display,fontWeight:800,fontSize:compactHeader?18:19,color:"#fff",letterSpacing:-0.5,lineHeight:1}}>Ledgr</span>
+            <span style={{fontFamily:G.mono,fontWeight:600,fontSize:compactHeader?9:10,color:"rgba(255,255,255,0.46)",letterSpacing:compactHeader?1.1:1.3,lineHeight:1.1}}>{subLabel}</span>
           </div>
         </div>
 
@@ -472,7 +477,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 
           {onViewNotifications && (
             <button onClick={onViewNotifications}
-              style={{height:38,minWidth:38,padding:"0 11px",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,cursor:"pointer",color:"rgba(255,255,255,0.9)",position:"relative",WebkitTapHighlightColor:"transparent",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
+              style={{height:compactHeader?40:38,minWidth:compactHeader?40:38,padding:compactHeader?"0 12px":"0 11px",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:compactHeader?"rgba(255,255,255,0.12)":"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:compactHeader?12:10,cursor:"pointer",color:"rgba(255,255,255,0.9)",position:"relative",WebkitTapHighlightColor:"transparent",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
                 <path d="M13.73 21a2 2 0 01-3.46 0"/>
@@ -562,9 +567,9 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
   const itemBase = isActive => ({
     flex:1,
-    minHeight:54,
+    minHeight:60,
     border:"none",
-    borderRadius:18,
+    borderRadius:20,
     background:isActive ? "linear-gradient(180deg, rgba(37,99,235,0.14) 0%, rgba(37,99,235,0.08) 100%)" : "transparent",
     color:isActive ? G.green : G.textL,
     cursor:"pointer",
@@ -572,33 +577,51 @@ function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
     flexDirection:"column",
     alignItems:"center",
     justifyContent:"center",
-    gap:4,
+    gap:5,
+    padding:"10px 8px 8px",
     fontFamily:G.sans,
     fontWeight:isActive ? 700 : 600,
     fontSize:12,
     position:"relative",
     WebkitTapHighlightColor:"transparent",
-    transition:"background 0.15s ease, color 0.15s ease, transform 0.15s ease",
+    transition:"background 0.18s ease, color 0.18s ease, transform 0.18s ease",
+  });
+  const iconWrap = isActive => ({
+    width:34,
+    height:34,
+    borderRadius:14,
+    display:"flex",
+    alignItems:"center",
+    justifyContent:"center",
+    background:isActive ? "rgba(255,255,255,0.9)" : "rgba(148,163,184,0.12)",
+    color:isActive ? G.green : G.textM,
+    boxShadow:isActive ? "0 8px 18px rgba(37,99,235,0.18)" : "inset 0 1px 0 rgba(255,255,255,0.65)",
+    transition:"background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease",
   });
 
   return(
-    <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:170,padding:"10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",pointerEvents:"none"}}>
-      <div style={{maxWidth:520,margin:"0 auto",background:"rgba(255,255,255,0.94)",border:`1px solid ${G.border}`,borderRadius:24,padding:"8px",boxShadow:"0 16px 40px rgba(15,23,42,0.18)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",display:"flex",gap:8,pointerEvents:"auto"}}>
-        <button type="button" onClick={onHome} style={itemBase(activeTab==="home")}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 10.5 12 3l9 7.5"/>
-            <path d="M5 9.5V21h14V9.5"/>
-          </svg>
+    <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:170,padding:"0 14px calc(12px + env(safe-area-inset-bottom, 0px))",pointerEvents:"none"}}>
+      <div style={{maxWidth:540,margin:"0 auto",background:"rgba(255,255,255,0.96)",border:`1px solid ${G.border}`,borderRadius:26,padding:"8px 10px 10px",boxShadow:"0 18px 42px rgba(15,23,42,0.18)",backdropFilter:"blur(18px)",WebkitBackdropFilter:"blur(18px)",display:"grid",gridTemplateColumns:"repeat(2, minmax(0,1fr))",gap:8,pointerEvents:"auto",position:"relative"}}>
+        <div style={{position:"absolute",top:6,left:"50%",transform:"translateX(-50%)",width:40,height:4,borderRadius:999,background:"rgba(148,163,184,0.28)"}}/>
+        <button type="button" onClick={onHome} onPointerDown={e=>rpl(e,true)} style={itemBase(activeTab==="home")}>
+          <span style={iconWrap(activeTab==="home")}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 10.5 12 3l9 7.5"/>
+              <path d="M5 9.5V21h14V9.5"/>
+            </svg>
+          </span>
           <span>Home</span>
         </button>
-        <button type="button" onClick={onProfile} style={itemBase(activeTab==="profile")}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21a8 8 0 0 0-16 0"/>
-            <circle cx="12" cy="8" r="4"/>
-          </svg>
+        <button type="button" onClick={onProfile} onPointerDown={e=>rpl(e,true)} style={itemBase(activeTab==="profile")}>
+          <span style={iconWrap(activeTab==="profile")}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21a8 8 0 0 0-16 0"/>
+              <circle cx="12" cy="8" r="4"/>
+            </svg>
+          </span>
           <span>Profile</span>
           {profileBadge > 0 && (
-            <span style={{position:"absolute",top:5,right:"calc(50% - 30px)",minWidth:18,height:18,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 8px 16px rgba(220,38,38,0.22)"}}>
+            <span style={{position:"absolute",top:7,right:"calc(50% - 28px)",minWidth:18,height:18,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 8px 16px rgba(220,38,38,0.22)"}}>
               {profileBadge > 9 ? "9+" : profileBadge}
             </span>
           )}
@@ -622,26 +645,30 @@ function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger
     <button
       type="button"
       onClick={onClick}
+      onPointerDown={e=>{rpl(e,false);e.currentTarget.style.transform="scale(0.992)";e.currentTarget.style.boxShadow="0 6px 16px rgba(15,23,42,0.08)";}}
+      onPointerUp={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}
+      onPointerCancel={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowSm;}}
       style={{
         width:"100%",
-        background:"#fff",
+        background:danger ? "linear-gradient(180deg, #FFFFFF 0%, #FFF8F8 100%)" : "linear-gradient(180deg, #FFFFFF 0%, #FAFBFE 100%)",
         border:`1px solid ${danger ? tone.border : G.border}`,
-        borderRadius:22,
-        padding:"16px 16px",
+        borderRadius:20,
+        padding:"15px 15px",
         display:"flex",
         alignItems:"center",
-        gap:14,
+        gap:13,
         textAlign:"left",
         cursor:"pointer",
         boxShadow:G.shadowSm,
         WebkitTapHighlightColor:"transparent",
+        transition:"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease",
       }}>
-      <div style={{width:48,height:48,borderRadius:16,background:tone.bg,border:`1px solid ${tone.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:tone.icon,flexShrink:0,fontSize:22}}>
+      <div style={{width:46,height:46,borderRadius:15,background:tone.bg,border:`1px solid ${tone.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:tone.icon,flexShrink:0,fontSize:21}}>
         {icon}
       </div>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:18,fontWeight:800,color:danger ? tone.text : G.text,fontFamily:G.display,letterSpacing:-0.25,lineHeight:1.15}}>{title}</div>
-        <div style={{fontSize:14,color:danger ? tone.text : G.textM,fontFamily:G.sans,marginTop:4,lineHeight:1.45}}>{subtitle}</div>
+        <div style={{fontSize:17,fontWeight:800,color:danger ? tone.text : G.text,fontFamily:G.display,letterSpacing:-0.25,lineHeight:1.15}}>{title}</div>
+        <div style={{fontSize:13.5,color:danger ? tone.text : G.textM,fontFamily:G.sans,marginTop:4,lineHeight:1.45}}>{subtitle}</div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
         {badge!==null && (
@@ -649,7 +676,7 @@ function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger
             {badge}
           </span>
         )}
-        <span style={{fontSize:22,color:danger ? tone.text : G.textL,lineHeight:1}}>›</span>
+        <span style={{width:30,height:30,borderRadius:12,background:danger ? tone.bg : "rgba(15,23,42,0.04)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:danger ? tone.text : G.textL,lineHeight:1}}>›</span>
       </div>
     </button>
   );
@@ -657,9 +684,15 @@ function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger
 
 function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount,trashCount,onOpenStats,onOpenNotifications,onOpenTrash,onOpenExport,onSignOut}){
   return(
-    <div style={{flex:1,overflowY:"auto",padding:"12px 14px calc(104px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch"}}>
-      <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:26,padding:"18px 18px 16px",boxShadow:"0 16px 32px rgba(15,23,42,0.18)",marginBottom:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
+    <div style={{flex:1,overflowY:"auto",padding:"14px 14px calc(108px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch",background:"radial-gradient(circle at top, rgba(37,99,235,0.05) 0%, rgba(37,99,235,0) 34%)"}}>
+      <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:28,padding:"18px 18px 16px",boxShadow:"0 16px 32px rgba(15,23,42,0.18)",marginBottom:16,position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",inset:0,background:"radial-gradient(circle at top right, rgba(96,165,250,0.26) 0%, transparent 42%)",pointerEvents:"none"}}/>
+        <div style={{position:"relative",display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
+          <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:999,padding:"5px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,color:"#DBEAFE",letterSpacing:0.55}}>Teacher account</span>
+          <span style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:999,padding:"5px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,color:"rgba(255,255,255,0.78)",letterSpacing:0.55}}>{quickHomeSummary.active} active classes</span>
+          {notificationCount > 0 && <span style={{background:"rgba(245,158,11,0.14)",border:"1px solid rgba(245,158,11,0.24)",borderRadius:999,padding:"5px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,color:"#FDE68A",letterSpacing:0.55}}>{notificationCount} unread</span>}
+        </div>
+        <div style={{position:"relative",display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
           <div style={{width:58,height:58,borderRadius:18,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <Avatar user={user} size={44}/>
           </div>
@@ -668,7 +701,7 @@ function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount
             <div style={{fontSize:14,color:"rgba(255,255,255,0.62)",fontFamily:G.sans,marginTop:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.email || "No email available"}</div>
           </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
+        <div style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
           {[
             { label:"Logged Today", value:quickHomeSummary.loggedToday },
             { label:"This Month", value:quickHomeSummary.monthEntries },
@@ -683,8 +716,13 @@ function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount
         </div>
       </div>
 
-      <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.65,margin:"0 4px 10px"}}>Manage Teacher Panel</div>
-      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,margin:"0 4px 12px"}}>
+        <div>
+          <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.65,marginBottom:4}}>Manage Teacher Panel</div>
+          <div style={{fontSize:14,color:G.textM,lineHeight:1.45}}>Everything important for your teacher account lives here.</div>
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <TeacherProfileActionCard icon="📊" title="View Stats" subtitle="See teaching hours and class breakdowns." onClick={onOpenStats} accent="blue"/>
         <TeacherProfileActionCard icon="🔔" title="Notifications" subtitle={notificationCount>0 ? `${notificationCount} unread update${notificationCount===1?"":"s"} from admin changes.` : "No unread updates right now."} onClick={onOpenNotifications} badge={notificationCount>0 ? notificationCount : null} accent="amber"/>
         <TeacherProfileActionCard icon="🗑️" title="Recycle Bin" subtitle={trashCount>0 ? `${trashCount} item${trashCount===1?"":"s"} waiting before permanent deletion.` : "Nothing in the recycle bin right now."} onClick={onOpenTrash} badge={trashCount>0 ? trashCount : null} accent="slate"/>
@@ -3670,14 +3708,14 @@ function ClassTrackerInner({user}){
       );
       return(
         <div onClick={onClick}
-          style={{background:`linear-gradient(180deg, #FFFFFF 0%, #FAFBFD 100%)`,borderRadius:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:compact||reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:compact||reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
+          style={{background:`linear-gradient(180deg, #FFFFFF 0%, #FAFBFD 100%)`,borderRadius:compact?18:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:compact||reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:compact||reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
           onPointerDown={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";e.currentTarget.style.borderColor=`${ic.bg}33`;})}
           onPointerUp={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}
           onPointerCancel={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}>
           <div style={{height:compact?5:6,background:`linear-gradient(90deg, ${ic.bg} 0%, ${ic.bg}BB 65%, ${ic.bg}66 100%)`}}/>
-          <div style={{padding:compact?"10px 12px 11px":"16px 16px 15px"}}>
+          <div style={{padding:compact?"11px 12px 12px":"16px 16px 15px"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:compact?9:12}}>
-            <div style={{width:compact?38:48,height:compact?38:48,borderRadius:compact?11:14,background:`linear-gradient(180deg, ${ic.light} 0%, #FFFFFF 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:compact?12:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,border:`1px solid ${ic.bg}22`,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.7)"}}>
+            <div style={{width:compact?40:48,height:compact?40:48,borderRadius:compact?12:14,background:`linear-gradient(180deg, ${ic.light} 0%, #FFFFFF 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:compact?12:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,border:`1px solid ${ic.bg}22`,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.7)"}}>
               {(cls.section||"?").slice(0,2).toUpperCase()}
             </div>
             <div style={{flex:1,minWidth:0}}>
@@ -3698,12 +3736,12 @@ function ClassTrackerInner({user}){
               </div>
               {compact&&(
                 <>
-                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:7}}>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8}}>
                   <StatChip label="Today" value={todayN} active={todayN>0}/>
                   <StatChip label={monthLabel} value={monthN} active={monthN>0}/>
                   <StatChip label="Total" value={total}/>
                 </div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:7}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:8}}>
                   <span style={{fontSize:11.5,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{lastLoggedKey?`Last log ${formatDateLabel(lastLoggedKey)}`:"No logs yet"}</span>
                   <span style={{display:"inline-flex",alignItems:"center",gap:5,background:`${ic.bg}10`,color:ic.bg,border:`1px solid ${ic.bg}1F`,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>Open ↗</span>
                 </div>
@@ -3798,41 +3836,63 @@ function ClassTrackerInner({user}){
     ):null;
 
     // ── MOBILE VIEW: full-page class list ────────────────────────────────────
-    const MobileHome = () => (
-      <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-        <div style={{padding:"8px 12px 6px"}}>
-          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:14,padding:"10px 13px",boxShadow:reduceEffects?"none":"0 10px 22px rgba(15,23,42,0.14)"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-              <div>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
-                  <h1 style={{fontSize:18,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.4,lineHeight:1}}>{teacherName}</h1>
-                  <span style={{fontSize:11,color:"rgba(255,255,255,0.55)",fontFamily:G.mono}}>{currentSession()}</span>
-                </div>
+    const MobileHome = () => {
+      const firstName=(teacherName||"Teacher").split(" ")[0]||"Teacher";
+      const homeStatCards=[
+        {label:"Logged today",value:quickHomeSummary.loggedToday,color:"#DBEAFE"},
+        {label:"This month",value:quickHomeSummary.monthEntries,color:"#FFFFFF"},
+        {label:"Institutes",value:quickHomeSummary.instituteCount,color:"#E2E8F0"},
+      ];
+      return(
+      <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden",background:"radial-gradient(circle at top, rgba(37,99,235,0.08) 0%, rgba(37,99,235,0) 34%)"}}>
+        <div style={{padding:"10px 12px 8px"}}>
+          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:24,padding:"16px 16px 15px",boxShadow:reduceEffects?"none":"0 16px 32px rgba(15,23,42,0.16)",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",inset:0,background:"radial-gradient(circle at top right, rgba(96,165,250,0.28) 0%, transparent 40%)",pointerEvents:"none"}}/>
+            <div style={{position:"relative",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
+              <div style={{minWidth:0,flex:1}}>
+                <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:999,padding:"5px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,color:"#DBEAFE",letterSpacing:0.55,marginBottom:10}}>Teacher workspace</span>
+                <h1 style={{fontSize:24,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.55,lineHeight:1.02,marginBottom:6}}>Welcome back, {firstName}</h1>
+                <div style={{fontSize:13.5,color:"rgba(255,255,255,0.68)",lineHeight:1.45,maxWidth:240}}>{currentSession()} session • {quickHomeSummary.active} active classes ready for today.</div>
               </div>
+              <button
+                type="button"
+                onClick={()=>setView("addClass")}
+                onPointerDown={e=>rpl(e,true)}
+                style={{background:"rgba(255,255,255,0.14)",border:"1px solid rgba(255,255,255,0.14)",borderRadius:16,padding:"11px 12px",color:"#fff",fontFamily:G.sans,fontSize:13,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.12)",WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+                <span style={{width:22,height:22,borderRadius:11,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,lineHeight:1}}>+</span>
+                <span>Add class</span>
+              </button>
             </div>
-            <div style={{display:"flex",gap:5,paddingTop:8,flexWrap:"wrap"}}>
-              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#DBEAFE"}}>{quickHomeSummary.loggedToday} today</span>
-              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#FFFFFF"}}>{quickHomeSummary.monthEntries} this month</span>
-              <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"3px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#E2E8F0"}}>{quickHomeSummary.active} classes</span>
+            <div style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8}}>
+              {homeStatCards.map(item=>(
+                <div key={item.label} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:18,padding:"11px 11px 10px"}}>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.52)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:7}}>{item.label}</div>
+                  <div style={{fontSize:21,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.35,lineHeight:1}}>{item.value}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
         {institutes.length>1&&(
           <div style={{padding:mobileLiteMode?"0 12px 8px":"0 14px 10px"}}>
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"8px 8px 6px",boxShadow:G.shadowSm}}>
-              <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6,padding:"0 4px"}}>Institute filter</div>
+            <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F9FBFF 100%)",border:`1px solid ${G.border}`,borderRadius:18,padding:"10px 10px 8px",boxShadow:G.shadowSm}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8,padding:"0 4px"}}>
+                <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55}}>Switch institute</div>
+                <span style={{fontSize:10.5,fontWeight:800,fontFamily:G.mono,color:G.textM,background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 8px"}}>{institutes.length} total</span>
+              </div>
               <InstFilter columns="repeat(2,minmax(0,1fr))" compact/>
             </div>
           </div>
         )}
         <div style={{padding:mobileLiteMode?"0 12px 8px":"0 14px 10px"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
+          <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:10,marginBottom:6}}>
             <div>
               <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55}}>Your classes</div>
-              <div style={{fontSize:16.5,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.25,marginTop:2}}>{filtered.length} visible right now</div>
+              <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.25,marginTop:2}}>{filtered.length} visible right now</div>
+              <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Tap any card to open today&apos;s log and entries.</div>
             </div>
-            <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,color:G.textS,fontFamily:G.mono}}>
-              {Math.min(filtered.length, visibleMobileClasses.length)}/{filtered.length} shown
+            <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,color:G.textS,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+              {visibleMobileClasses.length}/{filtered.length}
             </span>
           </div>
         </div>
@@ -3852,12 +3912,13 @@ function ClassTrackerInner({user}){
               ))}
               {hasMoreMobileClasses&&(
                 <button onClick={()=>setMobileClassLimit(limit=>Math.min(filtered.length, limit + mobileBatchSize))}
-                  style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 16px",fontSize:14,fontWeight:700,color:G.textS,fontFamily:G.sans,cursor:"pointer",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}>
+                  onPointerDown={e=>rpl(e,false)}
+                  style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",border:`1px solid ${G.border}`,borderRadius:18,padding:"14px 16px",fontSize:14,fontWeight:700,color:G.textS,fontFamily:G.sans,cursor:"pointer",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}>
                   Load {Math.min(mobileBatchSize, filtered.length - visibleMobileClasses.length)} more classes
                 </button>
               )}
               <div onClick={()=>setView("addClass")}
-                style={{borderRadius:18,border:`2px dashed ${G.border}`,padding:"20px",display:"flex",alignItems:"center",justifyContent:"center",gap:12,cursor:"pointer",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}
+                style={{borderRadius:20,border:`2px dashed ${G.border}`,padding:"18px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:12,cursor:"pointer",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}
                 onPointerDown={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.borderColor=G.green;}}
                 onPointerUp={e=>{e.currentTarget.style.background="linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)";e.currentTarget.style.borderColor=G.border;}}
                 onPointerCancel={e=>{e.currentTarget.style.background="linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)";e.currentTarget.style.borderColor=G.border;}}>
@@ -3865,7 +3926,7 @@ function ClassTrackerInner({user}){
                 <span style={{fontSize:15,fontWeight:600,color:G.textM,fontFamily:G.display}}>Add New Class</span>
               </div>
               {/* Tagline */}
-              <div style={{textAlign:"center",padding:"20px 0 4px"}}>
+              <div style={{textAlign:"center",padding:"18px 0 4px"}}>
                 <span style={{fontSize:12,color:G.textL,fontFamily:G.sans,letterSpacing:0.3}}>Every class. Every teacher. One place.</span>
               </div>
             </div>
@@ -3873,6 +3934,7 @@ function ClassTrackerInner({user}){
         </div>
       </div>
     );
+    };
 
     // ── TABLET / DESKTOP VIEW: sidebar + detail panel ────────────────────────
     const SplitView = () => {
