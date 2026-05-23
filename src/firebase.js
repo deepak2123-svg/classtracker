@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import {
-  getFirestore, doc, getDoc, setDoc, collection,
+  getFirestore, doc, getDoc, setDoc, updateDoc, collection,
   getDocs, query, where, deleteDoc, runTransaction,
   collectionGroup, documentId,
 } from "firebase/firestore";
@@ -1052,37 +1052,34 @@ export async function renameGlobalInstitute(oldName, newName, extra = {}) {
     const mainSnapR = await getDoc(userDocRef(uid));
     if (!mainSnapR.exists()) continue;
 
-    let currentData = mainSnapR.data();
-    let attempt = 0;
-    while (attempt < 2) {
-      const transformed = applyInstituteRenameToTeacherData(
-        currentData,
-        configResult.oldLabel,
-        configResult.newLabel,
-        { adminName, eventAt }
-      );
+    const currentData = mainSnapR.data();
+    const transformed = applyInstituteRenameToTeacherData(
+      currentData,
+      configResult.oldLabel,
+      configResult.newLabel,
+      { adminName, eventAt }
+    );
 
-      if (!transformed.changed) break;
+    if (!transformed.changed) continue;
 
-      try {
-        await saveUserData(uid, transformed.data, {
-          expectedRevision: safeRevision(currentData?._meta?.revision),
-          source: "adminRenameInstitute",
-        });
-        affectedTeacherCount += 1;
-        if (transformed.noticeAdded) notifiedTeacherCount += 1;
-        updatedMainUids.add(uid);
-        break;
-      } catch (error) {
-        if (error?.code === "revision-conflict" && attempt === 0) {
-          const latestSnap = await getDoc(userDocRef(uid));
-          if (!latestSnap.exists()) break;
-          currentData = latestSnap.data();
-          attempt += 1;
-          continue;
-        }
-        throw error;
-      }
+    const d = transformed.data;
+    try {
+      await updateDoc(userDocRef(uid), {
+        classes: d.classes,
+        institutes: d.institutes,
+        "profile.institutes": d.profile?.institutes ?? [],
+        "trash.classes": d.trash?.classes ?? [],
+        "trash.notes": d.trash?.notes ?? [],
+        "_meta.pendingAdminClassNotices": d._meta?.pendingAdminClassNotices ?? [],
+        "_meta.pendingSectionChangeNotice": d._meta?.pendingSectionChangeNotice ?? null,
+        "_meta.updatedAt": Date.now(),
+        "_meta.source": "adminRenameInstitute",
+      });
+      affectedTeacherCount += 1;
+      if (transformed.noticeAdded) notifiedTeacherCount += 1;
+      updatedMainUids.add(uid);
+    } catch (error) {
+      console.error(`renameGlobalInstitute: failed uid=${uid}`, error);
     }
   }
 
@@ -1207,22 +1204,19 @@ export async function deleteInstituteCompletely(instituteName, extra = {}) {
   });
 
   // 2. Walk all teacher main docs and strip classes + notify
-  // (collectionGroup + documentId("main") is invalid in Firestore — fetch by UID from index instead)
+  // Use direct updateDoc (targeted field patch) — never touches notes sub-docs
   let affectedTeacherCount = 0;
   const classNotesDeleteQueue = []; // [{uid, classId}]
 
   const teacherIndexSnap2 = await getDocs(collection(db, "teachers"));
-  const allUids = [...new Set([
-    ...teacherIndexSnap2.docs.map(d => d.id),
-  ])].filter(Boolean);
+  const allUids = [...new Set(teacherIndexSnap2.docs.map(d => d.id))].filter(Boolean);
 
   for (const uid of allUids) {
     const mainRef = userDocRef(uid);
     const mainSnap2 = await getDoc(mainRef);
     if (!mainSnap2.exists()) continue;
-    const snap = mainSnap2;
 
-    let currentData = snap.data();
+    const currentData = mainSnap2.data();
     const hasMatch =
       (currentData.classes || []).some(c => sameInstituteLabel(c?.institute, instLabel)) ||
       (currentData.trash?.classes || []).some(c => sameInstituteLabel(c?.institute, instLabel)) ||
@@ -1233,70 +1227,42 @@ export async function deleteInstituteCompletely(instituteName, extra = {}) {
     const classesToDelete = (currentData.classes || []).filter(c => sameInstituteLabel(c?.institute, instLabel));
     classesToDelete.forEach(c => classNotesDeleteQueue.push({ uid, classId: c.id }));
 
-    let attempt = 0;
-    while (attempt < 2) {
-      const currentClasses = currentData.classes || [];
-      const deletedClassIds = new Set(
-        currentClasses.filter(c => sameInstituteLabel(c?.institute, instLabel)).map(c => c.id)
-      );
-      const nextClasses = currentClasses.filter(c => !deletedClassIds.has(c.id));
-      const nextTrashClasses = (currentData.trash?.classes || []).filter(c => !sameInstituteLabel(c?.institute, instLabel));
-      const nextTrashNotes = (currentData.trash?.notes || []).filter(n => !sameInstituteLabel(n?.institute, instLabel));
-      const nextNotes = Object.fromEntries(
-        Object.entries(currentData.notes || {}).filter(([k]) => !deletedClassIds.has(k))
-      );
-      const nextInstitutes = uniqueTrimmed((currentData.institutes || []).filter(i => !sameInstituteLabel(i, instLabel)));
-      const nextProfileInstitutes = uniqueTrimmed((currentData.profile?.institutes || []).filter(i => !sameInstituteLabel(i, instLabel)));
+    const deletedClassIds = new Set(classesToDelete.map(c => c.id));
+    const nextClasses = (currentData.classes || []).filter(c => !deletedClassIds.has(c.id));
+    const nextTrashClasses = (currentData.trash?.classes || []).filter(c => !sameInstituteLabel(c?.institute, instLabel));
+    const nextTrashNotes = (currentData.trash?.notes || []).filter(n => !sameInstituteLabel(n?.institute, instLabel));
+    const nextInstitutes = uniqueTrimmed((currentData.institutes || []).filter(i => !sameInstituteLabel(i, instLabel)));
+    const nextProfileInstitutes = uniqueTrimmed((currentData.profile?.institutes || []).filter(i => !sameInstituteLabel(i, instLabel)));
 
-      // Build a deletion notice
-      const notice = {
-        id: `institute_deleted_${normaliseInstituteKey(instLabel)}_${eventAt}`,
-        kind: "institute_deleted",
-        classId: "",
-        section: "",
-        institute: "",
-        subject: "",
-        adminName,
-        eventAt,
-        promptedAt: null,
-        oldInstitute: instLabel,
-        newInstitute: "",
-        impactedClassCount: deletedClassIds.size,
-      };
-      const existingNotices = Array.isArray(currentData?._meta?.pendingAdminClassNotices)
-        ? currentData._meta.pendingAdminClassNotices : [];
-      const nextNotices = [
-        ...existingNotices.filter(n => String(n?.id || "") !== notice.id),
-        notice,
-      ].slice(-20);
+    const notice = {
+      id: `institute_deleted_${normaliseInstituteKey(instLabel)}_${eventAt}`,
+      kind: "institute_deleted",
+      classId: "", section: "", institute: "", subject: "",
+      adminName, eventAt, promptedAt: null,
+      oldInstitute: instLabel, newInstitute: "",
+      impactedClassCount: deletedClassIds.size,
+    };
+    const existingNotices = Array.isArray(currentData?._meta?.pendingAdminClassNotices)
+      ? currentData._meta.pendingAdminClassNotices : [];
+    const nextNotices = [
+      ...existingNotices.filter(n => String(n?.id || "") !== notice.id),
+      notice,
+    ].slice(-20);
 
-      const patchedData = {
-        ...currentData,
+    try {
+      await updateDoc(mainRef, {
         classes: nextClasses,
-        notes: nextNotes,
         institutes: nextInstitutes,
-        profile: { ...(currentData.profile || {}), institutes: nextProfileInstitutes },
-        trash: { ...(currentData.trash || {}), classes: nextTrashClasses, notes: nextTrashNotes },
-        _meta: { ...(currentData._meta || {}), pendingAdminClassNotices: nextNotices },
-      };
-
-      try {
-        await saveUserData(uid, patchedData, {
-          expectedRevision: safeRevision(currentData?._meta?.revision),
-          source: "adminDeleteInstituteCompletely",
-        });
-        affectedTeacherCount += 1;
-        break;
-      } catch (err) {
-        if (err?.code === "revision-conflict" && attempt === 0) {
-          const latest = await getDoc(userDocRef(uid));
-          if (!latest.exists()) break;
-          currentData = latest.data();
-          attempt += 1;
-          continue;
-        }
-        throw err;
-      }
+        "profile.institutes": nextProfileInstitutes,
+        "trash.classes": nextTrashClasses,
+        "trash.notes": nextTrashNotes,
+        "_meta.pendingAdminClassNotices": nextNotices,
+        "_meta.updatedAt": Date.now(),
+        "_meta.source": "adminDeleteInstituteCompletely",
+      });
+      affectedTeacherCount += 1;
+    } catch (err) {
+      console.error(`deleteInstituteCompletely: failed uid=${uid}`, err);
     }
   }
 
@@ -1404,42 +1370,34 @@ export async function deleteInstituteAndMigrate(fromInstituteName, toInstituteNa
     if (!mainSnap3.exists()) continue;
 
     let currentData = mainSnap3.data();
-    let attempt = 0;
-    while (attempt < 2) {
-      const transformed = applyInstituteRenameToTeacherData(currentData, fromLabel, toLabel, { adminName, eventAt });
-      if (!transformed.changed) break;
+    const transformed = applyInstituteRenameToTeacherData(currentData, fromLabel, toLabel, { adminName, eventAt });
+    if (!transformed.changed) continue;
 
-      // Override the notice kind to institute_deleted_migrated so teacher sees better copy
-      const nextNotices = (transformed.data?._meta?.pendingAdminClassNotices || []).map(n => {
-        if (n?.kind === "institute_renamed" && sameInstituteLabel(n?.oldInstitute, fromLabel)) {
-          return { ...n, kind: "institute_deleted_migrated", oldInstitute: fromLabel, newInstitute: toLabel };
-        }
-        return n;
-      });
-      const patchedData = {
-        ...transformed.data,
-        _meta: { ...(transformed.data._meta || {}), pendingAdminClassNotices: nextNotices },
-      };
-
-      try {
-        await saveUserData(uid, patchedData, {
-          expectedRevision: safeRevision(currentData?._meta?.revision),
-          source: "adminDeleteInstituteAndMigrate",
-        });
-        affectedTeacherCount += 1;
-        if (transformed.noticeAdded) notifiedTeacherCount += 1;
-        updatedUids.add(uid);
-        break;
-      } catch (err) {
-        if (err?.code === "revision-conflict" && attempt === 0) {
-          const latest = await getDoc(userDocRef(uid));
-          if (!latest.exists()) break;
-          currentData = latest.data();
-          attempt += 1;
-          continue;
-        }
-        throw err;
+    // Override notice kind to institute_deleted_migrated
+    const nextNotices = (transformed.data?._meta?.pendingAdminClassNotices || []).map(n => {
+      if (n?.kind === "institute_renamed" && sameInstituteLabel(n?.oldInstitute, fromLabel)) {
+        return { ...n, kind: "institute_deleted_migrated", oldInstitute: fromLabel, newInstitute: toLabel };
       }
+      return n;
+    });
+
+    const d = transformed.data;
+    try {
+      await updateDoc(userDocRef(uid), {
+        classes: d.classes,
+        institutes: d.institutes,
+        "profile.institutes": d.profile?.institutes ?? [],
+        "trash.classes": d.trash?.classes ?? [],
+        "trash.notes": d.trash?.notes ?? [],
+        "_meta.pendingAdminClassNotices": nextNotices,
+        "_meta.updatedAt": Date.now(),
+        "_meta.source": "adminDeleteInstituteAndMigrate",
+      });
+      affectedTeacherCount += 1;
+      if (transformed.noticeAdded) notifiedTeacherCount += 1;
+      updatedUids.add(uid);
+    } catch (err) {
+      console.error(`deleteInstituteAndMigrate: failed uid=${uid}`, err);
     }
   }
 
