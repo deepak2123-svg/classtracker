@@ -580,8 +580,8 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
             </button>
           )}
 
-          {/* Clickable profile pill */}
-          <div style={{position:"relative",flexShrink:0}}>
+          {/* Clickable profile pill — desktop only on mobile; replaced by bottom nav Profile tab */}
+          <div style={{position:"relative",flexShrink:0}} className="desktop-only">
             <div onClick={()=>setProfileOpen(o=>!o)}
               style={{height:38,display:"flex",alignItems:"center",gap:6,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"0 9px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
               <Avatar user={user} size={22}/>
