@@ -3189,26 +3189,16 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
   const rows = React.useMemo(() => {
     return institutes.map(inst => {
       const stats = instituteStats[inst] || { teacherCount: 0, classCount: 0 };
-      const instTeachers = teachers.filter(t =>
-        (t.institutes || []).some(i => sameInstituteName(i, inst)) ||
-        Object.values(fullData).some(d =>
-          (d?.profile?.institutes || []).some(i => sameInstituteName(i, inst)) ||
-          (d?.classes || []).some(c => sameInstituteName(c?.institute, inst))
-        )
-      );
-      const registered = instTeachers.length;
-      let todayFilled = 0;
-      let weekEntries = 0;
-      instTeachers.forEach(t => {
+      // Use the same teacher-membership logic as instituteStats for consistency
+      const instTeachers = teachers.filter(t => {
         const d = fullData[t.uid];
-        if (!d) return;
-        const classesHere = (d.classes || []).filter(c => sameInstituteName(c?.institute, inst));
-        classesHere.forEach(c => {
-          const notes = (d.notes || {})[c.id] || {};
-          todayFilled += getEntriesInRange(notes, 1).length > 0 ? 1 : 0;
-          weekEntries += getEntriesInRange(notes, 7).length;
-        });
+        const hasClassHere = d && (d.classes || []).some(c => sameInstituteName(c?.institute, inst));
+        const listedHere = (t.institutes || []).some(i => sameInstituteName(i, inst));
+        return hasClassHere || listedHere;
       });
+      // Use instituteStats.teacherCount as the authoritative registered count
+      const registered = stats.teacherCount || instTeachers.length;
+      let weekEntries = 0;
       const todayUpdatedTeachers = instTeachers.filter(t => {
         const d = fullData[t.uid];
         if (!d) return false;
@@ -3216,7 +3206,23 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
           .filter(c => sameInstituteName(c?.institute, inst))
           .some(c => getEntriesInRange((d.notes || {})[c.id] || {}, 1).length > 0);
       }).length;
-      return { inst, registered, todayFilled: todayUpdatedTeachers, weekEntries };
+      instTeachers.forEach(t => {
+        const d = fullData[t.uid];
+        if (!d) return;
+        const classesHere = (d.classes || []).filter(c => sameInstituteName(c?.institute, inst));
+        classesHere.forEach(c => {
+          const notes = (d.notes || {})[c.id] || {};
+          weekEntries += getEntriesInRange(notes, 7).length;
+        });
+      });
+      // Teachers who haven't filled any entry this week
+      const notFilledThisWeek = instTeachers.filter(t => {
+        const d = fullData[t.uid];
+        if (!d) return true;
+        const classesHere = (d.classes || []).filter(c => sameInstituteName(c?.institute, inst));
+        return classesHere.every(c => getEntriesInRange((d.notes || {})[c.id] || {}, 7).length === 0);
+      }).length;
+      return { inst, registered, todayFilled: todayUpdatedTeachers, weekEntries, notFilledThisWeek };
     });
   }, [institutes, teachers, fullData, instituteStats]);
 
@@ -3255,7 +3261,7 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
     const behind = rows.filter(r => { const s = getStatus(r); return s === "red" || s === "none"; });
     const good = rows.filter(r => getStatus(r) === "green");
     if (good.length) lines.push(`*Doing well:*\n${good.map(r => `✅ ${r.inst} — ${r.todayFilled}/${r.registered} teachers filled`).join("\n")}`);
-    if (behind.length) lines.push(`\n*Needs follow-up:*\n${behind.map(r => `${r.registered === 0 ? "⭕" : "🔴"} ${r.inst} — ${r.registered === 0 ? "0 registered" : `${r.todayFilled}/${r.registered} filled`}`).join("\n")}`);
+    if (behind.length) lines.push(`\n*Needs follow-up:*\n${behind.map(r => `${r.registered === 0 ? "⭕" : "🔴"} ${r.inst} — ${r.registered === 0 ? "0 registered" : `${r.todayFilled}/${r.registered} filled today, ${r.notFilledThisWeek} not filled this week`}`).join("\n")}`);
     lines.push(`\n_Overall: ${totalFilled}/${totalReg} teachers updated today (${compPct}%)_`);
     navigator.clipboard.writeText(lines.join("\n")).then(() => {
       setCopied(true);
@@ -3331,7 +3337,7 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ borderBottom: `1px solid ${G.border}` }}>
-              {["", "Centre", "Registered", "Today's entries", "This week", "Status"].map((h, i) => (
+              {["", "Centre", "Registered", "Today's entries", "This week", "Not filled (wk)", "Status"].map((h, i) => (
                 <th key={i} style={{
                   fontSize: 11, fontWeight: 700, color: G.textM, padding: "8px 10px",
                   textAlign: i >= 2 && i !== 3 ? "right" : "left",
@@ -3344,7 +3350,7 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
           </thead>
           <tbody>
             {visible.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: "center", padding: 24, color: G.textM, fontSize: 14 }}>No centres match this filter</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: "center", padding: 24, color: G.textM, fontSize: 14 }}>No centres match this filter</td></tr>
             ) : visible.map(row => {
               const pct = row.registered > 0 ? row.todayFilled / row.registered : 0;
               const barW = Math.round(pct * 100);
@@ -3378,6 +3384,13 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
                     <div style={{ fontSize: 11, color: G.textL, marginTop: 3, paddingLeft: 2 }}>{filledPct}% filled today</div>
                   </td>
                   <td style={{ padding: "12px 10px", textAlign: "right", fontSize: 14, fontWeight: 600, color: G.text }}>{row.weekEntries}</td>
+                  <td style={{ padding: "12px 10px", textAlign: "right" }}>
+                    {row.notFilledThisWeek > 0 ? (
+                      <span style={{ fontSize: 13, fontWeight: 700, color: G.red }}>{row.notFilledThisWeek}</span>
+                    ) : (
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#16a34a" }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: "12px 10px", textAlign: "right" }}>
                     {s === "none" && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 999, background: G.bg, color: G.textM, fontWeight: 700, border: `1px solid ${G.border}` }}>No activity</span>}
                     {s === "green" && <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 999, background: "#DCFCE7", color: "#166534", fontWeight: 700 }}>✓ On track</span>}
