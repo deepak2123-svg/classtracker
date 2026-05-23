@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, Component } from "react";
 import { createPortal } from "react-dom";
+import { Capacitor } from "@capacitor/core";
+import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
@@ -2968,10 +2970,19 @@ function ClassTrackerInner({user}){
     setActiveClass(pool[nextIndex]);
     return true;
   }, [activeClass?.id, teacherActiveClasses, teacherVisibleClasses]);
-  const triggerAppHaptic = React.useCallback((kind="light") => {
-    if(!isMobile || typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return false;
-    const pattern = kind==="entry" ? [14, 24, 18] : kind==="swipe" ? [10] : [12];
+  const triggerAppHaptic = React.useCallback(async (kind="light") => {
     try{
+      if(Capacitor.isNativePlatform()){
+        if(kind === "entry"){
+          await Haptics.notification({ type: NotificationType.Success });
+          return true;
+        }
+        const style = kind === "hold" ? ImpactStyle.Medium : ImpactStyle.Light;
+        await Haptics.impact({ style });
+        return true;
+      }
+      if(!isMobile || typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return false;
+      const pattern = kind==="entry" ? [14, 24, 18] : kind==="hold" ? [16] : kind==="swipe" ? [10] : [12];
       return navigator.vibrate(pattern);
     }catch{
       return false;
@@ -3399,7 +3410,7 @@ function ClassTrackerInner({user}){
 
     const note={id:Date.now().toString(),...newNote,status:newNote.status||"",teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
-    triggerAppHaptic("entry");
+    void triggerAppHaptic("entry");
     setShowNoteDetails(false);
     setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});setView("classDetail");
   };
@@ -3808,7 +3819,7 @@ function ClassTrackerInner({user}){
         holdStartRef.current = { x:touch.clientX, y:touch.clientY };
         holdTimerRef.current = window.setTimeout(() => {
           holdTriggeredRef.current = true;
-          if(typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(14);
+          void triggerAppHaptic("hold");
           onHold();
         }, 420);
       };
@@ -4305,9 +4316,9 @@ function ClassTrackerInner({user}){
       const dt = Date.now() - start.at;
       if(Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.15 || dt > 700) return;
       if(dx > 0){
-        if(navigateSiblingClass(1)) triggerAppHaptic("swipe");
+        if(navigateSiblingClass(1)) void triggerAppHaptic("swipe");
       }else{
-        if(navigateSiblingClass(-1)) triggerAppHaptic("swipe");
+        if(navigateSiblingClass(-1)) void triggerAppHaptic("swipe");
       }
     };
     return(
