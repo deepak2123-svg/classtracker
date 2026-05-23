@@ -7,8 +7,10 @@ import {
 import {
   getAuth, GoogleAuthProvider, signInWithPopup,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, onAuthStateChanged, updateProfile,
+  signInWithCredential, signOut, onAuthStateChanged, updateProfile,
 } from "firebase/auth";
+import { GoogleSignIn } from "@capawesome/capacitor-google-sign-in";
+import { canUseGooglePopupAuth, getGoogleWebClientId, isNativeApp } from "./platform";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCCPbJdMU0xQHWCtVLakaFeeRCdY3kMP4s",
@@ -25,6 +27,7 @@ export const auth = getAuth(app);
 const gProvider   = new GoogleAuthProvider();
 const MAIN_SCHEMA_VERSION = 3;
 const BACKUP_HISTORY_LIMIT = 12;
+let nativeGoogleInitPromise = null;
 
 class RevisionConflictError extends Error {
   constructor(details = {}) {
@@ -36,8 +39,43 @@ class RevisionConflictError extends Error {
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
+async function ensureNativeGoogleSignInReady() {
+  const clientId = getGoogleWebClientId();
+  if (!clientId) {
+    const error = new Error("Missing VITE_GOOGLE_WEB_CLIENT_ID for native Google sign-in.");
+    error.code = "auth/native-google-client-id-missing";
+    throw error;
+  }
+  if (!nativeGoogleInitPromise) {
+    nativeGoogleInitPromise = GoogleSignIn.initialize({ clientId });
+  }
+  await nativeGoogleInitPromise;
+}
+
 export async function loginWithGoogle() {
-  const r = await signInWithPopup(auth, gProvider); return r.user;
+  if (canUseGooglePopupAuth()) {
+    const r = await signInWithPopup(auth, gProvider);
+    return r.user;
+  }
+
+  await ensureNativeGoogleSignInReady();
+  const result = await GoogleSignIn.signIn();
+  if (!result?.idToken) {
+    const error = new Error("Google sign-in completed without an ID token.");
+    error.code = "auth/native-google-token-missing";
+    throw error;
+  }
+
+  const credential = GoogleAuthProvider.credential(result.idToken);
+  const signedIn = await signInWithCredential(auth, credential);
+
+  if (result.displayName && !signedIn.user.displayName) {
+    const profilePatch = { displayName: result.displayName };
+    if (result.imageUrl) profilePatch.photoURL = result.imageUrl;
+    await updateProfile(signedIn.user, profilePatch).catch(() => {});
+  }
+
+  return signedIn.user;
 }
 export async function signupWithEmail(name, email, password) {
   const r = await createUserWithEmailAndPassword(auth, email, password);
@@ -47,7 +85,14 @@ export async function signupWithEmail(name, email, password) {
 export async function loginWithEmail(email, password) {
   const r = await signInWithEmailAndPassword(auth, email, password); return r.user;
 }
-export function logout() { return signOut(auth); }
+export async function logout() {
+  await signOut(auth);
+  if (isNativeApp()) {
+    try {
+      await GoogleSignIn.signOut();
+    } catch {}
+  }
+}
 export function onAuth(cb) { return onAuthStateChanged(auth, cb); }
 
 // ── User data — split architecture ───────────────────────────────────────────

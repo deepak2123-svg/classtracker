@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "170006710635",
+    "project_id": "classtracker-84920",
+    "storage_bucket": "classtracker-84920.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:170006710635:android:ea119140b45852aadaa42e",
+        "android_client_info": {
+          "package_name": "com.classtracker.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "170006710635-d0tk3pv9if5c5gshue1dksbeoe42hjap.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.classtracker.app",
+            "certificate_hash": "93fcc0e7a761b4c867be86ed81262ec9b8c58c95"
+          }
+        },
+        {
+          "client_id": "170006710635-atlkuinjapndqjs4jsd3c1k6bkoiecrp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLipRuHcK054wc8OWcHxmM88MVJB7v9PU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "170006710635-atlkuinjapndqjs4jsd3c1k6bkoiecrp.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

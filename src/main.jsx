@@ -1,14 +1,17 @@
-import { StrictMode, useState, useEffect, useRef } from "react";
+import { StrictMode, Suspense, lazy, useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { onAuth, getUserRole, logout } from "./firebase";
 import { Spinner } from "./shared.jsx";
 import Auth from "./Auth";
-import ClassTracker from "./ClassTracker";
-import AdminAuth from "./AdminAuth";
-import AdminPanel from "./AdminPanel";
+const ClassTracker = lazy(() => import("./ClassTracker"));
+const AdminAuth = lazy(() => import("./AdminAuth"));
+const AdminPanel = lazy(() => import("./AdminPanel"));
+import { getAppMode, getTeacherAppUrl, isNativeApp } from "./platform";
 
-// VITE_APP_MODE = "admin" on ctadmin.vercel.app, unset on teacherct.vercel.app
-const IS_ADMIN_APP = import.meta.env.VITE_APP_MODE === "admin";
+// Web keeps the existing split build. Native uses one shared shell.
+const APP_MODE = getAppMode();
+const IS_ADMIN_APP = APP_MODE === "admin";
+const IS_NATIVE_SHELL = APP_MODE === "native";
 const ADMIN_INVITE_STORAGE_KEY = "ct_admin_invite_token";
 
 function hasPendingAdminInvite() {
@@ -59,14 +62,14 @@ function App() {
     if (user === undefined || roleLoading) return <Spinner text="Loading…" />;
 
     // Not logged in → admin login screen
-    if (!user) return <AdminAuth onVerified={handleAdminVerified} />;
+    if (!user) return <SuspenseScreen><AdminAuth onVerified={handleAdminVerified} /></SuspenseScreen>;
 
     // Logged in and confirmed admin → panel
-    if (role === "admin") return <AdminPanel user={user} />;
+    if (role === "admin") return <SuspenseScreen><AdminPanel user={user} /></SuspenseScreen>;
 
     // Invite-based admin activation can briefly sign the user in before the role handoff
     // completes. Keep the invite-aware auth screen mounted so it can finish promotion.
-    if (hasAdminInvite) return <AdminAuth onVerified={handleAdminVerified} currentUser={user} />;
+    if (hasAdminInvite) return <SuspenseScreen><AdminAuth onVerified={handleAdminVerified} currentUser={user} /></SuspenseScreen>;
 
     // Signed in but role not admin — show denied
     return <AccessDenied />;
@@ -75,10 +78,13 @@ function App() {
   // ── TEACHER APP (teacherct.vercel.app) ───────────────────────────────────
   if (user === undefined || (user && roleLoading)) return <Spinner text="Loading…" />;
   if (!user) return <Auth />;
-  return <ClassTracker user={user} />;
+  if (IS_NATIVE_SHELL) return <NativeRoleShell user={user} role={role} />;
+  return <SuspenseScreen><ClassTracker user={user} /></SuspenseScreen>;
 }
 
 function AccessDenied() {
+  const nativeApp = isNativeApp();
+  const teacherAppUrl = getTeacherAppUrl();
   return (
     <div style={{minHeight:"100vh",background:"#152B22",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Plus Jakarta Sans',sans-serif",padding:24}}>
       <div style={{textAlign:"center",maxWidth:360}}>
@@ -88,10 +94,12 @@ function AccessDenied() {
           Your account does not have admin privileges.<br/>Contact the super admin to request access.
         </p>
         <div style={{display:"flex",gap:10,justifyContent:"center"}}>
-          <a href="https://teacherct.vercel.app/"
-            style={{background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,padding:"9px 18px",fontSize:13,textDecoration:"none"}}>
-            ← Teacher app
-          </a>
+          {!nativeApp && (
+            <a href={teacherAppUrl}
+              style={{background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,padding:"9px 18px",fontSize:13,textDecoration:"none"}}>
+              ← Teacher app
+            </a>
+          )}
           <button onClick={logout}
             style={{background:"#C93030",color:"#fff",border:"none",borderRadius:9,padding:"9px 18px",fontSize:13,cursor:"pointer"}}>
             Sign out
@@ -100,6 +108,51 @@ function AccessDenied() {
       </div>
     </div>
   );
+}
+
+function NativeRoleShell({ user, role }) {
+  const [view, setView] = useState(role === "admin" ? "admin" : "teacher");
+
+  useEffect(() => {
+    if (role !== "admin") setView("teacher");
+  }, [role]);
+
+  const isAdminView = role === "admin" && view === "admin";
+
+  return (
+    <>
+      <SuspenseScreen>
+        {isAdminView ? <AdminPanel user={user} /> : <ClassTracker user={user} />}
+      </SuspenseScreen>
+      {role === "admin" && (
+        <button
+          type="button"
+          onClick={() => setView(current => current === "admin" ? "teacher" : "admin")}
+          style={{
+            position:"fixed",
+            right:16,
+            bottom:20,
+            zIndex:10000,
+            border:"none",
+            borderRadius:999,
+            background:"#0F172A",
+            color:"#fff",
+            padding:"12px 16px",
+            fontSize:13,
+            fontWeight:700,
+            boxShadow:"0 14px 34px rgba(15,23,42,0.28)",
+            cursor:"pointer",
+            WebkitTapHighlightColor:"transparent"
+          }}>
+          {isAdminView ? "Open teacher view" : "Open admin view"}
+        </button>
+      )}
+    </>
+  );
+}
+
+function SuspenseScreen({ children }) {
+  return <Suspense fallback={<Spinner text="Loading screen…" />}>{children}</Suspense>;
 }
 
 createRoot(document.getElementById("root")).render(

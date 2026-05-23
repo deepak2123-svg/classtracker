@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ClassLog</string>
+    <string name="title_activity_main">ClassLog</string>
+    <string name="package_name">com.classtracker.app</string>
+    <string name="custom_url_scheme">com.classtracker.app</string>
+</resources>

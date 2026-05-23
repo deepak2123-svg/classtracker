@@ -7,8 +7,6 @@ import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, 
 const G = {
   forest:"#0F172A",  forestS:"#1E293B",
   green:"#2563EB",   greenV:"#3B82F6",  greenL:"#E8F0FF",
-  blue:"#2563EB",    blueL:"#E8F0FF",
-  amber:"#B45309",   amberL:"#FEF3C7",
   bg:"#F6F8FC",      surface:"#FFFFFF",
   pageBg:"linear-gradient(180deg, #F8FAFC 0%, #F3F6FB 100%)",
   border:"#D7DFEC",  borderM:"#B7C3D7",
@@ -81,104 +79,7 @@ function hasCompleteProfile(profile) {
   return !!current.name && current.subjects.length > 0;
 }
 
-const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:normaliseProfile(),trash:{classes:[],notes:[]},syllabus:{}};
-
-// ── Syllabus presets by subject + exam type ───────────────────────────────────
-const EXAM_TYPES = [
-  {key:"jee",    label:"JEE",  color:"#1D4ED8", bg:"#DBEAFE"},
-  {key:"neet",   label:"NEET", color:"#0F766E", bg:"#CCFBF1"},
-  {key:"cbse",   label:"CBSE", color:"#7C3AED", bg:"#EDE9FE"},
-  {key:"boards", label:"State Boards", color:"#B45309", bg:"#FEF3C7"},
-];
-
-const SYLLABUS_PRESETS = {
-  physics: {
-    jee: {
-      targetDate:"2026-05-15",
-      chapters:["Physical World & Measurement","Kinematics","Laws of Motion","Work, Energy & Power","System of Particles & Rotational Motion","Gravitation","Mechanical Properties of Solids","Mechanical Properties of Fluids","Thermal Properties of Matter","Thermodynamics","Kinetic Theory","Oscillations","Waves","Electric Charges & Fields","Electrostatic Potential","Current Electricity","Magnetic Effects of Current","Magnetism & Matter","Electromagnetic Induction","Alternating Current","Electromagnetic Waves","Ray Optics","Wave Optics","Dual Nature of Radiation","Atoms","Nuclei","Semiconductor Electronics"],
-    },
-    neet: {
-      targetDate:"2026-05-04",
-      chapters:["Physical World","Units & Measurements","Motion in a Straight Line","Motion in a Plane","Laws of Motion","Work, Energy & Power","System of Particles","Gravitation","Mechanical Properties of Solids","Mechanical Properties of Fluids","Thermal Properties of Matter","Thermodynamics","Kinetic Theory","Oscillations","Waves","Electric Charges & Fields","Electrostatic Potential & Capacitance","Current Electricity","Moving Charges & Magnetism","Magnetism & Matter","Electromagnetic Induction","Alternating Current","Electromagnetic Waves","Ray Optics & Optical Instruments","Wave Optics","Dual Nature of Radiation & Matter","Atoms","Nuclei","Semiconductor Electronics"],
-    },
-    cbse: {
-      targetDate:"2026-03-10",
-      chapters:["Electric Charges & Fields","Electrostatic Potential & Capacitance","Current Electricity","Moving Charges & Magnetism","Magnetism & Matter","Electromagnetic Induction","Alternating Current","Electromagnetic Waves","Ray Optics & Optical Instruments","Wave Optics","Dual Nature of Radiation & Matter","Atoms","Nuclei","Semiconductor Electronics & Communication Systems"],
-    },
-    boards: {
-      targetDate:"2026-03-20",
-      chapters:["Electric Charges & Fields","Electrostatic Potential & Capacitance","Current Electricity","Moving Charges & Magnetism","Magnetism & Matter","Electromagnetic Induction","Alternating Current","Electromagnetic Waves","Ray Optics","Wave Optics","Dual Nature of Radiation","Atoms","Nuclei","Semiconductor Electronics"],
-    },
-  },
-  chemistry: {
-    jee: {
-      targetDate:"2026-05-15",
-      chapters:["Some Basic Concepts","Atomic Structure","Chemical Bonding","Equilibrium","Redox Reactions","s-Block Elements","Hydrogen","Organic Chemistry Basics","Hydrocarbons","Environmental Chemistry","States of Matter","Thermodynamics","Solutions","Electrochemistry","Chemical Kinetics","Surface Chemistry","p-Block Elements","d & f Block Elements","Coordination Compounds","Haloalkanes & Haloarenes","Alcohols Phenols Ethers","Aldehydes Ketones & Acids","Amines","Biomolecules","Polymers","Chemistry in Everyday Life"],
-    },
-    neet: {
-      targetDate:"2026-05-04",
-      chapters:["Some Basic Concepts","Atomic Structure","Classification of Elements","Chemical Bonding","States of Matter","Thermodynamics","Equilibrium","Redox Reactions","Hydrogen","s-Block Elements","p-Block Elements","Organic Chemistry Basics","Hydrocarbons","Environmental Chemistry","Solutions","Electrochemistry","Chemical Kinetics","d & f Block Elements","Coordination Compounds","Haloalkanes","Alcohols Phenols Ethers","Aldehydes Ketones","Amines","Biomolecules","Polymers","Chemistry in Everyday Life"],
-    },
-    cbse: {
-      targetDate:"2026-03-10",
-      chapters:["Solutions","Electrochemistry","Chemical Kinetics","d & f Block Elements","Coordination Compounds","Haloalkanes & Haloarenes","Alcohols Phenols Ethers","Aldehydes Ketones & Carboxylic Acids","Amines","Biomolecules","Polymers","Chemistry in Everyday Life"],
-    },
-    boards: {
-      targetDate:"2026-03-20",
-      chapters:["Solutions","Electrochemistry","Chemical Kinetics","d & f Block Elements","Coordination Compounds","Haloalkanes & Haloarenes","Alcohols Phenols Ethers","Aldehydes Ketones & Carboxylic Acids","Amines","Biomolecules","Polymers","Chemistry in Everyday Life"],
-    },
-  },
-  mathematics: {
-    jee: {
-      targetDate:"2026-05-15",
-      chapters:["Sets Relations & Functions","Complex Numbers","Matrices & Determinants","Permutation & Combination","Binomial Theorem","Sequences & Series","Limits Continuity & Differentiability","Integral Calculus","Differential Equations","Coordinate Geometry — Straight Lines","Coordinate Geometry — Circles","Coordinate Geometry — Conics","3D Geometry","Vector Algebra","Statistics & Probability","Trigonometry","Mathematical Reasoning","Quadratic Equations","Progressions"],
-    },
-    cbse: {
-      targetDate:"2026-03-10",
-      chapters:["Relations & Functions","Inverse Trigonometric Functions","Matrices","Determinants","Continuity & Differentiability","Applications of Derivatives","Integrals","Applications of Integrals","Differential Equations","Vector Algebra","3D Geometry","Probability","Linear Programming"],
-    },
-    boards: {
-      targetDate:"2026-03-20",
-      chapters:["Relations & Functions","Inverse Trigonometric Functions","Matrices","Determinants","Continuity & Differentiability","Applications of Derivatives","Integrals","Applications of Integrals","Differential Equations","Vector Algebra","3D Geometry","Probability","Linear Programming"],
-    },
-  },
-  biology: {
-    neet: {
-      targetDate:"2026-05-04",
-      chapters:["The Living World","Biological Classification","Plant Kingdom","Animal Kingdom","Morphology of Flowering Plants","Anatomy of Flowering Plants","Structural Organisation in Animals","Cell: Unit of Life","Biomolecules","Cell Cycle & Division","Transport in Plants","Mineral Nutrition","Photosynthesis","Respiration in Plants","Plant Growth & Development","Digestion & Absorption","Breathing & Exchange of Gases","Body Fluids & Circulation","Excretory Products","Locomotion & Movement","Neural Control & Coordination","Chemical Coordination","Reproduction in Organisms","Sexual Reproduction in Flowering Plants","Human Reproduction","Reproductive Health","Heredity & Variation","Molecular Basis of Inheritance","Evolution","Human Health & Disease","Strategies for Food Production","Microbes in Human Welfare","Biotechnology Principles","Biotechnology Applications","Organisms & Populations","Ecosystem","Biodiversity & Conservation","Environmental Issues"],
-    },
-    cbse: {
-      targetDate:"2026-03-10",
-      chapters:["Reproduction in Organisms","Sexual Reproduction in Flowering Plants","Human Reproduction","Reproductive Health","Heredity & Variation","Molecular Basis of Inheritance","Evolution","Human Health & Disease","Strategies for Food Production","Microbes in Human Welfare","Biotechnology Principles","Biotechnology Applications","Organisms & Populations","Ecosystem","Biodiversity & Conservation","Environmental Issues"],
-    },
-  },
-};
-
-function getPresetForClass(cls){
-  if(!cls) return null;
-  const subj=(cls.subject||"").toLowerCase();
-  let subjectKey=null;
-  if(/physics/.test(subj)) subjectKey="physics";
-  else if(/chem/.test(subj)) subjectKey="chemistry";
-  else if(/math|maths/.test(subj)) subjectKey="mathematics";
-  else if(/bio/.test(subj)) subjectKey="biology";
-  return subjectKey ? (SYLLABUS_PRESETS[subjectKey]||null) : null;
-}
-
-function readableDate(dk){
-  if(!dk) return "";
-  const [y,m,d]=dk.split("-").map(Number);
-  const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${d} ${months[m-1]} ${y}`;
-}
-
-function daysUntil(dk){
-  if(!dk) return null;
-  const now=new Date(); now.setHours(0,0,0,0);
-  const [y,m,d]=dk.split("-").map(Number);
-  const target=new Date(y,m-1,d);
-  return Math.ceil((target-now)/(1000*60*60*24));
-}
+const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:normaliseProfile(),trash:{classes:[],notes:[]}};
 
 function readClientProfile(){
   if(typeof window==="undefined"){
@@ -580,8 +481,8 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
             </button>
           )}
 
-          {/* Clickable profile pill — desktop only on mobile; replaced by bottom nav Profile tab */}
-          <div style={{position:"relative",flexShrink:0}} className="desktop-only">
+          {/* Clickable profile pill */}
+          <div style={{position:"relative",flexShrink:0}}>
             <div onClick={()=>setProfileOpen(o=>!o)}
               style={{height:38,display:"flex",alignItems:"center",gap:6,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"0 9px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
               <Avatar user={user} size={22}/>
@@ -2444,6 +2345,13 @@ function ClassTrackerInner({user}){
   const [editingClass,setEditingClass] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [instFilter,      setInstFilter]      = useState("all"); // institute filter on home
+
+  // Auto-reset the institute filter if the selected institute no longer has any active classes
+  React.useEffect(() => {
+    if (instFilter === "all") return;
+    const activeInsts = new Set((data.classes || []).filter(c => !c.left && !c.archived).map(c => c.institute || ""));
+    if (!activeInsts.has(instFilter)) setInstFilter("all");
+  }, [data.classes, instFilter]);
   const [leaveModal,setLeaveModal]     = useState(null);
   const [historyClassId,setHistoryClassId] = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
@@ -2470,12 +2378,6 @@ function ClassTrackerInner({user}){
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups,extraSections}}
   const [teacherNoticePrompt, setTeacherNoticePrompt] = useState(null);
-  // ── Syllabus tracker state ────────────────────────────────────────────────
-  const [syllabusSetupModal, setSyllabusSetupModal] = useState(null);
-  const [chapterCompleteModal, setChapterCompleteModal] = useState(null);
-  const [mobileNavTab, setMobileNavTab] = useState("home");
-  const [profileTab, setProfileTab] = useState("syllabus");
-  const [syllabusClassId, setSyllabusClassId] = useState(null);
   const pendingSaveKey = `classlog_pending_${user.uid}`;
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
@@ -3234,23 +3136,21 @@ function ClassTrackerInner({user}){
 
   const addNote=()=>{
     if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
-    if(!newNote.status){
-      showInlineToast("Please select a Topic Status before saving.");
-      const el=document.getElementById("statusSectionAnchor");
-      if(el) el.scrollIntoView({behavior:"smooth",block:"center"});
-      return;
-    }
+
+    // Duplicate check — same class, same date, overlapping or identical time
     const existing=(data.notes?.[activeClass.id]||{})[selectedDate]||[];
     if(newNote.timeStart){
       const newStart=newNote.timeStart;
       const clash=existing.find(e=>{
         if(!e.timeStart)return false;
+        // Exact same start time = definite duplicate
         if(e.timeStart===newStart)return true;
+        // Overlapping times check
         if(newNote.timeEnd&&e.timeEnd){
           const toMins=t=>{const[h,m]=t.split(":").map(Number);return h*60+m;};
           const ns=toMins(newStart),ne=toMins(newNote.timeEnd);
           const es=toMins(e.timeStart),ee=toMins(e.timeEnd);
-          return ns<ee&&ne>es;
+          return ns<ee&&ne>es; // overlap
         }
         return false;
       });
@@ -3259,15 +3159,11 @@ function ClassTrackerInner({user}){
         return;
       }
     }
+
     const note={id:Date.now().toString(),...newNote,status:newNote.status||"",teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
     setShowNoteDetails(false);
-    setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});
-    if(note.status==="completed"&&activeClass){
-      const topicName=(note.title||"").trim();
-      setChapterCompleteModal({classId:activeClass.id,chapterName:topicName||null});
-    }
-    setView("classDetail");
+    setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});setView("classDetail");
   };
   const saveEdit=()=>{
     if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
@@ -3493,11 +3389,9 @@ function ClassTrackerInner({user}){
   // ══════════════════════════════════════════════════════════════════════
   if(view==="home"){
     const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
-    // Show ALL institutes the teacher is associated with (from all classes — active + archived — and the
-    // stored institutes list), so both tabs always appear even if one institute has no active classes yet.
-    const institutesFromAllClasses=[...new Set((data.classes||[]).map(c=>c.institute||""))].filter(Boolean);
-    const institutesFromStore=(data.institutes||[]).filter(Boolean);
-    const institutes=[...new Set([...institutesFromAllClasses,...institutesFromStore])].filter(Boolean);
+    // Only show institutes that have at least one active (non-trashed) class.
+    // Empty institutes (all classes deleted) are hidden from filter and header count.
+    const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
     const filtered=instFilter==="all"?activeClasses:activeClasses.filter(c=>c.institute===instFilter);
     const visibleMobileClasses=filtered.slice(0,mobileClassLimit);
     const hasMoreMobileClasses=filtered.length>visibleMobileClasses.length;
@@ -4015,419 +3909,11 @@ function ClassTrackerInner({user}){
       );
     };
 
-    // ── Syllabus helper: get or initialise syllabus for a class ──────────────
-    const getSyllabus=(cid)=>(data.syllabus||{})[cid]||null;
-    const saveSyllabus=(cid,syl)=>{
-      setData(d=>({...d,syllabus:{...(d.syllabus||{}),[cid]:syl}}));
-    };
-
-    // ── SyllabusSetupModal ───────────────────────────────────────────────────
-    const SyllabusSetupModal=()=>{
-      if(!syllabusSetupModal) return null;
-      const cls=data.classes.find(c=>c.id===syllabusSetupModal.classId);
-      if(!cls) return null;
-      const preset=getPresetForClass(cls);
-      const examOptions=preset?Object.keys(preset):[];
-      const [step,setStep]=React.useState(syllabusSetupModal.step||"examType");
-      const [examType,setExamType]=React.useState(syllabusSetupModal.examType||"");
-      const [chapters,setChapters]=React.useState(syllabusSetupModal.chapters||[]);
-      const [targetDate,setTargetDate]=React.useState(syllabusSetupModal.targetDate||"");
-      const [editingChapters,setEditingChapters]=React.useState(false);
-      const [chapterInput,setChapterInput]=React.useState("");
-
-      const loadPreset=(key)=>{
-        const p=preset?.[key];
-        if(p){setChapters([...p.chapters]);setTargetDate(p.targetDate||"");}
-        setExamType(key);
-      };
-
-      const saveAndClose=()=>{
-        const syl={examType,chapters:chapters.filter(Boolean),targetDate,completedChapters:(getSyllabus(cls.id)||{}).completedChapters||{},lastUpdated:Date.now()};
-        saveSyllabus(cls.id,syl);
-        setSyllabusSetupModal(null);
-        showInlineToast("Syllabus saved ✓");
-      };
-
-      const overlayStyle={position:"fixed",inset:0,background:"rgba(15,23,42,0.55)",zIndex:600,display:"flex",alignItems:"flex-end",justifyContent:"center"};
-      const sheetStyle={background:G.surface,borderRadius:"20px 20px 0 0",padding:"0 0 env(safe-area-inset-bottom)",width:"100%",maxWidth:520,maxHeight:"90dvh",display:"flex",flexDirection:"column"};
-
-      return(
-        <div style={overlayStyle} onClick={e=>{if(e.target===e.currentTarget)setSyllabusSetupModal(null);}}>
-          <div style={sheetStyle}>
-            {/* Handle */}
-            <div style={{padding:"12px 0 0",display:"flex",justifyContent:"center",flexShrink:0}}>
-              <div style={{width:36,height:4,borderRadius:99,background:"#D1D5DB"}}/>
-            </div>
-            {/* Header */}
-            <div style={{padding:"12px 20px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:3}}>
-                {step==="examType"?"Step 1 of 3":step==="chapters"?"Step 2 of 3":"Step 3 of 3"}
-              </div>
-              <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display}}>{cls.section}</div>
-              <div style={{fontSize:13,color:G.textM}}>{cls.subject} · {cls.institute}</div>
-            </div>
-            {/* Body */}
-            <div style={{flex:1,overflowY:"auto",padding:"16px 20px 20px"}}>
-              {step==="examType"&&(
-                <div>
-                  <div style={{fontSize:15,fontWeight:700,color:G.text,marginBottom:4}}>What exam type are students preparing for?</div>
-                  <div style={{fontSize:13,color:G.textM,marginBottom:16}}>We'll load the right chapter list for you.</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                    {(examOptions.length?examOptions:["jee","neet","cbse","boards"]).map(key=>{
-                      const meta=EXAM_TYPES.find(e=>e.key===key)||{key,label:key.toUpperCase(),color:G.blue,bg:G.blueL};
-                      const isSelected=examType===key;
-                      return(
-                        <button key={key} onClick={()=>loadPreset(key)}
-                          style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",borderRadius:14,border:`2px solid ${isSelected?meta.color:G.border}`,background:isSelected?meta.bg:G.surface,cursor:"pointer",fontFamily:G.sans,textAlign:"left",transition:"all 0.15s",WebkitTapHighlightColor:"transparent"}}>
-                          <div style={{width:36,height:36,borderRadius:10,background:meta.bg,border:`1.5px solid ${meta.color}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:meta.color,flexShrink:0}}>{meta.label[0]}</div>
-                          <div>
-                            <div style={{fontSize:15,fontWeight:700,color:G.text}}>{meta.label}</div>
-                            {preset?.[key]&&<div style={{fontSize:12,color:G.textM,marginTop:2}}>{preset[key].chapters.length} chapters · Target: {readableDate(preset[key].targetDate)}</div>}
-                          </div>
-                          {isSelected&&<span style={{marginLeft:"auto",fontSize:18,color:meta.color}}>✓</span>}
-                        </button>
-                      );
-                    })}
-                    {!preset&&(
-                      <div style={{padding:14,borderRadius:12,background:"#FFF7E8",border:"1px solid #FCD34D",fontSize:13,color:"#92400E"}}>
-                        No preset available for <strong>{cls.subject}</strong>. You can add chapters manually in the next step.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {step==="chapters"&&(
-                <div>
-                  <div style={{fontSize:15,fontWeight:700,color:G.text,marginBottom:4}}>Review your chapter list</div>
-                  <div style={{fontSize:13,color:G.textM,marginBottom:12}}>These are loaded from the {examType.toUpperCase()} preset. Edit as needed.</div>
-                  {chapters.map((ch,i)=>(
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${G.border}`}}>
-                      <span style={{width:22,height:22,borderRadius:6,background:G.bg,border:`1px solid ${G.border}`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:G.textM,flexShrink:0}}>{i+1}</span>
-                      <span style={{flex:1,fontSize:14,color:G.text}}>{ch}</span>
-                      <button onClick={()=>setChapters(chapters.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:G.textL,fontSize:16,padding:"2px 6px",fontFamily:G.sans}}>✕</button>
-                    </div>
-                  ))}
-                  <div style={{display:"flex",gap:8,marginTop:12}}>
-                    <input value={chapterInput} onChange={e=>setChapterInput(e.target.value)}
-                      onKeyDown={e=>{if(e.key==="Enter"&&chapterInput.trim()){setChapters([...chapters,chapterInput.trim()]);setChapterInput("");}}}
-                      placeholder="Add a chapter…" style={{...inp,margin:0,flex:1,fontSize:14,padding:"9px 12px"}}/>
-                    <button onClick={()=>{if(chapterInput.trim()){setChapters([...chapters,chapterInput.trim()]);setChapterInput("");}}}
-                      style={{background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"9px 14px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:G.sans,flexShrink:0}}>Add</button>
-                  </div>
-                </div>
-              )}
-              {step==="date"&&(
-                <div>
-                  <div style={{fontSize:15,fontWeight:700,color:G.text,marginBottom:4}}>When should this syllabus be complete?</div>
-                  <div style={{fontSize:13,color:G.textM,marginBottom:16}}>Set a target date for finishing all chapters. This helps track pace.</div>
-                  {EXAM_TYPES.filter(e=>["jee","neet","cbse","boards"].includes(e.key)).map(e=>(
-                    <button key={e.key} onClick={()=>setTargetDate(preset?.[e.key]?.targetDate||targetDate)}
-                      style={{display:"inline-flex",alignItems:"center",gap:6,marginRight:8,marginBottom:8,padding:"6px 12px",borderRadius:999,border:`1.5px solid ${examType===e.key?e.color:G.border}`,background:examType===e.key?e.bg:G.surface,fontSize:12,fontWeight:600,color:examType===e.key?e.color:G.textM,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
-                      {e.label} {preset?.[e.key]?.targetDate?`· ${readableDate(preset[e.key].targetDate)}`:""}
-                    </button>
-                  ))}
-                  <div style={{marginTop:12}}>
-                    <label style={{...lbl,fontSize:12}}>Or pick a custom date</label>
-                    <input type="date" value={targetDate} onChange={e=>setTargetDate(e.target.value)}
-                      style={{...inp,margin:0,fontSize:15,padding:"11px 14px"}}/>
-                  </div>
-                  {targetDate&&(()=>{
-                    const d=daysUntil(targetDate);
-                    return <div style={{marginTop:10,fontSize:13,color:d<60?G.red:d<120?G.amber:G.green,fontWeight:600}}>
-                      {d>0?`${d} days until target`:"Target date has passed"} · {readableDate(targetDate)}
-                    </div>;
-                  })()}
-                </div>
-              )}
-            </div>
-            {/* Footer */}
-            <div style={{padding:"12px 20px 20px",borderTop:`1px solid ${G.border}`,flexShrink:0,display:"flex",gap:10}}>
-              {step!=="examType"&&(
-                <button onClick={()=>setStep(step==="date"?"chapters":"examType")}
-                  style={{flex:"0 0 auto",background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"12px 18px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:G.sans,color:G.textM}}>← Back</button>
-              )}
-              <button onClick={()=>{
-                  if(step==="examType"){if(examType)setStep("chapters");else showInlineToast("Please pick an exam type");}
-                  else if(step==="chapters"){if(chapters.length>0)setStep("date");else showInlineToast("Add at least one chapter");}
-                  else saveAndClose();
-                }}
-                style={{flex:1,background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"13px 18px",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
-                {step==="date"?"Save Syllabus →":step==="chapters"?"Set Target Date →":"Next →"}
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    // ── ChapterCompleteModal ─────────────────────────────────────────────────
-    const ChapterCompleteModal=()=>{
-      if(!chapterCompleteModal) return null;
-      const cls=data.classes.find(c=>c.id===chapterCompleteModal.classId);
-      const syl=getSyllabus(chapterCompleteModal.classId);
-      const topicName=chapterCompleteModal.chapterName;
-      // Match topic name to a chapter in the syllabus
-      const matchedChapter=syl?.chapters?.find(ch=>
-        topicName && ch.toLowerCase().includes(topicName.toLowerCase().slice(0,10))
-      )||null;
-      const [selectedChapter,setSelectedChapter]=React.useState(matchedChapter||(syl?.chapters?.[0])||"");
-
-      const markTestReady=(ready)=>{
-        if(!syl||!selectedChapter) return;
-        const completed={...(syl.completedChapters||{}),[selectedChapter]:{testReady:ready,markedAt:Date.now()}};
-        saveSyllabus(chapterCompleteModal.classId,{...syl,completedChapters:completed});
-        setChapterCompleteModal(null);
-        showInlineToast(ready?"✓ Chapter marked test-ready!":"Got it — will revisit this chapter.");
-      };
-
-      const overlayStyle={position:"fixed",inset:0,background:"rgba(15,23,42,0.55)",zIndex:601,display:"flex",alignItems:"flex-end",justifyContent:"center"};
-      const sheetStyle={background:G.surface,borderRadius:"20px 20px 0 0",padding:"0 0 env(safe-area-inset-bottom)",width:"100%",maxWidth:520};
-
-      return(
-        <div style={overlayStyle} onClick={e=>{if(e.target===e.currentTarget)setChapterCompleteModal(null);}}>
-          <div style={sheetStyle}>
-            <div style={{padding:"12px 0 0",display:"flex",justifyContent:"center"}}>
-              <div style={{width:36,height:4,borderRadius:99,background:"#D1D5DB"}}/>
-            </div>
-            <div style={{padding:"14px 20px 20px"}}>
-              <div style={{fontSize:28,marginBottom:8}}>🏁</div>
-              <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:6}}>Chapter completed!</div>
-              {syl?(
-                <>
-                  <div style={{fontSize:14,color:G.textM,marginBottom:14}}>Which chapter did you finish? Select it to update your syllabus tracker.</div>
-                  <div style={{maxHeight:180,overflowY:"auto",marginBottom:14,display:"flex",flexDirection:"column",gap:6}}>
-                    {(syl.chapters||[]).filter(ch=>!(syl.completedChapters||{})[ch]).map(ch=>(
-                      <button key={ch} onClick={()=>setSelectedChapter(ch)}
-                        style={{textAlign:"left",padding:"10px 14px",borderRadius:12,border:`2px solid ${selectedChapter===ch?G.green:G.border}`,background:selectedChapter===ch?G.greenL:G.surface,fontSize:14,fontWeight:selectedChapter===ch?700:500,color:G.text,cursor:"pointer",fontFamily:G.sans,transition:"all 0.12s",WebkitTapHighlightColor:"transparent"}}>
-                        {selectedChapter===ch?"✓ ":""}{ch}
-                      </button>
-                    ))}
-                    {(syl.chapters||[]).filter(ch=>!(syl.completedChapters||{})[ch]).length===0&&(
-                      <div style={{fontSize:14,color:G.textM,padding:"10px 0"}}>All chapters already marked done 🎉</div>
-                    )}
-                  </div>
-                  {selectedChapter&&(
-                    <>
-                      <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:8}}>Is <em>{selectedChapter}</em> ready for tests?</div>
-                      <div style={{display:"flex",gap:10,marginBottom:10}}>
-                        <button onClick={()=>markTestReady(true)}
-                          style={{flex:1,background:"#22c55e",color:"#fff",border:"none",borderRadius:12,padding:"13px 16px",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
-                          ✓ Yes, test-ready
-                        </button>
-                        <button onClick={()=>markTestReady(false)}
-                          style={{flex:1,background:G.amberL,color:G.amber,border:`1.5px solid ${G.amber}44`,borderRadius:12,padding:"13px 12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
-                          Need more practice
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </>
-              ):(
-                <>
-                  <div style={{fontSize:14,color:G.textM,marginBottom:16}}>You haven't set up a syllabus for <strong>{cls?.section}</strong> yet. Set it up to track chapters.</div>
-                  <button onClick={()=>{setChapterCompleteModal(null);setSyllabusSetupModal({classId:chapterCompleteModal.classId,step:"examType"});setMobileNavTab("profile");setProfileTab("syllabus");}}
-                    style={{width:"100%",background:G.navy,color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:G.sans,marginBottom:10}}>
-                    Set up syllabus →
-                  </button>
-                </>
-              )}
-              <button onClick={()=>setChapterCompleteModal(null)}
-                style={{width:"100%",background:"none",border:"none",padding:"10px",fontSize:14,color:G.textM,cursor:"pointer",fontFamily:G.sans}}>
-                Skip for now
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    // ── ProfileView (mobile) ─────────────────────────────────────────────────
-    const ProfileView=()=>{
-      const activeClasses=(data.classes||[]).filter(c=>!c.left);
-      const [selClassId,setSelClassId]=React.useState(syllabusClassId||(activeClasses[0]?.id||null));
-      const selCls=activeClasses.find(c=>c.id===selClassId)||activeClasses[0]||null;
-      const syl=selCls?getSyllabus(selCls.id):null;
-
-      const doneChapters=Object.keys(syl?.completedChapters||{});
-      const totalChapters=(syl?.chapters||[]).length;
-      const donePct=totalChapters>0?Math.round(doneChapters.length/totalChapters*100):0;
-
-      const tabBtnStyle=(active)=>({flex:1,padding:"9px 0",border:"none",borderRadius:10,cursor:"pointer",fontFamily:G.display,fontSize:13,fontWeight:600,transition:"all 0.15s",background:active?G.navy:"transparent",color:active?"#fff":G.textM});
-
-      return(
-        <div style={{flex:1,display:"flex",flexDirection:"column",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-          {/* Profile hero */}
-          <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,padding:"18px 16px 22px",flexShrink:0}}>
-            <div style={{width:52,height:52,borderRadius:"50%",background:G.blue,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:800,color:"#fff",marginBottom:10}}>
-              {(teacherName||"T")[0].toUpperCase()}
-            </div>
-            <div style={{fontSize:20,fontWeight:800,color:"#fff",fontFamily:G.display}}>{teacherName}</div>
-            <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginTop:2}}>{user.email}</div>
-          </div>
-
-          {/* Tabs */}
-          <div style={{padding:"12px 14px 0",flexShrink:0}}>
-            <div style={{display:"flex",background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:3,gap:2,boxShadow:G.shadowSm}}>
-              {[["syllabus","📖 Syllabus"],["stats","📊 Stats"],["settings","⚙ Settings"]].map(([key,label])=>(
-                <button key={key} style={tabBtnStyle(profileTab===key)} onClick={()=>setProfileTab(key)}>{label}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── SYLLABUS TAB ── */}
-          {profileTab==="syllabus"&&(
-            <div style={{flex:1,padding:"14px 14px 96px"}}>
-              {activeClasses.length===0?(
-                <div style={{textAlign:"center",padding:"48px 20px",color:G.textM}}>No classes yet. Add a class first.</div>
-              ):(
-                <>
-                  {/* Class selector */}
-                  <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:14}}>
-                    {activeClasses.map(cls=>{
-                      const isActive=cls.id===selClassId;
-                      const color=instColor(cls.institute);
-                      return(
-                        <button key={cls.id} onClick={()=>{setSelClassId(cls.id);setSyllabusClassId(cls.id);}}
-                          style={{padding:"7px 14px",borderRadius:999,border:`2px solid ${isActive?color.bg:G.border}`,background:isActive?color.light:"transparent",fontSize:13,fontWeight:700,color:isActive?color.bg:G.textM,cursor:"pointer",fontFamily:G.sans,transition:"all 0.15s",WebkitTapHighlightColor:"transparent"}}>
-                          {cls.section}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {selCls&&(
-                    syl?(
-                      <>
-                        {/* Progress card */}
-                        <div style={{...card,padding:"16px",marginBottom:12}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                            <div>
-                              <div style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.display}}>{selCls.subject||selCls.section}</div>
-                              <div style={{fontSize:12,color:G.textM,marginTop:2}}>{selCls.institute} · {EXAM_TYPES.find(e=>e.key===syl.examType)?.label||syl.examType?.toUpperCase()||"Custom"}</div>
-                            </div>
-                            <button onClick={()=>setSyllabusSetupModal({classId:selCls.id,step:"examType",examType:syl.examType,chapters:syl.chapters,targetDate:syl.targetDate})}
-                              style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:G.sans,color:G.textM}}>Edit</button>
-                          </div>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                            <span style={{fontSize:13,fontWeight:600,color:G.text}}>{doneChapters.length}/{totalChapters} chapters done</span>
-                            <span style={{fontSize:20,fontWeight:800,color:donePct>=70?G.green:donePct>=40?G.amber:G.red,fontFamily:G.display}}>{donePct}%</span>
-                          </div>
-                          <div style={{height:8,borderRadius:999,background:"#E8EEF8",overflow:"hidden",marginBottom:6}}>
-                            <div style={{height:"100%",width:`${donePct}%`,borderRadius:999,background:donePct>=70?"#22c55e":donePct>=40?G.amber:G.red,transition:"width 0.6s"}}/>
-                          </div>
-                          {syl.targetDate&&(()=>{
-                            const d=daysUntil(syl.targetDate);
-                            return <div style={{fontSize:12,color:d<30?G.red:d<90?G.amber:G.textM,fontWeight:600,marginTop:4}}>
-                              Target: {readableDate(syl.targetDate)} · {d>0?`${d} days left`:"Past target date"}
-                            </div>;
-                          })()}
-                        </div>
-                        {/* Chapter list */}
-                        <div style={{...card,overflow:"hidden",marginBottom:12}}>
-                          <div style={{padding:"12px 16px 8px",borderBottom:`1px solid ${G.border}`,fontSize:13,fontWeight:700,color:G.text}}>Chapters</div>
-                          {(syl.chapters||[]).map((ch,i)=>{
-                            const done=(syl.completedChapters||{})[ch];
-                            return(
-                              <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<syl.chapters.length-1?`1px solid ${G.border}`:"none"}}>
-                                <div style={{width:24,height:24,borderRadius:"50%",background:done?G.greenL:"#F1F5F9",border:`1.5px solid ${done?"#22c55e":G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:done?G.green:G.textM,flexShrink:0}}>
-                                  {done?"✓":i+1}
-                                </div>
-                                <span style={{flex:1,fontSize:14,fontWeight:done?500:500,color:done?G.textM:G.text,textDecoration:done?"line-through":"none",textDecorationColor:"#94A3B8"}}>{ch}</span>
-                                {done?.testReady&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:999,background:"#EDE9FE",color:"#7C3AED",fontWeight:700,flexShrink:0}}>🧪 Test-ready</span>}
-                                {done&&!done.testReady&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:999,background:G.amberL,color:G.amber,fontWeight:700,flexShrink:0}}>🔄 Practice</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </>
-                    ):(
-                      /* First time — no syllabus */
-                      <div style={{...card,padding:"28px 20px",textAlign:"center"}}>
-                        <div style={{fontSize:40,marginBottom:12}}>📖</div>
-                        <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:6}}>Set up syllabus for {selCls.section}</div>
-                        <div style={{fontSize:14,color:G.textM,marginBottom:20,lineHeight:1.6}}>Choose an exam type and we'll load the right chapters. You can edit them anytime.</div>
-                        <PrimaryBtn onClick={()=>setSyllabusSetupModal({classId:selCls.id,step:"examType"})} style={{width:"100%",padding:"13px"}}>
-                          Set up syllabus →
-                        </PrimaryBtn>
-                      </div>
-                    )
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ── STATS TAB ── */}
-          {profileTab==="stats"&&(
-            <div style={{flex:1,padding:"14px 14px 96px"}}>
-              <div style={{...card,padding:"20px",textAlign:"center",marginBottom:12}}>
-                <div style={{fontSize:36,marginBottom:8}}>📊</div>
-                <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display}}>Stats</div>
-                <div style={{fontSize:13,color:G.textM,marginTop:6}}>Your detailed stats are available in full view.</div>
-                <button onClick={()=>setView("stats")}
-                  style={{marginTop:14,background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"11px 20px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:G.sans}}>View full stats →</button>
-              </div>
-            </div>
-          )}
-
-          {/* ── SETTINGS TAB ── */}
-          {profileTab==="settings"&&(
-            <div style={{flex:1,padding:"14px 14px 96px",display:"flex",flexDirection:"column",gap:10}}>
-              {[
-                {icon:"🗑",label:"Recycle Bin",sub:`${trashCount} item${trashCount!==1?"s":""}`,onClick:()=>setView("trash"),badge:trashCount>0?String(trashCount):null},
-                {icon:"🔔",label:"Notifications",sub:`${notificationCount} unread`,onClick:()=>safeNav("notifications"),badge:notificationCount>0?String(notificationCount):null},
-                {icon:"📤",label:"Export data",sub:"Download your entries",onClick:()=>setExportOpen(true)},
-                {icon:"🚪",label:"Sign out",sub:"You'll be asked to confirm",onClick:()=>setSignOutPrompt(true),danger:true},
-              ].map(item=>(
-                <button key={item.label} onClick={item.onClick}
-                  style={{...card,padding:"16px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",border:`1px solid ${item.danger?G.red+"44":G.border}`,background:item.danger?G.redL:G.surface,width:"100%",textAlign:"left",fontFamily:G.sans}}>
-                  <span style={{fontSize:24,flexShrink:0}}>{item.icon}</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:15,fontWeight:700,color:item.danger?G.red:G.text}}>{item.label}</div>
-                    <div style={{fontSize:13,color:item.danger?G.red:G.textM,marginTop:2}}>{item.sub}</div>
-                  </div>
-                  {item.badge&&<span style={{background:G.red,color:"#fff",borderRadius:999,padding:"2px 8px",fontSize:12,fontWeight:700,flexShrink:0}}>{item.badge}</span>}
-                  <span style={{color:item.danger?G.red:G.textL,fontSize:18}}>›</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    };
-
-    // ── Bottom Nav ───────────────────────────────────────────────────────────
-    const BottomNav=()=>(
-      <div style={{position:"fixed",bottom:0,left:0,right:0,background:G.surface,borderTop:`1px solid ${G.border}`,display:"flex",zIndex:200,paddingBottom:"env(safe-area-inset-bottom)"}}>
-        {[
-          {key:"home",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,label:"Home"},
-          {key:"profile",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,label:"Profile"},
-        ].map(tab=>{
-          const isActive=mobileNavTab===tab.key;
-          return(
-            <button key={tab.key} onClick={()=>setMobileNavTab(tab.key)}
-              style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"10px 0",background:"none",border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent",color:isActive?G.blue:G.textL}}>
-              {tab.icon}
-              <span style={{fontSize:10,fontWeight:700,fontFamily:G.sans,color:isActive?G.blue:G.textL}}>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    );
-
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <SyllabusSetupModal/>
-        <ChapterCompleteModal/>
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={isMobile?null:NavRight}/>
-        {isMobile ? (
-          <>
-            {mobileNavTab==="home"&&<MobileHome/>}
-            {mobileNavTab==="profile"&&<ProfileView/>}
-            <BottomNav/>
-          </>
-        ) : <SplitView/>}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={NavRight}/>
+        {isMobile ? <MobileHome/> : <SplitView/>}
       </div>
     );
   }
@@ -5083,12 +4569,8 @@ function ClassTrackerInner({user}){
               </>
             )}
           <div className="form-card" style={{...card,padding:"24px"}}>
-            <div id="statusSectionAnchor" style={{marginBottom:18,scrollMarginTop:80}}>
-              <label style={{...lbl,display:"flex",alignItems:"center",gap:6}}>
-                Topic Status
-                <span style={{color:G.red,fontSize:13,fontWeight:700}}>*</span>
-                {!form.status&&!isEdit&&<span style={{fontSize:11,color:G.red,fontWeight:600,marginLeft:4,background:G.redL,padding:"2px 7px",borderRadius:999}}>required</span>}
-              </label>
+            <div style={{marginBottom:18}}>
+              <label style={lbl}>Topic Status</label>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                 {Object.entries(STATUS_STYLES).map(([key,val])=>(
                   <button key={key} onClick={()=>{

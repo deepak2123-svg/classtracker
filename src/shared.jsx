@@ -86,6 +86,12 @@ export function friendlyError(code) {
     "auth/too-many-requests":      "Too many attempts. Try again later.",
     "auth/popup-closed-by-user":   "Google sign-in was cancelled.",
     "auth/network-request-failed": "Network error. Check your connection.",
+    "auth/native-google-client-id-missing":
+      "Google sign-in is missing the Android web client ID configuration.",
+    "auth/native-google-token-missing":
+      "Google sign-in did not return an ID token. Check the Android OAuth setup.",
+    "SIGN_IN_CANCELED":
+      "Google sign-in was cancelled.",
   };
   return map[code] || "Something went wrong. Please try again.";
 }
