@@ -3182,7 +3182,7 @@ function GradeGroupModal({ inst, instType, group, onSave, onClose }) {
 
 
 // ── Daily Centre Summary ──────────────────────────────────────────────────────
-function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, onSelectInstitute }) {
+function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, onSelectInstitute, period = "today", onChangePeriod, customRange = {}, onChangeRangeStart, onChangeRangeEnd }) {
   const [filter, setFilter] = React.useState("all");
   const [copied, setCopied] = React.useState(false);
 
@@ -3198,13 +3198,16 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
       });
       // Use instituteStats.teacherCount as the authoritative registered count
       const registered = stats.teacherCount || instTeachers.length;
-      let weekEntries = 0;
-      const todayUpdatedTeachers = instTeachers.filter(t => {
+      // Resolve period filter
+      const pf = getPeriodFilter(period, customRange.start, customRange.end);
+      const pDays = pf.days; const pStart = pf.startKey; const pEnd = pf.endKey;
+      let periodEntries = 0;
+      const periodUpdatedTeachers = instTeachers.filter(t => {
         const d = fullData[t.uid];
         if (!d) return false;
         return (d.classes || [])
           .filter(c => sameInstituteName(c?.institute, inst))
-          .some(c => getEntriesInRange((d.notes || {})[c.id] || {}, 1).length > 0);
+          .some(c => getEntriesInRange((d.notes || {})[c.id] || {}, pDays, pStart, pEnd).length > 0);
       }).length;
       instTeachers.forEach(t => {
         const d = fullData[t.uid];
@@ -3212,19 +3215,19 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
         const classesHere = (d.classes || []).filter(c => sameInstituteName(c?.institute, inst));
         classesHere.forEach(c => {
           const notes = (d.notes || {})[c.id] || {};
-          weekEntries += getEntriesInRange(notes, 7).length;
+          periodEntries += getEntriesInRange(notes, pDays, pStart, pEnd).length;
         });
       });
-      // Teachers who haven't filled any entry this week
-      const notFilledThisWeek = instTeachers.filter(t => {
+      // Teachers who haven't filled any entry in the selected period
+      const notFilledThisPeriod = instTeachers.filter(t => {
         const d = fullData[t.uid];
         if (!d) return true;
         const classesHere = (d.classes || []).filter(c => sameInstituteName(c?.institute, inst));
-        return classesHere.every(c => getEntriesInRange((d.notes || {})[c.id] || {}, 7).length === 0);
+        return classesHere.every(c => getEntriesInRange((d.notes || {})[c.id] || {}, pDays, pStart, pEnd).length === 0);
       }).length;
-      return { inst, registered, todayFilled: todayUpdatedTeachers, weekEntries, notFilledThisWeek };
+      return { inst, registered, todayFilled: periodUpdatedTeachers, weekEntries: periodEntries, notFilledThisWeek: notFilledThisPeriod };
     });
-  }, [institutes, teachers, fullData, instituteStats]);
+  }, [institutes, teachers, fullData, instituteStats, period, customRange]);
 
   const getStatus = row => {
     if (row.registered === 0) return "none";
@@ -3262,7 +3265,7 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
     const good = rows.filter(r => getStatus(r) === "green");
     if (good.length) lines.push(`*Doing well:*\n${good.map(r => `✅ ${r.inst} — ${r.todayFilled}/${r.registered} teachers filled`).join("\n")}`);
     if (behind.length) lines.push(`\n*Needs follow-up:*\n${behind.map(r => `${r.registered === 0 ? "⭕" : "🔴"} ${r.inst} — ${r.registered === 0 ? "0 registered" : `${r.todayFilled}/${r.registered} filled today, ${r.notFilledThisWeek} not filled this week`}`).join("\n")}`);
-    lines.push(`\n_Overall: ${totalFilled}/${totalReg} teachers updated today (${compPct}%)_`);
+    lines.push(`\n_Overall: ${totalFilled}/${totalReg} teachers updated in period (${compPct}%)_`);
     navigator.clipboard.writeText(lines.join("\n")).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -3289,11 +3292,24 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
     <div style={{ display: "grid", gap: 14 }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: G.text, fontFamily: G.display }}>Daily centre summary</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: G.text, fontFamily: G.display }}>All centre summary</div>
           <div style={{ fontSize: 14, color: G.textM, marginTop: 4 }}>
             {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </div>
+          {onChangePeriod && (
+            <div style={{ marginTop: 12 }}>
+              <PeriodSelector
+                period={period}
+                onChangePeriod={onChangePeriod}
+                compact
+                rangeStart={customRange.start || ""}
+                rangeEnd={customRange.end || ""}
+                onChangeRangeStart={onChangeRangeStart || (()=>{})}
+                onChangeRangeEnd={onChangeRangeEnd || (()=>{})}
+              />
+            </div>
+          )}
         </div>
         <button
           onClick={handleCopy}
@@ -3314,7 +3330,7 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
         {[
           { label: "Total centres", value: institutes.length, sub: "across all regions" },
           { label: "Teachers on app", value: totalReg, sub: `of ${teachers.length} total` },
-          { label: "Updated today", value: totalFilled, sub: `${compPct}% compliance` },
+          { label: "Updated this period", value: totalFilled, sub: `${compPct}% compliance` },
           { label: "Centres on track", value: onTrackCount, sub: "≥70% filled today" },
         ].map(({ label, value, sub }) => (
           <div key={label} style={{ background: G.surface, border: `1px solid ${G.border}`, borderRadius: 12, padding: "12px 14px", boxShadow: G.shadowSm }}>
@@ -6087,6 +6103,11 @@ function AdminPanelInner({user}){
           fullData={fullData}
           instituteStats={instituteStats}
           onSelectInstitute={onSelectInstitute}
+          period={period}
+          onChangePeriod={handlePeriodChange}
+          customRange={customRange}
+          onChangeRangeStart={handleRangeStartChange}
+          onChangeRangeEnd={handleRangeEndChange}
         />
       );
     }
@@ -8488,6 +8509,16 @@ function AdminPanelInner({user}){
                 syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…
               </div>
             )}
+            <div
+              onClick={()=>{ setSelInst(null); setSelP2(null); setSelP3(null); setFullView(null); }}
+              title="All centre summary"
+              style={{display:"flex",alignItems:"center",gap:6,background: !selInst ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.14)",borderRadius:999,padding:"7px 13px",flexShrink:0,cursor:"pointer",transition:"background 0.15s",WebkitTapHighlightColor:"transparent"}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.18)"}
+              onMouseLeave={e=>e.currentTarget.style.background= !selInst ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.07)"}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              <span style={{fontSize:12,color:"rgba(255,255,255,0.82)",fontFamily:G.mono,fontWeight:600,whiteSpace:"nowrap"}}>All centres</span>
+            </div>
           </div>
         </div>
         <div className="admin-nav-r" style={{display:"flex",alignItems:"center",gap:8}}>
