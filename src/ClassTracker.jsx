@@ -436,12 +436,16 @@ function OverflowMenu({ items = [], buttonSize = 36 }) {
 }
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
-function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,onViewNotifications,trashCount,notificationCount=0,data}){
+function getPrimaryTeacherTab(view){
+  return ["profile","stats","trash","notifications"].includes(view) ? "profile" : "home";
+}
+
+function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,onViewNotifications,trashCount,notificationCount=0,data,showProfileMenu=true}){
   const shortName=(teacherName||"").split(" ")[0];
   const [profileOpen, setProfileOpen] = React.useState(false);
 
   return(
-    <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06), 0 14px 28px rgba(15,23,42,0.16)"}}>
+    <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06), 0 14px 28px rgba(15,23,42,0.16)",paddingTop:"env(safe-area-inset-top, 0px)"}}>
       <div style={{height:64,display:"flex",alignItems:"center",padding:"0 12px",gap:8,overflow:"visible"}}>
 
         {/* Ledgr logo */}
@@ -482,7 +486,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
           )}
 
           {/* Clickable profile pill */}
-          <div style={{position:"relative",flexShrink:0}}>
+          {showProfileMenu && <div style={{position:"relative",flexShrink:0}}>
             <div onClick={()=>setProfileOpen(o=>!o)}
               style={{height:38,display:"flex",alignItems:"center",gap:6,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"0 9px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
               <Avatar user={user} size={22}/>
@@ -547,9 +551,145 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 
               </div>
             </>)}
-          </div>
+          </div>}
 
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
+  const itemBase = isActive => ({
+    flex:1,
+    minHeight:54,
+    border:"none",
+    borderRadius:18,
+    background:isActive ? "linear-gradient(180deg, rgba(37,99,235,0.14) 0%, rgba(37,99,235,0.08) 100%)" : "transparent",
+    color:isActive ? G.green : G.textL,
+    cursor:"pointer",
+    display:"flex",
+    flexDirection:"column",
+    alignItems:"center",
+    justifyContent:"center",
+    gap:4,
+    fontFamily:G.sans,
+    fontWeight:isActive ? 700 : 600,
+    fontSize:12,
+    position:"relative",
+    WebkitTapHighlightColor:"transparent",
+    transition:"background 0.15s ease, color 0.15s ease, transform 0.15s ease",
+  });
+
+  return(
+    <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:170,padding:"10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",pointerEvents:"none"}}>
+      <div style={{maxWidth:520,margin:"0 auto",background:"rgba(255,255,255,0.94)",border:`1px solid ${G.border}`,borderRadius:24,padding:"8px",boxShadow:"0 16px 40px rgba(15,23,42,0.18)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",display:"flex",gap:8,pointerEvents:"auto"}}>
+        <button type="button" onClick={onHome} style={itemBase(activeTab==="home")}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 10.5 12 3l9 7.5"/>
+            <path d="M5 9.5V21h14V9.5"/>
+          </svg>
+          <span>Home</span>
+        </button>
+        <button type="button" onClick={onProfile} style={itemBase(activeTab==="profile")}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21a8 8 0 0 0-16 0"/>
+            <circle cx="12" cy="8" r="4"/>
+          </svg>
+          <span>Profile</span>
+          {profileBadge > 0 && (
+            <span style={{position:"absolute",top:5,right:"calc(50% - 30px)",minWidth:18,height:18,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 8px 16px rgba(220,38,38,0.22)"}}>
+              {profileBadge > 9 ? "9+" : profileBadge}
+            </span>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger=false,accent="blue"}){
+  const accentMap = {
+    blue: { bg:"#EFF6FF", border:"#BFDBFE", icon:"#2563EB", text:"#1D4ED8" },
+    amber: { bg:"#FFF7ED", border:"#FED7AA", icon:"#D97706", text:"#B45309" },
+    slate: { bg:"#F8FAFC", border:"#D7DFEC", icon:"#475569", text:"#334155" },
+    red: { bg:"#FEF2F2", border:"#FECACA", icon:"#DC2626", text:"#B91C1C" },
+    green: { bg:"#ECFDF3", border:"#BBF7D0", icon:"#16A34A", text:"#15803D" },
+  };
+  const tone = danger ? accentMap.red : (accentMap[accent] || accentMap.blue);
+
+  return(
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width:"100%",
+        background:"#fff",
+        border:`1px solid ${danger ? tone.border : G.border}`,
+        borderRadius:22,
+        padding:"16px 16px",
+        display:"flex",
+        alignItems:"center",
+        gap:14,
+        textAlign:"left",
+        cursor:"pointer",
+        boxShadow:G.shadowSm,
+        WebkitTapHighlightColor:"transparent",
+      }}>
+      <div style={{width:48,height:48,borderRadius:16,background:tone.bg,border:`1px solid ${tone.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:tone.icon,flexShrink:0,fontSize:22}}>
+        {icon}
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:18,fontWeight:800,color:danger ? tone.text : G.text,fontFamily:G.display,letterSpacing:-0.25,lineHeight:1.15}}>{title}</div>
+        <div style={{fontSize:14,color:danger ? tone.text : G.textM,fontFamily:G.sans,marginTop:4,lineHeight:1.45}}>{subtitle}</div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+        {badge!==null && (
+          <span style={{background:danger ? tone.bg : "rgba(37,99,235,0.08)",border:`1px solid ${danger ? tone.border : "rgba(37,99,235,0.16)"}`,borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:danger ? tone.text : G.green}}>
+            {badge}
+          </span>
+        )}
+        <span style={{fontSize:22,color:danger ? tone.text : G.textL,lineHeight:1}}>›</span>
+      </div>
+    </button>
+  );
+}
+
+function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount,trashCount,onOpenStats,onOpenNotifications,onOpenTrash,onOpenExport,onSignOut}){
+  return(
+    <div style={{flex:1,overflowY:"auto",padding:"12px 14px calc(104px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch"}}>
+      <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:26,padding:"18px 18px 16px",boxShadow:"0 16px 32px rgba(15,23,42,0.18)",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
+          <div style={{width:58,height:58,borderRadius:18,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Avatar user={user} size={44}/>
+          </div>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:26,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.55,lineHeight:1.05}}>{teacherName}</div>
+            <div style={{fontSize:14,color:"rgba(255,255,255,0.62)",fontFamily:G.sans,marginTop:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.email || "No email available"}</div>
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
+          {[
+            { label:"Logged Today", value:quickHomeSummary.loggedToday },
+            { label:"This Month", value:quickHomeSummary.monthEntries },
+            { label:"Active Classes", value:quickHomeSummary.active },
+            { label:"Institutes", value:quickHomeSummary.instituteCount },
+          ].map(item=>(
+            <div key={item.label} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:18,padding:"12px 12px 11px"}}>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.52)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:7}}>{item.label}</div>
+              <div style={{fontSize:22,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.4,lineHeight:1}}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.65,margin:"0 4px 10px"}}>Manage Teacher Panel</div>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <TeacherProfileActionCard icon="📊" title="View Stats" subtitle="See teaching hours and class breakdowns." onClick={onOpenStats} accent="blue"/>
+        <TeacherProfileActionCard icon="🔔" title="Notifications" subtitle={notificationCount>0 ? `${notificationCount} unread update${notificationCount===1?"":"s"} from admin changes.` : "No unread updates right now."} onClick={onOpenNotifications} badge={notificationCount>0 ? notificationCount : null} accent="amber"/>
+        <TeacherProfileActionCard icon="🗑️" title="Recycle Bin" subtitle={trashCount>0 ? `${trashCount} item${trashCount===1?"":"s"} waiting before permanent deletion.` : "Nothing in the recycle bin right now."} onClick={onOpenTrash} badge={trashCount>0 ? trashCount : null} accent="slate"/>
+        <TeacherProfileActionCard icon="📤" title="Export Data" subtitle="Download your teacher entries from this shared panel." onClick={onOpenExport} accent="green"/>
+        <TeacherProfileActionCard icon="🚪" title="Sign Out" subtitle="You'll be asked to confirm before signing out." onClick={onSignOut} danger accent="red"/>
       </div>
     </div>
   );
@@ -2381,6 +2521,7 @@ function ClassTrackerInner({user}){
   const pendingSaveKey = `classlog_pending_${user.uid}`;
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
+  const mobileBottomNavPad = "calc(104px + env(safe-area-inset-bottom, 0px))";
   const [mobileClassLimit, setMobileClassLimit] = useState(mobileBatchSize);
   const sectionChangeSessionSeenRef = useRef(new Set());
   const pendingAdminClassNotices = useMemo(() => (
@@ -2419,6 +2560,18 @@ function ClassTrackerInner({user}){
   const adminPromptNoticeItems = useMemo(() => (
     adminNoticeItems.filter(item => !item.promptedAt)
   ), [adminNoticeItems]);
+  const mobileBackTarget = isMobile ? "profile" : "home";
+  const renderTeacherBottomBar = currentView => {
+    if(!isMobile || ["addClass","addNote","editNote"].includes(currentView)) return null;
+    return (
+      <TeacherBottomBar
+        activeTab={getPrimaryTeacherTab(currentView)}
+        onHome={()=>safeNav("home")}
+        onProfile={()=>safeNav("profile")}
+        profileBadge={notificationCount}
+      />
+    );
+  };
   const markAdminNoticesPrompted = React.useCallback((ids) => {
     const idSet = new Set((Array.isArray(ids) ? ids : [ids]).map(id => String(id || "")).filter(Boolean));
     if(!idSet.size) return;
@@ -3252,9 +3405,10 @@ function ClassTrackerInner({user}){
           onViewNotifications={()=>safeNav("notifications")}
           trashCount={trashCount}
           notificationCount={notificationCount}
-          right={<GhostBtn onClick={()=>safeNav("home")}>← Back</GhostBtn>}
+          showProfileMenu={!isMobile}
+          right={<GhostBtn onClick={()=>safeNav(mobileBackTarget)}>← Back</GhostBtn>}
         />
-        <div style={{maxWidth:960,margin:"0 auto",padding:"28px 16px 72px"}}>
+        <div style={{maxWidth:960,margin:"0 auto",padding:`28px 16px ${isMobile ? mobileBottomNavPad : "72px"}`}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,flexWrap:"wrap",marginBottom:22}}>
             <div>
               <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Teacher notifications</div>
@@ -3378,6 +3532,53 @@ function ClassTrackerInner({user}){
             </div>
           )}
         </div>
+        {renderTeacherBottomBar("notifications")}
+      </div>
+    );
+  }
+
+  if(view==="profile"){
+    const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
+    const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
+    const quickHomeSummary=(()=>{
+      const now=new Date();
+      const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+      let loggedToday=0, monthEntries=0;
+      activeClasses.forEach(cls=>{
+        const classNotes=data.notes?.[cls.id]||{};
+        const todayEntries=Array.isArray(classNotes[todayKey()])?classNotes[todayKey()].length:0;
+        if(todayEntries>0) loggedToday+=1;
+        monthEntries+=Object.entries(classNotes).reduce((sum,[dk,arr])=>sum+(dk.startsWith(monthKey)&&Array.isArray(arr)?arr.length:0),0);
+      });
+      return { active:activeClasses.length, loggedToday, monthEntries, instituteCount:institutes.length||1 };
+    })();
+
+    return(
+      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
+        {sharedModals}
+        <TopNav
+          user={user}
+          teacherName={teacherName}
+          data={data}
+          onLogoClick={()=>safeNav("home")}
+          onSignOut={()=>setSignOutPrompt(true)}
+          onViewNotifications={()=>safeNav("notifications")}
+          notificationCount={notificationCount}
+          showProfileMenu={!isMobile}
+        />
+        <TeacherProfileView
+          user={user}
+          teacherName={teacherName}
+          quickHomeSummary={quickHomeSummary}
+          notificationCount={notificationCount}
+          trashCount={trashCount}
+          onOpenStats={()=>safeNav("stats")}
+          onOpenNotifications={()=>safeNav("notifications")}
+          onOpenTrash={()=>safeNav("trash")}
+          onOpenExport={()=>setExportOpen(true)}
+          onSignOut={()=>setSignOutPrompt(true)}
+        />
+        {renderTeacherBottomBar("profile")}
       </div>
     );
   }
@@ -3417,13 +3618,13 @@ function ClassTrackerInner({user}){
     const selNoteDates=Object.fromEntries(Object.entries(selNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
 
     // Nav buttons — same on all screen sizes
-    const NavRight = <>
+    const NavRight = !isMobile ? <>
       <button onClick={()=>setExportOpen(true)}
         style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span className="desktop-only" style={{display:"inline",fontSize:13,fontWeight:600}}>Export</span>
       </button>
-    </>;
+    </> : null;
 
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
     const ClassCard = ({cls, onClick, compact = false, onDelete = null}) => {
@@ -3636,7 +3837,7 @@ function ClassTrackerInner({user}){
           </div>
         </div>
         {/* Class list */}
-        <div style={{flex:1,overflowY:"auto",padding:mobileLiteMode?"0 12px 96px":"0 14px 96px",WebkitOverflowScrolling:"touch"}}>
+        <div style={{flex:1,overflowY:"auto",padding:mobileLiteMode?`0 12px ${mobileBottomNavPad}`:`0 14px ${mobileBottomNavPad}`,WebkitOverflowScrolling:"touch"}}>
           {activeClasses.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
               <div style={{fontSize:52,marginBottom:16}}>📚</div>
@@ -3912,8 +4113,9 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={NavRight}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={NavRight} showProfileMenu={!isMobile}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
+        {renderTeacherBottomBar("home")}
       </div>
     );
   }
@@ -3932,7 +4134,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
         <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
@@ -3959,7 +4161,7 @@ function ClassTrackerInner({user}){
           <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
         </div>
         {/* Entries scroll area */}
-        <div style={{flex:1,overflowY:"auto",padding:"14px 16px 16px",WebkitOverflowScrolling:"touch"}}>
+        <div style={{flex:1,overflowY:"auto",padding:`14px 16px ${isMobile ? mobileBottomNavPad : "16px"}`,WebkitOverflowScrolling:"touch"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8,background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 14px",boxShadow:G.shadowSm}}>
             <div>
               <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
@@ -4046,6 +4248,7 @@ function ClassTrackerInner({user}){
             </div>
           )}
         </div>
+        {renderTeacherBottomBar("classDetail")}
       </div>
     );
   }
@@ -4103,9 +4306,9 @@ function ClassTrackerInner({user}){
 
     return(
     <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
-      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>{setSelectedGroup(null);setView("home");}} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
+      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>{setSelectedGroup(null);setView("home");}} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
         right={<GhostBtn onClick={()=>{setSelectedGroup(null);setView("home");}}>← Back</GhostBtn>}/>
-      <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px 80px"}}>
+      <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px calc(80px + env(safe-area-inset-bottom, 0px))"}}>
         <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:6,textTransform:"uppercase",fontWeight:600}}>New Class</p>
         <h2 style={{marginBottom:28,fontSize:30,letterSpacing:-0.5,fontFamily:G.display}}>Add a class</h2>
         <div className="form-card" style={{...card,padding:"26px"}}>
@@ -4296,10 +4499,10 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
-          right={<button onClick={()=>setView("home")} style={navBtnStyle}>← Back</button>}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
+          right={<button onClick={()=>safeNav(mobileBackTarget)} style={navBtnStyle}>← Back</button>}/>
 
-        <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"16px 14px 48px",maxWidth:680,margin:"0 auto",width:"100%"}}>
+        <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:`16px 14px ${isMobile ? mobileBottomNavPad : "48px"}`,maxWidth:680,margin:"0 auto",width:"100%"}}>
 
           {/* Period tabs */}
           <div style={{display:"flex",background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:3,marginBottom:18,gap:2}}>
@@ -4393,6 +4596,7 @@ function ClassTrackerInner({user}){
             </>
           )}
         </div>
+        {renderTeacherBottomBar("stats")}
       </div>
     );
   }
@@ -4404,8 +4608,8 @@ function ClassTrackerInner({user}){
     return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>safeNav("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={<GhostBtn onClick={()=>safeNav("home")}>← Back</GhostBtn>}/>
-        <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:"32px 32px 72px"}}>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>safeNav("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={<GhostBtn onClick={()=>safeNav(mobileBackTarget)}>← Back</GhostBtn>} showProfileMenu={!isMobile}/>
+        <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:`32px 32px ${isMobile ? mobileBottomNavPad : "72px"}`}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>
             <h2 style={{fontSize:26,letterSpacing:-0.5}}>Recycle Bin</h2>
@@ -4488,6 +4692,7 @@ function ClassTrackerInner({user}){
             </div>
           )}
         </div>
+        {renderTeacherBottomBar("trash")}
       </div>
     );
   }
@@ -4506,7 +4711,7 @@ function ClassTrackerInner({user}){
 
     return(
       <div style={{height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans}}>
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<>
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
           </>}
@@ -4548,7 +4753,7 @@ function ClassTrackerInner({user}){
               </div>
             </div>
           )}
-          <div className="mobile-pad" style={{maxWidth:660,width:"100%",margin:"0 auto",padding:"16px 16px 72px",boxSizing:"border-box"}}>
+          <div className="mobile-pad" style={{maxWidth:660,width:"100%",margin:"0 auto",padding:"16px 16px calc(72px + env(safe-area-inset-bottom, 0px))",boxSizing:"border-box"}}>
             {isEdit?(
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
                 <div style={{flex:1}}>
