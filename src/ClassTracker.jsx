@@ -2345,6 +2345,13 @@ function ClassTrackerInner({user}){
   const [editingClass,setEditingClass] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [instFilter,      setInstFilter]      = useState("all"); // institute filter on home
+
+  // Auto-reset the institute filter if the selected institute no longer has any active classes
+  React.useEffect(() => {
+    if (instFilter === "all") return;
+    const activeInsts = new Set((data.classes || []).filter(c => !c.left && !c.archived).map(c => c.institute || ""));
+    if (!activeInsts.has(instFilter)) setInstFilter("all");
+  }, [data.classes, instFilter]);
   const [leaveModal,setLeaveModal]     = useState(null);
   const [historyClassId,setHistoryClassId] = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
@@ -3382,11 +3389,9 @@ function ClassTrackerInner({user}){
   // ══════════════════════════════════════════════════════════════════════
   if(view==="home"){
     const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
-    // Show ALL institutes the teacher is associated with (from all classes — active + archived — and the
-    // stored institutes list), so both tabs always appear even if one institute has no active classes yet.
-    const institutesFromAllClasses=[...new Set((data.classes||[]).map(c=>c.institute||""))].filter(Boolean);
-    const institutesFromStore=(data.institutes||[]).filter(Boolean);
-    const institutes=[...new Set([...institutesFromAllClasses,...institutesFromStore])].filter(Boolean);
+    // Only show institutes that have at least one active (non-trashed) class.
+    // Empty institutes (all classes deleted) are hidden from filter and header count.
+    const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
     const filtered=instFilter==="all"?activeClasses:activeClasses.filter(c=>c.institute===instFilter);
     const visibleMobileClasses=filtered.slice(0,mobileClassLimit);
     const hasMoreMobileClasses=filtered.length>visibleMobileClasses.length;
