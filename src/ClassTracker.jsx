@@ -4548,8 +4548,6 @@ function ClassTrackerInner({user}){
       const classNotes=data.notes?.[cls.id]||{};
       const metrics=buildClassEntryMetrics(classNotes);
       const todayN=metrics.todayEntries;
-      const needsLogToday=metrics.needsLogToday;
-      const statusTone=getTodayEntryStatusStyles(todayN);
       const holdTimerRef = React.useRef(null);
       const holdStartRef = React.useRef(null);
       const holdTriggeredRef = React.useRef(false);
@@ -4564,7 +4562,7 @@ function ClassTrackerInner({user}){
       // Truncate long institute names with ellipsis
       const instFull=cls.institute||"";
       const instShort=instFull.length>28?instFull.slice(0,26)+"…":instFull;
-      const cardBorder = needsLogToday ? statusTone.border : G.border;
+      const cardBorder = "rgba(15,23,42,0.32)";
       const beginHold = e => {
         if(!compact || !onHold || !e.touches?.length) return;
         const touch = e.touches[0];
@@ -4602,8 +4600,8 @@ function ClassTrackerInner({user}){
             onTouchMove={moveHold}
             onTouchEnd={clearHold}
             onTouchCancel={clearHold}
-            style={{background:G.surface,borderRadius:20,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
-            <div style={{background:ic.light,borderBottom:`1px solid ${ic.bg}1F`,padding:dense?"12px 14px":"13px 15px"}}>
+            style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
+            <div style={{background:ic.light,borderBottom:`1px solid rgba(15,23,42,0.12)`,padding:dense?"12px 14px":"13px 15px"}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:dense?22:24,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
@@ -4625,17 +4623,6 @@ function ClassTrackerInner({user}){
                 </div>
               </div>
             </div>
-
-            <div style={{padding:dense?"10px 14px 11px":"11px 15px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-              <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:999,fontSize:11.5,fontWeight:800,whiteSpace:"nowrap",background:statusTone.background,border:`1px solid ${statusTone.border}`,color:statusTone.color}}>
-                <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
-                {statusTone.label}
-              </span>
-              <span style={{display:"inline-flex",alignItems:"center",gap:5,color:G.textM,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
-                <AppIcon icon={IconArrowRight} size={13} color={G.textM} />
-                Open
-              </span>
-            </div>
           </div>
         );
       }
@@ -4647,11 +4634,11 @@ function ClassTrackerInner({user}){
           onTouchMove={moveHold}
           onTouchEnd={clearHold}
           onTouchCancel={clearHold}
-          style={{background:G.surface,borderRadius:20,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
+          style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
           onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";})}
           onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}
           onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}>
-          <div style={{background:ic.light,borderBottom:`1px solid ${ic.bg}1F`,padding:"14px 15px 13px"}}>
+          <div style={{background:ic.light,borderBottom:`1px solid rgba(15,23,42,0.12)`,padding:"14px 15px 13px"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:19,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
@@ -4673,16 +4660,6 @@ function ClassTrackerInner({user}){
                 ]}/>}
               </div>
             </div>
-          </div>
-          <div style={{padding:"11px 15px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:999,fontSize:11.5,fontWeight:800,whiteSpace:"nowrap",background:statusTone.background,border:`1px solid ${statusTone.border}`,color:statusTone.color}}>
-              <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
-              {statusTone.label}
-            </span>
-            <span style={{display:"inline-flex",alignItems:"center",gap:5,color:G.textM,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
-              <AppIcon icon={IconArrowRight} size={13} color={G.textM} />
-              View class
-            </span>
           </div>
         </div>
       );
@@ -4875,12 +4852,11 @@ function ClassTrackerInner({user}){
               const classNotes=data.notes?.[cls.id]||{};
               const metrics=buildClassEntryMetrics(classNotes);
               const todayN=metrics.todayEntries;
-              const statusTone=getTodayEntryStatusStyles(todayN);
               const instFull=cls.institute||"";
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
-                  style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1px solid ${isSel ? ic.bg : statusTone.border}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
-                  <div style={{background:ic.light,padding:"13px 13px 12px",borderBottom:`1px solid ${ic.bg}1E`}}>
+                  style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1.5px solid ${isSel ? "rgba(15,23,42,0.62)" : "rgba(15,23,42,0.32)"}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
+                  <div style={{background:ic.light,padding:"13px 13px 12px",borderBottom:`1px solid rgba(15,23,42,0.12)`}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:16,fontWeight:800,color:ic.bg,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
@@ -4902,16 +4878,6 @@ function ClassTrackerInner({user}){
                         ]}/>
                       </div>
                     </div>
-                  </div>
-                  <div style={{padding:"10px 13px 11px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:statusTone.background,border:`1px solid ${statusTone.border}`,borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:800,color:statusTone.color}}>
-                      <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
-                      {statusTone.label}
-                    </span>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:5,color:G.textM,fontSize:11,fontWeight:700}}>
-                      <AppIcon icon={IconArrowRight} size={12} color={G.textM} />
-                      Open
-                    </span>
                   </div>
                 </div>
               );
