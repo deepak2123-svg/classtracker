@@ -203,7 +203,7 @@ let nativeExportRuntimePromise = null;
 
 function AppIcon({ icon, size = 18, color = "currentColor", stroke = APP_ICON_STROKE, style = {} }){
   if(!icon) return null;
-  if(typeof icon === "function"){
+  if(typeof icon === "function" || (typeof icon === "object" && icon !== null && "$$typeof" in icon)){
     const Icon = icon;
     return <Icon size={size} color={color} stroke={stroke} style={{display:"block",flexShrink:0,...style}} />;
   }
