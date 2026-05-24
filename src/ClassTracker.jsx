@@ -257,6 +257,16 @@ function instColor(name) {
   return COLORS[Math.abs(h) % COLORS.length];
 }
 
+function hexToRgba(hex, alpha = 1){
+  const value = String(hex || "").replace("#", "").trim();
+  if(value.length !== 6) return `rgba(15,23,42,${alpha})`;
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  if([r, g, b].some(Number.isNaN)) return `rgba(15,23,42,${alpha})`;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function normaliseChoiceKey(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -631,6 +641,20 @@ function getTodayEntryStatusStyles(todayEntries = 0){
     border:"#FED7AA",
     color:"#B45309",
   };
+}
+
+function getSectionCardStatusBadge(metrics = {}){
+  const days = metrics?.lastLogMeta?.days;
+  if((metrics?.todayEntries || 0) > 0){
+    return { label:"done", background:"rgba(15,23,42,0.26)", color:"#FFFFFF" };
+  }
+  if(days === null){
+    return { label:"pending", background:"rgba(15,23,42,0.20)", color:"#FFFFFF" };
+  }
+  if(days === 1){
+    return { label:"1d ago", background:"rgba(15,23,42,0.22)", color:"#FFFFFF" };
+  }
+  return { label:"overdue", background:"rgba(15,23,42,0.24)", color:"#FFFFFF" };
 }
 
 // ── Ripple ────────────────────────────────────────────────────────────────────
@@ -3284,6 +3308,7 @@ function ClassTrackerInner({user}){
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
   const lastSyncedFingerprint = useRef("");
+  const lastForegroundRefreshAt = useRef(0);
   const classSwipeStartRef = useRef(null);
   const detailSwipeResetTimer = useRef(null);
   const teacherHistoryTokenRef = useRef(1);
@@ -3589,8 +3614,10 @@ function ClassTrackerInner({user}){
         getGlobalInstitutes(),
         getAllInstituteSections(),
       ]);
-      setGlobalInstitutes(latestInstitutes || []);
-      setInstituteSections(latestSections || {});
+      const nextInstitutes = latestInstitutes || [];
+      const nextSections = latestSections || {};
+      setGlobalInstitutes(prev => JSON.stringify(prev) === JSON.stringify(nextInstitutes) ? prev : nextInstitutes);
+      setInstituteSections(prev => JSON.stringify(prev) === JSON.stringify(nextSections) ? prev : nextSections);
 
       if (loading || !allowCloudSync) return;
       if (dataFingerprint(data) !== lastSyncedFingerprint.current) return;
@@ -3607,23 +3634,32 @@ function ClassTrackerInner({user}){
       setData(liveData);
     } catch {}
   }, [allowCloudSync, cloudRevision, data, loading, normaliseLoadedData, user.uid]);
+  const requestForegroundRefresh = React.useCallback((force = false) => {
+    const now = Date.now();
+    if (!force && now - lastForegroundRefreshAt.current < 120000) return;
+    lastForegroundRefreshAt.current = now;
+    refreshCloudState();
+  }, [refreshCloudState]);
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        refreshCloudState();
+        requestForegroundRefresh();
       }
     };
-    const intervalId = window.setInterval(() => {
-      refreshCloudState();
-    }, 45000);
-    window.addEventListener("focus", refreshCloudState);
+    window.addEventListener("focus", requestForegroundRefresh);
     document.addEventListener("visibilitychange", onVisible);
+    let appStateHandle = null;
+    if (Capacitor.isNativePlatform()) {
+      appStateHandle = CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+        if (isActive) requestForegroundRefresh();
+      });
+    }
     return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshCloudState);
+      window.removeEventListener("focus", requestForegroundRefresh);
       document.removeEventListener("visibilitychange", onVisible);
+      appStateHandle?.then?.(listener => listener.remove()).catch?.(()=>{});
     };
-  }, [refreshCloudState]);
+  }, [requestForegroundRefresh]);
   useEffect(()=>{
     if(loading||!allowCloudSync)return;
     const nextFingerprint = dataFingerprint(data);
@@ -4547,7 +4583,7 @@ function ClassTrackerInner({user}){
       const ic=instColor(cls.institute);
       const classNotes=data.notes?.[cls.id]||{};
       const metrics=buildClassEntryMetrics(classNotes);
-      const todayN=metrics.todayEntries;
+      const cardStatusBadge=getSectionCardStatusBadge(metrics);
       const holdTimerRef = React.useRef(null);
       const holdStartRef = React.useRef(null);
       const holdTriggeredRef = React.useRef(false);
@@ -4562,7 +4598,7 @@ function ClassTrackerInner({user}){
       // Truncate long institute names with ellipsis
       const instFull=cls.institute||"";
       const instShort=instFull.length>28?instFull.slice(0,26)+"…":instFull;
-      const cardBorder = "rgba(15,23,42,0.32)";
+      const cardBorder = "rgba(15,23,42,0.58)";
       const beginHold = e => {
         if(!compact || !onHold || !e.touches?.length) return;
         const touch = e.touches[0];
@@ -4601,7 +4637,7 @@ function ClassTrackerInner({user}){
             onTouchEnd={clearHold}
             onTouchCancel={clearHold}
             style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
-            <div style={{background:ic.light,borderBottom:`1px solid rgba(15,23,42,0.12)`,padding:dense?"12px 14px":"13px 15px"}}>
+            <div style={{background:`linear-gradient(180deg, ${hexToRgba(ic.bg, 0.24)} 0%, ${hexToRgba(ic.bg, 0.18)} 100%)`,borderBottom:`1px solid rgba(15,23,42,0.14)`,padding:dense?"12px 14px":"13px 15px"}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:dense?22:24,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
@@ -4617,10 +4653,9 @@ function ClassTrackerInner({user}){
                     )}
                   </div>
                 </div>
-                <div style={{minWidth:62,textAlign:"right",flexShrink:0}}>
-                  <div style={{fontSize:dense?29:31,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.9,lineHeight:0.95}}>{todayN}</div>
-                  <div style={{fontSize:10.5,fontWeight:700,color:G.textM,marginTop:5,whiteSpace:"nowrap"}}>today</div>
-                </div>
+                <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:dense?"10px 14px":"11px 15px",borderRadius:999,fontSize:dense?15:16,fontWeight:800,lineHeight:1,whiteSpace:"nowrap",background:cardStatusBadge.background,color:cardStatusBadge.color,textTransform:"lowercase",flexShrink:0,minWidth:dense?84:92}}>
+                  {cardStatusBadge.label}
+                </span>
               </div>
             </div>
           </div>
@@ -4638,7 +4673,7 @@ function ClassTrackerInner({user}){
           onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";})}
           onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}
           onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}>
-          <div style={{background:ic.light,borderBottom:`1px solid rgba(15,23,42,0.12)`,padding:"14px 15px 13px"}}>
+          <div style={{background:`linear-gradient(180deg, ${hexToRgba(ic.bg, 0.24)} 0%, ${hexToRgba(ic.bg, 0.18)} 100%)`,borderBottom:`1px solid rgba(15,23,42,0.14)`,padding:"14px 15px 13px"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:19,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
@@ -4651,10 +4686,9 @@ function ClassTrackerInner({user}){
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
-                <div style={{textAlign:"right",minWidth:56}}>
-                  <div style={{fontSize:28,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.8,lineHeight:0.95}}>{todayN}</div>
-                  <div style={{fontSize:10.5,fontWeight:700,color:G.textM,marginTop:5,whiteSpace:"nowrap"}}>today</div>
-                </div>
+                <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"10px 14px",borderRadius:999,fontSize:15,fontWeight:800,lineHeight:1,whiteSpace:"nowrap",background:cardStatusBadge.background,color:cardStatusBadge.color,textTransform:"lowercase",minWidth:88}}>
+                  {cardStatusBadge.label}
+                </span>
                 {onDelete&&<OverflowMenu buttonSize={30} items={[
                   { icon:IconTrash, label:"Delete class", danger:true, onClick:onDelete },
                 ]}/>}
@@ -4851,12 +4885,12 @@ function ClassTrackerInner({user}){
               const isSel=selCls?.id===cls.id;
               const classNotes=data.notes?.[cls.id]||{};
               const metrics=buildClassEntryMetrics(classNotes);
-              const todayN=metrics.todayEntries;
+              const cardStatusBadge=getSectionCardStatusBadge(metrics);
               const instFull=cls.institute||"";
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
-                  style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1.5px solid ${isSel ? "rgba(15,23,42,0.62)" : "rgba(15,23,42,0.32)"}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
-                  <div style={{background:ic.light,padding:"13px 13px 12px",borderBottom:`1px solid rgba(15,23,42,0.12)`}}>
+                  style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1.5px solid ${isSel ? "rgba(15,23,42,0.78)" : "rgba(15,23,42,0.58)"}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
+                  <div style={{background:`linear-gradient(180deg, ${hexToRgba(ic.bg, 0.24)} 0%, ${hexToRgba(ic.bg, 0.18)} 100%)`,padding:"13px 13px 12px",borderBottom:`1px solid rgba(15,23,42,0.14)`}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:16,fontWeight:800,color:ic.bg,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
@@ -4869,10 +4903,9 @@ function ClassTrackerInner({user}){
                         </div>
                       </div>
                       <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
-                        <div style={{textAlign:"right",minWidth:52}}>
-                          <div style={{fontSize:26,fontWeight:800,color:ic.bg,fontFamily:G.display,lineHeight:0.95}}>{todayN}</div>
-                          <div style={{fontSize:10,color:G.textM,fontWeight:700,marginTop:4}}>today</div>
-                        </div>
+                        <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"10px 13px",borderRadius:999,fontSize:14.5,fontWeight:800,lineHeight:1,whiteSpace:"nowrap",background:cardStatusBadge.background,color:cardStatusBadge.color,textTransform:"lowercase",minWidth:82}}>
+                          {cardStatusBadge.label}
+                        </span>
                         <OverflowMenu buttonSize={30} items={[
                           { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(cls.id) },
                         ]}/>
