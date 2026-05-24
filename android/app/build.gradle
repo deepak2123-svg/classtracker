@@ -1,4 +1,16 @@
 apply plugin: 'com.android.application'
+import com.android.build.OutputFile
+
+def releaseAbiTargets = ["armeabi-v7a", "arm64-v8a"]
+def releaseVersionCode = 2
+def releaseVersionName = "1.1.0"
+
+def envOrProperty = { key ->
+    def propValue = project.findProperty(key)
+    if (propValue != null && String.valueOf(propValue).trim()) return String.valueOf(propValue).trim()
+    def envValue = System.getenv(key)
+    return envValue != null && String.valueOf(envValue).trim() ? String.valueOf(envValue).trim() : null
+}
 
 android {
     namespace = "com.classtracker.app"
@@ -7,8 +19,8 @@ android {
         applicationId "com.classtracker.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode releaseVersionCode
+        versionName releaseVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +28,43 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            def uploadStoreFile = envOrProperty("CLASSLOG_UPLOAD_STORE_FILE")
+            def uploadStorePassword = envOrProperty("CLASSLOG_UPLOAD_STORE_PASSWORD")
+            def uploadKeyAlias = envOrProperty("CLASSLOG_UPLOAD_KEY_ALIAS")
+            def uploadKeyPassword = envOrProperty("CLASSLOG_UPLOAD_KEY_PASSWORD")
+
+            if (uploadStoreFile && uploadStorePassword && uploadKeyAlias && uploadKeyPassword) {
+                storeFile file(uploadStoreFile)
+                storePassword uploadStorePassword
+                keyAlias uploadKeyAlias
+                keyPassword uploadKeyPassword
+            } else {
+                initWith signingConfigs.debug
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    splits {
+        abi {
+            enable true
+            reset()
+            include(*releaseAbiTargets)
+            universalApk true
+        }
+    }
+    applicationVariants.configureEach { variant ->
+        if (variant.buildType.name != "release") return
+        variant.outputs.configureEach { output ->
+            def abiName = output.getFilter(OutputFile.ABI) ?: "universal"
+            output.outputFileName = "classlog-${defaultConfig.versionName}-${abiName}-release.apk"
         }
     }
 }

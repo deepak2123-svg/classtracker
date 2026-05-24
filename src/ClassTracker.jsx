@@ -168,12 +168,27 @@ const COLORS = [
   {bg:"#334155",light:"#EFF4F8",text:"#334155"},
 ];
 
+const INSTITUTE_CARD_TONES = [
+  { header:"#152B22", headerAlt:"#20392E", pill:"#34D077", pillBg:"rgba(52,208,119,0.22)", pillBorder:"rgba(52,208,119,0.30)", pillText:"#D9FBE8" },
+  { header:"#0F2044", headerAlt:"#1B3160", pill:"#60A5FA", pillBg:"rgba(96,165,250,0.22)", pillBorder:"rgba(147,197,253,0.28)", pillText:"#DBEAFE" },
+  { header:"#2D1B4E", headerAlt:"#46276F", pill:"#C084FC", pillBg:"rgba(192,132,252,0.22)", pillBorder:"rgba(216,180,254,0.28)", pillText:"#F3E8FF" },
+  { header:"#16324F", headerAlt:"#244565", pill:"#67CDD8", pillBg:"rgba(103,205,216,0.22)", pillBorder:"rgba(103,205,216,0.30)", pillText:"#DBF7FA" },
+  { header:"#3B2A1D", headerAlt:"#5A3B24", pill:"#F59E0B", pillBg:"rgba(245,158,11,0.22)", pillBorder:"rgba(253,186,116,0.28)", pillText:"#FEF3C7" },
+];
+
 // Stable colour per institute name (same institute always same colour)
 function instColor(name) {
   if (!name) return COLORS[0];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xFFFFFF;
   return COLORS[Math.abs(h) % COLORS.length];
+}
+
+function getInstituteCardTone(name){
+  if (!name) return INSTITUTE_CARD_TONES[0];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xFFFFFF;
+  return INSTITUTE_CARD_TONES[Math.abs(h) % INSTITUTE_CARD_TONES.length];
 }
 
 function normaliseChoiceKey(value) {
@@ -685,9 +700,8 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
               <path d="M4 3H7V13H14V16H4V3Z" fill="white"/>
             </svg>
           </div>
-          <div style={{minWidth:0}}>
+          <div style={{minWidth:0,display:"flex",alignItems:"center"}}>
             <div style={{fontFamily:G.display,fontWeight:700,fontSize:22,color:G.text,letterSpacing:-0.35,lineHeight:1}}>Ledgr</div>
-            <div style={{fontFamily:G.sans,fontWeight:700,fontSize:10.5,color:G.textM,letterSpacing:1.1,lineHeight:1.1,textTransform:"uppercase",marginTop:3}}>Teacher Panel</div>
           </div>
         </div>
 
@@ -885,7 +899,7 @@ function TeacherThemeCard({themeMode,onThemeChange}){
     {
       id:"light",
       label:"Light",
-      desc:"Clean daylight surface",
+      desc:"Bright daylight workspace",
       preview:{
         bg:"#F2F6F7",
         surface:"#FFFFFF",
@@ -896,7 +910,7 @@ function TeacherThemeCard({themeMode,onThemeChange}){
     {
       id:"dark",
       label:"Dark",
-      desc:"Low-glare night surface",
+      desc:"Low-glare evening workspace",
       preview:{
         bg:"#081114",
         surface:"#101B1F",
@@ -907,10 +921,26 @@ function TeacherThemeCard({themeMode,onThemeChange}){
   ];
 
   return(
-    <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:24,padding:"16px 16px 14px",boxShadow:G.shadowSm}}>
-      <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Appearance</div>
-      <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,lineHeight:1.1,marginBottom:6}}>Choose your theme</div>
-      <div style={{fontSize:14,color:G.textM,lineHeight:1.55,marginBottom:14}}>Switch the teacher panel between bright daylight and a darker evening view.</div>
+    <div
+      className="ledgr-card"
+      style={{
+        background:G.surface,
+        border:`1px solid ${G.border}`,
+        borderRadius:24,
+        padding:"16px 16px 14px",
+        boxShadow:G.shadowSm,
+      }}>
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
+        <div style={{width:48,height:48,borderRadius:16,background:"rgba(90,115,119,0.12)",border:"1px solid rgba(90,115,119,0.16)",display:"flex",alignItems:"center",justifyContent:"center",color:"#5A7377",flexShrink:0}}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.25,lineHeight:1.15}}>Choose your theme</div>
+          <div style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginTop:4,lineHeight:1.5}}>Switch between light and dark without changing the rest of your workspace.</div>
+        </div>
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
         {options.map(option=>{
           const selected = themeMode===option.id;
@@ -927,7 +957,7 @@ function TeacherThemeCard({themeMode,onThemeChange}){
                 padding:"11px 11px 12px",
                 textAlign:"left",
                 cursor:"pointer",
-                boxShadow:selected ? `0 10px 22px ${G.greenL}` : "none",
+                boxShadow:selected ? `0 8px 18px ${G.greenL}` : "none",
                 WebkitTapHighlightColor:"transparent",
               }}>
               <div style={{height:78,borderRadius:14,background:option.preview.bg,border:`1px solid ${selected ? option.preview.accent : "rgba(0,0,0,0.08)"}`,padding:8,display:"flex",flexDirection:"column",justifyContent:"space-between",marginBottom:10}}>
@@ -956,7 +986,7 @@ function TeacherThemeCard({themeMode,onThemeChange}){
   );
 }
 
-function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount,trashCount,onOpenStats,onOpenNotifications,onOpenTrash,onOpenExport,onSignOut,themeMode,onThemeChange}){
+function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount,trashCount,onOpenStats,onOpenNotifications,onOpenTrash,onOpenExport,onSignOut,themeMode,onThemeChange,memberSinceLabel}){
   return(
     <div className="ledgr-page" style={{flex:1,overflowY:"auto",padding:"14px 16px calc(96px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch"}}>
       <div className="ledgr-card" style={{background:G.heroBg,borderRadius:28,padding:"22px 20px 18px",boxShadow:G.shadowLg,marginBottom:16}}>
@@ -965,9 +995,10 @@ function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount
             <Avatar user={user} size={44}/>
           </div>
           <div style={{minWidth:0,flex:1}}>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.75,marginBottom:6}}>Teacher workspace</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.75,marginBottom:6}}>Workspace</div>
             <div style={{fontSize:28,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.55,lineHeight:1.05}}>{teacherName}</div>
             <div style={{fontSize:14,color:"rgba(255,255,255,0.68)",fontFamily:G.sans,marginTop:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.email || "No email available"}</div>
+            {memberSinceLabel && <div style={{fontSize:13,color:"rgba(255,255,255,0.68)",fontFamily:G.sans,marginTop:6}}>With Ledgr since {memberSinceLabel}</div>}
           </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
@@ -986,13 +1017,13 @@ function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount
       </div>
 
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        <TeacherThemeCard themeMode={themeMode} onThemeChange={onThemeChange}/>
-        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,margin:"2px 4px -2px"}}>Manage Teacher Panel</div>
+        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,margin:"2px 4px -2px"}}>Workspace</div>
         <TeacherProfileActionCard icon="📊" title="View Stats" subtitle="See teaching hours and class breakdowns." onClick={onOpenStats} accent="blue"/>
         <TeacherProfileActionCard icon="🔔" title="Notifications" subtitle={notificationCount>0 ? `${notificationCount} unread update${notificationCount===1?"":"s"} from admin changes.` : "No unread updates right now."} onClick={onOpenNotifications} badge={notificationCount>0 ? notificationCount : null} accent="amber"/>
         <TeacherProfileActionCard icon="🗑️" title="Recycle Bin" subtitle={trashCount>0 ? `${trashCount} item${trashCount===1?"":"s"} waiting before permanent deletion.` : "Nothing in the recycle bin right now."} onClick={onOpenTrash} badge={trashCount>0 ? trashCount : null} accent="slate"/>
         <TeacherProfileActionCard icon="📤" title="Export Data" subtitle="Download your teacher entries from this shared panel." onClick={onOpenExport} accent="green"/>
-        <TeacherProfileActionCard icon="🚪" title="Sign Out" subtitle="You'll be asked to confirm before signing out." onClick={onSignOut} danger accent="red"/>
+        <TeacherThemeCard themeMode={themeMode} onThemeChange={onThemeChange}/>
+        <TeacherProfileActionCard icon="🚪" title="Sign Out" subtitle="Sign out of your teacher workspace." onClick={onSignOut} danger accent="red"/>
       </div>
     </div>
   );
@@ -2009,6 +2040,61 @@ function ExportModal({data, teacherName, onClose}){
     return `${MONTHS[m-1]} ${y}`;
   }
 
+  function downloadBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.rel = "noopener";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+      anchor.remove();
+    }, 1200);
+  }
+
+  function printHtmlDocument(html){
+    const iframe = document.createElement("iframe");
+    let blobUrl = "";
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.position = "fixed";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
+    iframe.style.border = "0";
+
+    const cleanup = () => {
+      window.setTimeout(() => {
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        iframe.remove();
+      }, 400);
+    };
+
+    iframe.onload = () => {
+      const printWindow = iframe.contentWindow;
+      if(!printWindow){
+        cleanup();
+        return;
+      }
+      const afterPrint = () => cleanup();
+      printWindow.onafterprint = afterPrint;
+      window.setTimeout(afterPrint, 4000);
+      printWindow.focus();
+      printWindow.print();
+    };
+
+    document.body.appendChild(iframe);
+    if("srcdoc" in iframe){
+      iframe.srcdoc = html;
+    }else{
+      blobUrl = URL.createObjectURL(new Blob([html], {type:"text/html;charset=utf-8"}));
+      iframe.src = blobUrl;
+    }
+  }
+
   function exportPDF(){
     const rows=getEntries();
     const label=periodLabel();
@@ -2081,19 +2167,8 @@ ${groups.map(inst=>`<section class="inst-block">
     </table>
   </div>`).join("")}
 </section>`).join("")}`}
-<script>window.onload=()=>{window.print();}<\/script>
 </body></html>`;
-
-    // Use a Blob URL so browsers don't treat it as a popup
-    const blob = new Blob([html], {type:"text/html;charset=utf-8"});
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.target   = "_blank";
-    a.rel      = "noopener";
-    a.click();
-    // Revoke after a short delay to allow the tab to load the blob
-    setTimeout(()=>URL.revokeObjectURL(url), 10000);
+    printHtmlDocument(html);
   }
 
   function exportExcel(){
@@ -2108,24 +2183,20 @@ ${groups.map(inst=>`<section class="inst-block">
       headers.join(","),
       ...rows.map(r=>[r.date,r.class,r.institute,r.subject,r.time,r.status||"",r.title,r.notes].map(escape).join(","))
     ].join("\r\n");
-
     const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;
-    a.download=`ClassLog_${teacherName.replace(/ /g,"_")}_${label.replace(/ /g,"_").replace(/–/g,"-")}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `ClassLog_${teacherName.replace(/ /g,"_")}_${label.replace(/ /g,"_").replace(/–/g,"-")}.csv`);
   }
 
   function doExport(){
+    if(busy) return;
     setBusy(true);
-    setTimeout(()=>{
+    try{
       if(format==="pdf") exportPDF();
       else exportExcel();
-      setBusy(false);
       onClose();
-    },100);
+    }finally{
+      setBusy(false);
+    }
   }
 
   const inp2={width:"100%",padding:"10px 12px",borderRadius:10,border:`1px solid #D9E4DC`,fontSize:15,fontFamily:"'Inter',sans-serif",outline:"none",background:"#F5F7F5",color:"#111827"};
@@ -2917,6 +2988,7 @@ function ClassTrackerInner({user}){
   const [mobileClassSheetId,setMobileClassSheetId] = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
   const [exportOpen,setExportOpen]       = useState(false);
+  const [teacherBackView,setTeacherBackView] = useState("home");
   const [statPeriod,setStatPeriod]       = useState("month");
   const [isOffline,setIsOffline]         = useState(!navigator.onLine);
   const [inlineToast,setInlineToast]     = useState(null);
@@ -3356,6 +3428,13 @@ function ClassTrackerInner({user}){
       action ? action() : setView(destination);
     }
   }
+  function openStatsView(origin = "home"){
+    const backTarget = origin === "profile" ? "profile" : "home";
+    safeNav("stats", () => {
+      setTeacherBackView(backTarget);
+      setView("stats");
+    });
+  }
   const closeTeacherOverlay = React.useCallback(() => {
     if(mobileClassSheetId){ setMobileClassSheetId(null); return true; }
     if(historyClassId){ setHistoryClassId(null); return true; }
@@ -3702,6 +3781,17 @@ function ClassTrackerInner({user}){
 
   const teacherName=data.profile.name;
   const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
+  const teacherMemberSinceLabel = useMemo(() => {
+    const authCreated = user?.metadata?.creationTime ? new Date(user.metadata.creationTime) : null;
+    const firstClassCreated = [...(data.classes || [])]
+      .map(cls => Number(cls?.created || 0))
+      .filter(Boolean)
+      .sort((a,b)=>a-b)[0];
+    const fallbackCreated = firstClassCreated ? new Date(firstClassCreated) : null;
+    const source = authCreated && !Number.isNaN(authCreated.getTime()) ? authCreated : fallbackCreated;
+    if(!source || Number.isNaN(source.getTime())) return "";
+    return source.toLocaleDateString("en-IN", { month:"long", year:"numeric" });
+  }, [data.classes, user?.metadata?.creationTime]);
 
   const SaveBadge=()=>{
     if(!saving&&!saveErr) return null;
@@ -3953,7 +4043,7 @@ function ClassTrackerInner({user}){
           data={data}
           onLogoClick={()=>safeNav("home")}
           onSignOut={()=>setSignOutPrompt(true)}
-          onViewStats={()=>safeNav("stats")}
+          onViewStats={()=>openStatsView("profile")}
           onViewTrash={()=>safeNav("trash")}
           onViewNotifications={()=>safeNav("notifications")}
           trashCount={trashCount}
@@ -4114,13 +4204,14 @@ function ClassTrackerInner({user}){
           quickHomeSummary={quickHomeSummary}
           notificationCount={notificationCount}
           trashCount={trashCount}
-          onOpenStats={()=>safeNav("stats")}
+          onOpenStats={()=>openStatsView("profile")}
           onOpenNotifications={()=>safeNav("notifications")}
           onOpenTrash={()=>safeNav("trash")}
           onOpenExport={()=>setExportOpen(true)}
           onSignOut={()=>setSignOutPrompt(true)}
           themeMode={teacherTheme}
           onThemeChange={setTeacherTheme}
+          memberSinceLabel={teacherMemberSinceLabel}
         />
         {renderTeacherBottomBar("profile")}
       </div>
@@ -4193,6 +4284,7 @@ function ClassTrackerInner({user}){
       const instFull=cls.institute||"";
       const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
       const classSubject=cls.subject||"Subject not set";
+      const instituteTone = getInstituteCardTone(instFull);
       const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
       const lastLogTone = getLastLogToneStyles(lastLogMeta);
       const needsLogToday = todayN === 0;
@@ -4251,12 +4343,29 @@ function ClassTrackerInner({user}){
       };
 
       if(compact){
-        const statBox = (label, value, active=false) => (
-          <div style={{background:G.surfaceAlt,border:`1px solid ${active ? `${G.green}22` : G.border}`,borderRadius:12,padding:dense?"8px 7px":"9px 8px",textAlign:"center"}}>
-            <div style={{fontSize:20,fontWeight:800,color:active ? G.green : G.text,fontFamily:G.display,lineHeight:1}}>{value}</div>
-            <div style={{fontSize:9.5,color:G.textM,marginTop:4,letterSpacing:0.3}}>{label}</div>
-          </div>
-        );
+        const headerStatus = needsLogToday
+          ? {
+              label:"Not logged",
+              bg:"rgba(180,83,9,0.22)",
+              border:"rgba(251,191,36,0.25)",
+              text:"#FBBF24",
+            }
+          : {
+              label:"Logged today",
+              bg:"rgba(52,208,119,0.20)",
+              border:"rgba(52,208,119,0.30)",
+              text:"#D1FAE5",
+            };
+        const footerButtonLabel = needsLogToday ? "Log now" : "View class";
+        const statBox = (label, value, tone="default") => {
+          const valueColor = tone === "zero" ? G.textL : tone === "positive" ? G.green : G.text;
+          return (
+            <div style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:13,padding:dense?"9px 6px 8px":"10px 7px 9px",textAlign:"center"}}>
+              <div style={{fontSize:22,fontWeight:800,color:valueColor,fontFamily:G.display,lineHeight:1}}>{value}</div>
+              <div style={{fontSize:10.5,color:G.textL,marginTop:4,letterSpacing:0.2,fontWeight:600}}>{label}</div>
+            </div>
+          );
+        };
 
         return(
           <div className="ledgr-card ledgr-pressable"
@@ -4265,43 +4374,58 @@ function ClassTrackerInner({user}){
             onTouchMove={moveHold}
             onTouchEnd={clearHold}
             onTouchCancel={clearHold}
-            style={{background:cardBackground,borderRadius:20,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-            <div style={{display:"flex"}}>
-              <div style={{width:5,background:attentionStripe,flexShrink:0,animation:stripeGlow,boxShadow:needsLogToday?`0 0 0 1px ${attentionStripe}22 inset`:"none"}}/>
-              <div style={{flex:1,padding:dense?"13px 13px 12px":"14px 14px 13px"}}>
-                <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-                      <div style={{fontSize:19,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,lineHeight:1.1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
-                      {needsLogToday && <span style={{...lastLogTone,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap",flexShrink:0}}>Not logged today</span>}
-                    </div>
-                    <div style={{display:"inline-flex",alignItems:"center",gap:7,marginTop:6,maxWidth:"100%",background:G.surfaceAlt,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:700,color:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                      <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
-                      <span style={{display:"inline-block",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{instShort}</span>
-                      {cls.subject && <span style={{color:G.textM}}>· {cls.subject}</span>}
-                    </div>
+            style={{background:cardBackground,borderRadius:22,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
+            {needsLogToday && <div style={{position:"absolute",left:0,top:0,bottom:0,width:4,background:attentionStripe,animation:stripeGlow,boxShadow:`0 0 0 1px ${attentionStripe}18 inset`,zIndex:2}}/>}
+            <div style={{padding:dense?"14px 14px 12px":"15px 16px 13px",position:"relative",overflow:"hidden",background:`linear-gradient(135deg, ${instituteTone.header} 0%, ${instituteTone.headerAlt} 100%)`}}>
+              <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px)",backgroundSize:"16px 16px",pointerEvents:"none"}}/>
+              <div style={{position:"relative"}}>
+                <div style={{fontSize:23,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.35,lineHeight:1.08,marginBottom:10,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                  <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.13)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:20,padding:"4px 10px 4px 8px",fontSize:11.5,fontWeight:600,color:"rgba(255,255,255,0.9)",minWidth:0,flex:1}}>
+                    <span style={{width:7,height:7,borderRadius:999,background:instituteTone.pill,flexShrink:0}}/>
+                    <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0,flex:1}}>{instShort || "No institute"}</span>
+                    {cls.subject && (
+                      <>
+                        <span style={{color:"rgba(255,255,255,0.32)",fontSize:11,flexShrink:0}}>·</span>
+                        <span style={{fontSize:11,fontWeight:700,padding:"2px 7px",borderRadius:7,letterSpacing:0.04,background:instituteTone.pillBg,border:`1px solid ${instituteTone.pillBorder}`,color:instituteTone.pillText,flexShrink:0}}>
+                          {cls.subject}
+                        </span>
+                      </>
+                    )}
                   </div>
-                  <div style={{width:36,height:36,borderRadius:999,background:G.surfaceAlt,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:G.textM,flexShrink:0}}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 18l6-6-6-6"/>
-                    </svg>
-                  </div>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:700,whiteSpace:"nowrap",flexShrink:0,background:headerStatus.bg,border:`1px solid ${headerStatus.border}`,color:headerStatus.text}}>
+                    <span style={{width:6,height:6,borderRadius:999,background:"currentColor",flexShrink:0}}/>
+                    {headerStatus.label}
+                  </span>
                 </div>
+              </div>
+            </div>
 
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6,marginBottom:10}}>
-                  {statBox("Today", todayN, todayN>0)}
-                  {statBox(monthLabel, monthN, monthN>0)}
-                  {statBox("Total", total)}
-                </div>
+            <div style={{padding:dense?"13px 14px 14px":"13px 16px 15px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:7,marginBottom:12}}>
+                {statBox("Today", todayN, todayN===0 ? "zero" : "default")}
+                {statBox(monthLabel, monthN, monthN>0 ? "positive" : "default")}
+                {statBox("Total", total)}
+              </div>
 
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-                  <span style={{...lastLogTone,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,fontFamily:G.mono}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,paddingTop:10,borderTop:`1px solid ${G.border}`,flexWrap:"wrap"}}>
+                <span style={{...lastLogTone,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,fontFamily:G.mono,display:"inline-flex",alignItems:"center",gap:5}}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M12 7v5l3 2"/>
+                  </svg>
                     {lastLogMeta.label}
-                  </span>
-                  <span style={{fontSize:11.5,color:G.textM,lineHeight:1.5}}>
-                    {needsLogToday ? "Needs a fresh entry today" : "Up to date for today"}
-                  </span>
-                </div>
+                </span>
+                <button
+                  type="button"
+                  onClick={e=>{e.stopPropagation();onClick?.();}}
+                  style={{display:"inline-flex",alignItems:"center",gap:6,border:"none",borderRadius:20,padding:"8px 13px",fontSize:12.5,fontWeight:700,fontFamily:G.sans,cursor:"pointer",whiteSpace:"nowrap",color:"#fff",background:needsLogToday ? instituteTone.header : G.forest,boxShadow:reduceEffects ? "none" : "0 8px 16px rgba(16,24,40,0.14)"}}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  {footerButtonLabel}
+                </button>
               </div>
             </div>
           </div>
@@ -4466,7 +4590,7 @@ function ClassTrackerInner({user}){
             </div>
             <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid rgba(16,24,40,0.08)"}}>
               <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11.5,color:G.textM,fontWeight:700,marginBottom:7}}>
-                <span>{quickHomeSummary.monthLoggedDays} of {quickHomeSummary.workingDaysElapsed} working days logged this month</span>
+                <span>{quickHomeSummary.monthEntries} entries across {quickHomeSummary.monthLoggedDays} active day{quickHomeSummary.monthLoggedDays===1?"":"s"} this month</span>
                 <span>{progressPct}%</span>
               </div>
               <div style={{height:5,borderRadius:999,background:"rgba(16,24,40,0.08)",overflow:"hidden"}}>
@@ -4585,7 +4709,7 @@ function ClassTrackerInner({user}){
               </div>
               <div style={{marginTop:13}}>
                 <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:10.5,color:"rgba(255,255,255,0.74)",fontWeight:700,marginBottom:6}}>
-                  <span>{quickHomeSummary.monthLoggedDays}/{quickHomeSummary.workingDaysElapsed} working days logged</span>
+                  <span>{quickHomeSummary.monthEntries} entries across {quickHomeSummary.monthLoggedDays} active day{quickHomeSummary.monthLoggedDays===1?"":"s"}</span>
                   <span>{Math.round(quickHomeSummary.monthProgressPct * 100)}%</span>
                 </div>
                 <div style={{height:6,borderRadius:999,background:"rgba(255,255,255,0.12)",overflow:"hidden"}}>
@@ -4785,7 +4909,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={NavRight} showProfileMenu={!isMobile}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>openStatsView("home")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={NavRight} showProfileMenu={!isMobile}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
         {renderTeacherBottomBar("home")}
       </div>
@@ -5256,16 +5380,23 @@ function ClassTrackerInner({user}){
     const avgSession=grandSessions>0?Math.round(grandTotal/grandSessions):0;
     const maxClassMins=classStats.length>0?classStats[0].mins:1;
     const maxDayMins=Math.max(...dayMins,1);
+    const statsBackTarget = teacherBackView === "profile" ? "profile" : "home";
+    const statsContextLabel = statsBackTarget === "profile" ? "Profile insight" : "Teaching insight";
 
     const navBtnStyle={background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",fontFamily:G.sans};
 
     return(
       <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
-          right={<button onClick={()=>safeNav(mobileBackTarget)} style={navBtnStyle}>← Back</button>}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav(statsBackTarget)} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
+          right={<button onClick={()=>safeNav(statsBackTarget)} style={navBtnStyle}>← Back</button>}/>
 
         <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:`16px 14px ${isMobile ? mobileBottomNavPad : "48px"}`,maxWidth:680,margin:"0 auto",width:"100%"}}>
+          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"16px 16px 15px",boxShadow:G.shadowSm,marginBottom:14}}>
+            <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.65,marginBottom:6}}>{statsContextLabel}</div>
+            <div style={{fontSize:23,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.45,lineHeight:1.15,marginBottom:6}}>View Stats</div>
+            <div style={{fontSize:14,color:G.textM,lineHeight:1.6}}>This stays connected to your profile workspace so you can review teaching time and head right back.</div>
+          </div>
 
           {/* Period tabs */}
           <div style={{display:"flex",background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:3,marginBottom:18,gap:2}}>
@@ -5369,7 +5500,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>safeNav("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={<GhostBtn onClick={()=>safeNav(mobileBackTarget)}>← Back</GhostBtn>} showProfileMenu={!isMobile}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>openStatsView("profile")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={<GhostBtn onClick={()=>safeNav(mobileBackTarget)}>← Back</GhostBtn>} showProfileMenu={!isMobile}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:`32px 32px ${isMobile ? mobileBottomNavPad : "72px"}`}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <span style={{fontSize:28}}>🗑</span>

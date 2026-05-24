@@ -5,6 +5,9 @@ dist/
 
 .env.local
 .env.*.local
+preview.out.log
+preview.err.log
+teacher-preview.png
 
 npm-debug.log*
 yarn-debug.log*
