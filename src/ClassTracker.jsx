@@ -2,9 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, Component } from "react";
 import { createPortal } from "react-dom";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
-import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
-import { Share } from "@capacitor/share";
 import {
   IconAlertTriangle,
   IconArchive,
@@ -45,8 +43,6 @@ import {
   IconUser,
   IconX,
 } from "@tabler/icons-react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
@@ -202,6 +198,8 @@ const G = {
 };
 
 const APP_ICON_STROKE = 2.05;
+let exportPdfRuntimePromise = null;
+let nativeExportRuntimePromise = null;
 
 function AppIcon({ icon, size = 18, color = "currentColor", stroke = APP_ICON_STROKE, style = {} }){
   if(!icon) return null;
@@ -210,6 +208,34 @@ function AppIcon({ icon, size = 18, color = "currentColor", stroke = APP_ICON_ST
     return <Icon size={size} color={color} stroke={stroke} style={{display:"block",flexShrink:0,...style}} />;
   }
   return <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",lineHeight:1,...style}}>{icon}</span>;
+}
+
+async function loadExportPdfRuntime(){
+  if(!exportPdfRuntimePromise){
+    exportPdfRuntimePromise = Promise.all([
+      import("jspdf"),
+      import("jspdf-autotable"),
+    ]).then(([jspdfModule, autoTableModule]) => ({
+      jsPDF: jspdfModule.jsPDF,
+      autoTable: autoTableModule.default,
+    }));
+  }
+  return exportPdfRuntimePromise;
+}
+
+async function loadNativeExportRuntime(){
+  if(!nativeExportRuntimePromise){
+    nativeExportRuntimePromise = Promise.all([
+      import("@capacitor/filesystem"),
+      import("@capacitor/share"),
+    ]).then(([filesystemModule, shareModule]) => ({
+      Filesystem: filesystemModule.Filesystem,
+      Directory: filesystemModule.Directory,
+      Encoding: filesystemModule.Encoding,
+      Share: shareModule.Share,
+    }));
+  }
+  return nativeExportRuntimePromise;
 }
 
 const COLORS = [
@@ -2137,6 +2163,7 @@ function ExportModal({data, teacherName, onClose}){
   }
 
   async function shareNativeFile({ filename, textContent = "", blob = null }){
+    const { Filesystem, Directory, Encoding, Share } = await loadNativeExportRuntime();
     const writeResult = blob
       ? await Filesystem.writeFile({
           path: filename,
@@ -2161,7 +2188,8 @@ function ExportModal({data, teacherName, onClose}){
     });
   }
 
-  function buildPdfDocument(rows, label){
+  async function buildPdfDocument(rows, label){
+    const { jsPDF, autoTable } = await loadExportPdfRuntime();
     const doc = new jsPDF({ unit:"pt", format:"a4" });
     const groups = groupRowsForPdf(rows);
     const totalClasses = groups.reduce((sum, inst) => sum + inst.classCount, 0);
@@ -2304,7 +2332,7 @@ function ExportModal({data, teacherName, onClose}){
   async function exportPDF(){
     const rows=getEntries();
     const label=periodLabel();
-    const doc = buildPdfDocument(rows, label);
+    const doc = await buildPdfDocument(rows, label);
     if(isNativeExport){
       const pdfBlob = new Blob([doc.output("arraybuffer")], { type:"application/pdf" });
       await shareNativeFile({ filename: exportFilename("pdf"), blob: pdfBlob });
