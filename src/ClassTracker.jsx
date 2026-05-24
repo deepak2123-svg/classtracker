@@ -557,6 +557,41 @@ function buildTeacherQuickHomeSummary(activeClasses = [], notes = {}){
   };
 }
 
+function buildClassEntryMetrics(classNotes = {}, now = new Date()){
+  const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  const monthLabel = now.toLocaleDateString("en-IN", { month:"short", year:"numeric" });
+  const noteDates = {};
+  let monthEntries = 0;
+  let totalCount = 0;
+
+  Object.entries(classNotes || {}).forEach(([dk, arr])=>{
+    if(!Array.isArray(arr) || !arr.length) return;
+    totalCount += arr.length;
+    noteDates[dk] = arr.length;
+    if(dk.startsWith(monthKey)) monthEntries += arr.length;
+  });
+
+  const todayEntries = Array.isArray(classNotes?.[todayKey()]) ? classNotes[todayKey()].length : 0;
+  const activeDays = Object.keys(noteDates).length;
+  const lastLoggedKey = Object.keys(noteDates).sort().pop() || null;
+  const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
+  const lastLogTone = getLastLogToneStyles(lastLogMeta);
+  const needsLogToday = todayEntries === 0;
+
+  return {
+    todayEntries,
+    monthEntries,
+    monthLabel,
+    totalCount,
+    noteDates,
+    activeDays,
+    lastLoggedKey,
+    lastLogMeta,
+    lastLogTone,
+    needsLogToday,
+  };
+}
+
 function getLastLogToneStyles(meta){
   if(meta?.tone === "green"){
     return {
@@ -575,6 +610,25 @@ function getLastLogToneStyles(meta){
   return {
     background:"rgba(245,158,11,0.10)",
     border:"1px solid rgba(245,158,11,0.18)",
+    color:"#B45309",
+  };
+}
+
+function getTodayEntryStatusStyles(todayEntries = 0){
+  if(todayEntries > 0){
+    return {
+      label:"Logged today",
+      short:"done",
+      background:"#ECFDF3",
+      border:"#BBF7D0",
+      color:"#15803D",
+    };
+  }
+  return {
+    label:"Not logged today",
+    short:"not logged",
+    background:"#FFF7ED",
+    border:"#FED7AA",
     color:"#B45309",
   };
 }
@@ -774,7 +828,8 @@ function OverflowMenu({ items = [], buttonSize = 36 }) {
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
 function getPrimaryTeacherTab(view){
-  return ["profile","stats","trash","notifications"].includes(view) ? "profile" : "home";
+  if(view==="stats") return "stats";
+  return ["profile","trash","notifications"].includes(view) ? "profile" : "home";
 }
 
 function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,onViewNotifications,trashCount,notificationCount=0,data,showProfileMenu=true}){
@@ -881,7 +936,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
   );
 }
 
-function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
+function TeacherBottomBar({activeTab,onHome,onStats,onProfile,profileBadge=0}){
   const itemBase = isActive => ({
     flex:1,
     minHeight:56,
@@ -909,15 +964,21 @@ function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
           <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="home" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
             <AppIcon icon={IconHome2} size={22} color={activeTab==="home" ? G.green : G.textM} />
           </span>
-          <span>Home</span>
+          <span>home</span>
+        </button>
+        <button type="button" onClick={onStats} style={itemBase(activeTab==="stats")}>
+          <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="stats" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
+            <AppIcon icon={IconChartBar} size={22} color={activeTab==="stats" ? G.green : G.textM} />
+          </span>
+          <span>stats</span>
         </button>
         <button type="button" onClick={onProfile} style={itemBase(activeTab==="profile")}>
           <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="profile" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
             <AppIcon icon={IconUser} size={22} color={activeTab==="profile" ? G.green : G.textM} />
           </span>
-          <span>Profile</span>
+          <span>profile</span>
           {profileBadge > 0 && (
-            <span style={{position:"absolute",top:5,right:"calc(50% - 30px)",minWidth:18,height:18,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 8px 16px rgba(220,38,38,0.22)"}}>
+            <span style={{position:"absolute",top:5,right:14,minWidth:18,height:18,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 8px 16px rgba(220,38,38,0.22)"}}>
               {profileBadge > 9 ? "9+" : profileBadge}
             </span>
           )}
@@ -3296,10 +3357,12 @@ function ClassTrackerInner({user}){
   }, []);
   const renderTeacherBottomBar = currentView => {
     if(!isMobile || ["addClass","addNote","editNote"].includes(currentView)) return null;
+    const statsOrigin = ["profile","notifications","trash"].includes(currentView) ? "profile" : "home";
     return (
       <TeacherBottomBar
         activeTab={getPrimaryTeacherTab(currentView)}
         onHome={()=>safeNav("home")}
+        onStats={()=>openStatsView(statsOrigin)}
         onProfile={()=>safeNav("profile")}
         profileBadge={notificationCount}
       />
@@ -4468,8 +4531,7 @@ function ClassTrackerInner({user}){
     const selColor=selCls?instColor(selCls.institute):instColor("");
     const selNotes=selCls?getClassNotes(selCls.id):{};
     const selDateNotes=selCls?getDateNotes(selCls.id,selectedDate):[];
-    const selTotal=Object.values(selNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
-    const selNoteDates=Object.fromEntries(Object.entries(selNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
+    const selMetrics=selCls?buildClassEntryMetrics(selNotes):null;
 
     // Nav buttons — same on all screen sizes
     const NavRight = !isMobile ? <>
@@ -4484,24 +4546,13 @@ function ClassTrackerInner({user}){
     const ClassCard = ({cls, onClick, compact = false, dense = false, onDelete = null, onHold = null}) => {
       const ic=instColor(cls.institute);
       const classNotes=data.notes?.[cls.id]||{};
-      const total=Object.values(classNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
+      const metrics=buildClassEntryMetrics(classNotes);
+      const todayN=metrics.todayEntries;
+      const needsLogToday=metrics.needsLogToday;
+      const statusTone=getTodayEntryStatusStyles(todayN);
       const holdTimerRef = React.useRef(null);
       const holdStartRef = React.useRef(null);
       const holdTriggeredRef = React.useRef(false);
-      // This-month entries
-      const now=new Date();
-      const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-      const MONTH_NAMES=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-      const monthLabel=`${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
-      const monthN=Object.entries(classNotes).reduce((s,[dk,arr])=>
-        s+(dk.startsWith(monthKey)&&Array.isArray(arr)?arr.length:0),0);
-      const todayArr=classNotes[todayKey()];
-      const todayN=Array.isArray(todayArr)?todayArr.length:0;
-      const lastLoggedKey=Object.entries(classNotes)
-        .filter(([,arr])=>Array.isArray(arr)&&arr.length>0)
-        .map(([dk])=>dk)
-        .sort()
-        .pop();
       const clearHold = React.useCallback(() => {
         if(holdTimerRef.current){
           window.clearTimeout(holdTimerRef.current);
@@ -4512,35 +4563,8 @@ function ClassTrackerInner({user}){
       React.useEffect(() => () => clearHold(), [clearHold]);
       // Truncate long institute names with ellipsis
       const instFull=cls.institute||"";
-      const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
-      const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
-      const lastLogTone = getLastLogToneStyles(lastLogMeta);
-      const needsLogToday = todayN === 0;
-      const attentionStripe = needsLogToday ? (lastLogMeta.tone === "red" ? "#B42318" : "#D97706") : "rgba(152,162,179,0.65)";
-      const cardBorder = needsLogToday
-        ? (lastLogMeta.tone === "red" ? "rgba(180,35,24,0.18)" : "rgba(217,119,6,0.18)")
-        : G.border;
-      const cardBackground = G.classCardBg;
-      const stripeGlow = needsLogToday && !reduceEffects ? "ledgrStripePulse 1.9s ease-in-out infinite" : "none";
-      const StatChip = ({label,value,active=false,wide=false})=>(
-        <span style={{
-          display:"inline-flex",
-          alignItems:"center",
-          gap:5,
-          borderRadius:999,
-          padding:wide?"5px 10px":"4px 9px",
-          fontSize:11,
-          fontFamily:G.mono,
-          fontWeight:700,
-          background:active?G.surfaceAlt:G.surfaceSoft,
-          color:active?G.textS:G.textM,
-          border:`1px solid ${active?G.borderM:G.border}`,
-          boxShadow:"none",
-        }}>
-          <span style={{fontFamily:G.sans,fontWeight:600,color:G.textL}}>{label}</span>
-          <span>{value}</span>
-        </span>
-      );
+      const instShort=instFull.length>28?instFull.slice(0,26)+"…":instFull;
+      const cardBorder = needsLogToday ? statusTone.border : G.border;
       const beginHold = e => {
         if(!compact || !onHold || !e.touches?.length) return;
         const touch = e.touches[0];
@@ -4571,30 +4595,6 @@ function ClassTrackerInner({user}){
       };
 
       if(compact){
-        const headerStatus = needsLogToday
-          ? {
-              label:"Not logged today",
-              bg:"#FFF7ED",
-              border:"#FED7AA",
-              text:"#B45309",
-            }
-          : {
-              label:"Logged today",
-              bg:G.surfaceAlt,
-              border:G.border,
-              text:G.textS,
-            };
-        const footerButtonLabel = needsLogToday ? "Log now" : "View class";
-        const statBox = (label, value, tone="default") => {
-          const valueColor = tone === "zero" ? G.textL : G.text;
-          return (
-            <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:13,padding:dense?"9px 6px 8px":"10px 7px 9px",textAlign:"center"}}>
-              <div style={{fontSize:22,fontWeight:800,color:valueColor,fontFamily:G.display,lineHeight:1}}>{value}</div>
-              <div style={{fontSize:10.5,color:G.textL,marginTop:4,letterSpacing:0.2,fontWeight:600}}>{label}</div>
-            </div>
-          );
-        };
-
         return(
           <div className="ledgr-card ledgr-pressable"
             onClick={handleCardClick}
@@ -4602,49 +4602,39 @@ function ClassTrackerInner({user}){
             onTouchMove={moveHold}
             onTouchEnd={clearHold}
             onTouchCancel={clearHold}
-            style={{background:cardBackground,borderRadius:22,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
-            {needsLogToday && <div style={{position:"absolute",left:0,top:0,bottom:0,width:4,background:attentionStripe,animation:stripeGlow,boxShadow:`0 0 0 1px ${attentionStripe}18 inset`,zIndex:2}}/>}
-            <div style={{padding:dense?"14px 14px 12px":"15px 16px 13px"}}>
-              <div style={{fontSize:23,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,lineHeight:1.08,marginBottom:10,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
-                <div style={{display:"flex",gap:7,flexWrap:"wrap",minWidth:0,flex:1}}>
-                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:G.surfaceSoft,color:G.textS,borderRadius:20,padding:"5px 11px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${G.border}`,flexShrink:0,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                    <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
-                    {instShort || "No institute"}
-                  </span>
-                  {cls.subject && (
-                    <span style={{display:"inline-flex",alignItems:"center",background:G.surfaceSoft,color:G.textM,borderRadius:20,padding:"5px 11px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${G.border}`,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
-                      {cls.subject}
+            style={{background:G.surface,borderRadius:20,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
+            <div style={{background:ic.light,borderBottom:`1px solid ${ic.bg}1F`,padding:dense?"12px 14px":"13px 15px"}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:dense?22:24,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
+                    <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:ic.bg,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}22`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
+                      {instShort || "No institute"}
                     </span>
-                  )}
+                    {cls.subject && (
+                      <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.textS,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${G.border}`,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
+                        {cls.subject}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:20,fontSize:11,fontWeight:700,whiteSpace:"nowrap",flexShrink:0,background:headerStatus.bg,border:`1px solid ${headerStatus.border}`,color:headerStatus.text}}>
-                  <span style={{width:6,height:6,borderRadius:999,background:"currentColor",flexShrink:0}}/>
-                  {headerStatus.label}
-                </span>
+                <div style={{minWidth:62,textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:dense?29:31,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.9,lineHeight:0.95}}>{todayN}</div>
+                  <div style={{fontSize:10.5,fontWeight:700,color:G.textM,marginTop:5,whiteSpace:"nowrap"}}>today</div>
+                </div>
               </div>
             </div>
 
-            <div style={{padding:dense?"13px 14px 14px":"13px 16px 15px"}}>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:7,marginBottom:12}}>
-                {statBox("Today", todayN, todayN===0 ? "zero" : "default")}
-                {statBox(monthLabel, monthN)}
-                {statBox("Total", total)}
-              </div>
-
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,paddingTop:10,borderTop:`1px solid ${G.border}`,flexWrap:"wrap"}}>
-                <span style={{...lastLogTone,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,fontFamily:G.mono,display:"inline-flex",alignItems:"center",gap:5}}>
-                  <AppIcon icon={IconClockHour4} size={12} color="currentColor" />
-                    {lastLogMeta.label}
-                </span>
-                <button
-                  type="button"
-                  onClick={e=>{e.stopPropagation();onClick?.();}}
-                  style={{display:"inline-flex",alignItems:"center",gap:6,border:`1px solid ${needsLogToday ? "#FED7AA" : G.borderM}`,borderRadius:20,padding:"8px 13px",fontSize:12.5,fontWeight:700,fontFamily:G.sans,cursor:"pointer",whiteSpace:"nowrap",color:needsLogToday ? "#B45309" : G.textS,background:needsLogToday ? "#FFF7ED" : G.surfaceAlt,boxShadow:"none"}}>
-                  <AppIcon icon={needsLogToday ? IconPlus : IconArrowRight} size={11} color="currentColor" />
-                  {footerButtonLabel}
-                </button>
-              </div>
+            <div style={{padding:dense?"10px 14px 11px":"11px 15px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:999,fontSize:11.5,fontWeight:800,whiteSpace:"nowrap",background:statusTone.background,border:`1px solid ${statusTone.border}`,color:statusTone.color}}>
+                <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
+                {statusTone.label}
+              </span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:5,color:G.textM,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
+                <AppIcon icon={IconArrowRight} size={13} color={G.textM} />
+                Open
+              </span>
             </div>
           </div>
         );
@@ -4657,77 +4647,42 @@ function ClassTrackerInner({user}){
           onTouchMove={moveHold}
           onTouchEnd={clearHold}
           onTouchCancel={clearHold}
-          style={{background:cardBackground,borderRadius:20,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
-          onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";e.currentTarget.style.borderColor=`${attentionStripe}33`;})}
-          onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=cardBorder;})}
-          onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=cardBorder;})}>
-          <div style={{display:"flex"}}>
-            <div style={{width:5,background:attentionStripe,flexShrink:0,animation:stripeGlow,boxShadow:needsLogToday?`0 0 0 1px ${attentionStripe}22 inset`:"none"}}/>
-            <div style={{flex:1,padding:compact?"10px 12px 11px":"16px 16px 15px"}}>
-              <div style={{display:"flex",alignItems:"flex-start",gap:compact?9:12}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:compact?4:5}}>
-                <div style={{fontSize:compact?15:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,lineHeight:1.2}}>{cls.section}</div>
-                {compact&&<div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:5,background:todayN>0?G.greenL:"rgba(15,23,42,0.05)",border:todayN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.08)`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,color:todayN>0?G.green:G.textL,whiteSpace:"nowrap"}}>{todayN} today</span>
-                  <span style={{width:30,height:30,borderRadius:10,background:"rgba(15,23,42,0.04)",border:"1px solid rgba(15,23,42,0.08)",display:"flex",alignItems:"center",justifyContent:"center",color:G.textL,flexShrink:0}}><AppIcon icon={IconDots} size={16} color={G.textL} /></span>
-                </div>}
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:G.surfaceSoft,color:G.textS,borderRadius:20,padding:"4px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${G.border}`,flexShrink:0,maxWidth:210,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                  <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
-                  {instShort}
-                </span>
-                {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:G.surfaceSoft,color:G.textM,borderRadius:20,padding:"4px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${G.border}`,whiteSpace:"nowrap",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis"}}>{cls.subject}</span>}
-              </div>
-              {compact&&(
-                <>
-                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:7}}>
-                  <StatChip label="Today" value={todayN} active={todayN>0}/>
-                  <StatChip label={monthLabel} value={monthN} active={monthN>0}/>
-                  <StatChip label="Total" value={total}/>
+          style={{background:G.surface,borderRadius:20,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
+          onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";})}
+          onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}
+          onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}>
+          <div style={{background:ic.light,borderBottom:`1px solid ${ic.bg}1F`,padding:"14px 15px 13px"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:19,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:ic.bg,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${ic.bg}22`,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
+                    {instShort || "No institute"}
+                  </span>
+                  {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.textS,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${G.border}`,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
                 </div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:7}}>
-                  <span style={{...lastLogTone,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap"}}>{lastLogMeta.short}</span>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surfaceAlt,color:G.textS,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}><AppIcon icon={IconArrowRight} size={12} color={G.textS} />Open</span>
+              </div>
+              <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
+                <div style={{textAlign:"right",minWidth:56}}>
+                  <div style={{fontSize:28,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.8,lineHeight:0.95}}>{todayN}</div>
+                  <div style={{fontSize:10.5,fontWeight:700,color:G.textM,marginTop:5,whiteSpace:"nowrap"}}>today</div>
                 </div>
-                </>
-              )}
+                {onDelete&&<OverflowMenu buttonSize={30} items={[
+                  { icon:IconTrash, label:"Delete class", danger:true, onClick:onDelete },
+                ]}/>}
+              </div>
             </div>
-            {!compact&&<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:7,flexShrink:0}}>
-              {onDelete&&<OverflowMenu buttonSize={30} items={[
-                { icon:IconTrash, label:"Delete class", danger:true, onClick:onDelete },
-              ]}/>}
-              <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surfaceAlt,color:G.textS,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>{total} total</span>
-              <span style={{display:"inline-flex",alignItems:"center",gap:5,background:todayN>0?G.greenL:"rgba(15,23,42,0.04)",color:todayN>0?G.green:G.textL,border:todayN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.08)`,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>{todayN} today</span>
-            </div>}
-            </div>
-            {!compact&&(
-              <>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
-                <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
-                  <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>Today</div>
-                  <div style={{fontSize:18,fontWeight:800,color:todayN>0?G.text:G.textS,fontFamily:G.display,marginTop:4,lineHeight:1}}>{todayN}</div>
-                </div>
-                <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
-                  <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>{monthLabel}</div>
-                  <div style={{fontSize:18,fontWeight:800,color:G.textS,fontFamily:G.display,marginTop:4,lineHeight:1}}>{monthN}</div>
-                </div>
-                <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
-                  <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>Total</div>
-                  <div style={{fontSize:18,fontWeight:800,color:G.textS,fontFamily:G.display,marginTop:4,lineHeight:1}}>{total}</div>
-                </div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:12}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0}}>
-                  <span style={{...lastLogTone,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap"}}>{lastLogMeta.label}</span>
-                  {needsLogToday && <span style={{fontSize:12,color:"#B45309",fontWeight:700,whiteSpace:"nowrap"}}>Needs attention today</span>}
-                </div>
-                <StatChip label="Open" value="View" active wide/>
-              </div>
-              </>
-            )}
           </div>
+          <div style={{padding:"11px 15px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:999,fontSize:11.5,fontWeight:800,whiteSpace:"nowrap",background:statusTone.background,border:`1px solid ${statusTone.border}`,color:statusTone.color}}>
+              <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
+              {statusTone.label}
+            </span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:5,color:G.textM,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
+              <AppIcon icon={IconArrowRight} size={13} color={G.textM} />
+              View class
+            </span>
           </div>
         </div>
       );
@@ -4891,6 +4846,8 @@ function ClassTrackerInner({user}){
         window.addEventListener("pointerup", onUp);
       }
 
+      const selStatusTone = selMetrics ? getTodayEntryStatusStyles(selMetrics.todayEntries) : getTodayEntryStatusStyles(0);
+
       return (
       <div ref={containerRef} style={{display:"flex",flex:1,overflow:"hidden"}}>
         {/* Left sidebar */}
@@ -4916,44 +4873,45 @@ function ClassTrackerInner({user}){
               const ic=instColor(cls.institute);
               const isSel=selCls?.id===cls.id;
               const classNotes=data.notes?.[cls.id]||{};
-              const total=Object.values(classNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
-              const todayN=Array.isArray(classNotes[todayKey()])?classNotes[todayKey()].length:0;
-              const lastLoggedKey=Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk])=>dk).sort().pop();
-              const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
-              const lastLogTone = getLastLogToneStyles(lastLogMeta);
-              const needsLogToday = todayN === 0;
+              const metrics=buildClassEntryMetrics(classNotes);
+              const todayN=metrics.todayEntries;
+              const statusTone=getTodayEntryStatusStyles(todayN);
+              const instFull=cls.institute||"";
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
-                  style={{borderRadius:16,padding:"12px 12px 11px",marginBottom:8,cursor:"pointer",background:isSel?G.surfaceAlt:"#FFFFFF",border:`1px solid ${isSel?G.borderM:needsLogToday?"rgba(245,158,11,0.18)":G.border}`,boxShadow:G.shadowSm,transition:"all 0.14s ease"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:9}}>
-                    <div style={{width:4,alignSelf:"stretch",borderRadius:999,background:needsLogToday?"#F59E0B":ic.bg,animation:needsLogToday&&!reduceEffects?"ledgrStripePulse 1.9s ease-in-out infinite":"none",flexShrink:0}}/>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:7}}>
-                        <span title={cls.institute} style={{display:"inline-flex",alignItems:"center",gap:6,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.textS,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                          <span style={{width:7,height:7,borderRadius:999,background:ic.bg,flexShrink:0}}/>
-                          <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{cls.institute || "No institute"}</span>
-                        </span>
-                        {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.textM,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                  style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1px solid ${isSel ? ic.bg : statusTone.border}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
+                  <div style={{background:ic.light,padding:"13px 13px 12px",borderBottom:`1px solid ${ic.bg}1E`}}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:16,fontWeight:800,color:ic.bg,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
+                          <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FFFFFF",border:`1px solid ${ic.bg}22`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:ic.bg,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            <span style={{width:7,height:7,borderRadius:999,background:ic.bg,flexShrink:0}}/>
+                            <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{instFull || "No institute"}</span>
+                          </span>
+                          {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.textS,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                        </div>
                       </div>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-                        <span style={{...lastLogTone,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>{lastLogMeta.short}</span>
-                        {needsLogToday && <span style={{fontSize:10.5,fontWeight:800,color:"#B45309"}}>Not logged today</span>}
+                      <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
+                        <div style={{textAlign:"right",minWidth:52}}>
+                          <div style={{fontSize:26,fontWeight:800,color:ic.bg,fontFamily:G.display,lineHeight:0.95}}>{todayN}</div>
+                          <div style={{fontSize:10,color:G.textM,fontWeight:700,marginTop:4}}>today</div>
+                        </div>
+                        <OverflowMenu buttonSize={30} items={[
+                          { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(cls.id) },
+                        ]}/>
                       </div>
-                    </div>
-                    <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
-                      <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:14,fontWeight:800,color:G.textS,fontFamily:G.display,lineHeight:1}}>{total}</div>
-                        <div style={{fontSize:10,color:todayN>0?G.green:G.textL,fontWeight:700,marginTop:3}}>{todayN>0?`+${todayN} today`:"quiet today"}</div>
-                      </div>
-                      <OverflowMenu buttonSize={30} items={[
-                        { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(cls.id) },
-                      ]}/>
                     </div>
                   </div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:G.textM}}>{total} total</span>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 8px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:todayN>0?G.textS:G.textL}}>{todayN} today</span>
+                  <div style={{padding:"10px 13px 11px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:statusTone.background,border:`1px solid ${statusTone.border}`,borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:800,color:statusTone.color}}>
+                      <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
+                      {statusTone.label}
+                    </span>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5,color:G.textM,fontSize:11,fontWeight:700}}>
+                      <AppIcon icon={IconArrowRight} size={12} color={G.textM} />
+                      Open
+                    </span>
                   </div>
                 </div>
               );
@@ -4995,25 +4953,41 @@ function ClassTrackerInner({user}){
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:G.textL,fontSize:15}}>Select a class from the left</div>
         ):(
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
-            <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${G.border}`,background:"linear-gradient(180deg, #FFFFFF 0%, #F7FAF8 100%)",flexShrink:0}}>
-              <div style={{background:`linear-gradient(135deg, ${selColor.light} 0%, #FFFFFF 78%)`,border:`1px solid ${selColor.bg}1A`,borderRadius:22,padding:"16px 16px 14px",boxShadow:reduceEffects?"none":"0 10px 24px rgba(14,31,24,0.08)"}}>
-                <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Class timeline</div>
-                    <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.1}}>{selCls.section}</div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                      <span style={{background:"#fff",border:`1px solid ${selColor.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:selColor.bg,fontFamily:G.sans,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCls.institute}</span>
-                      {selCls.subject&&<span style={{background:"rgba(15,23,42,0.04)",border:"1px solid rgba(15,23,42,0.08)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textS,fontFamily:G.sans}}>{selCls.subject}</span>}
-                      <span style={{background:G.greenL,border:`1px solid ${G.green}1E`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.green,fontFamily:G.mono}}>{selTotal} total entries</span>
-                      <span style={{background:"rgba(15,23,42,0.04)",border:"1px solid rgba(15,23,42,0.08)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{Object.keys(selNoteDates).length} active days</span>
+            <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${G.border}`,background:G.pageBg,flexShrink:0}}>
+              <div style={{background:G.surface,border:`1px solid ${selColor.bg}22`,borderRadius:22,overflow:"hidden",boxShadow:G.shadowMd}}>
+                <div style={{background:selColor.light,padding:"16px 16px 14px",borderBottom:`1px solid ${selColor.bg}1A`}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:11,color:selColor.bg,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Class entry</div>
+                      <div style={{fontSize:22,fontWeight:800,color:selColor.bg,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.08}}>{selCls.section}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+                        <span style={{background:"#FFFFFF",border:`1px solid ${selColor.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:selColor.bg,fontFamily:G.sans,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCls.institute}</span>
+                        {selCls.subject&&<span style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textS,fontFamily:G.sans}}>{selCls.subject}</span>}
+                        <span style={{background:selStatusTone.background,border:`1px solid ${selStatusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:800,color:selStatusTone.color,fontFamily:G.sans}}>{selStatusTone.label}</span>
+                      </div>
                     </div>
+                    <OverflowMenu buttonSize={34} items={[
+                      { icon:IconEdit, label:"Edit class", onClick:()=>setEditingClass(selCls) },
+                      { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(selCls.id) },
+                    ]}/>
                   </div>
-                  <OverflowMenu buttonSize={34} items={[
-                    { icon:IconEdit, label:"Edit class", onClick:()=>setEditingClass(selCls) },
-                    { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(selCls.id) },
-                  ]}/>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8}}>
+                    {[
+                      { label:"Today", value:selMetrics?.todayEntries ?? 0, color:selColor.bg },
+                      { label:selMetrics?.monthLabel || "This month", value:selMetrics?.monthEntries ?? 0, color:G.textS },
+                      { label:"Total", value:selMetrics?.totalCount ?? 0, color:G.text },
+                      { label:"Logged days", value:selMetrics?.activeDays ?? 0, color:G.textS },
+                    ].map(item=>(
+                      <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 10px 10px",textAlign:"center"}}>
+                        <div style={{fontSize:22,fontWeight:800,color:item.color,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
+                        <div style={{fontSize:10.5,color:G.textL,marginTop:5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div style={{maxWidth:500,margin:"0 auto"}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selNoteDates}/></div>
+                <div style={{padding:"14px 16px 16px"}}>
+                  <div style={{maxWidth:500,margin:"0 auto"}}><DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={selMetrics?.noteDates || {}}/></div>
+                </div>
               </div>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
@@ -5022,19 +4996,24 @@ function ClassTrackerInner({user}){
                   <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
                   <span style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.2}}>{formatDateLabel(selectedDate)}</span>
                   <span style={{color:selDateNotes.length>0?G.green:G.textM,marginLeft:8,fontSize:13,fontWeight:700,fontFamily:G.mono}}>{selDateNotes.length} {selDateNotes.length===1?"entry":"entries"}</span>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                    <span style={{...(selMetrics?.lastLogTone || getLastLogToneStyles({tone:"red"})),borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>
+                      {selMetrics?.lastLogMeta?.label || "No logs yet"}
+                    </span>
+                  </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
                   <button
                     onClick={()=>setHistoryClassId(selCls.id)}
-                    disabled={selTotal===0}
+                    disabled={(selMetrics?.totalCount || 0)===0}
                     style={{
-                      background:selTotal===0?G.bg:G.surface,
-                      color:selTotal===0?G.textL:G.textS,
-                      border:`1px solid ${selTotal===0?G.border:G.borderM}`,
+                      background:(selMetrics?.totalCount || 0)===0?G.bg:G.surface,
+                      color:(selMetrics?.totalCount || 0)===0?G.textL:G.textS,
+                      border:`1px solid ${(selMetrics?.totalCount || 0)===0?G.border:G.borderM}`,
                       borderRadius:9,
                       padding:"8px 14px",
                       fontSize:14,
-                      cursor:selTotal===0?"not-allowed":"pointer",
+                      cursor:(selMetrics?.totalCount || 0)===0?"not-allowed":"pointer",
                       fontFamily:G.sans,
                       fontWeight:700,
                       display:"flex",
@@ -5043,7 +5022,7 @@ function ClassTrackerInner({user}){
                       minHeight:40,
                       WebkitTapHighlightColor:"transparent"
                     }}>
-                    <AppIcon icon={IconHistory} size={16} color={selTotal===0?G.textL:G.textS} /> History
+                    <AppIcon icon={IconHistory} size={16} color={(selMetrics?.totalCount || 0)===0?G.textL:G.textS} /> History
                   </button>
                   {canAdd&&<button onClick={()=>{
     setActiveClass(selCls);
@@ -5119,12 +5098,8 @@ function ClassTrackerInner({user}){
     const color=instColor(cls.institute);
     const classNotes=getClassNotes(cls.id);
     const dateNotes=getDateNotes(cls.id,selectedDate);
-    const totalCount=Object.values(classNotes||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
-    const noteDates=Object.fromEntries(Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
-    const activeDays=Object.keys(noteDates).length;
-    const lastLoggedKey=Object.keys(noteDates).sort().pop();
-    const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
-    const lastLogTone = getLastLogToneStyles(lastLogMeta);
+    const detailMetrics=buildClassEntryMetrics(classNotes);
+    const statusTone=getTodayEntryStatusStyles(detailMetrics.todayEntries);
     const swipePool = teacherVisibleClasses.some(entry => String(entry?.id || "") === String(cls.id || ""))
       ? teacherVisibleClasses
       : teacherActiveClasses;
@@ -5214,66 +5189,90 @@ function ClassTrackerInner({user}){
         else bounceDetailCardBack();
       }
     };
+    const detailSurfaceTransition = detailSwipeTransitionMs ? `transform ${detailSwipeTransitionMs}ms cubic-bezier(.22,.8,.24,1)` : "none";
     return(
       <div key={cls.id} className="ledgr-page" style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden",touchAction:"pan-y"}} onTouchStart={handleDetailTouchStart} onTouchMove={handleDetailTouchMove} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;bounceDetailCardBack(160);}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
-          right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Classes</GhostBtn>}
+          right={<GhostBtn onClick={()=>setView("home")} style={{display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Classes</GhostBtn>}
         />
-        <div className="ledgr-card" style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0,transform:`translateX(${detailSwipeOffset}px)`,transition:detailSwipeTransitionMs?`transform ${detailSwipeTransitionMs}ms cubic-bezier(.22,.8,.24,1)`:"none"}}>
-          {/* Compact single-line class identity */}
-          <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
-            <div style={{flex:1,minWidth:0,display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
-              <span style={{fontSize:16,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.3,lineHeight:1,flexShrink:0}}>{cls.section}</span>
-              <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
-              <span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.sans,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}}>{cls.institute}</span>
-              {cls.subject&&<><span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span><span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.sans,fontWeight:600,flexShrink:0}}>{cls.subject}</span></>}
-              <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
-              <span style={{fontSize:11,color:"#DBEAFE",fontFamily:G.mono,fontWeight:700,flexShrink:0}}>{totalCount} entries</span>
-              <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
-              <span style={{fontSize:11,color:"rgba(255,255,255,0.45)",fontFamily:G.mono,flexShrink:0}}>{activeDays}d active</span>
-              <span style={{...lastLogTone,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,flexShrink:0}}>{lastLogMeta.short}</span>
+        <div style={{flex:1,overflow:"hidden"}}>
+          <div style={{height:"100%",overflowY:"auto",padding:`12px 14px ${mobileBottomNavPad}`,WebkitOverflowScrolling:"touch",transform:`translate3d(${detailSwipeOffset}px,0,0)`,transition:detailSurfaceTransition,willChange:"transform",backfaceVisibility:"hidden"}}>
+            <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${color.bg}22`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd,marginBottom:14}}>
+              <div style={{background:color.light,padding:"14px 14px 12px",borderBottom:`1px solid ${color.bg}1A`}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:28,fontWeight:800,color:color.bg,fontFamily:G.display,letterSpacing:-0.6,lineHeight:1.02}}>{cls.section}</div>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",border:`1px solid ${color.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:color.bg,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        <span style={{width:8,height:8,borderRadius:999,background:color.bg,flexShrink:0}}/>
+                        {cls.institute || "No institute"}
+                      </span>
+                      {cls.subject&&<span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:G.textS,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.subject}</span>}
+                      <span style={{display:"inline-flex",alignItems:"center",gap:6,background:statusTone.background,border:`1px solid ${statusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:statusTone.color,whiteSpace:"nowrap"}}>
+                        <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
+                        {statusTone.label}
+                      </span>
+                    </div>
+                  </div>
+                  <OverflowMenu items={[
+                    { icon:IconEdit, label:"Edit class", onClick:()=>setEditingClass(cls) },
+                    { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(cls.id) },
+                  ]}/>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:12}}>
+                  {[
+                    { label:"Today", value:detailMetrics.todayEntries, color:color.bg },
+                    { label:detailMetrics.monthLabel, value:detailMetrics.monthEntries, color:G.textS },
+                    { label:"Total", value:detailMetrics.totalCount, color:G.text },
+                    { label:"Logged days", value:detailMetrics.activeDays, color:G.textS },
+                  ].map(item=>(
+                    <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 10px 10px",textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:item.color,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
+                      <div style={{fontSize:10.5,color:G.textL,marginTop:5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{padding:"14px 14px 16px"}}>
+                <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={detailMetrics.noteDates}/>
+              </div>
             </div>
-            <OverflowMenu items={[
-              { icon:IconEdit, label:"Edit class", onClick:()=>setEditingClass(cls) },
-              { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(cls.id) },
-            ]}/>
-          </div>
-          <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
-        </div>
-        {/* Entries scroll area */}
-        <div style={{flex:1,overflowY:"auto",padding:`14px 16px ${isMobile ? mobileBottomNavPad : "16px"}`,WebkitOverflowScrolling:"touch",transform:`translateX(${detailSwipeOffset}px)`,transition:detailSwipeTransitionMs?`transform ${detailSwipeTransitionMs}ms cubic-bezier(.22,.8,.24,1)`:"none"}}>
-          <div className="ledgr-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8,background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 14px",boxShadow:G.shadowSm}}>
-            <div>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
-              <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</div>
-              <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:700,marginTop:3,fontFamily:G.mono}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
-              {isMobile && swipePool.length > 1 && <div style={{fontSize:12,color:G.textL,marginTop:5}}>Swipe left or right to move between classes</div>}
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
-              <button
-                onClick={()=>setHistoryClassId(activeClass.id)}
-                disabled={totalCount===0}
-                style={{
-                  background:totalCount===0?G.bg:G.surface,
-                  color:totalCount===0?G.textL:G.textS,
-                  border:`1px solid ${totalCount===0?G.border:G.borderM}`,
-                  borderRadius:12,
-                  padding:"11px 18px",
-                  fontSize:15,
-                  cursor:totalCount===0?"not-allowed":"pointer",
-                  fontFamily:G.sans,
-                  fontWeight:700,
-                  display:"flex",
-                  alignItems:"center",
-                  gap:6,
-                  minHeight:48,
-                  WebkitTapHighlightColor:"transparent",
-                  flexShrink:0
-                }}>
-                <AppIcon icon={IconHistory} size={16} color={totalCount===0?G.textL:G.textS} /> History
-              </button>
-              {canAdd&&<button onClick={()=>{
+
+            <div className="ledgr-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10,background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 14px",boxShadow:G.shadowSm}}>
+              <div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
+                <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</div>
+                <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:700,marginTop:3,fontFamily:G.mono}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                  <span style={{...detailMetrics.lastLogTone,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>{detailMetrics.lastLogMeta.label}</span>
+                  {swipePool.length > 1 && <span style={{fontSize:11.5,color:G.textL,fontWeight:700}}>Swipe left or right to change class</span>}
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                <button
+                  onClick={()=>setHistoryClassId(activeClass.id)}
+                  disabled={detailMetrics.totalCount===0}
+                  style={{
+                    background:detailMetrics.totalCount===0?G.bg:G.surface,
+                    color:detailMetrics.totalCount===0?G.textL:G.textS,
+                    border:`1px solid ${detailMetrics.totalCount===0?G.border:G.borderM}`,
+                    borderRadius:12,
+                    padding:"11px 18px",
+                    fontSize:15,
+                    cursor:detailMetrics.totalCount===0?"not-allowed":"pointer",
+                    fontFamily:G.sans,
+                    fontWeight:700,
+                    display:"flex",
+                    alignItems:"center",
+                    gap:6,
+                    minHeight:48,
+                    WebkitTapHighlightColor:"transparent",
+                    flexShrink:0
+                  }}>
+                  <AppIcon icon={IconHistory} size={16} color={detailMetrics.totalCount===0?G.textL:G.textS} /> History
+                </button>
+                {canAdd&&<button onClick={()=>{
     const _ks=getSlotsForSection(activeClass,instituteSections);
     const _used=new Set(((data.notes?.[activeClass.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
     const _def=_ks?getDefaultKisSlot(data.notes,activeClass.id,_ks,_used):null;
@@ -5282,53 +5281,55 @@ function ClassTrackerInner({user}){
       :{title:"",body:"",tag:"note",status:"",...(_ks?{}:(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60}))});
     safeNav("addNote");
   }} onPointerDown={e=>rpl(e,true)}
-                style={{background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",boxShadow:`0 4px 14px ${color.bg}55`,flexShrink:0}}>
-                + Add Entry
-              </button>}
+                  style={{background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+                  + Add Entry
+                </button>}
+              </div>
             </div>
-          </div>
-          {dateNotes.length===0?(
-            <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
-              <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconEdit} size={28} color={G.textM} /></div>
-              <div style={{fontSize:16,color:G.textM,fontWeight:600}}>{canAdd?"No entries yet":"No entries for this date"}</div>
-              {canAdd&&<div style={{fontSize:14,color:G.textL,marginTop:6}}>Tap + Add Entry to log this class</div>}
-            </div>
-          ):(
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {isReadOnlyDate&&(
-                <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#9A3412",fontWeight:600}}>
-                  Viewing past entries only. Dates older than the past week cannot be edited.
-                </div>
-              )}
-              {dateNotes.map(note=>{
-                const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
-                return(
-                  <div key={note.id} className="ledgr-card" style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
-                    <div style={{height:4,background:tag.bg}}/>
-                    <div style={{padding:"14px 15px"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:note.title?8:0}}>
-                            <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
-                            {note.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}><AppIcon icon={IconClockHour4} size={13} color={G.textS} />{formatPeriod(note.timeStart,note.timeEnd)}</span>}
-                            {note.status&&STATUS_STYLES[note.status]&&<span style={{background:STATUS_STYLES[note.status].bg,color:STATUS_STYLES[note.status].text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.sans,fontWeight:600}}>{STATUS_STYLES[note.status].label}</span>}
+
+            {dateNotes.length===0?(
+              <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+                <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconEdit} size={28} color={G.textM} /></div>
+                <div style={{fontSize:16,color:G.textM,fontWeight:600}}>{canAdd?"No entries yet":"No entries for this date"}</div>
+                {canAdd&&<div style={{fontSize:14,color:G.textL,marginTop:6}}>Tap + Add Entry to log this class</div>}
+              </div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {isReadOnlyDate&&(
+                  <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#9A3412",fontWeight:600}}>
+                    Viewing past entries only. Dates older than the past week cannot be edited.
+                  </div>
+                )}
+                {dateNotes.map(note=>{
+                  const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
+                  return(
+                    <div key={note.id} className="ledgr-card" style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
+                      <div style={{height:4,background:tag.bg}}/>
+                      <div style={{padding:"14px 15px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:note.title?8:0}}>
+                              <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
+                              {note.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}><AppIcon icon={IconClockHour4} size={13} color={G.textS} />{formatPeriod(note.timeStart,note.timeEnd)}</span>}
+                              {note.status&&STATUS_STYLES[note.status]&&<span style={{background:STATUS_STYLES[note.status].bg,color:STATUS_STYLES[note.status].text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.sans,fontWeight:600}}>{STATUS_STYLES[note.status].label}</span>}
+                            </div>
+                            {note.title&&<div style={{fontWeight:700,fontSize:17,color:G.text,fontFamily:G.display,lineHeight:1.3,marginBottom:4}}>{note.title}</div>}
+                            {note.body&&<p style={{margin:0,fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
                           </div>
-                          {note.title&&<div style={{fontWeight:700,fontSize:17,color:G.text,fontFamily:G.display,lineHeight:1.3,marginBottom:4}}>{note.title}</div>}
-                          {note.body&&<p style={{margin:0,fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
+                          {canAdd&&(
+                            <OverflowMenu items={[
+                              { icon:IconEdit, label:"Edit entry", onClick:()=>{setEditNote({...note});setView("editNote");} },
+                              { icon:IconTrash, label:"Delete entry", danger:true, onClick:()=>deleteNote(note.id) },
+                            ]}/>
+                          )}
                         </div>
-                        {canAdd&&(
-                          <OverflowMenu items={[
-                            { icon:IconEdit, label:"Edit entry", onClick:()=>{setEditNote({...note});setView("editNote");} },
-                            { icon:IconTrash, label:"Delete entry", danger:true, onClick:()=>deleteNote(note.id) },
-                          ]}/>
-                        )}
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
         {renderTeacherBottomBar("classDetail")}
       </div>
