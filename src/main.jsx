@@ -1,4 +1,4 @@
-import { StrictMode, Suspense, lazy, useState, useEffect, useRef } from "react";
+import { StrictMode, Suspense, lazy, useState, useEffect, useRef, Component } from "react";
 import { createRoot } from "react-dom/client";
 import { onAuth, getUserRole, logout } from "./firebase";
 import { Spinner } from "./shared.jsx";
@@ -82,6 +82,82 @@ function App() {
   return <SuspenseScreen><ClassTracker user={user} /></SuspenseScreen>;
 }
 
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return <FatalAppScreen error={this.state.error} />;
+    }
+    return this.props.children;
+  }
+}
+
+function RuntimeErrorBridge({ children }) {
+  const [runtimeError, setRuntimeError] = useState(null);
+
+  useEffect(() => {
+    const handleError = (event) => {
+      setRuntimeError(event?.error || new Error(event?.message || "Unexpected runtime error"));
+    };
+
+    const handleRejection = (event) => {
+      const reason = event?.reason;
+      setRuntimeError(reason instanceof Error ? reason : new Error(String(reason || "Unhandled promise rejection")));
+    };
+
+    window.addEventListener("error", handleError);
+    window.addEventListener("unhandledrejection", handleRejection);
+    return () => {
+      window.removeEventListener("error", handleError);
+      window.removeEventListener("unhandledrejection", handleRejection);
+    };
+  }, []);
+
+  if (runtimeError) {
+    return <FatalAppScreen error={runtimeError} />;
+  }
+
+  return children;
+}
+
+function FatalAppScreen({ error }) {
+  const message = error?.message || String(error || "Unknown error");
+  return (
+    <div style={{ minHeight:"100vh", background:"#F5F7FA", display:"flex", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Inter',sans-serif" }}>
+      <div style={{ width:"100%", maxWidth:460, background:"#FFFFFF", border:"1px solid #DCE3EA", borderRadius:24, boxShadow:"0 16px 40px rgba(16,24,40,0.12)", padding:"28px 24px" }}>
+        <div style={{ width:56, height:56, borderRadius:18, background:"#FEF3F2", color:"#B42318", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, marginBottom:16 }}>
+          !
+        </div>
+        <div style={{ fontSize:24, fontWeight:800, color:"#101828", marginBottom:8, fontFamily:"'Poppins',sans-serif" }}>Something went wrong</div>
+        <div style={{ fontSize:14, lineHeight:1.7, color:"#475467", marginBottom:18 }}>
+          The app hit a runtime error before the teacher panel could finish loading.
+        </div>
+        <div style={{ fontSize:12, fontWeight:700, color:"#667085", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
+          Error Details
+        </div>
+        <pre style={{ margin:0, whiteSpace:"pre-wrap", wordBreak:"break-word", background:"#F8FAFC", border:"1px solid #DCE3EA", borderRadius:14, padding:"14px 15px", color:"#101828", fontSize:13, lineHeight:1.55, fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" }}>
+          {message}
+          {error?.stack ? `\n\n${error.stack}` : ""}
+        </pre>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          style={{ marginTop:18, width:"100%", border:"none", borderRadius:14, background:"#16324F", color:"#fff", padding:"13px 18px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+          Reload
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AccessDenied() {
   const nativeApp = isNativeApp();
   const teacherAppUrl = getTeacherAppUrl();
@@ -156,5 +232,11 @@ function SuspenseScreen({ children }) {
 }
 
 createRoot(document.getElementById("root")).render(
-  <StrictMode><App /></StrictMode>
+  <StrictMode>
+    <AppErrorBoundary>
+      <RuntimeErrorBridge>
+        <App />
+      </RuntimeErrorBridge>
+    </AppErrorBoundary>
+  </StrictMode>
 );

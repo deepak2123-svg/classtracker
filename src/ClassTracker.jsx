@@ -3137,6 +3137,38 @@ function TeacherLoadingScreen({text="Loading teacher panel…", themeShell={}}){
   );
 }
 
+function TeacherStateFallback({ themeShell = {}, view, resolvedView, activeClassId, classCount, notificationCount, onResetHome }){
+  return(
+    <div style={{...themeShell,minHeight:"100vh",background:G.pageBg,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{width:"100%",maxWidth:420,background:G.surface,border:`1px solid ${G.border}`,borderRadius:24,boxShadow:G.shadowLg,padding:"26px 22px 22px"}}>
+        <div style={{width:54,height:54,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
+          <AppIcon icon={IconInfoCircle} size={28} color={G.textM} />
+        </div>
+        <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.4,marginBottom:8}}>Teacher panel needs a reset</div>
+        <div style={{fontSize:14,color:G.textM,lineHeight:1.7,marginBottom:16}}>
+          The app reached an unexpected teacher screen state after loading. Resetting to home should recover it immediately.
+        </div>
+        <button
+          type="button"
+          onClick={onResetHome}
+          style={{width:"100%",border:"none",borderRadius:14,background:G.navy,color:"#fff",padding:"13px 18px",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
+          Reset teacher home
+        </button>
+        <div style={{marginTop:16,fontSize:12,fontWeight:700,color:G.textL,textTransform:"uppercase",letterSpacing:0.55}}>Debug state</div>
+        <pre style={{margin:"8px 0 0",whiteSpace:"pre-wrap",wordBreak:"break-word",background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"13px 14px",color:G.textS,fontSize:12.5,lineHeight:1.6,fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"}}>
+{JSON.stringify({
+  view,
+  resolvedView,
+  activeClassId: activeClassId || null,
+  classCount,
+  notificationCount,
+}, null, 2)}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 function ClassTrackerInner({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
@@ -6122,7 +6154,32 @@ function ClassTrackerInner({user}){
       </div>
     );
   }
-  return null;
+  return(
+    <TeacherStateFallback
+      themeShell={teacherThemeShell}
+      view={view}
+      resolvedView={resolvedView}
+      activeClassId={activeClass?.id}
+      classCount={(data.classes || []).length}
+      notificationCount={notificationCount}
+      onResetHome={()=>{
+        setActiveClass(null);
+        setEditNote(null);
+        setTeacherBackView("home");
+        setSelectedDate(todayKey());
+        _setView("home");
+        if(typeof window !== "undefined"){
+          const navToken = Number(window.history.state?.navToken ?? teacherHistoryTokenRef.current ?? 0) || 0;
+          teacherHistoryTokenRef.current = Math.max(teacherHistoryTokenRef.current, navToken);
+          window.history.replaceState(
+            { ...(window.history.state || {}), view:"home", navToken },
+            "",
+            buildTeacherHistoryUrl("home", navToken)
+          );
+        }
+      }}
+    />
+  );
 }
 
 export default function ClassTracker(props){
