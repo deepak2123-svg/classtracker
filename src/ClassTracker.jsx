@@ -5094,59 +5094,57 @@ function ClassTrackerInner({user}){
   // ══════════════════════════════════════════════════════════════════════
   if(view==="classDetail" && activeClass){
     const cls=activeClass;
-    const color=instColor(cls.institute);
-    const classNotes=getClassNotes(cls.id);
-    const dateNotes=getDateNotes(cls.id,selectedDate);
-    const detailMetrics=buildClassEntryMetrics(classNotes);
-    const statusTone=getTodayEntryStatusStyles(detailMetrics.todayEntries);
     const swipePool = teacherVisibleClasses.some(entry => String(entry?.id || "") === String(cls.id || ""))
       ? teacherVisibleClasses
       : teacherActiveClasses;
+    const currentDetailIndex = swipePool.findIndex(entry => String(entry?.id || "") === String(cls.id || ""));
+    const leftSwipeClass = currentDetailIndex >= 0 && swipePool.length > 1
+      ? swipePool[(currentDetailIndex + 1) % swipePool.length]
+      : cls;
+    const rightSwipeClass = currentDetailIndex >= 0 && swipePool.length > 1
+      ? swipePool[(currentDetailIndex - 1 + swipePool.length) % swipePool.length]
+      : cls;
+    const getDetailViewportWidth = () => Math.max(320, Math.round(window.visualViewport?.width || window.innerWidth || 360));
     const bounceDetailCardBack = (duration = 190) => {
+      if(detailSwipeResetTimer.current){
+        window.clearTimeout(detailSwipeResetTimer.current);
+        detailSwipeResetTimer.current = null;
+      }
       setDetailSwipeTransitionMs(reduceEffects ? 0 : duration);
       setDetailSwipeOffset(0);
     };
     const animateSiblingCardChange = (direction, distance = 96, gestureMs = 180) => {
-      const currentIndex = swipePool.findIndex(entry => String(entry?.id || "") === String(cls.id || ""));
-      if(currentIndex < 0 || swipePool.length < 2){
+      const targetClass = direction > 0 ? leftSwipeClass : rightSwipeClass;
+      if(
+        swipePool.length < 2 ||
+        !targetClass ||
+        String(targetClass?.id || "") === String(cls.id || "")
+      ){
         bounceDetailCardBack();
         return false;
       }
-      const nextIndex = (currentIndex + direction + swipePool.length) % swipePool.length;
-      if(nextIndex === currentIndex){
-        bounceDetailCardBack();
-        return false;
-      }
-      const nextClass = swipePool[nextIndex];
-      const viewportWidth = window.innerWidth || 360;
-      const travelSign = direction > 0 ? 1 : -1;
+      const viewportWidth = getDetailViewportWidth();
       const settleMs = reduceEffects ? 0 : Math.max(150, Math.min(360, Math.round(120 + gestureMs * 0.34)));
-      const carryInOffset = Math.min(Math.max(Math.abs(distance) * 0.32, 42), 96);
       if(detailSwipeResetTimer.current){
         window.clearTimeout(detailSwipeResetTimer.current);
         detailSwipeResetTimer.current = null;
       }
       setDetailSwipeTransitionMs(settleMs);
-      setDetailSwipeOffset(travelSign * viewportWidth);
+      setDetailSwipeOffset(direction > 0 ? viewportWidth : -viewportWidth);
       detailSwipeResetTimer.current = window.setTimeout(() => {
-        setActiveClass(nextClass);
+        setActiveClass(targetClass);
         setDetailSwipeTransitionMs(0);
-        setDetailSwipeOffset(-travelSign * carryInOffset);
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setDetailSwipeTransitionMs(reduceEffects ? 0 : Math.max(140, Math.min(260, settleMs - 18)));
-            setDetailSwipeOffset(0);
-          });
-        });
+        setDetailSwipeOffset(0);
         detailSwipeResetTimer.current = null;
       }, settleMs);
       return true;
     };
     const handleDetailTouchStart = e => {
       if(!isMobile || e.touches?.length !== 1) return;
+      if(detailSwipeResetTimer.current) return;
       if(e.target?.closest?.("button, input, textarea, select")) return;
       const touch = e.touches[0];
-      const viewportWidth = window.innerWidth || 0;
+      const viewportWidth = getDetailViewportWidth();
       if(touch.clientX < 24 || (viewportWidth && touch.clientX > viewportWidth - 24)) return;
       setDetailSwipeTransitionMs(0);
       classSwipeStartRef.current = { x:touch.clientX, y:touch.clientY, at:Date.now(), axis:null };
@@ -5162,9 +5160,9 @@ function ClassTrackerInner({user}){
         start.axis = Math.abs(dx) > Math.abs(dy) * 1.05 ? "x" : "y";
       }
       if(start.axis !== "x") return;
-      e.preventDefault();
-      const viewportWidth = window.innerWidth || 360;
-      const resistedOffset = Math.sign(dx) * Math.min(Math.abs(dx), viewportWidth * 0.78);
+      if(e.cancelable) e.preventDefault();
+      const viewportWidth = getDetailViewportWidth();
+      const resistedOffset = Math.sign(dx) * Math.min(Math.abs(dx), viewportWidth * 0.88);
       setDetailSwipeTransitionMs(0);
       setDetailSwipeOffset(resistedOffset);
     };
@@ -5189,6 +5187,169 @@ function ClassTrackerInner({user}){
       }
     };
     const detailSurfaceTransition = detailSwipeTransitionMs ? `transform ${detailSwipeTransitionMs}ms cubic-bezier(.22,.8,.24,1)` : "none";
+    const openAddEntryForClass = surfaceCls => {
+      const _ks = getSlotsForSection(surfaceCls, instituteSections);
+      const _used = new Set((((data.notes?.[surfaceCls.id] || {})[selectedDate]) || []).map(entry => entry.timeStart).filter(Boolean));
+      const _def = _ks ? getDefaultKisSlot(data.notes, surfaceCls.id, _ks, _used) : null;
+      setActiveClass(surfaceCls);
+      setNewNote(
+        _def && !_used.has(_def.start)
+          ? {title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
+          : {title:"",body:"",tag:"note",status:"",...(_ks ? {} : (getSuggestedTime(data.notes, surfaceCls.id, selectedDate) || {_dur:surfaceCls?.duration || 60}))}
+      );
+      safeNav("addNote");
+    };
+    const openEditNoteForClass = (surfaceCls, note) => {
+      setActiveClass(surfaceCls);
+      setEditNote({...note});
+      setView("editNote");
+    };
+    const deleteNoteFromClass = (surfaceCls, noteId) => setData(d => {
+      const cn = d.notes[surfaceCls.id] || {};
+      const dn = cn[selectedDate] || [];
+      const note = dn.find(entry => entry.id === noteId);
+      if(!note) return d;
+      const tn = {...note,classId:surfaceCls.id,className:surfaceCls.section,institute:surfaceCls.institute,dateKey:selectedDate,deletedAt:Date.now()};
+      return {
+        ...d,
+        notes:{...d.notes,[surfaceCls.id]:{...cn,[selectedDate]:dn.filter(entry => entry.id !== noteId)}},
+        trash:{...d.trash,notes:[...(d.trash?.notes || []),tn]}
+      };
+    });
+    const renderDetailSurface = (surfaceCls, panelKey) => {
+      const surfaceColor = instColor(surfaceCls.institute);
+      const surfaceClassNotes = getClassNotes(surfaceCls.id);
+      const surfaceDateNotes = getDateNotes(surfaceCls.id, selectedDate);
+      const surfaceMetrics = buildClassEntryMetrics(surfaceClassNotes);
+      const surfaceStatusTone = getTodayEntryStatusStyles(surfaceMetrics.todayEntries);
+      return(
+        <div key={`${panelKey}-${surfaceCls.id || "class"}`} style={{flex:"0 0 100%",width:"100%",height:"100%",overflowY:"auto",padding:`12px 14px ${mobileBottomNavPad}`,boxSizing:"border-box",WebkitOverflowScrolling:"touch",overscrollBehaviorY:"contain"}}>
+          <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${surfaceColor.bg}22`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd,marginBottom:14}}>
+            <div style={{background:surfaceColor.light,padding:"14px 14px 12px",borderBottom:`1px solid ${surfaceColor.bg}1A`}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:28,fontWeight:800,color:surfaceColor.bg,fontFamily:G.display,letterSpacing:-0.6,lineHeight:1.02}}>{surfaceCls.section}</div>
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",border:`1px solid ${surfaceColor.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:surfaceColor.bg,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      <span style={{width:8,height:8,borderRadius:999,background:surfaceColor.bg,flexShrink:0}}/>
+                      {surfaceCls.institute || "No institute"}
+                    </span>
+                    {surfaceCls.subject&&<span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:G.textS,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{surfaceCls.subject}</span>}
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:surfaceStatusTone.background,border:`1px solid ${surfaceStatusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:surfaceStatusTone.color,whiteSpace:"nowrap"}}>
+                      <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
+                      {surfaceStatusTone.label}
+                    </span>
+                  </div>
+                </div>
+                <OverflowMenu items={[
+                  { icon:IconEdit, label:"Edit class", onClick:()=>setEditingClass(surfaceCls) },
+                  { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(surfaceCls.id) },
+                ]}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:12}}>
+                {[
+                  { label:"Today", value:surfaceMetrics.todayEntries, color:surfaceColor.bg },
+                  { label:surfaceMetrics.monthLabel, value:surfaceMetrics.monthEntries, color:G.textS },
+                  { label:"Total", value:surfaceMetrics.totalCount, color:G.text },
+                  { label:"Logged days", value:surfaceMetrics.activeDays, color:G.textS },
+                ].map(item=>(
+                  <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 10px 10px",textAlign:"center"}}>
+                    <div style={{fontSize:22,fontWeight:800,color:item.color,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
+                    <div style={{fontSize:10.5,color:G.textL,marginTop:5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{padding:"14px 14px 16px"}}>
+              <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={surfaceMetrics.noteDates}/>
+            </div>
+          </div>
+
+          <div className="ledgr-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10,background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 14px",boxShadow:G.shadowSm}}>
+            <div>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
+              <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</div>
+              <div style={{fontSize:13,color:surfaceDateNotes.length>0?G.green:G.textM,fontWeight:700,marginTop:3,fontFamily:G.mono}}>{surfaceDateNotes.length} {surfaceDateNotes.length===1?"entry":"entries"}</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                <span style={{...surfaceMetrics.lastLogTone,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>{surfaceMetrics.lastLogMeta.label}</span>
+                {swipePool.length > 1 && <span style={{fontSize:11.5,color:G.textL,fontWeight:700}}>Swipe left or right to change class</span>}
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+              <button
+                onClick={()=>{setActiveClass(surfaceCls);setHistoryClassId(surfaceCls.id);}}
+                disabled={surfaceMetrics.totalCount===0}
+                style={{
+                  background:surfaceMetrics.totalCount===0?G.bg:G.surface,
+                  color:surfaceMetrics.totalCount===0?G.textL:G.textS,
+                  border:`1px solid ${surfaceMetrics.totalCount===0?G.border:G.borderM}`,
+                  borderRadius:12,
+                  padding:"11px 18px",
+                  fontSize:15,
+                  cursor:surfaceMetrics.totalCount===0?"not-allowed":"pointer",
+                  fontFamily:G.sans,
+                  fontWeight:700,
+                  display:"flex",
+                  alignItems:"center",
+                  gap:6,
+                  minHeight:48,
+                  WebkitTapHighlightColor:"transparent",
+                  flexShrink:0
+                }}>
+                <AppIcon icon={IconHistory} size={16} color={surfaceMetrics.totalCount===0?G.textL:G.textS} /> History
+              </button>
+              {canAdd&&<button onClick={()=>openAddEntryForClass(surfaceCls)} onPointerDown={e=>rpl(e,true)}
+                style={{background:surfaceColor.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+                + Add Entry
+              </button>}
+            </div>
+          </div>
+
+          {surfaceDateNotes.length===0?(
+            <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+              <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconEdit} size={28} color={G.textM} /></div>
+              <div style={{fontSize:16,color:G.textM,fontWeight:600}}>{canAdd?"No entries yet":"No entries for this date"}</div>
+              {canAdd&&<div style={{fontSize:14,color:G.textL,marginTop:6}}>Tap + Add Entry to log this class</div>}
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {isReadOnlyDate&&(
+                <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#9A3412",fontWeight:600}}>
+                  Viewing past entries only. Dates older than the past week cannot be edited.
+                </div>
+              )}
+              {surfaceDateNotes.map(note=>{
+                const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
+                return(
+                  <div key={note.id} className="ledgr-card" style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
+                    <div style={{height:4,background:tag.bg}}/>
+                    <div style={{padding:"14px 15px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:note.title?8:0}}>
+                            <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
+                            {note.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}><AppIcon icon={IconClockHour4} size={13} color={G.textS} />{formatPeriod(note.timeStart,note.timeEnd)}</span>}
+                            {note.status&&STATUS_STYLES[note.status]&&<span style={{background:STATUS_STYLES[note.status].bg,color:STATUS_STYLES[note.status].text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.sans,fontWeight:600}}>{STATUS_STYLES[note.status].label}</span>}
+                          </div>
+                          {note.title&&<div style={{fontWeight:700,fontSize:17,color:G.text,fontFamily:G.display,lineHeight:1.3,marginBottom:4}}>{note.title}</div>}
+                          {note.body&&<p style={{margin:0,fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
+                        </div>
+                        {canAdd&&(
+                          <OverflowMenu items={[
+                            { icon:IconEdit, label:"Edit entry", onClick:()=>openEditNoteForClass(surfaceCls, note) },
+                            { icon:IconTrash, label:"Delete entry", danger:true, onClick:()=>deleteNoteFromClass(surfaceCls, note.id) },
+                          ]}/>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    };
     return(
       <div key={cls.id} className="ledgr-page" style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden",touchAction:"pan-y"}} onTouchStart={handleDetailTouchStart} onTouchMove={handleDetailTouchMove} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;bounceDetailCardBack(160);}}>
         {sharedModals}
@@ -5196,138 +5357,12 @@ function ClassTrackerInner({user}){
           right={<GhostBtn onClick={()=>setView("home")} style={{display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Classes</GhostBtn>}
         />
         <div style={{flex:1,overflow:"hidden"}}>
-          <div style={{height:"100%",overflowY:"auto",padding:`12px 14px ${mobileBottomNavPad}`,WebkitOverflowScrolling:"touch",transform:`translate3d(${detailSwipeOffset}px,0,0)`,transition:detailSurfaceTransition,willChange:"transform",backfaceVisibility:"hidden"}}>
-            <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${color.bg}22`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd,marginBottom:14}}>
-              <div style={{background:color.light,padding:"14px 14px 12px",borderBottom:`1px solid ${color.bg}1A`}}>
-                <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:28,fontWeight:800,color:color.bg,fontFamily:G.display,letterSpacing:-0.6,lineHeight:1.02}}>{cls.section}</div>
-                    <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
-                      <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",border:`1px solid ${color.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:color.bg,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        <span style={{width:8,height:8,borderRadius:999,background:color.bg,flexShrink:0}}/>
-                        {cls.institute || "No institute"}
-                      </span>
-                      {cls.subject&&<span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:G.textS,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.subject}</span>}
-                      <span style={{display:"inline-flex",alignItems:"center",gap:6,background:statusTone.background,border:`1px solid ${statusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:statusTone.color,whiteSpace:"nowrap"}}>
-                        <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
-                        {statusTone.label}
-                      </span>
-                    </div>
-                  </div>
-                  <OverflowMenu items={[
-                    { icon:IconEdit, label:"Edit class", onClick:()=>setEditingClass(cls) },
-                    { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(cls.id) },
-                  ]}/>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:12}}>
-                  {[
-                    { label:"Today", value:detailMetrics.todayEntries, color:color.bg },
-                    { label:detailMetrics.monthLabel, value:detailMetrics.monthEntries, color:G.textS },
-                    { label:"Total", value:detailMetrics.totalCount, color:G.text },
-                    { label:"Logged days", value:detailMetrics.activeDays, color:G.textS },
-                  ].map(item=>(
-                    <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 10px 10px",textAlign:"center"}}>
-                      <div style={{fontSize:22,fontWeight:800,color:item.color,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
-                      <div style={{fontSize:10.5,color:G.textL,marginTop:5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div style={{padding:"14px 14px 16px"}}>
-                <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={detailMetrics.noteDates}/>
-              </div>
+          <div style={{height:"100%",overflow:"hidden"}}>
+            <div style={{display:"flex",height:"100%",transform:`translateX(calc(-100% + ${detailSwipeOffset}px))`,transition:detailSurfaceTransition,willChange:"transform",backfaceVisibility:"hidden"}}>
+              {renderDetailSurface(leftSwipeClass,"left")}
+              {renderDetailSurface(cls,"center")}
+              {renderDetailSurface(rightSwipeClass,"right")}
             </div>
-
-            <div className="ledgr-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10,background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 14px",boxShadow:G.shadowSm}}>
-              <div>
-                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
-                <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</div>
-                <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:700,marginTop:3,fontFamily:G.mono}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
-                  <span style={{...detailMetrics.lastLogTone,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>{detailMetrics.lastLogMeta.label}</span>
-                  {swipePool.length > 1 && <span style={{fontSize:11.5,color:G.textL,fontWeight:700}}>Swipe left or right to change class</span>}
-                </div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                <button
-                  onClick={()=>setHistoryClassId(activeClass.id)}
-                  disabled={detailMetrics.totalCount===0}
-                  style={{
-                    background:detailMetrics.totalCount===0?G.bg:G.surface,
-                    color:detailMetrics.totalCount===0?G.textL:G.textS,
-                    border:`1px solid ${detailMetrics.totalCount===0?G.border:G.borderM}`,
-                    borderRadius:12,
-                    padding:"11px 18px",
-                    fontSize:15,
-                    cursor:detailMetrics.totalCount===0?"not-allowed":"pointer",
-                    fontFamily:G.sans,
-                    fontWeight:700,
-                    display:"flex",
-                    alignItems:"center",
-                    gap:6,
-                    minHeight:48,
-                    WebkitTapHighlightColor:"transparent",
-                    flexShrink:0
-                  }}>
-                  <AppIcon icon={IconHistory} size={16} color={detailMetrics.totalCount===0?G.textL:G.textS} /> History
-                </button>
-                {canAdd&&<button onClick={()=>{
-    const _ks=getSlotsForSection(activeClass,instituteSections);
-    const _used=new Set(((data.notes?.[activeClass.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
-    const _def=_ks?getDefaultKisSlot(data.notes,activeClass.id,_ks,_used):null;
-    setNewNote(_def&&!_used.has(_def.start)
-      ?{title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
-      :{title:"",body:"",tag:"note",status:"",...(_ks?{}:(getSuggestedTime(data.notes,activeClass.id,selectedDate)||{_dur:activeClass?.duration||60}))});
-    safeNav("addNote");
-  }} onPointerDown={e=>rpl(e,true)}
-                  style={{background:color.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
-                  + Add Entry
-                </button>}
-              </div>
-            </div>
-
-            {dateNotes.length===0?(
-              <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
-                <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconEdit} size={28} color={G.textM} /></div>
-                <div style={{fontSize:16,color:G.textM,fontWeight:600}}>{canAdd?"No entries yet":"No entries for this date"}</div>
-                {canAdd&&<div style={{fontSize:14,color:G.textL,marginTop:6}}>Tap + Add Entry to log this class</div>}
-              </div>
-            ):(
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {isReadOnlyDate&&(
-                  <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#9A3412",fontWeight:600}}>
-                    Viewing past entries only. Dates older than the past week cannot be edited.
-                  </div>
-                )}
-                {dateNotes.map(note=>{
-                  const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
-                  return(
-                    <div key={note.id} className="ledgr-card" style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
-                      <div style={{height:4,background:tag.bg}}/>
-                      <div style={{padding:"14px 15px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:note.title?8:0}}>
-                              <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
-                              {note.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}><AppIcon icon={IconClockHour4} size={13} color={G.textS} />{formatPeriod(note.timeStart,note.timeEnd)}</span>}
-                              {note.status&&STATUS_STYLES[note.status]&&<span style={{background:STATUS_STYLES[note.status].bg,color:STATUS_STYLES[note.status].text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.sans,fontWeight:600}}>{STATUS_STYLES[note.status].label}</span>}
-                            </div>
-                            {note.title&&<div style={{fontWeight:700,fontSize:17,color:G.text,fontFamily:G.display,lineHeight:1.3,marginBottom:4}}>{note.title}</div>}
-                            {note.body&&<p style={{margin:0,fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{note.body}</p>}
-                          </div>
-                          {canAdd&&(
-                            <OverflowMenu items={[
-                              { icon:IconEdit, label:"Edit entry", onClick:()=>{setEditNote({...note});setView("editNote");} },
-                              { icon:IconTrash, label:"Delete entry", danger:true, onClick:()=>deleteNote(note.id) },
-                            ]}/>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
         {renderTeacherBottomBar("classDetail")}
