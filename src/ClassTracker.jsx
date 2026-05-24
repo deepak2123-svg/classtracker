@@ -267,6 +267,32 @@ function hasCompleteProfile(profile) {
 }
 
 const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:normaliseProfile(),trash:{classes:[],notes:[]}};
+const TEACHER_ALLOWED_VIEWS = new Set([
+  "home",
+  "profile",
+  "notifications",
+  "stats",
+  "trash",
+  "classDetail",
+  "addClass",
+  "addNote",
+  "editNote",
+]);
+
+function sanitizeTeacherView(view) {
+  const key = String(view || "").trim();
+  return TEACHER_ALLOWED_VIEWS.has(key) ? key : "home";
+}
+
+function resolveTeacherView(view, { activeClass = null, editNote = null } = {}) {
+  const safeView = sanitizeTeacherView(view);
+  if ((safeView === "classDetail" || safeView === "addNote") && !activeClass) return "home";
+  if (safeView === "editNote") {
+    if (activeClass && editNote) return "editNote";
+    return activeClass ? "classDetail" : "home";
+  }
+  return safeView;
+}
 
 function readClientProfile(){
   if(typeof window==="undefined"){
@@ -3206,7 +3232,7 @@ function ClassTrackerInner({user}){
   const getTeacherHashView = React.useCallback(() => {
     if(typeof window === "undefined") return "home";
     const match = (window.location.hash || "").match(/^#teacher-([a-zA-Z]+)-/);
-    return match?.[1] || "home";
+    return sanitizeTeacherView(match?.[1] || "home");
   }, []);
   const renderTeacherBottomBar = currentView => {
     if(!isMobile || ["addClass","addNote","editNote"].includes(currentView)) return null;
@@ -3535,7 +3561,7 @@ function ClassTrackerInner({user}){
   // Listen for back gesture — just read the state, no extra pushing
   useEffect(() => {
     const onPop = (e) => {
-      const target = e.state?.view || getTeacherHashView();
+      const target = sanitizeTeacherView(e.state?.view || getTeacherHashView());
       // addNote/editNote have no meaningful back target in history — go to classDetail
       if (target === "addNote" || target === "editNote") {
         _setView("classDetail");
@@ -3868,6 +3894,23 @@ function ClassTrackerInner({user}){
     if(!source || Number.isNaN(source.getTime())) return "";
     return source.toLocaleDateString("en-IN", { month:"long", year:"numeric" });
   }, [data.classes, user?.metadata?.creationTime]);
+  const resolvedView = useMemo(
+    () => resolveTeacherView(view, { activeClass, editNote }),
+    [view, activeClass, editNote]
+  );
+
+  useEffect(() => {
+    if(view === resolvedView || typeof window === "undefined") return;
+    _setView(resolvedView);
+    const existingState = window.history.state || {};
+    const navToken = Number(existingState?.navToken ?? teacherHistoryTokenRef.current ?? 0) || 0;
+    teacherHistoryTokenRef.current = Math.max(teacherHistoryTokenRef.current, navToken);
+    window.history.replaceState(
+      { ...existingState, view: resolvedView, navToken },
+      "",
+      buildTeacherHistoryUrl(resolvedView, navToken)
+    );
+  }, [view, resolvedView, buildTeacherHistoryUrl]);
 
   useEffect(()=>{
     if(view!=="addClass") return;
@@ -3915,6 +3958,7 @@ function ClassTrackerInner({user}){
       />
     </div>
   );
+  if(view !== resolvedView)return<TeacherLoadingScreen themeShell={teacherThemeShell} text="Restoring teacher workspace…" />;
 
   const teacherName=data.profile.name;
   const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
