@@ -7,7 +7,6 @@
     <meta name="description" content="ClassLog — Academic class tracker for teachers" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>ClassLog</title>
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -37,12 +36,15 @@
         --radius-md: 12px;
         --radius-lg: 16px;
         --radius-xl: 20px;
+        --font-sans: 'Trebuchet MS', 'Segoe UI', sans-serif;
+        --font-display: Georgia, 'Times New Roman', serif;
+        --font-mono: Consolas, 'Courier New', monospace;
       }
 
       html { font-size: 17px; overflow-x: hidden; }
       body {
         background: var(--bg);
-        font-family: 'Inter', sans-serif;
+        font-family: var(--font-sans);
         color: var(--text);
         -webkit-tap-highlight-color: transparent;
         -webkit-font-smoothing: antialiased;
@@ -79,7 +81,7 @@
 
       /* ── Inputs ── */
       input, textarea, select {
-        font-family: 'Inter', sans-serif;
+        font-family: var(--font-sans);
         transition: border-color 0.15s, box-shadow 0.15s;
       }
       input:focus, textarea:focus, select:focus {
@@ -175,7 +177,7 @@
         color: var(--text-m);
         letter-spacing: 0.5px;
         text-transform: uppercase;
-        font-family: 'Inter', sans-serif;
+        font-family: var(--font-sans);
         line-height: 1;
       }
       .dc-sel .dc-day { color: rgba(255,255,255,0.55); }
@@ -183,7 +185,7 @@
       /* Date number */
       .dc-num {
         font-size: 20px; font-weight: 800;
-        font-family: 'Poppins', sans-serif;
+        font-family: var(--font-display);
         color: var(--text); line-height: 1;
       }
       .dc-sel .dc-num { color: #fff; }
@@ -193,7 +195,7 @@
         font-size: 8px; font-weight: 700;
         letter-spacing: 1px; text-transform: uppercase;
         color: rgba(255,255,255,0.5);
-        font-family: 'Inter', sans-serif;
+        font-family: var(--font-sans);
       }
 
       /* Entry indicator area */
@@ -211,7 +213,7 @@
         min-width: 16px; height: 16px; border-radius: 16px;
         background: var(--green); color: #fff;
         font-size: 9px; font-weight: 700;
-        font-family: 'Inter', sans-serif;
+        font-family: var(--font-sans);
         display: flex; align-items: center; justify-content: center;
         padding: 0 4px;
       }
@@ -231,14 +233,14 @@
         display: inline-flex; align-items: center; gap: 5px;
         padding: 5px 13px; border-radius: 20px;
         font-size: 13px; font-weight: 600; white-space: nowrap;
-        font-family: 'Inter', sans-serif;
+        font-family: var(--font-sans);
       }
       .badge-green { background: var(--green-l); color: var(--green); }
-      .badge-session { background: var(--green-l); color: var(--green); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; }
+      .badge-session { background: var(--green-l); color: var(--green); font-family: var(--font-sans); font-size: 13px; font-weight: 600; }
       .badge-red { background: var(--red-l); color: var(--red); }
 
       /* ── Headings ── */
-      h1, h2, h3 { font-family: 'Poppins', sans-serif; font-weight: 700; }
+      h1, h2, h3 { font-family: var(--font-display); font-weight: 700; }
 
       /* Split panel: on mobile left panel = compact top strip */
       @media (max-width: 767px) {

@@ -81,8 +81,8 @@ export function Spinner({ text="Loading…" }) {
         </svg>
       </div>
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-        <div style={{fontSize:14,fontWeight:800,letterSpacing:1.1,textTransform:"uppercase",color:"#2563EB",fontFamily:"'Inter',sans-serif"}}>Loading Ledgr</div>
-        <div style={{color:"#64748B",fontSize:15,fontFamily:"'Inter',sans-serif",textAlign:"center"}}>{text}</div>
+        <div style={{fontSize:14,fontWeight:800,letterSpacing:1.1,textTransform:"uppercase",color:"#2563EB",fontFamily:"'Trebuchet MS','Segoe UI',sans-serif"}}>Loading Ledgr</div>
+        <div style={{color:"#64748B",fontSize:15,fontFamily:"'Trebuchet MS','Segoe UI',sans-serif",textAlign:"center"}}>{text}</div>
       </div>
       <style>{`
         .book-loader-shell{

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, Component } from "react";
+import { Capacitor } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
 import {
   logout, getAllTeachers, getTeacherFullData,
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
@@ -3491,6 +3493,8 @@ function AdminPanelInner({user}){
   const historyReadyRef = React.useRef(false);
   const historyRestoreRef = React.useRef(false);
   const lastHistoryKeyRef = React.useRef("");
+  const rootHistoryKeyRef = React.useRef("");
+  const adminHistoryTokenRef = React.useRef(1);
   const expandedPanelWidthsRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelWRef = React.useRef({ p1:PANEL_LIMITS.p1.default, p2:PANEL_LIMITS.p2.default, p3:PANEL_LIMITS.p3.default });
   const panelResizeFrameRef = React.useRef(null);
@@ -3638,12 +3642,23 @@ function AdminPanelInner({user}){
     fullView: fullView || null,
   }), [view, mobileStep, instDetailView, selInst, tab, selP2, selP3, fullView]);
   const currentNavKey = useMemo(() => JSON.stringify(currentNavState), [currentNavState]);
+  const buildAdminHistoryUrl = React.useCallback((state, navToken = 0) => {
+    if(typeof window === "undefined") return "";
+    const base = `${window.location.pathname}${window.location.search}`;
+    const scope = state.view === "manage"
+      ? `manage-${state.mobileStep || 0}`
+      : `${state.view || "main"}-${state.mobileStep || 0}-${state.tab || "class"}`;
+    return `${base}#admin-${scope}-${navToken}`;
+  }, []);
 
   useEffect(() => {
-    window.history.replaceState(currentNavState, "");
+    adminHistoryTokenRef.current = 1;
+    rootHistoryKeyRef.current = currentNavKey;
+    window.history.replaceState({ ...currentNavState, navToken:0 }, "", buildAdminHistoryUrl(currentNavState, 0));
+    window.history.pushState({ ...currentNavState, navToken:1 }, "", buildAdminHistoryUrl(currentNavState, 1));
     lastHistoryKeyRef.current = currentNavKey;
     historyReadyRef.current = true;
-  }, []);
+  }, [buildAdminHistoryUrl]);
 
   useEffect(() => {
     if(!historyReadyRef.current) return;
@@ -3653,30 +3668,58 @@ function AdminPanelInner({user}){
       return;
     }
     if(currentNavKey === lastHistoryKeyRef.current) return;
-    window.history.pushState(currentNavState, "");
+    const nextToken = adminHistoryTokenRef.current + 1;
+    adminHistoryTokenRef.current = nextToken;
+    window.history.pushState({ ...currentNavState, navToken:nextToken }, "", buildAdminHistoryUrl(currentNavState, nextToken));
     lastHistoryKeyRef.current = currentNavKey;
-  }, [currentNavKey, currentNavState]);
+  }, [buildAdminHistoryUrl, currentNavKey, currentNavState]);
 
   useEffect(() => {
     const onPop = (e) => {
       const s = e.state;
       if (!s) return;
+      const { navToken, ...restoredNavState } = s;
       historyRestoreRef.current = true;
-      lastHistoryKeyRef.current = JSON.stringify(s);
+      lastHistoryKeyRef.current = JSON.stringify(restoredNavState);
       setProfileOpen(false);
       setExportOpen(false);
-      setView(s.view ?? "main");
-      setMobileStep(typeof s.mobileStep === "number" ? s.mobileStep : 0);
-      setInstDetailView(s.instDetailView ?? null);
-      setSelInst(s.selInst ?? null);
-      setTab(s.tab === "teacher" ? "teacher" : "class");
-      setSelP2(s.selP2 ?? null);
-      setSelP3(s.selP3 ?? null);
-      setFullView(s.fullView ?? null);
+      setView(restoredNavState.view ?? "main");
+      setMobileStep(typeof restoredNavState.mobileStep === "number" ? restoredNavState.mobileStep : 0);
+      setInstDetailView(restoredNavState.instDetailView ?? null);
+      setSelInst(restoredNavState.selInst ?? null);
+      setTab(restoredNavState.tab === "teacher" ? "teacher" : "class");
+      setSelP2(restoredNavState.selP2 ?? null);
+      setSelP3(restoredNavState.selP3 ?? null);
+      setFullView(restoredNavState.fullView ?? null);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+  const closeAdminOverlay = React.useCallback(() => {
+    if(exportOpen){ setExportOpen(false); return true; }
+    if(profileOpen){ setProfileOpen(false); return true; }
+    if(adminConfirm){ setAdminConfirm(null); return true; }
+    if(deleteModal){ setDeleteModal(null); return true; }
+    if(instDeleteModal){ setInstDeleteModal(null); return true; }
+    if(grpModal){ setGrpModal(null); return true; }
+    if(copyGroupModal){ setCopyGroupModal(null); return true; }
+    if(legacySectionRepair){ setLegacySectionRepair(null); return true; }
+    return false;
+  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, legacySectionRepair, profileOpen]);
+  useEffect(() => {
+    if(!Capacitor.isNativePlatform()) return undefined;
+    const listenerPromise = CapacitorApp.addListener("backButton", () => {
+      if(closeAdminOverlay()) return;
+      if(currentNavKey !== rootHistoryKeyRef.current){
+        window.history.back();
+        return;
+      }
+      CapacitorApp.exitApp();
+    });
+    return () => {
+      Promise.resolve(listenerPromise).then(handle => handle?.remove?.()).catch(()=>{});
+    };
+  }, [closeAdminOverlay, currentNavKey]);
 
   // Lazy-load full data for a teacher only when needed
   const ensureFullData = React.useCallback(async (uid) => {

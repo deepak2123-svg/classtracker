@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo, Component } from "react";
 import { createPortal } from "react-dom";
 import { Capacitor } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
-import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
+import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 const TEACHER_THEME_STORAGE_KEY = "classlog_teacher_theme";
+const LOCAL_SANS_FONT = "'Trebuchet MS','Segoe UI',sans-serif";
+const LOCAL_DISPLAY_FONT = "Georgia,'Times New Roman',serif";
+const LOCAL_MONO_FONT = "Consolas,'Courier New',monospace";
 const TEACHER_THEMES = {
   light: {
     forest:"#005965",
@@ -75,18 +79,13 @@ const TEACHER_THEMES = {
   },
 };
 
-function getSystemTeacherTheme(){
-  if(typeof window==="undefined") return "light";
-  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
-}
-
 function readStoredTeacherTheme(){
   if(typeof window==="undefined") return "light";
   try{
     const stored = localStorage.getItem(TEACHER_THEME_STORAGE_KEY);
     if(stored==="light" || stored==="dark") return stored;
   }catch(e){}
-  return getSystemTeacherTheme();
+  return "light";
 }
 
 function getTeacherThemeVars(themeName){
@@ -153,9 +152,9 @@ const G = {
   navBg:"var(--ledgr-nav-bg)",
   navBorder:"var(--ledgr-nav-border)",
   navActiveBg:"var(--ledgr-nav-active-bg)",
-  mono:"'Inter',sans-serif",
-  sans:"'Inter',sans-serif",
-  display:"'Poppins',sans-serif",
+  mono:LOCAL_MONO_FONT,
+  sans:LOCAL_SANS_FONT,
+  display:LOCAL_DISPLAY_FONT,
 };
 
 const COLORS = [
@@ -374,6 +373,102 @@ function buildDateWindow(){
   return days;
 }
 function isDateAllowed(dk){return buildDateWindow().some(d=>d.key===dk);}
+
+function parseDateKey(dk){
+  const [y,m,d] = String(dk || "").split("-").map(Number);
+  if(!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+function daysSinceDateKey(dk){
+  const date = parseDateKey(dk);
+  if(!date) return null;
+  const today = parseDateKey(todayKey());
+  return Math.max(0, Math.round((today - date) / (1000 * 60 * 60 * 24)));
+}
+
+function formatDaysSinceLastLog(dk){
+  if(!dk) return { label:"Needs first log", short:"No logs yet", tone:"red", days:null };
+  const days = daysSinceDateKey(dk);
+  if(days===null) return { label:"Last log unknown", short:"Unknown", tone:"amber", days:null };
+  if(days===0) return { label:"Logged today", short:"Today", tone:"green", days:0 };
+  if(days===1) return { label:"1 day ago", short:"1d ago", tone:"amber", days:1 };
+  return { label:`${days} days ago`, short:`${days}d ago`, tone:days >= 7 ? "red" : "amber", days };
+}
+
+function formatHeroDateLabel(now = new Date()){
+  return now.toLocaleDateString("en-IN",{
+    weekday:"long",
+    day:"numeric",
+    month:"short",
+  });
+}
+
+function countWorkingDaysElapsed(now = new Date()){
+  const cursor = new Date(now.getFullYear(), now.getMonth(), 1);
+  let total = 0;
+  while(cursor <= now){
+    if(cursor.getDay() !== 0) total += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return Math.max(total, 1);
+}
+
+function buildTeacherQuickHomeSummary(activeClasses = [], notes = {}){
+  const now = new Date();
+  const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  const monthLoggedDaySet = new Set();
+  const institutes = [...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
+  let loggedToday = 0;
+  let monthEntries = 0;
+
+  activeClasses.forEach(cls=>{
+    const classNotes = notes?.[cls.id] || {};
+    const todayEntries = Array.isArray(classNotes[todayKey()]) ? classNotes[todayKey()].length : 0;
+    if(todayEntries > 0) loggedToday += 1;
+    Object.entries(classNotes).forEach(([dk, arr])=>{
+      if(!Array.isArray(arr) || !arr.length || !dk.startsWith(monthKey)) return;
+      monthEntries += arr.length;
+      monthLoggedDaySet.add(dk);
+    });
+  });
+
+  const workingDaysElapsed = countWorkingDaysElapsed(now);
+  const monthLoggedDays = monthLoggedDaySet.size;
+  return {
+    active:activeClasses.length,
+    loggedToday,
+    monthEntries,
+    instituteCount:institutes.length || 1,
+    monthLoggedDays,
+    workingDaysElapsed,
+    monthProgressPct:Math.max(0, Math.min(1, monthLoggedDays / workingDaysElapsed)),
+    todayLabel:formatHeroDateLabel(now),
+    needsAttentionCount:Math.max(0, activeClasses.length - loggedToday),
+  };
+}
+
+function getLastLogToneStyles(meta){
+  if(meta?.tone === "green"){
+    return {
+      background:"rgba(34,197,94,0.10)",
+      border:"1px solid rgba(34,197,94,0.18)",
+      color:"#15803D",
+    };
+  }
+  if(meta?.tone === "red"){
+    return {
+      background:"rgba(239,68,68,0.08)",
+      border:"1px solid rgba(239,68,68,0.18)",
+      color:"#B91C1C",
+    };
+  }
+  return {
+    background:"rgba(245,158,11,0.10)",
+    border:"1px solid rgba(245,158,11,0.18)",
+    color:"#B45309",
+  };
+}
 
 // ── Ripple ────────────────────────────────────────────────────────────────────
 function rpl(e,white=false){
@@ -2725,6 +2820,72 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
   );
 }
 
+function TeacherLoadingScreen({text="Loading teacher panel…", themeShell={}}){
+  const shimmer = {
+    background:"linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 100%)",
+    backgroundSize:"220% 100%",
+    animation:"teacherSkeletonWave 1.25s linear infinite",
+  };
+  const block = (width, height, extra={}) => (
+    <div style={{width, height, borderRadius:12, background:G.surfaceAlt, overflow:"hidden", ...extra}}>
+      <div style={{width:"100%",height:"100%",...shimmer}}/>
+    </div>
+  );
+
+  return(
+    <div style={{...themeShell,minHeight:"100vh",background:G.pageBg,fontFamily:G.sans,padding:"20px 16px"}}>
+      <style>{`
+        @keyframes teacherSkeletonWave{
+          0%{background-position:200% 0;}
+          100%{background-position:-200% 0;}
+        }
+      `}</style>
+      <div style={{maxWidth:430,margin:"0 auto"}}>
+        <div style={{background:G.heroBg,borderRadius:26,padding:"20px 18px 18px",boxShadow:G.shadowLg,marginBottom:18}}>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>{block("58%","14px",{borderRadius:999,background:"rgba(255,255,255,0.18)"})}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            {block("34%","46px",{borderRadius:18,background:"rgba(255,255,255,0.18)"})}
+            {block("24%","24px",{borderRadius:999,background:"rgba(255,255,255,0.15)"})}
+          </div>
+          {block("100%","8px",{borderRadius:999,background:"rgba(255,255,255,0.16)",marginBottom:10})}
+          <div style={{display:"flex",gap:8}}>
+            {block("30%","28px",{borderRadius:999,background:"rgba(255,255,255,0.14)"})}
+            {block("34%","28px",{borderRadius:999,background:"rgba(255,255,255,0.14)"})}
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:8,overflow:"hidden",marginBottom:18}}>
+          {[0,1,2].map(i=>(
+            <div key={i} style={{flex:i===0?0.7:1,height:38,borderRadius:999,background:G.surface,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
+              <div style={{width:"100%",height:"100%",...shimmer}}/>
+            </div>
+          ))}
+        </div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {[0,1,2].map(i=>(
+            <div key={i} style={{background:G.classCardBg,border:`1px solid ${G.border}`,borderRadius:22,padding:"15px 14px 14px",boxShadow:G.shadowSm}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:12,marginBottom:12}}>
+                <div style={{flex:1}}>
+                  {block(i===0?"48%":"42%","20px",{marginBottom:8})}
+                  {block(i===1?"68%":"74%","14px",{borderRadius:999})}
+                </div>
+                {block("26%","28px",{borderRadius:999})}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6,marginBottom:10}}>
+                {[0,1,2].map(idx=>block("100%","48px",{borderRadius:12,background:G.surfaceAlt}))}
+              </div>
+              {block(i===2?"54%":"62%","12px",{borderRadius:999})}
+            </div>
+          ))}
+        </div>
+
+        <div style={{textAlign:"center",marginTop:18,fontSize:13,color:G.textM}}>{text}</div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 function ClassTrackerInner({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
@@ -2766,6 +2927,9 @@ function ClassTrackerInner({user}){
   const [isWeakDevice,setIsWeakDevice]   = useState(false);
   const [reduceEffects,setReduceEffects] = useState(false);
   const [teacherTheme,setTeacherTheme]   = useState(readStoredTeacherTheme);
+  const [heroCollapsed,setHeroCollapsed] = useState(false);
+  const [detailSwipeOffset,setDetailSwipeOffset] = useState(0);
+  const [detailSwipeTransitionMs,setDetailSwipeTransitionMs] = useState(0);
   const [loadIssue,setLoadIssue]         = useState(null);
   const [dataWarning,setDataWarning]     = useState(null);
   const [allowCloudSync,setAllowCloudSync] = useState(false);
@@ -2776,6 +2940,8 @@ function ClassTrackerInner({user}){
   const saveTimer= useRef(null);
   const lastSyncedFingerprint = useRef("");
   const classSwipeStartRef = useRef(null);
+  const detailSwipeResetTimer = useRef(null);
+  const teacherHistoryTokenRef = useRef(1);
 
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups,extraSections}}
@@ -2834,6 +3000,16 @@ function ClassTrackerInner({user}){
     adminNoticeItems.filter(item => !item.promptedAt)
   ), [adminNoticeItems]);
   const mobileBackTarget = isMobile ? "profile" : "home";
+  const buildTeacherHistoryUrl = React.useCallback((targetView, navToken = 0) => {
+    if(typeof window === "undefined") return "";
+    const base = `${window.location.pathname}${window.location.search}`;
+    return `${base}#teacher-${targetView}-${navToken}`;
+  }, []);
+  const getTeacherHashView = React.useCallback(() => {
+    if(typeof window === "undefined") return "home";
+    const match = (window.location.hash || "").match(/^#teacher-([a-zA-Z]+)-/);
+    return match?.[1] || "home";
+  }, []);
   const renderTeacherBottomBar = currentView => {
     if(!isMobile || ["addClass","addNote","editNote"].includes(currentView)) return null;
     return (
@@ -2925,6 +3101,13 @@ function ClassTrackerInner({user}){
   useEffect(()=>{
     try{ localStorage.setItem(TEACHER_THEME_STORAGE_KEY, teacherTheme); }catch(e){}
   },[teacherTheme]);
+
+  useEffect(() => () => {
+    if(detailSwipeResetTimer.current){
+      window.clearTimeout(detailSwipeResetTimer.current);
+      detailSwipeResetTimer.current = null;
+    }
+  }, []);
 
   useEffect(()=>{
     let cancelled = false;
@@ -3134,24 +3317,27 @@ function ClassTrackerInner({user}){
   // ── Browser history integration — enables Android back gesture ──────────────
   // On mount: seed the base history entry so back never exits the app accidentally
   useEffect(() => {
-    window.history.replaceState({ view: "home" }, "", "");
+    teacherHistoryTokenRef.current = 1;
+    window.history.replaceState({ view: "home", navToken: 0 }, "", buildTeacherHistoryUrl("home", 0));
     // Push a sentinel so the first back press lands on "home" state, not empty
-    window.history.pushState({ view: "home" }, "", "");
-  }, []);
+    window.history.pushState({ view: "home", navToken: 1 }, "", buildTeacherHistoryUrl("home", 1));
+  }, [buildTeacherHistoryUrl]);
 
   // Wrap raw setter: every navigation pushes a history entry
   const setView = React.useCallback((nextView) => {
     _setView(prev => {
       if (prev === nextView) return prev;
-      window.history.pushState({ view: nextView }, "", "");
+      const nextToken = teacherHistoryTokenRef.current + 1;
+      teacherHistoryTokenRef.current = nextToken;
+      window.history.pushState({ view: nextView, navToken: nextToken }, "", buildTeacherHistoryUrl(nextView, nextToken));
       return nextView;
     });
-  }, []);
+  }, [buildTeacherHistoryUrl]);
 
   // Listen for back gesture — just read the state, no extra pushing
   useEffect(() => {
     const onPop = (e) => {
-      const target = e.state?.view || "home";
+      const target = e.state?.view || getTeacherHashView();
       // addNote/editNote have no meaningful back target in history — go to classDetail
       if (target === "addNote" || target === "editNote") {
         _setView("classDetail");
@@ -3161,7 +3347,7 @@ function ClassTrackerInner({user}){
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  }, [getTeacherHashView]);
 
   function safeNav(destination, action){
     if(saving){
@@ -3170,21 +3356,32 @@ function ClassTrackerInner({user}){
       action ? action() : setView(destination);
     }
   }
+  const closeTeacherOverlay = React.useCallback(() => {
+    if(mobileClassSheetId){ setMobileClassSheetId(null); return true; }
+    if(historyClassId){ setHistoryClassId(null); return true; }
+    if(exportOpen){ setExportOpen(false); return true; }
+    if(signOutPrompt){ setSignOutPrompt(false); return true; }
+    if(confirmModal){ setConfirmModal(null); return true; }
+    if(savingGuard){ setSavingGuard(null); return true; }
+    if(leaveModal){ setLeaveModal(null); return true; }
+    if(teacherNoticePrompt){ setTeacherNoticePrompt(null); return true; }
+    return false;
+  }, [confirmModal, exportOpen, historyClassId, leaveModal, mobileClassSheetId, savingGuard, signOutPrompt, teacherNoticePrompt]);
+  useEffect(() => {
+    if(!Capacitor.isNativePlatform()) return undefined;
+    const listenerPromise = CapacitorApp.addListener("backButton", () => {
+      if(closeTeacherOverlay()) return;
+      if(view !== "home"){
+        window.history.back();
+        return;
+      }
+      CapacitorApp.exitApp();
+    });
+    return () => {
+      Promise.resolve(listenerPromise).then(handle => handle?.remove?.()).catch(()=>{});
+    };
+  }, [closeTeacherOverlay, view]);
 
-  const navigateSiblingClass = React.useCallback((direction) => {
-    const currentId = String(activeClass?.id || "");
-    if(!currentId) return false;
-    const pool = teacherVisibleClasses.some(cls => String(cls?.id || "") === currentId)
-      ? teacherVisibleClasses
-      : teacherActiveClasses;
-    if(pool.length < 2) return false;
-    const currentIndex = pool.findIndex(cls => String(cls?.id || "") === currentId);
-    if(currentIndex < 0) return false;
-    const nextIndex = (currentIndex + direction + pool.length) % pool.length;
-    if(nextIndex === currentIndex) return false;
-    setActiveClass(pool[nextIndex]);
-    return true;
-  }, [activeClass?.id, teacherActiveClasses, teacherVisibleClasses]);
   const triggerAppHaptic = React.useCallback(async (kind="light") => {
     try{
       if(Capacitor.isNativePlatform()){
@@ -3469,7 +3666,7 @@ function ClassTrackerInner({user}){
     if(view==="addNote") setShowNoteDetails(false);
   },[view,activeClass?.id,selectedDate]);
 
-    if(loading)return<Spinner text={restoringBackup?"Restoring class list…":"Loading…"} />;
+  if(loading)return<TeacherLoadingScreen themeShell={teacherThemeShell} text={restoringBackup?"Restoring class list…":"Loading teacher panel…"} />;
   if(loadIssue){
     return(
       <div style={teacherThemeShell}>
@@ -3676,6 +3873,10 @@ function ClassTrackerInner({user}){
       0%{opacity:0;transform:translateY(24px) scale(0.985);}
       100%{opacity:1;transform:translateY(0) scale(1);}
     }
+    @keyframes ledgrStripePulse{
+      0%,100%{opacity:0.92;box-shadow:0 0 0 rgba(245,158,11,0);}
+      50%{opacity:0.5;box-shadow:0 0 18px rgba(245,158,11,0.18);}
+    }
     .ledgr-page{
       animation:ledgrPageRise .30s cubic-bezier(.22,.8,.24,1) both;
     }
@@ -3701,12 +3902,13 @@ function ClassTrackerInner({user}){
       <SaveBadge/>
       {/* Offline banner */}
       {isOffline&&(
-        <div style={{position:"fixed",top:58,left:0,right:0,zIndex:9998,background:"#B45309",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:600,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-          <span>📡</span> No internet connection — changes will save when reconnected
+        <div style={{position:"fixed",top:68,left:"50%",transform:"translateX(-50%)",zIndex:9998,background:"rgba(180,83,9,0.96)",color:"#fff",textAlign:"center",padding:"9px 14px",fontSize:12.5,fontWeight:700,fontFamily:G.sans,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:999,border:"1px solid rgba(255,255,255,0.16)",boxShadow:"0 10px 24px rgba(146,64,14,0.28)",maxWidth:"calc(100vw - 28px)"}}>
+          <span style={{fontSize:13}}>📡</span>
+          <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Offline now. Changes stay local until you reconnect.</span>
         </div>
       )}
       {dataWarning&&(
-        <div style={{position:"fixed",top:isOffline?96:58,left:0,right:0,zIndex:9997,background:dataWarning.kind==="staleDraft"?"#7C2D12":"#92400E",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:600,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+        <div style={{position:"fixed",top:isOffline?118:58,left:0,right:0,zIndex:9997,background:dataWarning.kind==="staleDraft"?"#7C2D12":"#92400E",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:600,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
           {dataWarning.kind==="staleDraft"
             ? <><span>🗂</span> We found an older unsynced browser draft from {fmtRecoveryStamp(dataWarning.savedAt)}. The latest cloud classes are showing so nothing newer gets overwritten.</>
             : <><span>🧩</span> We found {dataWarning.count} unattached class note file{dataWarning.count===1?"":"s"}. If anything looks missing, do not create duplicate classes — contact admin first.</>}
@@ -3891,18 +4093,7 @@ function ClassTrackerInner({user}){
   if(view==="profile"){
     const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
     const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
-    const quickHomeSummary=(()=>{
-      const now=new Date();
-      const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-      let loggedToday=0, monthEntries=0;
-      activeClasses.forEach(cls=>{
-        const classNotes=data.notes?.[cls.id]||{};
-        const todayEntries=Array.isArray(classNotes[todayKey()])?classNotes[todayKey()].length:0;
-        if(todayEntries>0) loggedToday+=1;
-        monthEntries+=Object.entries(classNotes).reduce((sum,[dk,arr])=>sum+(dk.startsWith(monthKey)&&Array.isArray(arr)?arr.length:0),0);
-      });
-      return { active:activeClasses.length, loggedToday, monthEntries, instituteCount:institutes.length||1 };
-    })();
+    const quickHomeSummary=buildTeacherQuickHomeSummary(activeClasses, data.notes);
 
     return(
       <div style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
@@ -3949,18 +4140,7 @@ function ClassTrackerInner({user}){
     const filtered=teacherVisibleClasses;
     const visibleMobileClasses=filtered.slice(0,mobileClassLimit);
     const hasMoreMobileClasses=filtered.length>visibleMobileClasses.length;
-    const quickHomeSummary=(()=>{
-      const now=new Date();
-      const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-      let loggedToday=0, monthEntries=0;
-      activeClasses.forEach(cls=>{
-        const classNotes=data.notes?.[cls.id]||{};
-        const todayEntries=Array.isArray(classNotes[todayKey()])?classNotes[todayKey()].length:0;
-        if(todayEntries>0) loggedToday+=1;
-        monthEntries+=Object.entries(classNotes).reduce((sum,[dk,arr])=>sum+(dk.startsWith(monthKey)&&Array.isArray(arr)?arr.length:0),0);
-      });
-      return { active:activeClasses.length, loggedToday, monthEntries, instituteCount:institutes.length||1 };
-    })();
+    const quickHomeSummary=buildTeacherQuickHomeSummary(activeClasses, data.notes);
 
     // For tablet/desktop split view
     const selCls=activeClasses.find(c=>c.id===activeClass?.id)||activeClasses[0]||null;
@@ -4013,10 +4193,17 @@ function ClassTrackerInner({user}){
       const instFull=cls.institute||"";
       const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
       const classSubject=cls.subject||"Subject not set";
-      const initials=(cls.section||"?").split(/\s+/).filter(Boolean).map(part=>part[0]).join("").slice(0,2).toUpperCase() || "?";
-      const ringCircumference = 2 * Math.PI * 23;
-      const ringFill = total > 0 ? Math.min(0.88, 0.24 + (Math.min(total, 30) / 40)) : 0.16;
-      const ringOffset = ringCircumference * (1 - ringFill);
+      const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
+      const lastLogTone = getLastLogToneStyles(lastLogMeta);
+      const needsLogToday = todayN === 0;
+      const attentionStripe = needsLogToday ? (lastLogMeta.tone === "red" ? "#DC2626" : "#F59E0B") : ic.bg;
+      const cardBorder = needsLogToday
+        ? (lastLogMeta.tone === "red" ? "rgba(220,38,38,0.18)" : "rgba(245,158,11,0.18)")
+        : G.border;
+      const cardBackground = needsLogToday
+        ? "linear-gradient(180deg, rgba(255,251,235,0.86) 0%, #FFFFFF 76%)"
+        : G.classCardBg;
+      const stripeGlow = needsLogToday && !reduceEffects ? "ledgrStripePulse 1.9s ease-in-out infinite" : "none";
       const StatChip = ({label,value,active=false,wide=false})=>(
         <span style={{
           display:"inline-flex",
@@ -4080,22 +4267,16 @@ function ClassTrackerInner({user}){
             onTouchMove={moveHold}
             onTouchEnd={clearHold}
             onTouchCancel={clearHold}
-            style={{background:G.classCardBg,borderRadius:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            style={{background:cardBackground,borderRadius:20,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
             <div style={{display:"flex"}}>
-              <div style={{width:4,background:ic.bg,flexShrink:0}}/>
+              <div style={{width:5,background:attentionStripe,flexShrink:0,animation:stripeGlow,boxShadow:needsLogToday?`0 0 0 1px ${attentionStripe}22 inset`:"none"}}/>
               <div style={{flex:1,padding:dense?"13px 13px 12px":"14px 14px 13px"}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
-                  <div style={{width:50,height:50,position:"relative",flexShrink:0}}>
-                    <svg viewBox="0 0 52 52" style={{position:"absolute",inset:0}}>
-                      <circle cx="26" cy="26" r="23" fill="none" stroke={G.border} strokeWidth="2.5"/>
-                      <circle cx="26" cy="26" r="23" fill="none" stroke={ic.bg} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={ringCircumference} strokeDashoffset={ringOffset} transform="rotate(-90 26 26)"/>
-                    </svg>
-                    <div style={{position:"absolute",inset:5,borderRadius:"50%",background:ic.light,border:`1px solid ${ic.bg}20`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.display,fontSize:15,fontWeight:800,color:ic.bg}}>
-                      {initials}
-                    </div>
-                  </div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:19,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,lineHeight:1.1}}>{cls.section}</div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                      <div style={{fontSize:19,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,lineHeight:1.1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
+                      {needsLogToday && <span style={{...lastLogTone,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap",flexShrink:0}}>Not logged today</span>}
+                    </div>
                     <div style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:6,maxWidth:"100%",background:ic.light,border:`1px solid ${ic.bg}26`,borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:700,color:ic.bg,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                       <span style={{display:"inline-block",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{instShort}</span>
                       {cls.subject && <span style={{opacity:0.85}}>· {cls.subject}</span>}
@@ -4114,8 +4295,13 @@ function ClassTrackerInner({user}){
                   {statBox("Total", total)}
                 </div>
 
-                <div style={{fontSize:11.5,color:G.textM,lineHeight:1.5}}>
-                  {lastLoggedKey ? `Last log ${formatDateLabel(lastLoggedKey)}` : "Hold for quick actions or open to log today"}.
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+                  <span style={{...lastLogTone,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,fontFamily:G.mono}}>
+                    {lastLogMeta.label}
+                  </span>
+                  <span style={{fontSize:11.5,color:G.textM,lineHeight:1.5}}>
+                    {needsLogToday ? "Needs a fresh entry today" : "Up to date for today"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -4130,16 +4316,14 @@ function ClassTrackerInner({user}){
           onTouchMove={moveHold}
           onTouchEnd={clearHold}
           onTouchCancel={clearHold}
-          style={{background:G.classCardBg,borderRadius:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
-          onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";e.currentTarget.style.borderColor=`${ic.bg}33`;})}
-          onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}
-          onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}>
-          <div style={{height:compact?5:6,background:`linear-gradient(90deg, ${ic.bg} 0%, ${ic.bg}BB 65%, ${ic.bg}66 100%)`}}/>
-          <div style={{padding:compact?"10px 12px 11px":"16px 16px 15px"}}>
-            <div style={{display:"flex",alignItems:"flex-start",gap:compact?9:12}}>
-            <div style={{width:compact?38:48,height:compact?38:48,borderRadius:compact?11:14,background:`linear-gradient(180deg, ${ic.light} 0%, #FFFFFF 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:compact?12:14,fontWeight:700,color:ic.bg,fontFamily:G.mono,border:`1px solid ${ic.bg}22`,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.7)"}}>
-              {(cls.section||"?").slice(0,2).toUpperCase()}
-            </div>
+          style={{background:cardBackground,borderRadius:20,border:`1px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
+          onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";e.currentTarget.style.borderColor=`${attentionStripe}33`;})}
+          onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=cardBorder;})}
+          onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=cardBorder;})}>
+          <div style={{display:"flex"}}>
+            <div style={{width:5,background:attentionStripe,flexShrink:0,animation:stripeGlow,boxShadow:needsLogToday?`0 0 0 1px ${attentionStripe}22 inset`:"none"}}/>
+            <div style={{flex:1,padding:compact?"10px 12px 11px":"16px 16px 15px"}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:compact?9:12}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:compact?4:5}}>
                 <div style={{fontSize:compact?15:17,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.2,lineHeight:1.2}}>{cls.section}</div>
@@ -4162,7 +4346,7 @@ function ClassTrackerInner({user}){
                   <StatChip label="Total" value={total}/>
                 </div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:7}}>
-                  <span style={{fontSize:11.5,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{lastLoggedKey?`Last log ${formatDateLabel(lastLoggedKey)}`:"Hold for history or delete"}</span>
+                  <span style={{...lastLogTone,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap"}}>{lastLogMeta.short}</span>
                   <span style={{display:"inline-flex",alignItems:"center",gap:5,background:`${ic.bg}10`,color:ic.bg,border:`1px solid ${ic.bg}1F`,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>Open ↗</span>
                 </div>
                 </>
@@ -4193,54 +4377,65 @@ function ClassTrackerInner({user}){
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:12}}>
-                <span style={{fontSize:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{lastLoggedKey?`Last log ${formatDateLabel(lastLoggedKey)}`:"No logs yet"}</span>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0}}>
+                  <span style={{...lastLogTone,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap"}}>{lastLogMeta.label}</span>
+                  {needsLogToday && <span style={{fontSize:12,color:"#B45309",fontWeight:700,whiteSpace:"nowrap"}}>Needs attention today</span>}
+                </div>
                 <StatChip label="Open" value="View" active wide/>
               </div>
               </>
             )}
+          </div>
           </div>
         </div>
       );
     };
 
     // Institute filter pills
-    const InstFilter = ({ columns = "1fr", compact = false, scroll = false }) => institutes.length>1?(
-      <div style={scroll ? {display:"flex",gap:8,overflowX:"auto",padding:"0 0 4px",scrollbarWidth:"none"} : {display:"grid",gridTemplateColumns:columns,gap:compact?6:8,padding:"0 0 2px"}}>
+    const InstFilter = ({ columns = "1fr", compact = false, scroll = false, stacked = false, allLabel = "All" }) => institutes.length>1?(
+      <div style={scroll ? {display:"flex",gap:8,overflowX:"auto",padding:"0 0 4px",scrollbarWidth:"none"} : {display:"grid",gridTemplateColumns:stacked?"repeat(2,minmax(0,1fr))":columns,gap:stacked?10:(compact?6:8),padding:"0 0 2px"}}>
         {["all",...institutes].map(inst=>{
           const isSel=instFilter===inst;
           const ic=inst==="all"?{bg:G.green,light:G.greenL,text:"#fff"}:instColor(inst);
-          const label=inst==="all"?"All":inst;
+          const label=inst==="all"?allLabel:inst;
           return(
             <button key={inst} title={label} onClick={()=>setInstFilter(inst)}
               style={{
                 width:scroll?"auto":"100%",
                 minWidth:scroll?0:0,
                 flexShrink:scroll?0:1,
-                minHeight:compact?36:44,
-                padding:compact?"8px 14px":"10px 14px",
-                borderRadius:999,
-                border:isSel?`1px solid ${inst==="all" ? G.green : `${ic.bg}26`}`:`1px solid ${G.border}`,
+                minHeight:stacked?54:(compact?36:44),
+                padding:stacked?"12px 15px":(compact?"8px 14px":"10px 14px"),
+                borderRadius:stacked?20:999,
+                border:isSel
+                  ?`1px solid ${stacked ? "rgba(255,255,255,0.08)" : (inst==="all" ? G.green : `${ic.bg}26`)}`
+                  :`1px solid ${stacked ? "rgba(148,163,184,0.28)" : G.border}`,
                 cursor:"pointer",
                 fontFamily:G.sans,
-                fontSize:compact?12:12.5,
-                fontWeight:isSel?700:600,
+                fontSize:stacked?12.5:(compact?12:12.5),
+                fontWeight:isSel?800:600,
                 WebkitTapHighlightColor:"transparent",
                 transition:"all 0.15s",
                 background:isSel
-                  ?(inst==="all"
-                    ?G.green
-                    :ic.light)
-                  :G.surface,
-                color:isSel?(inst==="all"?"#fff":ic.bg):G.textM,
-                boxShadow:isSel?`0 10px 22px ${inst==="all" ? "rgba(0,104,116,0.16)" : `${ic.bg}18`}`:G.shadowSm,
+                  ?(stacked
+                    ?G.forest
+                    :(inst==="all"
+                      ?G.green
+                      :ic.light))
+                  :(stacked?"rgba(255,255,255,0.92)":G.surface),
+                color:isSel?(stacked?"#fff":(inst==="all"?"#fff":ic.bg)):G.textM,
+                boxShadow:isSel
+                  ?(stacked?"0 16px 30px rgba(0,56,64,0.18)":`0 10px 22px ${inst==="all" ? "rgba(0,104,116,0.16)" : `${ic.bg}18`}`)
+                  :G.shadowSm,
                 display:"flex",
                 alignItems:"center",
-                gap:7,
+                gap:9,
                 textAlign:"left",
                 lineHeight:1.15,
+                overflow:"hidden",
               }}>
-              {inst!=="all" && <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>}
-              <span style={{whiteSpace:"nowrap"}}>{label}</span>
+              <span style={{width:stacked?10:8,height:stacked?10:8,borderRadius:999,background:isSel&&stacked?"#fff":(inst==="all"?G.forest:ic.bg),flexShrink:0,boxShadow:isSel&&stacked?"0 0 0 3px rgba(255,255,255,0.14)":"none"}}/>
+              <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</span>
             </button>
           );
         })}
@@ -4248,23 +4443,73 @@ function ClassTrackerInner({user}){
     ):null;
 
     // ── MOBILE VIEW: full-page class list ────────────────────────────────────
-    const MobileHome = () => (
+    const MobileHome = () => {
+      const progressPct = Math.round(quickHomeSummary.monthProgressPct * 100);
+      return(
       <div className="ledgr-page" style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
         <div style={{flex:1,overflowY:"auto",padding:mobileLiteMode?`12px 12px ${mobileBottomNavPad}`:`14px 16px ${mobileBottomNavPad}`,WebkitOverflowScrolling:"touch"}}>
-          <div className="ledgr-card" style={{background:G.heroBg,borderRadius:24,padding:"20px 18px 18px",boxShadow:G.shadowLg,marginBottom:18}}>
-            <div style={{fontSize:52,fontWeight:800,fontFamily:G.display,letterSpacing:-2.8,lineHeight:1,color:"#fff"}}>{filtered.length}</div>
-            <div style={{fontSize:12,color:"rgba(255,255,255,0.68)",letterSpacing:0.25,marginTop:4,marginBottom:16}}>classes visible right now</div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              <span style={{background:"rgba(255,255,255,0.16)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:999,padding:"6px 14px",fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.88)"}}><b style={{color:"#fff"}}>{quickHomeSummary.loggedToday}</b> today</span>
-              <span style={{background:"rgba(255,255,255,0.16)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:999,padding:"6px 14px",fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.88)"}}><b style={{color:"#fff"}}>{quickHomeSummary.monthEntries}</b> this month</span>
+          <div
+            className="ledgr-card ledgr-pressable"
+            onClick={()=>setHeroCollapsed(v=>!v)}
+            style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F3F8F4 100%)",border:`1px solid ${G.border}`,borderRadius:24,padding:heroCollapsed?"14px 16px":"18px 18px 16px",boxShadow:G.shadowLg,marginBottom:18,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
+          >
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+              <div style={{flex:1,minWidth:0,textAlign:"center"}}>
+                <div style={{fontSize:11,fontWeight:800,color:G.textM,letterSpacing:1.05,textTransform:"uppercase",fontFamily:G.mono}}>Today</div>
+                <div style={{fontSize:heroCollapsed?16:19,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,marginTop:heroCollapsed?2:5}}>{quickHomeSummary.todayLabel}</div>
+              </div>
+              <span style={{flexShrink:0,width:32,height:32,borderRadius:999,display:"inline-flex",alignItems:"center",justifyContent:"center",background:G.surfaceAlt,border:`1px solid ${G.border}`,color:G.textM,fontSize:15,fontWeight:700}}>
+                {heroCollapsed ? "+" : "−"}
+              </span>
             </div>
+            {heroCollapsed ? (
+              <>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,marginTop:12,flexWrap:"wrap"}}>
+                  <span style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-1.2,lineHeight:1}}>{filtered.length}</span>
+                  <span style={{fontSize:13,color:G.textM,fontWeight:700}}>classes</span>
+                  <span style={{fontSize:13,color:quickHomeSummary.needsAttentionCount>0?"#B45309":G.green,fontWeight:800}}>
+                    {quickHomeSummary.needsAttentionCount} need attention
+                  </span>
+                </div>
+                <div style={{marginTop:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11.5,color:G.textM,fontWeight:700,marginBottom:6}}>
+                    <span>{quickHomeSummary.monthLoggedDays}/{quickHomeSummary.workingDaysElapsed} working days logged</span>
+                    <span>{progressPct}%</span>
+                  </div>
+                  <div style={{height:6,borderRadius:999,background:"rgba(15,23,42,0.08)",overflow:"hidden"}}>
+                    <div style={{width:`${Math.max(8, progressPct)}%`,height:"100%",borderRadius:999,background:"linear-gradient(90deg, #1B8A4C 0%, #34D077 100%)"}}/>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{textAlign:"center",marginTop:14}}>
+                  <div style={{fontSize:52,fontWeight:800,fontFamily:G.display,letterSpacing:-2.8,lineHeight:0.95,color:G.text}}>{filtered.length}</div>
+                  <div style={{fontSize:12.5,color:G.textM,letterSpacing:0.22,marginTop:8}}>classes visible right now</div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:14}}>
+                  <span style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:G.textS}}><b style={{color:G.text}}>{quickHomeSummary.loggedToday}</b> logged today</span>
+                  <span style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:G.textS}}><b style={{color:G.text}}>{quickHomeSummary.monthEntries}</b> entries this month</span>
+                  <span style={{background:quickHomeSummary.needsAttentionCount>0?"rgba(245,158,11,0.10)":G.surface,border:quickHomeSummary.needsAttentionCount>0?"1px solid rgba(245,158,11,0.18)":`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:800,color:quickHomeSummary.needsAttentionCount>0?"#B45309":G.green}}>{quickHomeSummary.needsAttentionCount} not logged today</span>
+                </div>
+                <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid rgba(15,23,42,0.08)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11.5,color:G.textM,fontWeight:700,marginBottom:7}}>
+                    <span>{quickHomeSummary.monthLoggedDays} of {quickHomeSummary.workingDaysElapsed} working days logged this month</span>
+                    <span>{progressPct}%</span>
+                  </div>
+                  <div style={{height:6,borderRadius:999,background:"rgba(15,23,42,0.08)",overflow:"hidden"}}>
+                    <div style={{width:`${Math.max(8, progressPct)}%`,height:"100%",borderRadius:999,background:"linear-gradient(90deg, #1B8A4C 0%, #34D077 100%)"}}/>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {institutes.length>1&&(
-            <>
-              <div style={{fontSize:10.5,fontWeight:700,color:G.textM,letterSpacing:1.1,textTransform:"uppercase",margin:"0 4px 10px",fontFamily:G.mono}}>Institute</div>
-              <InstFilter compact scroll/>
-            </>
+            <div className="ledgr-card" style={{background:"linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,252,0.98) 100%)",border:`1px solid rgba(148,163,184,0.20)`,borderRadius:24,padding:"14px 14px 12px",boxShadow:"0 12px 28px rgba(15,23,42,0.08)",marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:800,color:"#94A3B8",letterSpacing:1.1,textTransform:"uppercase",margin:"0 2px 12px",fontFamily:G.mono}}>Institute Filter</div>
+              <InstFilter stacked allLabel="All Classes"/>
+            </div>
           )}
 
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,margin:"18px 4px 12px"}}>
@@ -4313,6 +4558,7 @@ function ClassTrackerInner({user}){
         </div>
       </div>
     );
+    };
 
     // ── TABLET / DESKTOP VIEW: sidebar + detail panel ────────────────────────
     const SplitView = () => {
@@ -4359,13 +4605,22 @@ function ClassTrackerInner({user}){
         <div style={{width:sidebarWidth,flexShrink:0,display:"flex",flexDirection:"column",background:"linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(242,246,252,0.98) 100%)",overflow:"hidden"}}>
           <div style={{padding:"14px 12px 10px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
             <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:22,padding:"15px 14px 14px",color:"#fff",boxShadow:reduceEffects?"none":"0 14px 30px rgba(15,23,42,0.16)"}}>
-              <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Teacher workspace</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:4,textAlign:"center"}}>{quickHomeSummary.todayLabel}</div>
               <div style={{fontSize:20,fontWeight:800,fontFamily:G.display,letterSpacing:-0.4,marginBottom:5,lineHeight:1.1}}>{teacherName}</div>
               <div style={{fontSize:13,color:"rgba(255,255,255,0.72)",lineHeight:1.45}}>{currentSession()} session • {filtered.length} visible classes</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}}>
                 <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#DBEAFE"}}>{quickHomeSummary.loggedToday} logged today</span>
                 <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#FFFFFF"}}>{quickHomeSummary.monthEntries} this month</span>
-                <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#E2E8F0"}}>{quickHomeSummary.instituteCount} institutes</span>
+                <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.10)",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,color:"#FDE68A"}}>{quickHomeSummary.needsAttentionCount} need attention</span>
+              </div>
+              <div style={{marginTop:13}}>
+                <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:10.5,color:"rgba(255,255,255,0.74)",fontWeight:700,marginBottom:6}}>
+                  <span>{quickHomeSummary.monthLoggedDays}/{quickHomeSummary.workingDaysElapsed} working days logged</span>
+                  <span>{Math.round(quickHomeSummary.monthProgressPct * 100)}%</span>
+                </div>
+                <div style={{height:6,borderRadius:999,background:"rgba(255,255,255,0.12)",overflow:"hidden"}}>
+                  <div style={{width:`${Math.max(8, Math.round(quickHomeSummary.monthProgressPct * 100))}%`,height:"100%",borderRadius:999,background:"linear-gradient(90deg, #34D077 0%, #86EFAC 100%)"}}/>
+                </div>
               </div>
             </div>
           </div>
@@ -4380,14 +4635,22 @@ function ClassTrackerInner({user}){
               const classNotes=data.notes?.[cls.id]||{};
               const total=Object.values(classNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
               const todayN=Array.isArray(classNotes[todayKey()])?classNotes[todayKey()].length:0;
+              const lastLoggedKey=Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk])=>dk).sort().pop();
+              const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
+              const lastLogTone = getLastLogToneStyles(lastLogMeta);
+              const needsLogToday = todayN === 0;
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
-                  style={{borderRadius:16,padding:"12px 12px 11px",marginBottom:8,cursor:"pointer",background:isSel?`linear-gradient(135deg, ${ic.light} 0%, #FFFFFF 76%)`:"#FFFFFF",border:`1px solid ${isSel?`${ic.bg}26`:G.border}`,boxShadow:isSel?`0 10px 24px ${ic.bg}18`:G.shadowSm,transition:"all 0.14s ease"}}>
+                  style={{borderRadius:16,padding:"12px 12px 11px",marginBottom:8,cursor:"pointer",background:isSel?`linear-gradient(135deg, ${ic.light} 0%, #FFFFFF 76%)`:needsLogToday?"linear-gradient(180deg, rgba(255,251,235,0.82) 0%, #FFFFFF 76%)":"#FFFFFF",border:`1px solid ${isSel?`${ic.bg}26`:needsLogToday?"rgba(245,158,11,0.18)":G.border}`,boxShadow:isSel?`0 10px 24px ${ic.bg}18`:G.shadowSm,transition:"all 0.14s ease"}}>
                   <div style={{display:"flex",alignItems:"center",gap:9}}>
-                    <div style={{width:38,height:38,borderRadius:11,background:isSel?ic.bg:`linear-gradient(180deg, ${ic.light} 0%, #FFFFFF 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:isSel?"#fff":ic.bg,fontFamily:G.mono,border:isSel?"none":`1px solid ${ic.bg}22`}}>{(cls.section||"?").slice(0,2).toUpperCase()}</div>
+                    <div style={{width:4,alignSelf:"stretch",borderRadius:999,background:needsLogToday?"#F59E0B":ic.bg,animation:needsLogToday&&!reduceEffects?"ledgrStripePulse 1.9s ease-in-out infinite":"none",flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:15,fontWeight:700,color:isSel?ic.bg:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                       <div style={{fontSize:12,color:G.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.subject||cls.institute}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                        <span style={{...lastLogTone,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>{lastLogMeta.short}</span>
+                        {needsLogToday && <span style={{fontSize:10.5,fontWeight:800,color:"#B45309"}}>Not logged today</span>}
+                      </div>
                     </div>
                     <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
                       <div style={{textAlign:"right"}}>
@@ -4446,7 +4709,6 @@ function ClassTrackerInner({user}){
             <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${G.border}`,background:"linear-gradient(180deg, #FFFFFF 0%, #F7FAF8 100%)",flexShrink:0}}>
               <div style={{background:`linear-gradient(135deg, ${selColor.light} 0%, #FFFFFF 78%)`,border:`1px solid ${selColor.bg}1A`,borderRadius:22,padding:"16px 16px 14px",boxShadow:reduceEffects?"none":"0 10px 24px rgba(14,31,24,0.08)"}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
-                  <div style={{width:44,height:44,borderRadius:13,background:`linear-gradient(180deg, ${selColor.bg} 0%, ${selColor.bg}CC 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",fontFamily:G.mono,boxShadow:`0 10px 18px ${selColor.bg}22`}}>{(selCls.section||"?").slice(0,2).toUpperCase()}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Class timeline</div>
                     <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.1}}>{selCls.section}</div>
@@ -4571,16 +4833,77 @@ function ClassTrackerInner({user}){
     const totalCount=Object.values(classNotes||{}).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
     const noteDates=Object.fromEntries(Object.entries(classNotes).filter(([,arr])=>Array.isArray(arr)&&arr.length>0).map(([dk,arr])=>[dk,arr.length]));
     const activeDays=Object.keys(noteDates).length;
+    const lastLoggedKey=Object.keys(noteDates).sort().pop();
+    const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
+    const lastLogTone = getLastLogToneStyles(lastLogMeta);
     const swipePool = teacherVisibleClasses.some(entry => String(entry?.id || "") === String(cls.id || ""))
       ? teacherVisibleClasses
       : teacherActiveClasses;
+    const bounceDetailCardBack = (duration = 190) => {
+      setDetailSwipeTransitionMs(reduceEffects ? 0 : duration);
+      setDetailSwipeOffset(0);
+    };
+    const animateSiblingCardChange = (direction, distance = 96, gestureMs = 180) => {
+      const currentIndex = swipePool.findIndex(entry => String(entry?.id || "") === String(cls.id || ""));
+      if(currentIndex < 0 || swipePool.length < 2){
+        bounceDetailCardBack();
+        return false;
+      }
+      const nextIndex = (currentIndex + direction + swipePool.length) % swipePool.length;
+      if(nextIndex === currentIndex){
+        bounceDetailCardBack();
+        return false;
+      }
+      const nextClass = swipePool[nextIndex];
+      const viewportWidth = window.innerWidth || 360;
+      const travelSign = direction > 0 ? 1 : -1;
+      const settleMs = reduceEffects ? 0 : Math.max(150, Math.min(360, Math.round(120 + gestureMs * 0.34)));
+      const carryInOffset = Math.min(Math.max(Math.abs(distance) * 0.32, 42), 96);
+      if(detailSwipeResetTimer.current){
+        window.clearTimeout(detailSwipeResetTimer.current);
+        detailSwipeResetTimer.current = null;
+      }
+      setDetailSwipeTransitionMs(settleMs);
+      setDetailSwipeOffset(travelSign * viewportWidth);
+      detailSwipeResetTimer.current = window.setTimeout(() => {
+        setActiveClass(nextClass);
+        setDetailSwipeTransitionMs(0);
+        setDetailSwipeOffset(-travelSign * carryInOffset);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setDetailSwipeTransitionMs(reduceEffects ? 0 : Math.max(140, Math.min(260, settleMs - 18)));
+            setDetailSwipeOffset(0);
+          });
+        });
+        detailSwipeResetTimer.current = null;
+      }, settleMs);
+      return true;
+    };
     const handleDetailTouchStart = e => {
       if(!isMobile || e.touches?.length !== 1) return;
       if(e.target?.closest?.("button, input, textarea, select")) return;
       const touch = e.touches[0];
       const viewportWidth = window.innerWidth || 0;
       if(touch.clientX < 24 || (viewportWidth && touch.clientX > viewportWidth - 24)) return;
-      classSwipeStartRef.current = { x:touch.clientX, y:touch.clientY, at:Date.now() };
+      setDetailSwipeTransitionMs(0);
+      classSwipeStartRef.current = { x:touch.clientX, y:touch.clientY, at:Date.now(), axis:null };
+    };
+    const handleDetailTouchMove = e => {
+      const start = classSwipeStartRef.current;
+      if(!start || e.touches?.length !== 1) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if(!start.axis){
+        if(Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        start.axis = Math.abs(dx) > Math.abs(dy) * 1.05 ? "x" : "y";
+      }
+      if(start.axis !== "x") return;
+      e.preventDefault();
+      const viewportWidth = window.innerWidth || 360;
+      const resistedOffset = Math.sign(dx) * Math.min(Math.abs(dx), viewportWidth * 0.78);
+      setDetailSwipeTransitionMs(0);
+      setDetailSwipeOffset(resistedOffset);
     };
     const handleDetailTouchEnd = e => {
       const start = classSwipeStartRef.current;
@@ -4590,25 +4913,27 @@ function ClassTrackerInner({user}){
       const dx = touch.clientX - start.x;
       const dy = touch.clientY - start.y;
       const dt = Date.now() - start.at;
-      if(Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.15 || dt > 700) return;
+      if(start.axis !== "x" || Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.15){
+        bounceDetailCardBack(Math.max(160, Math.min(240, 110 + dt * 0.2)));
+        return;
+      }
       if(dx > 0){
-        if(navigateSiblingClass(1)) void triggerAppHaptic("swipe");
+        if(animateSiblingCardChange(1, dx, dt)) void triggerAppHaptic("swipe");
+        else bounceDetailCardBack();
       }else{
-        if(navigateSiblingClass(-1)) void triggerAppHaptic("swipe");
+        if(animateSiblingCardChange(-1, dx, dt)) void triggerAppHaptic("swipe");
+        else bounceDetailCardBack();
       }
     };
     return(
-      <div key={cls.id} className="ledgr-page" style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}} onTouchStart={handleDetailTouchStart} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;}}>
+      <div key={cls.id} className="ledgr-page" style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden",touchAction:"pan-y"}} onTouchStart={handleDetailTouchStart} onTouchMove={handleDetailTouchMove} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;bounceDetailCardBack(160);}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
         />
-        <div className="ledgr-card" style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0}}>
+        <div className="ledgr-card" style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderBottom:"1px solid rgba(255,255,255,0.08)",padding:"8px 14px 10px",flexShrink:0,transform:`translateX(${detailSwipeOffset}px)`,transition:detailSwipeTransitionMs?`transform ${detailSwipeTransitionMs}ms cubic-bezier(.22,.8,.24,1)`:"none"}}>
           {/* Compact single-line class identity */}
           <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
-            <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(180deg, ${color.bg} 0%, ${color.bg}CC 100%)`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",fontFamily:G.mono}}>
-              {(cls.section||"?").slice(0,2).toUpperCase()}
-            </div>
             <div style={{flex:1,minWidth:0,display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
               <span style={{fontSize:16,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.3,lineHeight:1,flexShrink:0}}>{cls.section}</span>
               <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
@@ -4618,6 +4943,7 @@ function ClassTrackerInner({user}){
               <span style={{fontSize:11,color:"#DBEAFE",fontFamily:G.mono,fontWeight:700,flexShrink:0}}>{totalCount} entries</span>
               <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>·</span>
               <span style={{fontSize:11,color:"rgba(255,255,255,0.45)",fontFamily:G.mono,flexShrink:0}}>{activeDays}d active</span>
+              <span style={{...lastLogTone,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,flexShrink:0}}>{lastLogMeta.short}</span>
             </div>
             <OverflowMenu items={[
               { icon:"✏", label:"Edit class", onClick:()=>setEditingClass(cls) },
@@ -4627,13 +4953,13 @@ function ClassTrackerInner({user}){
           <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={noteDates}/>
         </div>
         {/* Entries scroll area */}
-        <div style={{flex:1,overflowY:"auto",padding:`14px 16px ${isMobile ? mobileBottomNavPad : "16px"}`,WebkitOverflowScrolling:"touch"}}>
+        <div style={{flex:1,overflowY:"auto",padding:`14px 16px ${isMobile ? mobileBottomNavPad : "16px"}`,WebkitOverflowScrolling:"touch",transform:`translateX(${detailSwipeOffset}px)`,transition:detailSwipeTransitionMs?`transform ${detailSwipeTransitionMs}ms cubic-bezier(.22,.8,.24,1)`:"none"}}>
           <div className="ledgr-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8,background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 14px",boxShadow:G.shadowSm}}>
             <div>
               <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
               <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{formatDateLabel(selectedDate)}</div>
               <div style={{fontSize:13,color:dateNotes.length>0?G.green:G.textM,fontWeight:700,marginTop:3,fontFamily:G.mono}}>{dateNotes.length} {dateNotes.length===1?"entry":"entries"}</div>
-              {isMobile && swipePool.length > 1 && <div style={{fontSize:12,color:G.textL,marginTop:5}}>Swipe right for next class</div>}
+              {isMobile && swipePool.length > 1 && <div style={{fontSize:12,color:G.textL,marginTop:5}}>Swipe left or right to move between classes</div>}
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
               <button
@@ -5039,9 +5365,7 @@ function ClassTrackerInner({user}){
                 return(
                   <div key={cls.id} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,marginBottom:8,padding:"13px 14px"}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                      <div style={{width:38,height:38,borderRadius:9,background:ic.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:ic.bg,fontFamily:G.mono}}>
-                        {(cls.section||"?").slice(0,2).toUpperCase()}
-                      </div>
+                      <div style={{width:4,alignSelf:"stretch",borderRadius:999,background:ic.bg,flexShrink:0}}/>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                         <div style={{fontSize:12,color:G.textL}}>🏫 {cls.institute}{cls.subject?" · "+cls.subject:""}</div>
@@ -5101,9 +5425,7 @@ function ClassTrackerInner({user}){
                   const dl=daysLeft(tc.deletedAt);
                   return(
                     <div key={tc.id} className="trash-row" style={{...card,padding:"16px 20px",display:"flex",alignItems:"center",gap:16}}>
-                      <div style={{width:44,height:44,borderRadius:12,background:color.light,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,color:color.bg,fontFamily:G.mono}}>
-                        {(tc.section||"?").slice(0,2).toUpperCase()}
-                      </div>
+                      <div style={{width:4,alignSelf:"stretch",borderRadius:999,background:color.bg,flexShrink:0}}/>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display}}>{tc.section}</div>
                         <div style={{fontSize:14,color:G.textM,marginTop:2}}>🏫 {tc.institute}{tc.subject?` · ${tc.subject}`:""} · {ec} entries</div>
