@@ -643,18 +643,19 @@ function getTodayEntryStatusStyles(todayEntries = 0){
   };
 }
 
-function getSectionCardStatusBadge(metrics = {}){
-  const days = metrics?.lastLogMeta?.days;
-  if((metrics?.todayEntries || 0) > 0){
-    return { label:"done", background:"rgba(15,23,42,0.26)", color:"#FFFFFF" };
+function getSectionCardTodayDotStyles(todayEntries = 0){
+  if(todayEntries > 0){
+    return {
+      background:"#16A34A",
+      borderColor:"#166534",
+      boxShadow:"0 0 0 3px rgba(22,163,74,0.12)",
+    };
   }
-  if(days === null){
-    return { label:"pending", background:"rgba(15,23,42,0.20)", color:"#FFFFFF" };
-  }
-  if(days === 1){
-    return { label:"1d ago", background:"rgba(15,23,42,0.22)", color:"#FFFFFF" };
-  }
-  return { label:"overdue", background:"rgba(15,23,42,0.24)", color:"#FFFFFF" };
+  return {
+    background:"transparent",
+    borderColor:"rgba(15,23,42,0.78)",
+    boxShadow:"none",
+  };
 }
 
 // ── Ripple ────────────────────────────────────────────────────────────────────
@@ -4583,7 +4584,7 @@ function ClassTrackerInner({user}){
       const ic=instColor(cls.institute);
       const classNotes=data.notes?.[cls.id]||{};
       const metrics=buildClassEntryMetrics(classNotes);
-      const cardStatusBadge=getSectionCardStatusBadge(metrics);
+      const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
       const holdTimerRef = React.useRef(null);
       const holdStartRef = React.useRef(null);
       const holdTriggeredRef = React.useRef(false);
@@ -4598,7 +4599,8 @@ function ClassTrackerInner({user}){
       // Truncate long institute names with ellipsis
       const instFull=cls.institute||"";
       const instShort=instFull.length>28?instFull.slice(0,26)+"…":instFull;
-      const cardBorder = "rgba(15,23,42,0.58)";
+      const cardBorder = "rgba(15,23,42,0.88)";
+      const sectionSurface = hexToRgba(ic.bg, compact ? 0.20 : 0.18);
       const beginHold = e => {
         if(!compact || !onHold || !e.touches?.length) return;
         const touch = e.touches[0];
@@ -4637,25 +4639,23 @@ function ClassTrackerInner({user}){
             onTouchEnd={clearHold}
             onTouchCancel={clearHold}
             style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
-            <div style={{background:`linear-gradient(180deg, ${hexToRgba(ic.bg, 0.24)} 0%, ${hexToRgba(ic.bg, 0.18)} 100%)`,borderBottom:`1px solid rgba(15,23,42,0.14)`,padding:dense?"12px 14px":"13px 15px"}}>
+            <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.20)`,padding:dense?"12px 14px":"13px 15px"}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:dense?22:24,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
+                  <div style={{fontSize:dense?22:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
-                    <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:ic.bg,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}22`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.96)",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid rgba(15,23,42,0.16)`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                       {instShort || "No institute"}
                     </span>
                     {cls.subject && (
-                      <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.textS,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${G.border}`,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      <span style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.96)",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid rgba(15,23,42,0.16)`,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
                         {cls.subject}
                       </span>
                     )}
                   </div>
                 </div>
-                <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:dense?"10px 14px":"11px 15px",borderRadius:999,fontSize:dense?15:16,fontWeight:800,lineHeight:1,whiteSpace:"nowrap",background:cardStatusBadge.background,color:cardStatusBadge.color,textTransform:"lowercase",flexShrink:0,minWidth:dense?84:92}}>
-                  {cardStatusBadge.label}
-                </span>
+                <span title={metrics.todayEntries > 0 ? "Today's entry is filled" : "Today's entry is not filled"} aria-label={metrics.todayEntries > 0 ? "Today's entry is filled" : "Today's entry is not filled"} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:dense?20:22,height:dense?20:22,borderRadius:999,border:`2px solid ${todayDotStyle.borderColor}`,background:todayDotStyle.background,boxShadow:todayDotStyle.boxShadow,flexShrink:0,marginTop:2}} />
               </div>
             </div>
           </div>
@@ -4673,22 +4673,20 @@ function ClassTrackerInner({user}){
           onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";})}
           onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}
           onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}>
-          <div style={{background:`linear-gradient(180deg, ${hexToRgba(ic.bg, 0.24)} 0%, ${hexToRgba(ic.bg, 0.18)} 100%)`,borderBottom:`1px solid rgba(15,23,42,0.14)`,padding:"14px 15px 13px"}}>
+          <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.20)`,padding:"14px 15px 13px"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:19,fontWeight:800,color:ic.bg,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
+                <div style={{fontSize:19,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:ic.bg,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${ic.bg}22`,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.96)",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid rgba(15,23,42,0.16)`,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                     <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                     {instShort || "No institute"}
                   </span>
-                  {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.textS,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${G.border}`,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                  {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.96)",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid rgba(15,23,42,0.16)`,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
-                <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"10px 14px",borderRadius:999,fontSize:15,fontWeight:800,lineHeight:1,whiteSpace:"nowrap",background:cardStatusBadge.background,color:cardStatusBadge.color,textTransform:"lowercase",minWidth:88}}>
-                  {cardStatusBadge.label}
-                </span>
+                <span title={metrics.todayEntries > 0 ? "Today's entry is filled" : "Today's entry is not filled"} aria-label={metrics.todayEntries > 0 ? "Today's entry is filled" : "Today's entry is not filled"} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:20,height:20,borderRadius:999,border:`2px solid ${todayDotStyle.borderColor}`,background:todayDotStyle.background,boxShadow:todayDotStyle.boxShadow,flexShrink:0,marginTop:2}} />
                 {onDelete&&<OverflowMenu buttonSize={30} items={[
                   { icon:IconTrash, label:"Delete class", danger:true, onClick:onDelete },
                 ]}/>}
@@ -4885,27 +4883,26 @@ function ClassTrackerInner({user}){
               const isSel=selCls?.id===cls.id;
               const classNotes=data.notes?.[cls.id]||{};
               const metrics=buildClassEntryMetrics(classNotes);
-              const cardStatusBadge=getSectionCardStatusBadge(metrics);
+              const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
               const instFull=cls.institute||"";
+              const sectionSurface=hexToRgba(ic.bg, isSel ? 0.21 : 0.18);
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
-                  style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1.5px solid ${isSel ? "rgba(15,23,42,0.78)" : "rgba(15,23,42,0.58)"}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
-                  <div style={{background:`linear-gradient(180deg, ${hexToRgba(ic.bg, 0.24)} 0%, ${hexToRgba(ic.bg, 0.18)} 100%)`,padding:"13px 13px 12px",borderBottom:`1px solid rgba(15,23,42,0.14)`}}>
+                  style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1.5px solid ${isSel ? "rgba(15,23,42,0.92)" : "rgba(15,23,42,0.82)"}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
+                  <div style={{background:sectionSurface,padding:"13px 13px 12px",borderBottom:`1px solid rgba(15,23,42,0.20)`}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:16,fontWeight:800,color:ic.bg,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
+                        <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
                         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
-                          <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FFFFFF",border:`1px solid ${ic.bg}22`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:ic.bg,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.96)",border:`1px solid rgba(15,23,42,0.16)`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                             <span style={{width:7,height:7,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                             <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{instFull || "No institute"}</span>
                           </span>
-                          {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.textS,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                          {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.96)",border:`1px solid rgba(15,23,42,0.16)`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
                         </div>
                       </div>
                       <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
-                        <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"10px 13px",borderRadius:999,fontSize:14.5,fontWeight:800,lineHeight:1,whiteSpace:"nowrap",background:cardStatusBadge.background,color:cardStatusBadge.color,textTransform:"lowercase",minWidth:82}}>
-                          {cardStatusBadge.label}
-                        </span>
+                        <span title={metrics.todayEntries > 0 ? "Today's entry is filled" : "Today's entry is not filled"} aria-label={metrics.todayEntries > 0 ? "Today's entry is filled" : "Today's entry is not filled"} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:18,height:18,borderRadius:999,border:`2px solid ${todayDotStyle.borderColor}`,background:todayDotStyle.background,boxShadow:todayDotStyle.boxShadow,flexShrink:0,marginTop:3}} />
                         <OverflowMenu buttonSize={30} items={[
                           { icon:IconTrash, label:"Delete class", danger:true, onClick:()=>setLeaveModal(cls.id) },
                         ]}/>
