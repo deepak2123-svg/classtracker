@@ -7,75 +7,75 @@ import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassN
 import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
 const TEACHER_THEME_STORAGE_KEY = "classlog_teacher_theme";
-const LOCAL_SANS_FONT = "'Trebuchet MS','Segoe UI',sans-serif";
-const LOCAL_DISPLAY_FONT = "Georgia,'Times New Roman',serif";
-const LOCAL_MONO_FONT = "Consolas,'Courier New',monospace";
+const LOCAL_SANS_FONT = "'Inter',sans-serif";
+const LOCAL_DISPLAY_FONT = "'Poppins',sans-serif";
+const LOCAL_MONO_FONT = "'Inter',sans-serif";
 const TEACHER_THEMES = {
   light: {
-    forest:"#005965",
-    forestS:"#0A7481",
-    green:"#006874",
-    greenV:"#0A7F8D",
-    greenL:"#E2F4F6",
-    bg:"#F2F6F7",
+    forest:"#16324F",
+    forestS:"#1F4568",
+    green:"#0F6B78",
+    greenV:"#155E75",
+    greenL:"#E7F4F6",
+    bg:"#F5F7FA",
     surface:"#FFFFFF",
-    surfaceAlt:"#EAF2F4",
-    surfaceSoft:"#F8FBFB",
-    pageBg:"linear-gradient(180deg, #F2F6F7 0%, #EDF4F6 100%)",
-    border:"#D4E3E6",
-    borderM:"#BACED3",
-    text:"#0E1A1C",
-    textS:"#1E3134",
-    textM:"#5A7377",
-    textL:"#8AA2A7",
-    red:"#C2500A",
-    redL:"#FFF3EC",
-    navy:"#006874",
-    shadowSm:"0 1px 4px rgba(14,26,28,0.06)",
-    shadowMd:"0 10px 24px rgba(14,26,28,0.08)",
-    shadowLg:"0 20px 44px rgba(14,26,28,0.14)",
-    topbarBg:"rgba(242,246,247,0.96)",
-    topbarBorder:"rgba(212,227,230,0.92)",
+    surfaceAlt:"#EFF3F7",
+    surfaceSoft:"#FAFBFC",
+    pageBg:"#F5F7FA",
+    border:"#DCE3EA",
+    borderM:"#CAD4DE",
+    text:"#101828",
+    textS:"#344054",
+    textM:"#667085",
+    textL:"#98A2B3",
+    red:"#B42318",
+    redL:"#FEF3F2",
+    navy:"#0F6B78",
+    shadowSm:"0 1px 2px rgba(16,24,40,0.05)",
+    shadowMd:"0 8px 18px rgba(16,24,40,0.07)",
+    shadowLg:"0 14px 30px rgba(16,24,40,0.10)",
+    topbarBg:"rgba(255,255,255,0.98)",
+    topbarBorder:"rgba(220,227,234,0.96)",
     topbarButtonBg:"#FFFFFF",
-    topbarButtonBorder:"rgba(212,227,230,0.92)",
-    heroBg:"linear-gradient(135deg, #006874 0%, #0A7F8D 100%)",
-    classCardBg:"linear-gradient(180deg, #FFFFFF 0%, #F9FCFC 100%)",
+    topbarButtonBorder:"#DCE3EA",
+    heroBg:"linear-gradient(135deg, #16324F 0%, #0F6B78 100%)",
+    classCardBg:"#FFFFFF",
     navBg:"rgba(255,255,255,0.96)",
-    navBorder:"rgba(212,227,230,0.95)",
-    navActiveBg:"rgba(0,104,116,0.10)",
+    navBorder:"rgba(220,227,234,0.98)",
+    navActiveBg:"rgba(15,107,120,0.10)",
   },
   dark: {
-    forest:"#0E3A40",
-    forestS:"#13525A",
-    green:"#67CDD8",
-    greenV:"#88DEE7",
-    greenL:"rgba(103,205,216,0.14)",
-    bg:"#081114",
-    surface:"#101B1F",
-    surfaceAlt:"#142328",
-    surfaceSoft:"#0D171A",
-    pageBg:"linear-gradient(180deg, #081114 0%, #0C171A 100%)",
-    border:"#21363B",
-    borderM:"#2B444A",
-    text:"#F1FBFC",
-    textS:"#D7E8E9",
-    textM:"#9DB8BC",
-    textL:"#71898D",
-    red:"#FFB27A",
-    redL:"rgba(255,178,122,0.16)",
-    navy:"#1B7F89",
-    shadowSm:"0 2px 8px rgba(0,0,0,0.28)",
-    shadowMd:"0 12px 28px rgba(0,0,0,0.34)",
-    shadowLg:"0 24px 56px rgba(0,0,0,0.42)",
-    topbarBg:"rgba(8,17,20,0.92)",
-    topbarBorder:"rgba(33,54,59,0.95)",
-    topbarButtonBg:"rgba(255,255,255,0.05)",
+    forest:"#111C2D",
+    forestS:"#18314A",
+    green:"#7ED2DC",
+    greenV:"#98DEE6",
+    greenL:"rgba(126,210,220,0.14)",
+    bg:"#0F1720",
+    surface:"#121B26",
+    surfaceAlt:"#182432",
+    surfaceSoft:"#101923",
+    pageBg:"#0F1720",
+    border:"#263445",
+    borderM:"#314255",
+    text:"#F8FAFC",
+    textS:"#E2E8F0",
+    textM:"#A7B4C3",
+    textL:"#7D8A99",
+    red:"#F97066",
+    redL:"rgba(249,112,102,0.16)",
+    navy:"#7ED2DC",
+    shadowSm:"0 2px 8px rgba(0,0,0,0.24)",
+    shadowMd:"0 10px 24px rgba(0,0,0,0.28)",
+    shadowLg:"0 18px 40px rgba(0,0,0,0.34)",
+    topbarBg:"rgba(15,23,32,0.96)",
+    topbarBorder:"rgba(38,52,69,0.96)",
+    topbarButtonBg:"rgba(255,255,255,0.04)",
     topbarButtonBorder:"rgba(255,255,255,0.08)",
-    heroBg:"linear-gradient(135deg, #11444B 0%, #16606A 100%)",
-    classCardBg:"linear-gradient(180deg, #101B1F 0%, #0D171A 100%)",
-    navBg:"rgba(16,27,31,0.96)",
-    navBorder:"rgba(33,54,59,0.98)",
-    navActiveBg:"rgba(103,205,216,0.14)",
+    heroBg:"linear-gradient(180deg, #121B26 0%, #182432 100%)",
+    classCardBg:"#121B26",
+    navBg:"rgba(18,27,38,0.98)",
+    navBorder:"rgba(38,52,69,0.98)",
+    navActiveBg:"rgba(126,210,220,0.12)",
   },
 };
 
@@ -161,11 +161,11 @@ const COLORS = [
   {bg:"#2563EB",light:"#E8F0FF",text:"#1D4ED8"},
   {bg:"#0F766E",light:"#E6F7F5",text:"#115E59"},
   {bg:"#475569",light:"#EEF2F7",text:"#334155"},
-  {bg:"#7C3AED",light:"#F3ECFF",text:"#6D28D9"},
-  {bg:"#B45309",light:"#FFF4E5",text:"#92400E"},
+  {bg:"#C2410C",light:"#FFF4E8",text:"#9A3412"},
+  {bg:"#0F766E",light:"#E8F8F6",text:"#115E59"},
   {bg:"#1D4ED8",light:"#EAF1FF",text:"#1E40AF"},
   {bg:"#0369A1",light:"#E8F7FF",text:"#075985"},
-  {bg:"#0F766E",light:"#E8F8F6",text:"#0F5F59"},
+  {bg:"#334155",light:"#EFF4F8",text:"#334155"},
 ];
 
 // Stable colour per institute name (same institute always same colour)
@@ -672,22 +672,22 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
   const [profileOpen, setProfileOpen] = React.useState(false);
 
   return(
-    <div style={{position:"sticky",top:0,zIndex:100,background:G.topbarBg,borderBottom:`1px solid ${G.topbarBorder}`,backdropFilter:"blur(18px)",WebkitBackdropFilter:"blur(18px)",paddingTop:"env(safe-area-inset-top, 0px)"}}>
-      <div style={{minHeight:72,display:"flex",alignItems:"center",padding:"12px 16px 10px",gap:12,overflow:"visible"}}>
+    <div style={{position:"sticky",top:0,zIndex:100,background:G.topbarBg,borderBottom:`1px solid ${G.topbarBorder}`,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",paddingTop:"env(safe-area-inset-top, 0px)"}}>
+      <div style={{minHeight:64,display:"flex",alignItems:"center",padding:"10px 16px 8px",gap:12,overflow:"visible"}}>
         <div
           onClick={onLogoClick}
           style={{display:"flex",alignItems:"center",gap:12,flex:1,minWidth:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
           onPointerDown={e=>{e.currentTarget.style.opacity="0.72";}}
           onPointerUp={e=>{e.currentTarget.style.opacity="1";}}
           onPointerCancel={e=>{e.currentTarget.style.opacity="1";}}>
-          <div style={{width:44,height:44,borderRadius:14,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.18), 0 10px 22px rgba(0,104,116,0.18)"}}>
+          <div style={{width:40,height:40,borderRadius:12,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <svg width="19" height="19" viewBox="0 0 18 18" fill="none">
               <path d="M4 3H7V13H14V16H4V3Z" fill="white"/>
             </svg>
           </div>
           <div style={{minWidth:0}}>
-            <div style={{fontFamily:G.display,fontWeight:800,fontSize:23,color:G.text,letterSpacing:-0.5,lineHeight:1}}>Ledgr</div>
-            <div style={{fontFamily:G.mono,fontWeight:700,fontSize:10.5,color:G.textM,letterSpacing:1.2,lineHeight:1.1,textTransform:"uppercase",marginTop:4}}>Teacher Panel</div>
+            <div style={{fontFamily:G.display,fontWeight:700,fontSize:22,color:G.text,letterSpacing:-0.35,lineHeight:1}}>Ledgr</div>
+            <div style={{fontFamily:G.sans,fontWeight:700,fontSize:10.5,color:G.textM,letterSpacing:1.1,lineHeight:1.1,textTransform:"uppercase",marginTop:3}}>Teacher Panel</div>
           </div>
         </div>
 
@@ -696,13 +696,13 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 
           {onViewNotifications && (
             <button onClick={onViewNotifications}
-              style={{width:44,height:44,padding:0,display:"flex",alignItems:"center",justifyContent:"center",background:G.topbarButtonBg,border:`1px solid ${G.topbarButtonBorder}`,borderRadius:999,cursor:"pointer",color:G.textM,position:"relative",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}>
+              style={{width:40,height:40,padding:0,display:"flex",alignItems:"center",justifyContent:"center",background:G.topbarButtonBg,border:`1px solid ${G.topbarButtonBorder}`,borderRadius:14,cursor:"pointer",color:G.textM,position:"relative",WebkitTapHighlightColor:"transparent"}}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
                 <path d="M13.73 21a2 2 0 01-3.46 0"/>
               </svg>
               {notificationCount > 0 && (
-                <span style={{position:"absolute",top:-4,right:-4,minWidth:18,height:18,borderRadius:999,background:"#F08C00",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 8px 18px rgba(240,140,0,0.26)"}}>
+                <span style={{position:"absolute",top:-4,right:-4,minWidth:18,height:18,borderRadius:999,background:"#D92D20",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px"}}>
                   {notificationCount > 9 ? "9+" : notificationCount}
                 </span>
               )}
@@ -711,7 +711,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 
           {showProfileMenu && <div style={{position:"relative",flexShrink:0}}>
             <div onClick={()=>setProfileOpen(o=>!o)}
-              style={{height:44,display:"flex",alignItems:"center",gap:8,background:profileOpen?G.surfaceAlt:G.topbarButtonBg,border:`1px solid ${profileOpen ? G.borderM : G.topbarButtonBorder}`,borderRadius:999,padding:"0 10px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s",boxShadow:G.shadowSm}}>
+              style={{height:40,display:"flex",alignItems:"center",gap:8,background:profileOpen?G.surfaceAlt:G.topbarButtonBg,border:`1px solid ${profileOpen ? G.borderM : G.topbarButtonBorder}`,borderRadius:14,padding:"0 10px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s"}}>
               <Avatar user={user} size={22}/>
               <span style={{fontWeight:700,fontSize:13,color:G.text,whiteSpace:"nowrap",fontFamily:G.sans}} className="desktop-only">
                 {teacherName}
@@ -783,9 +783,9 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
   const itemBase = isActive => ({
     flex:1,
-    minHeight:52,
+    minHeight:56,
     border:"none",
-    borderRadius:20,
+    borderRadius:16,
     background:"transparent",
     color:isActive ? G.green : G.textM,
     cursor:"pointer",
@@ -802,10 +802,10 @@ function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
   });
 
   return(
-    <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,zIndex:170,padding:"10px 18px calc(20px + env(safe-area-inset-bottom, 0px))",pointerEvents:"none"}}>
-      <div style={{background:G.navBg,border:`1px solid ${G.navBorder}`,borderRadius:28,padding:"10px 12px",boxShadow:G.shadowLg,backdropFilter:"blur(18px)",WebkitBackdropFilter:"blur(18px)",display:"flex",gap:10,pointerEvents:"auto"}}>
+    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:170,background:G.navBg,borderTop:`1px solid ${G.navBorder}`,boxShadow:"0 -6px 20px rgba(16,24,40,0.08)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",pointerEvents:"auto"}}>
+      <div style={{maxWidth:430,margin:"0 auto",padding:"8px 12px calc(8px + env(safe-area-inset-bottom, 0px))",display:"flex",gap:10}}>
         <button type="button" onClick={onHome} style={itemBase(activeTab==="home")}>
-          <span style={{width:64,height:32,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="home" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
+          <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="home" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 10.5 12 3l9 7.5"/>
               <path d="M5 9.5V21h14V9.5"/>
@@ -814,7 +814,7 @@ function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
           <span>Home</span>
         </button>
         <button type="button" onClick={onProfile} style={itemBase(activeTab==="profile")}>
-          <span style={{width:64,height:32,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="profile" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
+          <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="profile" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 21a8 8 0 0 0-16 0"/>
               <circle cx="12" cy="8" r="4"/>
@@ -958,7 +958,7 @@ function TeacherThemeCard({themeMode,onThemeChange}){
 
 function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount,trashCount,onOpenStats,onOpenNotifications,onOpenTrash,onOpenExport,onSignOut,themeMode,onThemeChange}){
   return(
-    <div className="ledgr-page" style={{flex:1,overflowY:"auto",padding:"14px 16px calc(118px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch"}}>
+    <div className="ledgr-page" style={{flex:1,overflowY:"auto",padding:"14px 16px calc(96px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch"}}>
       <div className="ledgr-card" style={{background:G.heroBg,borderRadius:28,padding:"22px 20px 18px",boxShadow:G.shadowLg,marginBottom:16}}>
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
           <div style={{width:62,height:62,borderRadius:20,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -2927,7 +2927,7 @@ function ClassTrackerInner({user}){
   const [isWeakDevice,setIsWeakDevice]   = useState(false);
   const [reduceEffects,setReduceEffects] = useState(false);
   const [teacherTheme,setTeacherTheme]   = useState(readStoredTeacherTheme);
-  const [heroCollapsed,setHeroCollapsed] = useState(false);
+  const heroCollapsed = true;
   const [detailSwipeOffset,setDetailSwipeOffset] = useState(0);
   const [detailSwipeTransitionMs,setDetailSwipeTransitionMs] = useState(0);
   const [loadIssue,setLoadIssue]         = useState(null);
@@ -2949,7 +2949,7 @@ function ClassTrackerInner({user}){
   const pendingSaveKey = `classlog_pending_${user.uid}`;
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
-  const mobileBottomNavPad = "calc(104px + env(safe-area-inset-bottom, 0px))";
+  const mobileBottomNavPad = "calc(88px + env(safe-area-inset-bottom, 0px))";
   const teacherThemeVars = useMemo(() => getTeacherThemeVars(teacherTheme), [teacherTheme]);
   const teacherThemeShell = useMemo(() => ({
     ...teacherThemeVars,
@@ -4196,13 +4196,11 @@ function ClassTrackerInner({user}){
       const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
       const lastLogTone = getLastLogToneStyles(lastLogMeta);
       const needsLogToday = todayN === 0;
-      const attentionStripe = needsLogToday ? (lastLogMeta.tone === "red" ? "#DC2626" : "#F59E0B") : ic.bg;
+      const attentionStripe = needsLogToday ? (lastLogMeta.tone === "red" ? "#B42318" : "#D97706") : "rgba(152,162,179,0.65)";
       const cardBorder = needsLogToday
-        ? (lastLogMeta.tone === "red" ? "rgba(220,38,38,0.18)" : "rgba(245,158,11,0.18)")
+        ? (lastLogMeta.tone === "red" ? "rgba(180,35,24,0.18)" : "rgba(217,119,6,0.18)")
         : G.border;
-      const cardBackground = needsLogToday
-        ? "linear-gradient(180deg, rgba(255,251,235,0.86) 0%, #FFFFFF 76%)"
-        : G.classCardBg;
+      const cardBackground = G.classCardBg;
       const stripeGlow = needsLogToday && !reduceEffects ? "ledgrStripePulse 1.9s ease-in-out infinite" : "none";
       const StatChip = ({label,value,active=false,wide=false})=>(
         <span style={{
@@ -4214,9 +4212,9 @@ function ClassTrackerInner({user}){
           fontSize:11,
           fontFamily:G.mono,
           fontWeight:700,
-          background:active?`${ic.light}`:"rgba(15,23,42,0.04)",
+          background:active?G.navActiveBg:"rgba(15,23,42,0.04)",
           color:active?G.green:G.textM,
-          border:`1px solid ${active?`${ic.bg}22`:"rgba(15,23,42,0.08)"}`,
+          border:`1px solid ${active?`${G.green}22`:"rgba(15,23,42,0.08)"}`,
           boxShadow:active?"inset 0 1px 0 rgba(255,255,255,0.42)":"none",
         }}>
           <span style={{fontFamily:G.sans,fontWeight:600,color:G.textL}}>{label}</span>
@@ -4254,8 +4252,8 @@ function ClassTrackerInner({user}){
 
       if(compact){
         const statBox = (label, value, active=false) => (
-          <div style={{background:G.surfaceAlt,border:`1px solid ${active ? `${ic.bg}2A` : G.border}`,borderRadius:12,padding:dense?"8px 7px":"9px 8px",textAlign:"center"}}>
-            <div style={{fontSize:20,fontWeight:800,color:active ? ic.bg : G.text,fontFamily:G.display,lineHeight:1}}>{value}</div>
+          <div style={{background:G.surfaceAlt,border:`1px solid ${active ? `${G.green}22` : G.border}`,borderRadius:12,padding:dense?"8px 7px":"9px 8px",textAlign:"center"}}>
+            <div style={{fontSize:20,fontWeight:800,color:active ? G.green : G.text,fontFamily:G.display,lineHeight:1}}>{value}</div>
             <div style={{fontSize:9.5,color:G.textM,marginTop:4,letterSpacing:0.3}}>{label}</div>
           </div>
         );
@@ -4277,12 +4275,13 @@ function ClassTrackerInner({user}){
                       <div style={{fontSize:19,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,lineHeight:1.1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
                       {needsLogToday && <span style={{...lastLogTone,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap",flexShrink:0}}>Not logged today</span>}
                     </div>
-                    <div style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:6,maxWidth:"100%",background:ic.light,border:`1px solid ${ic.bg}26`,borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:700,color:ic.bg,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                    <div style={{display:"inline-flex",alignItems:"center",gap:7,marginTop:6,maxWidth:"100%",background:G.surfaceAlt,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:700,color:G.textS,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                       <span style={{display:"inline-block",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{instShort}</span>
-                      {cls.subject && <span style={{opacity:0.85}}>· {cls.subject}</span>}
+                      {cls.subject && <span style={{color:G.textM}}>· {cls.subject}</span>}
                     </div>
                   </div>
-                  <div style={{width:36,height:36,borderRadius:999,background:ic.light,border:`1px solid ${ic.bg}26`,display:"flex",alignItems:"center",justifyContent:"center",color:ic.bg,flexShrink:0}}>
+                  <div style={{width:36,height:36,borderRadius:999,background:G.surfaceAlt,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:G.textM,flexShrink:0}}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9 18l6-6-6-6"/>
                     </svg>
@@ -4333,7 +4332,8 @@ function ClassTrackerInner({user}){
                 </div>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span title={instFull} style={{background:ic.light,color:ic.bg,borderRadius:20,padding:"2px 9px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${ic.bg}33`,flexShrink:0,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:G.surfaceAlt,color:G.textS,borderRadius:20,padding:"3px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${G.border}`,flexShrink:0,maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                   {instShort}
                 </span>
                 <span style={{fontSize:compact?11.5:12,color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{classSubject}</span>
@@ -4347,7 +4347,7 @@ function ClassTrackerInner({user}){
                 </div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:7}}>
                   <span style={{...lastLogTone,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap"}}>{lastLogMeta.short}</span>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:5,background:`${ic.bg}10`,color:ic.bg,border:`1px solid ${ic.bg}1F`,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>Open ↗</span>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surfaceAlt,color:G.textS,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>Open ↗</span>
                 </div>
                 </>
               )}
@@ -4356,16 +4356,16 @@ function ClassTrackerInner({user}){
               {onDelete&&<OverflowMenu buttonSize={30} items={[
                 { icon:"🗑", label:"Delete class", danger:true, onClick:onDelete },
               ]}/>}
-              <span style={{display:"inline-flex",alignItems:"center",gap:5,background:`${ic.bg}10`,color:ic.bg,border:`1px solid ${ic.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>{total} total</span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surfaceAlt,color:G.textS,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>{total} total</span>
               <span style={{display:"inline-flex",alignItems:"center",gap:5,background:todayN>0?G.greenL:"rgba(15,23,42,0.04)",color:todayN>0?G.green:G.textL,border:todayN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.08)`,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>{todayN} today</span>
             </div>}
             </div>
             {!compact&&(
               <>
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
-                <div style={{background:todayN>0?`${ic.light}`:"rgba(15,23,42,0.03)",border:todayN>0?`1px solid ${ic.bg}1A`:`1px solid rgba(15,23,42,0.06)`,borderRadius:14,padding:"10px 11px"}}>
+                <div style={{background:todayN>0?G.navActiveBg:"rgba(15,23,42,0.03)",border:todayN>0?`1px solid ${G.green}1A`:`1px solid rgba(15,23,42,0.06)`,borderRadius:14,padding:"10px 11px"}}>
                   <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>Today</div>
-                  <div style={{fontSize:18,fontWeight:800,color:todayN>0?ic.bg:G.textS,fontFamily:G.display,marginTop:4,lineHeight:1}}>{todayN}</div>
+                  <div style={{fontSize:18,fontWeight:800,color:todayN>0?G.green:G.textS,fontFamily:G.display,marginTop:4,lineHeight:1}}>{todayN}</div>
                 </div>
                 <div style={{background:monthN>0?G.greenL:"rgba(15,23,42,0.03)",border:monthN>0?`1px solid ${G.green}22`:`1px solid rgba(15,23,42,0.06)`,borderRadius:14,padding:"10px 11px"}}>
                   <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>{monthLabel}</div>
@@ -4448,65 +4448,35 @@ function ClassTrackerInner({user}){
       return(
       <div className="ledgr-page" style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
         <div style={{flex:1,overflowY:"auto",padding:mobileLiteMode?`12px 12px ${mobileBottomNavPad}`:`14px 16px ${mobileBottomNavPad}`,WebkitOverflowScrolling:"touch"}}>
-          <div
-            className="ledgr-card ledgr-pressable"
-            onClick={()=>setHeroCollapsed(v=>!v)}
-            style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F3F8F4 100%)",border:`1px solid ${G.border}`,borderRadius:24,padding:heroCollapsed?"14px 16px":"18px 18px 16px",boxShadow:G.shadowLg,marginBottom:18,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
-          >
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-              <div style={{flex:1,minWidth:0,textAlign:"center"}}>
-                <div style={{fontSize:11,fontWeight:800,color:G.textM,letterSpacing:1.05,textTransform:"uppercase",fontFamily:G.mono}}>Today</div>
-                <div style={{fontSize:heroCollapsed?16:19,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,marginTop:heroCollapsed?2:5}}>{quickHomeSummary.todayLabel}</div>
+          <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:22,padding:"14px 16px 13px",boxShadow:G.shadowMd,marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:10.5,fontWeight:800,color:G.textM,letterSpacing:0.95,textTransform:"uppercase",fontFamily:G.sans}}>Today</div>
+                <div style={{fontSize:19,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-0.25,marginTop:4,lineHeight:1.2}}>{quickHomeSummary.todayLabel}</div>
               </div>
-              <span style={{flexShrink:0,width:32,height:32,borderRadius:999,display:"inline-flex",alignItems:"center",justifyContent:"center",background:G.surfaceAlt,border:`1px solid ${G.border}`,color:G.textM,fontSize:15,fontWeight:700}}>
-                {heroCollapsed ? "+" : "−"}
-              </span>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:10.5,fontWeight:800,color:G.textM,letterSpacing:0.95,textTransform:"uppercase",fontFamily:G.sans}}>Visible</div>
+                <div style={{fontSize:30,fontWeight:700,color:G.text,fontFamily:G.display,letterSpacing:-1,lineHeight:1,marginTop:4}}>{filtered.length}</div>
+              </div>
             </div>
-            {heroCollapsed ? (
-              <>
-                <div style={{display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,marginTop:12,flexWrap:"wrap"}}>
-                  <span style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-1.2,lineHeight:1}}>{filtered.length}</span>
-                  <span style={{fontSize:13,color:G.textM,fontWeight:700}}>classes</span>
-                  <span style={{fontSize:13,color:quickHomeSummary.needsAttentionCount>0?"#B45309":G.green,fontWeight:800}}>
-                    {quickHomeSummary.needsAttentionCount} need attention
-                  </span>
-                </div>
-                <div style={{marginTop:12}}>
-                  <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11.5,color:G.textM,fontWeight:700,marginBottom:6}}>
-                    <span>{quickHomeSummary.monthLoggedDays}/{quickHomeSummary.workingDaysElapsed} working days logged</span>
-                    <span>{progressPct}%</span>
-                  </div>
-                  <div style={{height:6,borderRadius:999,background:"rgba(15,23,42,0.08)",overflow:"hidden"}}>
-                    <div style={{width:`${Math.max(8, progressPct)}%`,height:"100%",borderRadius:999,background:"linear-gradient(90deg, #1B8A4C 0%, #34D077 100%)"}}/>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{textAlign:"center",marginTop:14}}>
-                  <div style={{fontSize:52,fontWeight:800,fontFamily:G.display,letterSpacing:-2.8,lineHeight:0.95,color:G.text}}>{filtered.length}</div>
-                  <div style={{fontSize:12.5,color:G.textM,letterSpacing:0.22,marginTop:8}}>classes visible right now</div>
-                </div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:14}}>
-                  <span style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:G.textS}}><b style={{color:G.text}}>{quickHomeSummary.loggedToday}</b> logged today</span>
-                  <span style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700,color:G.textS}}><b style={{color:G.text}}>{quickHomeSummary.monthEntries}</b> entries this month</span>
-                  <span style={{background:quickHomeSummary.needsAttentionCount>0?"rgba(245,158,11,0.10)":G.surface,border:quickHomeSummary.needsAttentionCount>0?"1px solid rgba(245,158,11,0.18)":`1px solid ${G.border}`,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:800,color:quickHomeSummary.needsAttentionCount>0?"#B45309":G.green}}>{quickHomeSummary.needsAttentionCount} not logged today</span>
-                </div>
-                <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid rgba(15,23,42,0.08)"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11.5,color:G.textM,fontWeight:700,marginBottom:7}}>
-                    <span>{quickHomeSummary.monthLoggedDays} of {quickHomeSummary.workingDaysElapsed} working days logged this month</span>
-                    <span>{progressPct}%</span>
-                  </div>
-                  <div style={{height:6,borderRadius:999,background:"rgba(15,23,42,0.08)",overflow:"hidden"}}>
-                    <div style={{width:`${Math.max(8, progressPct)}%`,height:"100%",borderRadius:999,background:"linear-gradient(90deg, #1B8A4C 0%, #34D077 100%)"}}/>
-                  </div>
-                </div>
-              </>
-            )}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+              <span style={{background:G.surfaceAlt,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:700,color:G.textS}}>{quickHomeSummary.loggedToday} logged today</span>
+              <span style={{background:G.surfaceAlt,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:700,color:G.textS}}>{quickHomeSummary.monthEntries} entries this month</span>
+              <span style={{background:quickHomeSummary.needsAttentionCount>0?"rgba(217,119,6,0.10)":G.surfaceAlt,border:quickHomeSummary.needsAttentionCount>0?"1px solid rgba(217,119,6,0.18)":`1px solid ${G.border}`,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:800,color:quickHomeSummary.needsAttentionCount>0?"#B45309":G.textS}}>{quickHomeSummary.needsAttentionCount} not logged today</span>
+            </div>
+            <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid rgba(16,24,40,0.08)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11.5,color:G.textM,fontWeight:700,marginBottom:7}}>
+                <span>{quickHomeSummary.monthLoggedDays} of {quickHomeSummary.workingDaysElapsed} working days logged this month</span>
+                <span>{progressPct}%</span>
+              </div>
+              <div style={{height:5,borderRadius:999,background:"rgba(16,24,40,0.08)",overflow:"hidden"}}>
+                <div style={{width:`${Math.max(8, progressPct)}%`,height:"100%",borderRadius:999,background:G.green}}/>
+              </div>
+            </div>
           </div>
 
           {institutes.length>1&&(
-            <div className="ledgr-card" style={{background:"linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,252,0.98) 100%)",border:`1px solid rgba(148,163,184,0.20)`,borderRadius:24,padding:"14px 14px 12px",boxShadow:"0 12px 28px rgba(15,23,42,0.08)",marginBottom:16}}>
+            <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:22,padding:"14px 14px 12px",boxShadow:G.shadowMd,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:800,color:"#94A3B8",letterSpacing:1.1,textTransform:"uppercase",margin:"0 2px 12px",fontFamily:G.mono}}>Institute Filter</div>
               <InstFilter stacked allLabel="All Classes"/>
             </div>

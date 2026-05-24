@@ -1,12 +1,12 @@
 export const COLORS = [
-  { bg:"#FF6B6B", light:"#FFE5E5", text:"#8B0000" },
-  { bg:"#4ECDC4", light:"#E0F7F6", text:"#00574B" },
-  { bg:"#FFD93D", light:"#FFF8DC", text:"#7A5C00" },
-  { bg:"#6BCB77", light:"#E4F7E6", text:"#1A5C27" },
-  { bg:"#845EC2", light:"#EFE6FF", text:"#3D007A" },
-  { bg:"#FF9671", light:"#FFF0E8", text:"#7A3000" },
-  { bg:"#0089BA", light:"#E0F2FA", text:"#004A6E" },
-  { bg:"#F9A8D4", light:"#FDE8F5", text:"#7C1A50" },
+  { bg:"#2563EB", light:"#EAF1FF", text:"#1E40AF" },
+  { bg:"#0F766E", light:"#E8F8F6", text:"#115E59" },
+  { bg:"#C2410C", light:"#FFF4E8", text:"#9A3412" },
+  { bg:"#475569", light:"#EEF2F7", text:"#334155" },
+  { bg:"#0369A1", light:"#E8F7FF", text:"#075985" },
+  { bg:"#B42318", light:"#FEF3F2", text:"#912018" },
+  { bg:"#1D4ED8", light:"#EAF1FF", text:"#1D4ED8" },
+  { bg:"#334155", light:"#EFF4F8", text:"#334155" },
 ];
 
 export const STATUS_STYLES = {
@@ -28,7 +28,7 @@ export const MONTHS = ["January","February","March","April","May","June",
 export const inp = {
   width:"100%", padding:"11px 14px", borderRadius:10,
   border:"1.5px solid #E5E5E5", fontSize:17,
-  fontFamily:"Georgia,serif", outline:"none",
+  fontFamily:"'Inter',sans-serif", outline:"none",
   background:"#fff", boxSizing:"border-box", marginBottom:10,
 };
 
@@ -81,8 +81,8 @@ export function Spinner({ text="Loading…" }) {
         </svg>
       </div>
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-        <div style={{fontSize:14,fontWeight:800,letterSpacing:1.1,textTransform:"uppercase",color:"#2563EB",fontFamily:"'Trebuchet MS','Segoe UI',sans-serif"}}>Loading Ledgr</div>
-        <div style={{color:"#64748B",fontSize:15,fontFamily:"'Trebuchet MS','Segoe UI',sans-serif",textAlign:"center"}}>{text}</div>
+        <div style={{fontSize:14,fontWeight:800,letterSpacing:1.1,textTransform:"uppercase",color:"#2563EB",fontFamily:"'Inter',sans-serif"}}>Loading Ledgr</div>
+        <div style={{color:"#64748B",fontSize:15,fontFamily:"'Inter',sans-serif",textAlign:"center"}}>{text}</div>
       </div>
       <style>{`
         .book-loader-shell{
