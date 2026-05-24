@@ -3731,6 +3731,17 @@ function ClassTrackerInner({user}){
         created:cls.created||0,
       }));
   },[data.classes]);
+  const teacherMemberSinceLabel = useMemo(() => {
+    const authCreated = user?.metadata?.creationTime ? new Date(user.metadata.creationTime) : null;
+    const firstClassCreated = [...(data.classes || [])]
+      .map(cls => Number(cls?.created || 0))
+      .filter(Boolean)
+      .sort((a,b)=>a-b)[0];
+    const fallbackCreated = firstClassCreated ? new Date(firstClassCreated) : null;
+    const source = authCreated && !Number.isNaN(authCreated.getTime()) ? authCreated : fallbackCreated;
+    if(!source || Number.isNaN(source.getTime())) return "";
+    return source.toLocaleDateString("en-IN", { month:"long", year:"numeric" });
+  }, [data.classes, user?.metadata?.creationTime]);
 
   useEffect(()=>{
     if(view!=="addClass") return;
@@ -3781,17 +3792,6 @@ function ClassTrackerInner({user}){
 
   const teacherName=data.profile.name;
   const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
-  const teacherMemberSinceLabel = useMemo(() => {
-    const authCreated = user?.metadata?.creationTime ? new Date(user.metadata.creationTime) : null;
-    const firstClassCreated = [...(data.classes || [])]
-      .map(cls => Number(cls?.created || 0))
-      .filter(Boolean)
-      .sort((a,b)=>a-b)[0];
-    const fallbackCreated = firstClassCreated ? new Date(firstClassCreated) : null;
-    const source = authCreated && !Number.isNaN(authCreated.getTime()) ? authCreated : fallbackCreated;
-    if(!source || Number.isNaN(source.getTime())) return "";
-    return source.toLocaleDateString("en-IN", { month:"long", year:"numeric" });
-  }, [data.classes, user?.metadata?.creationTime]);
 
   const SaveBadge=()=>{
     if(!saving&&!saveErr) return null;
