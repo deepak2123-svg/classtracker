@@ -5,23 +5,154 @@ import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Spinner, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
 
+const TEACHER_THEME_STORAGE_KEY = "classlog_teacher_theme";
+const TEACHER_THEMES = {
+  light: {
+    forest:"#005965",
+    forestS:"#0A7481",
+    green:"#006874",
+    greenV:"#0A7F8D",
+    greenL:"#E2F4F6",
+    bg:"#F2F6F7",
+    surface:"#FFFFFF",
+    surfaceAlt:"#EAF2F4",
+    surfaceSoft:"#F8FBFB",
+    pageBg:"linear-gradient(180deg, #F2F6F7 0%, #EDF4F6 100%)",
+    border:"#D4E3E6",
+    borderM:"#BACED3",
+    text:"#0E1A1C",
+    textS:"#1E3134",
+    textM:"#5A7377",
+    textL:"#8AA2A7",
+    red:"#C2500A",
+    redL:"#FFF3EC",
+    navy:"#006874",
+    shadowSm:"0 1px 4px rgba(14,26,28,0.06)",
+    shadowMd:"0 10px 24px rgba(14,26,28,0.08)",
+    shadowLg:"0 20px 44px rgba(14,26,28,0.14)",
+    topbarBg:"rgba(242,246,247,0.96)",
+    topbarBorder:"rgba(212,227,230,0.92)",
+    topbarButtonBg:"#FFFFFF",
+    topbarButtonBorder:"rgba(212,227,230,0.92)",
+    heroBg:"linear-gradient(135deg, #006874 0%, #0A7F8D 100%)",
+    classCardBg:"linear-gradient(180deg, #FFFFFF 0%, #F9FCFC 100%)",
+    navBg:"rgba(255,255,255,0.96)",
+    navBorder:"rgba(212,227,230,0.95)",
+    navActiveBg:"rgba(0,104,116,0.10)",
+  },
+  dark: {
+    forest:"#0E3A40",
+    forestS:"#13525A",
+    green:"#67CDD8",
+    greenV:"#88DEE7",
+    greenL:"rgba(103,205,216,0.14)",
+    bg:"#081114",
+    surface:"#101B1F",
+    surfaceAlt:"#142328",
+    surfaceSoft:"#0D171A",
+    pageBg:"linear-gradient(180deg, #081114 0%, #0C171A 100%)",
+    border:"#21363B",
+    borderM:"#2B444A",
+    text:"#F1FBFC",
+    textS:"#D7E8E9",
+    textM:"#9DB8BC",
+    textL:"#71898D",
+    red:"#FFB27A",
+    redL:"rgba(255,178,122,0.16)",
+    navy:"#1B7F89",
+    shadowSm:"0 2px 8px rgba(0,0,0,0.28)",
+    shadowMd:"0 12px 28px rgba(0,0,0,0.34)",
+    shadowLg:"0 24px 56px rgba(0,0,0,0.42)",
+    topbarBg:"rgba(8,17,20,0.92)",
+    topbarBorder:"rgba(33,54,59,0.95)",
+    topbarButtonBg:"rgba(255,255,255,0.05)",
+    topbarButtonBorder:"rgba(255,255,255,0.08)",
+    heroBg:"linear-gradient(135deg, #11444B 0%, #16606A 100%)",
+    classCardBg:"linear-gradient(180deg, #101B1F 0%, #0D171A 100%)",
+    navBg:"rgba(16,27,31,0.96)",
+    navBorder:"rgba(33,54,59,0.98)",
+    navActiveBg:"rgba(103,205,216,0.14)",
+  },
+};
+
+function getSystemTeacherTheme(){
+  if(typeof window==="undefined") return "light";
+  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+}
+
+function readStoredTeacherTheme(){
+  if(typeof window==="undefined") return "light";
+  try{
+    const stored = localStorage.getItem(TEACHER_THEME_STORAGE_KEY);
+    if(stored==="light" || stored==="dark") return stored;
+  }catch(e){}
+  return getSystemTeacherTheme();
+}
+
+function getTeacherThemeVars(themeName){
+  const theme = TEACHER_THEMES[themeName] || TEACHER_THEMES.light;
+  return {
+    "--ledgr-forest":theme.forest,
+    "--ledgr-forest-s":theme.forestS,
+    "--ledgr-green":theme.green,
+    "--ledgr-green-v":theme.greenV,
+    "--ledgr-green-l":theme.greenL,
+    "--ledgr-bg":theme.bg,
+    "--ledgr-surface":theme.surface,
+    "--ledgr-surface-alt":theme.surfaceAlt,
+    "--ledgr-surface-soft":theme.surfaceSoft,
+    "--ledgr-page-bg":theme.pageBg,
+    "--ledgr-border":theme.border,
+    "--ledgr-border-m":theme.borderM,
+    "--ledgr-text":theme.text,
+    "--ledgr-text-s":theme.textS,
+    "--ledgr-text-m":theme.textM,
+    "--ledgr-text-l":theme.textL,
+    "--ledgr-red":theme.red,
+    "--ledgr-red-l":theme.redL,
+    "--ledgr-navy":theme.navy,
+    "--ledgr-shadow-sm":theme.shadowSm,
+    "--ledgr-shadow-md":theme.shadowMd,
+    "--ledgr-shadow-lg":theme.shadowLg,
+    "--ledgr-topbar-bg":theme.topbarBg,
+    "--ledgr-topbar-border":theme.topbarBorder,
+    "--ledgr-topbar-button-bg":theme.topbarButtonBg,
+    "--ledgr-topbar-button-border":theme.topbarButtonBorder,
+    "--ledgr-hero-bg":theme.heroBg,
+    "--ledgr-class-card-bg":theme.classCardBg,
+    "--ledgr-nav-bg":theme.navBg,
+    "--ledgr-nav-border":theme.navBorder,
+    "--ledgr-nav-active-bg":theme.navActiveBg,
+  };
+}
+
 // ── Design tokens (mirrors CSS vars) ─────────────────────────────────────────
 const G = {
-  forest:"#0F172A",  forestS:"#1E293B",
-  green:"#2563EB",   greenV:"#3B82F6",  greenL:"#E8F0FF",
-  bg:"#F6F8FC",      surface:"#FFFFFF",
-  pageBg:"linear-gradient(180deg, #F8FAFC 0%, #F3F6FB 100%)",
-  border:"#D7DFEC",  borderM:"#B7C3D7",
-  // High contrast text — primary reading on mobile
-  text:  "#0F172A",
-  textS: "#1E293B",
-  textM: "#475569",
-  textL: "#94A3B8",
-  red:"#C24141",     redL:"#FDECEC",
-  navy:"#0F172A",
-  shadowSm:"0 2px 8px rgba(15,23,42,0.06)",
-  shadowMd:"0 10px 24px rgba(15,23,42,0.08)",
-  shadowLg:"0 20px 44px rgba(15,23,42,0.14)",
+  forest:"var(--ledgr-forest)",  forestS:"var(--ledgr-forest-s)",
+  green:"var(--ledgr-green)",    greenV:"var(--ledgr-green-v)",  greenL:"var(--ledgr-green-l)",
+  bg:"var(--ledgr-bg)",          surface:"var(--ledgr-surface)",
+  surfaceAlt:"var(--ledgr-surface-alt)",
+  surfaceSoft:"var(--ledgr-surface-soft)",
+  pageBg:"var(--ledgr-page-bg)",
+  border:"var(--ledgr-border)",  borderM:"var(--ledgr-border-m)",
+  text:"var(--ledgr-text)",
+  textS:"var(--ledgr-text-s)",
+  textM:"var(--ledgr-text-m)",
+  textL:"var(--ledgr-text-l)",
+  red:"var(--ledgr-red)",        redL:"var(--ledgr-red-l)",
+  navy:"var(--ledgr-navy)",
+  shadowSm:"var(--ledgr-shadow-sm)",
+  shadowMd:"var(--ledgr-shadow-md)",
+  shadowLg:"var(--ledgr-shadow-lg)",
+  topbarBg:"var(--ledgr-topbar-bg)",
+  topbarBorder:"var(--ledgr-topbar-border)",
+  topbarButtonBg:"var(--ledgr-topbar-button-bg)",
+  topbarButtonBorder:"var(--ledgr-topbar-button-border)",
+  heroBg:"var(--ledgr-hero-bg)",
+  classCardBg:"var(--ledgr-class-card-bg)",
+  navBg:"var(--ledgr-nav-bg)",
+  navBorder:"var(--ledgr-nav-border)",
+  navActiveBg:"var(--ledgr-nav-active-bg)",
   mono:"'Inter',sans-serif",
   sans:"'Inter',sans-serif",
   display:"'Poppins',sans-serif",
@@ -443,73 +574,65 @@ function getPrimaryTeacherTab(view){
 }
 
 function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,onViewNotifications,trashCount,notificationCount=0,data,showProfileMenu=true}){
-  const shortName=(teacherName||"").split(" ")[0];
   const [profileOpen, setProfileOpen] = React.useState(false);
 
   return(
-    <div style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 0 rgba(255,255,255,0.06), 0 14px 28px rgba(15,23,42,0.16)",paddingTop:"env(safe-area-inset-top, 0px)"}}>
-      <div style={{height:64,display:"flex",alignItems:"center",padding:"0 12px",gap:8,overflow:"visible"}}>
-
-        {/* Ledgr logo */}
-        <div onClick={onLogoClick}
-          style={{display:"flex",alignItems:"center",gap:7,flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
-          onPointerDown={e=>{e.currentTarget.style.opacity="0.7";}}
+    <div style={{position:"sticky",top:0,zIndex:100,background:G.topbarBg,borderBottom:`1px solid ${G.topbarBorder}`,backdropFilter:"blur(18px)",WebkitBackdropFilter:"blur(18px)",paddingTop:"env(safe-area-inset-top, 0px)"}}>
+      <div style={{minHeight:72,display:"flex",alignItems:"center",padding:"12px 16px 10px",gap:12,overflow:"visible"}}>
+        <div
+          onClick={onLogoClick}
+          style={{display:"flex",alignItems:"center",gap:12,flex:1,minWidth:0,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}
+          onPointerDown={e=>{e.currentTarget.style.opacity="0.72";}}
           onPointerUp={e=>{e.currentTarget.style.opacity="1";}}
           onPointerCancel={e=>{e.currentTarget.style.opacity="1";}}>
-          <div style={{width:38,height:38,borderRadius:12,background:"linear-gradient(180deg, #4A93FF 0%, #3376F0 100%)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 16px rgba(20,51,103,0.24)"}}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <div style={{width:44,height:44,borderRadius:14,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.18), 0 10px 22px rgba(0,104,116,0.18)"}}>
+            <svg width="19" height="19" viewBox="0 0 18 18" fill="none">
               <path d="M4 3H7V13H14V16H4V3Z" fill="white"/>
             </svg>
           </div>
-          <div style={{display:"flex",flexDirection:"column",justifyContent:"center",gap:1}}>
-            <span style={{fontFamily:G.display,fontWeight:800,fontSize:19,color:"#fff",letterSpacing:-0.5,lineHeight:1}}>Ledgr</span>
-            <span style={{fontFamily:G.mono,fontWeight:600,fontSize:10,color:"rgba(255,255,255,0.46)",letterSpacing:1.3,lineHeight:1.1}}>TEACHER PANEL</span>
+          <div style={{minWidth:0}}>
+            <div style={{fontFamily:G.display,fontWeight:800,fontSize:23,color:G.text,letterSpacing:-0.5,lineHeight:1}}>Ledgr</div>
+            <div style={{fontFamily:G.mono,fontWeight:700,fontSize:10.5,color:G.textM,letterSpacing:1.2,lineHeight:1.1,textTransform:"uppercase",marginTop:4}}>Teacher Panel</div>
           </div>
         </div>
 
-        <div style={{flex:1}}/>
-
-        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,minWidth:0}}>
           {right}
 
           {onViewNotifications && (
             <button onClick={onViewNotifications}
-              style={{height:38,minWidth:38,padding:"0 11px",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,cursor:"pointer",color:"rgba(255,255,255,0.9)",position:"relative",WebkitTapHighlightColor:"transparent",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
+              style={{width:44,height:44,padding:0,display:"flex",alignItems:"center",justifyContent:"center",background:G.topbarButtonBg,border:`1px solid ${G.topbarButtonBorder}`,borderRadius:999,cursor:"pointer",color:G.textM,position:"relative",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
                 <path d="M13.73 21a2 2 0 01-3.46 0"/>
               </svg>
               {notificationCount > 0 && (
-                <span style={{position:"absolute",top:-5,right:-4,minWidth:18,height:18,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 6px 16px rgba(220,38,38,0.3)"}}>
+                <span style={{position:"absolute",top:-4,right:-4,minWidth:18,height:18,borderRadius:999,background:"#F08C00",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 8px 18px rgba(240,140,0,0.26)"}}>
                   {notificationCount > 9 ? "9+" : notificationCount}
                 </span>
               )}
             </button>
           )}
 
-          {/* Clickable profile pill */}
           {showProfileMenu && <div style={{position:"relative",flexShrink:0}}>
             <div onClick={()=>setProfileOpen(o=>!o)}
-              style={{height:38,display:"flex",alignItems:"center",gap:6,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"0 9px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
+              style={{height:44,display:"flex",alignItems:"center",gap:8,background:profileOpen?G.surfaceAlt:G.topbarButtonBg,border:`1px solid ${profileOpen ? G.borderM : G.topbarButtonBorder}`,borderRadius:999,padding:"0 10px",flexShrink:0,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s, border-color 0.15s",boxShadow:G.shadowSm}}>
               <Avatar user={user} size={22}/>
-              <span style={{fontWeight:600,fontSize:13,color:"rgba(255,255,255,0.92)",whiteSpace:"nowrap",fontFamily:G.sans}} className="desktop-only">
+              <span style={{fontWeight:700,fontSize:13,color:G.text,whiteSpace:"nowrap",fontFamily:G.sans}} className="desktop-only">
                 {teacherName}
               </span>
-              <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:2}}>{profileOpen?"▲":"▼"}</span>
+              <span style={{fontSize:10,color:G.textL,marginLeft:2}}>{profileOpen?"▲":"▼"}</span>
             </div>
 
-            {/* Profile dropdown */}
             {profileOpen&&(<>
               <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
-              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"rgba(20,33,61,0.97)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 18px 38px rgba(20,33,61,0.34)",minWidth:230,overflow:"hidden"}}>
-
-                {/* Profile header */}
-                <div style={{padding:"14px 16px 12px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+              <div style={{position:"absolute",top:"calc(100% + 10px)",right:0,zIndex:200,background:G.surface,border:`1px solid ${G.border}`,borderRadius:20,boxShadow:G.shadowLg,minWidth:240,overflow:"hidden"}}>
+                <div style={{padding:"16px 16px 13px",borderBottom:`1px solid ${G.border}`}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <Avatar user={user} size={36}/>
                     <div>
-                      <div style={{fontSize:15,fontWeight:700,color:"rgba(255,255,255,0.95)",fontFamily:G.sans}}>{teacherName}</div>
-                      <div style={{fontSize:12,color:"rgba(255,255,255,0.45)",marginTop:2,fontFamily:G.sans}}>{user?.email||"—"}</div>
+                      <div style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.sans}}>{teacherName}</div>
+                      <div style={{fontSize:12,color:G.textM,marginTop:2,fontFamily:G.sans}}>{user?.email||"—"}</div>
                     </div>
                   </div>
                 </div>
@@ -517,32 +640,33 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
                 <div style={{padding:"8px"}}>
                   {onViewNotifications && (
                     <button onClick={()=>{setProfileOpen(false);onViewNotifications();}}
-                      style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.84)",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
+                      style={{width:"100%",marginBottom:6,padding:"11px 12px",background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:G.textS,fontSize:14,fontFamily:G.sans,fontWeight:700,WebkitTapHighlightColor:"transparent"}}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
                       Notifications
-                      {notificationCount>0&&<span style={{marginLeft:"auto",background:"rgba(59,130,246,0.2)",color:"#DBEAFE",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>{notificationCount}</span>}
+                      {notificationCount>0&&<span style={{marginLeft:"auto",background:"rgba(240,140,0,0.14)",color:"#C2500A",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:800,fontFamily:G.mono}}>{notificationCount}</span>}
                     </button>
                   )}
 
-                  {/* Stats */}
-                  <button onClick={()=>{setProfileOpen(false);onViewStats();}}
-                    style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(59,130,246,0.14)",border:"1px solid rgba(59,130,246,0.24)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#BFDBFE",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
-                    View Stats
-                  </button>
+                  {onViewStats && (
+                    <button onClick={()=>{setProfileOpen(false);onViewStats();}}
+                      style={{width:"100%",marginBottom:6,padding:"11px 12px",background:G.greenL,border:`1px solid ${G.border}`,borderRadius:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:G.green,fontSize:14,fontFamily:G.sans,fontWeight:700,WebkitTapHighlightColor:"transparent"}}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
+                      View Stats
+                    </button>
+                  )}
 
-                  {/* Recycle Bin */}
-                  <button onClick={()=>{setProfileOpen(false);onViewTrash&&onViewTrash();}}
-                    style={{width:"100%",marginBottom:6,padding:"10px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.75)",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                    Recycle Bin
-                    {(trashCount||0)>0&&<span style={{marginLeft:"auto",background:"rgba(201,48,48,0.7)",color:"#fff",borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:700}}>{trashCount}</span>}
-                  </button>
+                  {onViewTrash && (
+                    <button onClick={()=>{setProfileOpen(false);onViewTrash();}}
+                      style={{width:"100%",marginBottom:6,padding:"11px 12px",background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:G.textS,fontSize:14,fontFamily:G.sans,fontWeight:700,WebkitTapHighlightColor:"transparent"}}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                      Recycle Bin
+                      {(trashCount||0)>0&&<span style={{marginLeft:"auto",background:G.redL,color:G.red,borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:800,fontFamily:G.mono}}>{trashCount}</span>}
+                    </button>
+                  )}
 
-                  {/* Sign out */}
                   <button onClick={()=>{setProfileOpen(false);onSignOut();}}
-                    style={{width:"100%",padding:"10px 12px",background:"rgba(220,38,38,0.15)",border:"1px solid rgba(220,38,38,0.3)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"#FCA5A5",fontSize:14,fontFamily:G.sans,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    style={{width:"100%",padding:"11px 12px",background:G.redL,border:`1px solid ${G.red}33`,borderRadius:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:G.red,fontSize:14,fontFamily:G.sans,fontWeight:700,WebkitTapHighlightColor:"transparent"}}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={G.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                       <polyline points="16 17 21 12 16 7"/>
                       <line x1="21" y1="12" x2="9" y2="12"/>
@@ -564,11 +688,11 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
   const itemBase = isActive => ({
     flex:1,
-    minHeight:54,
+    minHeight:52,
     border:"none",
-    borderRadius:18,
-    background:isActive ? "linear-gradient(180deg, rgba(37,99,235,0.14) 0%, rgba(37,99,235,0.08) 100%)" : "transparent",
-    color:isActive ? G.green : G.textL,
+    borderRadius:20,
+    background:"transparent",
+    color:isActive ? G.green : G.textM,
     cursor:"pointer",
     display:"flex",
     flexDirection:"column",
@@ -577,27 +701,30 @@ function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
     gap:4,
     fontFamily:G.sans,
     fontWeight:isActive ? 700 : 600,
-    fontSize:12,
+    fontSize:11.5,
     position:"relative",
     WebkitTapHighlightColor:"transparent",
-    transition:"background 0.15s ease, color 0.15s ease, transform 0.15s ease",
   });
 
   return(
-    <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:170,padding:"10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",pointerEvents:"none"}}>
-      <div style={{maxWidth:520,margin:"0 auto",background:"rgba(255,255,255,0.94)",border:`1px solid ${G.border}`,borderRadius:24,padding:"8px",boxShadow:"0 16px 40px rgba(15,23,42,0.18)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",display:"flex",gap:8,pointerEvents:"auto"}}>
+    <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,zIndex:170,padding:"10px 18px calc(20px + env(safe-area-inset-bottom, 0px))",pointerEvents:"none"}}>
+      <div style={{background:G.navBg,border:`1px solid ${G.navBorder}`,borderRadius:28,padding:"10px 12px",boxShadow:G.shadowLg,backdropFilter:"blur(18px)",WebkitBackdropFilter:"blur(18px)",display:"flex",gap:10,pointerEvents:"auto"}}>
         <button type="button" onClick={onHome} style={itemBase(activeTab==="home")}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 10.5 12 3l9 7.5"/>
-            <path d="M5 9.5V21h14V9.5"/>
-          </svg>
+          <span style={{width:64,height:32,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="home" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 10.5 12 3l9 7.5"/>
+              <path d="M5 9.5V21h14V9.5"/>
+            </svg>
+          </span>
           <span>Home</span>
         </button>
         <button type="button" onClick={onProfile} style={itemBase(activeTab==="profile")}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21a8 8 0 0 0-16 0"/>
-            <circle cx="12" cy="8" r="4"/>
-          </svg>
+          <span style={{width:64,height:32,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="profile" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21a8 8 0 0 0-16 0"/>
+              <circle cx="12" cy="8" r="4"/>
+            </svg>
+          </span>
           <span>Profile</span>
           {profileBadge > 0 && (
             <span style={{position:"absolute",top:5,right:"calc(50% - 30px)",minWidth:18,height:18,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,fontFamily:G.mono,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px",boxShadow:"0 8px 16px rgba(220,38,38,0.22)"}}>
@@ -612,11 +739,11 @@ function TeacherBottomBar({activeTab,onHome,onProfile,profileBadge=0}){
 
 function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger=false,accent="blue"}){
   const accentMap = {
-    blue: { bg:"#EFF6FF", border:"#BFDBFE", icon:"#2563EB", text:"#1D4ED8" },
-    amber: { bg:"#FFF7ED", border:"#FED7AA", icon:"#D97706", text:"#B45309" },
-    slate: { bg:"#F8FAFC", border:"#D7DFEC", icon:"#475569", text:"#334155" },
-    red: { bg:"#FEF2F2", border:"#FECACA", icon:"#DC2626", text:"#B91C1C" },
-    green: { bg:"#ECFDF3", border:"#BBF7D0", icon:"#16A34A", text:"#15803D" },
+    blue: { bg:"rgba(20,85,179,0.12)", border:"rgba(20,85,179,0.16)", icon:"#1455B3", text:"#1455B3" },
+    amber: { bg:"rgba(194,80,10,0.12)", border:"rgba(194,80,10,0.16)", icon:"#C2500A", text:"#C2500A" },
+    slate: { bg:"rgba(90,115,119,0.12)", border:"rgba(90,115,119,0.16)", icon:"#5A7377", text:"#5A7377" },
+    red: { bg:"rgba(220,38,38,0.12)", border:"rgba(220,38,38,0.18)", icon:"#DC2626", text:"#DC2626" },
+    green: { bg:"rgba(26,102,54,0.12)", border:"rgba(26,102,54,0.18)", icon:"#1A6636", text:"#1A6636" },
   };
   const tone = danger ? accentMap.red : (accentMap[accent] || accentMap.blue);
 
@@ -627,9 +754,9 @@ function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger
       onClick={onClick}
       style={{
         width:"100%",
-        background:"#fff",
+        background:G.surface,
         border:`1px solid ${danger ? tone.border : G.border}`,
-        borderRadius:22,
+        borderRadius:24,
         padding:"16px 16px",
         display:"flex",
         alignItems:"center",
@@ -644,11 +771,11 @@ function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger
       </div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:18,fontWeight:800,color:danger ? tone.text : G.text,fontFamily:G.display,letterSpacing:-0.25,lineHeight:1.15}}>{title}</div>
-        <div style={{fontSize:14,color:danger ? tone.text : G.textM,fontFamily:G.sans,marginTop:4,lineHeight:1.45}}>{subtitle}</div>
+        <div style={{fontSize:14,color:danger ? tone.text : G.textM,fontFamily:G.sans,marginTop:4,lineHeight:1.5}}>{subtitle}</div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
         {badge!==null && (
-          <span style={{background:danger ? tone.bg : "rgba(37,99,235,0.08)",border:`1px solid ${danger ? tone.border : "rgba(37,99,235,0.16)"}`,borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:danger ? tone.text : G.green}}>
+          <span style={{background:danger ? tone.bg : G.greenL,border:`1px solid ${danger ? tone.border : G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:danger ? tone.text : G.green}}>
             {badge}
           </span>
         )}
@@ -658,17 +785,94 @@ function TeacherProfileActionCard({icon,title,subtitle,onClick,badge=null,danger
   );
 }
 
-function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount,trashCount,onOpenStats,onOpenNotifications,onOpenTrash,onOpenExport,onSignOut}){
+function TeacherThemeCard({themeMode,onThemeChange}){
+  const options = [
+    {
+      id:"light",
+      label:"Light",
+      desc:"Clean daylight surface",
+      preview:{
+        bg:"#F2F6F7",
+        surface:"#FFFFFF",
+        accent:"#006874",
+        text:"#0E1A1C",
+      },
+    },
+    {
+      id:"dark",
+      label:"Dark",
+      desc:"Low-glare night surface",
+      preview:{
+        bg:"#081114",
+        surface:"#101B1F",
+        accent:"#67CDD8",
+        text:"#F1FBFC",
+      },
+    },
+  ];
+
   return(
-    <div className="ledgr-page" style={{flex:1,overflowY:"auto",padding:"12px 14px calc(104px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch"}}>
-      <div className="ledgr-card" style={{background:`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`,borderRadius:26,padding:"18px 18px 16px",boxShadow:"0 16px 32px rgba(15,23,42,0.18)",marginBottom:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
-          <div style={{width:58,height:58,borderRadius:18,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+    <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:24,padding:"16px 16px 14px",boxShadow:G.shadowSm}}>
+      <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Appearance</div>
+      <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,lineHeight:1.1,marginBottom:6}}>Choose your theme</div>
+      <div style={{fontSize:14,color:G.textM,lineHeight:1.55,marginBottom:14}}>Switch the teacher panel between bright daylight and a darker evening view.</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
+        {options.map(option=>{
+          const selected = themeMode===option.id;
+          return(
+            <button
+              key={option.id}
+              type="button"
+              className="ledgr-pressable"
+              onClick={()=>onThemeChange(option.id)}
+              style={{
+                border:`1px solid ${selected ? G.green : G.border}`,
+                borderRadius:18,
+                background:selected ? G.greenL : G.surfaceSoft,
+                padding:"11px 11px 12px",
+                textAlign:"left",
+                cursor:"pointer",
+                boxShadow:selected ? `0 10px 22px ${G.greenL}` : "none",
+                WebkitTapHighlightColor:"transparent",
+              }}>
+              <div style={{height:78,borderRadius:14,background:option.preview.bg,border:`1px solid ${selected ? option.preview.accent : "rgba(0,0,0,0.08)"}`,padding:8,display:"flex",flexDirection:"column",justifyContent:"space-between",marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{width:24,height:24,borderRadius:8,background:option.preview.accent}}/>
+                  <div style={{width:18,height:18,borderRadius:999,border:`2px solid ${option.preview.accent}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {selected && <div style={{width:8,height:8,borderRadius:999,background:option.preview.accent}}/>}
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:6}}>
+                  {[0,1].map(i=>(
+                    <div key={i} style={{height:22,borderRadius:8,background:option.preview.surface,border:"1px solid rgba(0,0,0,0.06)"}}/>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:4}}>
+                <span style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.display}}>{option.label}</span>
+                {selected && <span style={{background:G.green,color:"#fff",borderRadius:999,padding:"3px 8px",fontSize:10,fontWeight:800,fontFamily:G.mono,textTransform:"uppercase"}}>Active</span>}
+              </div>
+              <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45}}>{option.desc}</div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount,trashCount,onOpenStats,onOpenNotifications,onOpenTrash,onOpenExport,onSignOut,themeMode,onThemeChange}){
+  return(
+    <div className="ledgr-page" style={{flex:1,overflowY:"auto",padding:"14px 16px calc(118px + env(safe-area-inset-bottom, 0px))",WebkitOverflowScrolling:"touch"}}>
+      <div className="ledgr-card" style={{background:G.heroBg,borderRadius:28,padding:"22px 20px 18px",boxShadow:G.shadowLg,marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
+          <div style={{width:62,height:62,borderRadius:20,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <Avatar user={user} size={44}/>
           </div>
           <div style={{minWidth:0,flex:1}}>
-            <div style={{fontSize:26,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.55,lineHeight:1.05}}>{teacherName}</div>
-            <div style={{fontSize:14,color:"rgba(255,255,255,0.62)",fontFamily:G.sans,marginTop:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.email || "No email available"}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.75,marginBottom:6}}>Teacher workspace</div>
+            <div style={{fontSize:28,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.55,lineHeight:1.05}}>{teacherName}</div>
+            <div style={{fontSize:14,color:"rgba(255,255,255,0.68)",fontFamily:G.sans,marginTop:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.email || "No email available"}</div>
           </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
@@ -686,8 +890,9 @@ function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount
         </div>
       </div>
 
-      <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.65,margin:"0 4px 10px"}}>Manage Teacher Panel</div>
-      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <TeacherThemeCard themeMode={themeMode} onThemeChange={onThemeChange}/>
+        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,margin:"2px 4px -2px"}}>Manage Teacher Panel</div>
         <TeacherProfileActionCard icon="📊" title="View Stats" subtitle="See teaching hours and class breakdowns." onClick={onOpenStats} accent="blue"/>
         <TeacherProfileActionCard icon="🔔" title="Notifications" subtitle={notificationCount>0 ? `${notificationCount} unread update${notificationCount===1?"":"s"} from admin changes.` : "No unread updates right now."} onClick={onOpenNotifications} badge={notificationCount>0 ? notificationCount : null} accent="amber"/>
         <TeacherProfileActionCard icon="🗑️" title="Recycle Bin" subtitle={trashCount>0 ? `${trashCount} item${trashCount===1?"":"s"} waiting before permanent deletion.` : "Nothing in the recycle bin right now."} onClick={onOpenTrash} badge={trashCount>0 ? trashCount : null} accent="slate"/>
@@ -2560,6 +2765,7 @@ function ClassTrackerInner({user}){
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
   const [isWeakDevice,setIsWeakDevice]   = useState(false);
   const [reduceEffects,setReduceEffects] = useState(false);
+  const [teacherTheme,setTeacherTheme]   = useState(readStoredTeacherTheme);
   const [loadIssue,setLoadIssue]         = useState(null);
   const [dataWarning,setDataWarning]     = useState(null);
   const [allowCloudSync,setAllowCloudSync] = useState(false);
@@ -2578,6 +2784,11 @@ function ClassTrackerInner({user}){
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
   const mobileBottomNavPad = "calc(104px + env(safe-area-inset-bottom, 0px))";
+  const teacherThemeVars = useMemo(() => getTeacherThemeVars(teacherTheme), [teacherTheme]);
+  const teacherThemeShell = useMemo(() => ({
+    ...teacherThemeVars,
+    colorScheme:teacherTheme,
+  }), [teacherThemeVars, teacherTheme]);
   const [mobileClassLimit, setMobileClassLimit] = useState(mobileBatchSize);
   const sectionChangeSessionSeenRef = useRef(new Set());
   const pendingAdminClassNotices = useMemo(() => (
@@ -2710,6 +2921,10 @@ function ClassTrackerInner({user}){
       else if(media?.removeListener) media.removeListener(check);
     };
   },[]);
+
+  useEffect(()=>{
+    try{ localStorage.setItem(TEACHER_THEME_STORAGE_KEY, teacherTheme); }catch(e){}
+  },[teacherTheme]);
 
   useEffect(()=>{
     let cancelled = false;
@@ -3257,31 +3472,35 @@ function ClassTrackerInner({user}){
     if(loading)return<Spinner text={restoringBackup?"Restoring class list…":"Loading…"} />;
   if(loadIssue){
     return(
-      <DataIntegrityScreen
-        issue={loadIssue}
-        restoring={restoringBackup}
-        onRetry={retryCloudLoad}
-        onRestore={restoreBackup}
-        onSignOut={()=>logout()}
-      />
+      <div style={teacherThemeShell}>
+        <DataIntegrityScreen
+          issue={loadIssue}
+          restoring={restoringBackup}
+          onRetry={retryCloudLoad}
+          onRestore={restoreBackup}
+          onSignOut={()=>logout()}
+        />
+      </div>
     );
   }
   if(!hasCompleteProfile(data.profile))return(
-    <ProfileSetup
-      user={user}
-      initialProfile={data.profile}
-      subjectSuggestions={data.subjects}
-      instituteSuggestions={globalInstitutes}
-      onSave={profile=>{
-        const nextProfile = normaliseProfile(profile);
-        setData(d=>({
-          ...d,
-          profile: nextProfile,
-          subjects: mergeChoiceValues(d.subjects, nextProfile.subjects),
-          institutes: mergeChoiceValues((d.classes || []).map(cls => cls.institute), nextProfile.institutes),
-        }));
-      }}
-    />
+    <div style={teacherThemeShell}>
+      <ProfileSetup
+        user={user}
+        initialProfile={data.profile}
+        subjectSuggestions={data.subjects}
+        instituteSuggestions={globalInstitutes}
+        onSave={profile=>{
+          const nextProfile = normaliseProfile(profile);
+          setData(d=>({
+            ...d,
+            profile: nextProfile,
+            subjects: mergeChoiceValues(d.subjects, nextProfile.subjects),
+            institutes: mergeChoiceValues((d.classes || []).map(cls => cls.institute), nextProfile.institutes),
+          }));
+        }}
+      />
+    </div>
   );
 
   const teacherName=data.profile.name;
@@ -3524,7 +3743,7 @@ function ClassTrackerInner({user}){
     const deletedNoticeCount = adminNoticeItems.filter(item => item.kind === "class_deleted").length;
     const restoredNoticeCount = adminNoticeItems.filter(item => item.kind === "class_restored").length;
     return(
-      <div className="ledgr-page" style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
+      <div className="ledgr-page" style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
         {sharedModals}
         <TopNav
           user={user}
@@ -3686,7 +3905,7 @@ function ClassTrackerInner({user}){
     })();
 
     return(
-      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
+      <div style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
         <TopNav
           user={user}
@@ -3709,6 +3928,8 @@ function ClassTrackerInner({user}){
           onOpenTrash={()=>safeNav("trash")}
           onOpenExport={()=>setExportOpen(true)}
           onSignOut={()=>setSignOutPrompt(true)}
+          themeMode={teacherTheme}
+          onThemeChange={setTeacherTheme}
         />
         {renderTeacherBottomBar("profile")}
       </div>
@@ -3752,14 +3973,14 @@ function ClassTrackerInner({user}){
     // Nav buttons — same on all screen sizes
     const NavRight = !isMobile ? <>
       <button onClick={()=>setExportOpen(true)}
-        style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 10px",cursor:"pointer",color:"rgba(255,255,255,0.85)",display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+        style={{background:G.topbarButtonBg,border:`1px solid ${G.topbarButtonBorder}`,borderRadius:999,padding:"0 14px",cursor:"pointer",color:G.textS,display:"flex",alignItems:"center",gap:6,minHeight:44,WebkitTapHighlightColor:"transparent",flexShrink:0,boxShadow:G.shadowSm}}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span className="desktop-only" style={{display:"inline",fontSize:13,fontWeight:600}}>Export</span>
+        <span className="desktop-only" style={{display:"inline",fontSize:13,fontWeight:700}}>Export</span>
       </button>
     </> : null;
 
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
-    const ClassCard = ({cls, onClick, compact = false, onDelete = null, onHold = null}) => {
+    const ClassCard = ({cls, onClick, compact = false, dense = false, onDelete = null, onHold = null}) => {
       const ic=instColor(cls.institute);
       const classNotes=data.notes?.[cls.id]||{};
       const total=Object.values(classNotes).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);
@@ -3792,6 +4013,10 @@ function ClassTrackerInner({user}){
       const instFull=cls.institute||"";
       const instShort=instFull.length>22?instFull.slice(0,20)+"…":instFull;
       const classSubject=cls.subject||"Subject not set";
+      const initials=(cls.section||"?").split(/\s+/).filter(Boolean).map(part=>part[0]).join("").slice(0,2).toUpperCase() || "?";
+      const ringCircumference = 2 * Math.PI * 23;
+      const ringFill = total > 0 ? Math.min(0.88, 0.24 + (Math.min(total, 30) / 40)) : 0.16;
+      const ringOffset = ringCircumference * (1 - ringFill);
       const StatChip = ({label,value,active=false,wide=false})=>(
         <span style={{
           display:"inline-flex",
@@ -3839,6 +4064,65 @@ function ClassTrackerInner({user}){
         }
         onClick?.();
       };
+
+      if(compact){
+        const statBox = (label, value, active=false) => (
+          <div style={{background:G.surfaceAlt,border:`1px solid ${active ? `${ic.bg}2A` : G.border}`,borderRadius:12,padding:dense?"8px 7px":"9px 8px",textAlign:"center"}}>
+            <div style={{fontSize:20,fontWeight:800,color:active ? ic.bg : G.text,fontFamily:G.display,lineHeight:1}}>{value}</div>
+            <div style={{fontSize:9.5,color:G.textM,marginTop:4,letterSpacing:0.3}}>{label}</div>
+          </div>
+        );
+
+        return(
+          <div className="ledgr-card ledgr-pressable"
+            onClick={handleCardClick}
+            onTouchStart={beginHold}
+            onTouchMove={moveHold}
+            onTouchEnd={clearHold}
+            onTouchCancel={clearHold}
+            style={{background:G.classCardBg,borderRadius:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+            <div style={{display:"flex"}}>
+              <div style={{width:4,background:ic.bg,flexShrink:0}}/>
+              <div style={{flex:1,padding:dense?"13px 13px 12px":"14px 14px 13px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
+                  <div style={{width:50,height:50,position:"relative",flexShrink:0}}>
+                    <svg viewBox="0 0 52 52" style={{position:"absolute",inset:0}}>
+                      <circle cx="26" cy="26" r="23" fill="none" stroke={G.border} strokeWidth="2.5"/>
+                      <circle cx="26" cy="26" r="23" fill="none" stroke={ic.bg} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={ringCircumference} strokeDashoffset={ringOffset} transform="rotate(-90 26 26)"/>
+                    </svg>
+                    <div style={{position:"absolute",inset:5,borderRadius:"50%",background:ic.light,border:`1px solid ${ic.bg}20`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.display,fontSize:15,fontWeight:800,color:ic.bg}}>
+                      {initials}
+                    </div>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:19,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,lineHeight:1.1}}>{cls.section}</div>
+                    <div style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:6,maxWidth:"100%",background:ic.light,border:`1px solid ${ic.bg}26`,borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:700,color:ic.bg,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      <span style={{display:"inline-block",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{instShort}</span>
+                      {cls.subject && <span style={{opacity:0.85}}>· {cls.subject}</span>}
+                    </div>
+                  </div>
+                  <div style={{width:36,height:36,borderRadius:999,background:ic.light,border:`1px solid ${ic.bg}26`,display:"flex",alignItems:"center",justifyContent:"center",color:ic.bg,flexShrink:0}}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18l6-6-6-6"/>
+                    </svg>
+                  </div>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6,marginBottom:10}}>
+                  {statBox("Today", todayN, todayN>0)}
+                  {statBox(monthLabel, monthN, monthN>0)}
+                  {statBox("Total", total)}
+                </div>
+
+                <div style={{fontSize:11.5,color:G.textM,lineHeight:1.5}}>
+                  {lastLoggedKey ? `Last log ${formatDateLabel(lastLoggedKey)}` : "Hold for quick actions or open to log today"}.
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       return(
         <div className="ledgr-card"
           onClick={handleCardClick}
@@ -3846,10 +4130,10 @@ function ClassTrackerInner({user}){
           onTouchMove={moveHold}
           onTouchEnd={clearHold}
           onTouchCancel={clearHold}
-          style={{background:`linear-gradient(180deg, #FFFFFF 0%, #FAFBFD 100%)`,borderRadius:compact?22:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:compact?G.shadowMd:(reduceEffects?G.shadowSm:G.shadowMd),cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:compact||reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
-          onPointerDown={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";e.currentTarget.style.borderColor=`${ic.bg}33`;})}
-          onPointerUp={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}
-          onPointerCancel={compact||reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}>
+          style={{background:G.classCardBg,borderRadius:20,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
+          onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";e.currentTarget.style.borderColor=`${ic.bg}33`;})}
+          onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}
+          onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;e.currentTarget.style.borderColor=G.border;})}>
           <div style={{height:compact?5:6,background:`linear-gradient(90deg, ${ic.bg} 0%, ${ic.bg}BB 65%, ${ic.bg}66 100%)`}}/>
           <div style={{padding:compact?"10px 12px 11px":"16px 16px 15px"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:compact?9:12}}>
@@ -3920,51 +4204,43 @@ function ClassTrackerInner({user}){
     };
 
     // Institute filter pills
-    const InstFilter = ({ columns = "1fr", compact = false }) => institutes.length>1?(
-      <div style={{display:"grid",gridTemplateColumns:columns,gap:compact?6:8,padding:"0 0 2px"}}>
+    const InstFilter = ({ columns = "1fr", compact = false, scroll = false }) => institutes.length>1?(
+      <div style={scroll ? {display:"flex",gap:8,overflowX:"auto",padding:"0 0 4px",scrollbarWidth:"none"} : {display:"grid",gridTemplateColumns:columns,gap:compact?6:8,padding:"0 0 2px"}}>
         {["all",...institutes].map(inst=>{
           const isSel=instFilter===inst;
-          const ic=inst==="all"?{bg:G.forest,light:"rgba(20,33,61,0.08)",text:"#fff"}:instColor(inst);
-          const label=inst==="all"?"All Classes":inst;
+          const ic=inst==="all"?{bg:G.green,light:G.greenL,text:"#fff"}:instColor(inst);
+          const label=inst==="all"?"All":inst;
           return(
             <button key={inst} title={label} onClick={()=>setInstFilter(inst)}
               style={{
-                width:"100%",
-                minWidth:0,
-                minHeight:compact?34:44,
-                padding:compact?"6px 9px":"10px 12px",
-                borderRadius:compact?14:16,
-                border:isSel?`1px solid ${inst==="all"?"rgba(20,33,61,0.22)":`${ic.bg}22`}`:`1px solid ${G.border}`,
+                width:scroll?"auto":"100%",
+                minWidth:scroll?0:0,
+                flexShrink:scroll?0:1,
+                minHeight:compact?36:44,
+                padding:compact?"8px 14px":"10px 14px",
+                borderRadius:999,
+                border:isSel?`1px solid ${inst==="all" ? G.green : `${ic.bg}26`}`:`1px solid ${G.border}`,
                 cursor:"pointer",
                 fontFamily:G.sans,
-                fontSize:compact?11.5:12.5,
+                fontSize:compact?12:12.5,
                 fontWeight:isSel?700:600,
                 WebkitTapHighlightColor:"transparent",
                 transition:"all 0.15s",
                 background:isSel
                   ?(inst==="all"
-                    ?`linear-gradient(135deg, ${G.forest} 0%, ${G.forestS} 100%)`
-                    :`linear-gradient(180deg, ${ic.light} 0%, #FFFFFF 100%)`)
-                  :"rgba(255,255,255,0.82)",
-                color:isSel?(inst==="all"?"#fff":ic.bg):G.textS,
-                boxShadow:isSel?`0 10px 22px ${inst==="all"?"rgba(20,33,61,0.18)":`${ic.bg}18`}`:"inset 0 1px 0 rgba(255,255,255,0.65)",
+                    ?G.green
+                    :ic.light)
+                  :G.surface,
+                color:isSel?(inst==="all"?"#fff":ic.bg):G.textM,
+                boxShadow:isSel?`0 10px 22px ${inst==="all" ? "rgba(0,104,116,0.16)" : `${ic.bg}18`}`:G.shadowSm,
                 display:"flex",
-                alignItems:compact?"center":"flex-start",
-                gap:compact?6:8,
+                alignItems:"center",
+                gap:7,
                 textAlign:"left",
-                lineHeight:compact?1.15:1.3,
-                overflowWrap:compact?"normal":"anywhere"
+                lineHeight:1.15,
               }}>
-              <span style={{
-                width:compact?8:10,
-                height:compact?8:10,
-                borderRadius:999,
-                flexShrink:0,
-                marginTop:compact?0:3,
-                background:inst==="all"?(isSel?"rgba(255,255,255,0.92)":"rgba(20,33,61,0.34)"):(isSel?ic.bg:ic.bg),
-                boxShadow:isSel&&inst!=="all"?"0 0 0 3px rgba(255,255,255,0.78)":"none"
-              }}/>
-              <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:compact?"nowrap":"normal"}}>{label}</span>
+              {inst!=="all" && <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>}
+              <span style={{whiteSpace:"nowrap"}}>{label}</span>
             </button>
           );
         })}
@@ -3974,32 +4250,33 @@ function ClassTrackerInner({user}){
     // ── MOBILE VIEW: full-page class list ────────────────────────────────────
     const MobileHome = () => (
       <div className="ledgr-page" style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-        {institutes.length>1&&(
-          <div style={{padding:mobileLiteMode?"10px 12px 8px":"12px 14px 10px"}}>
-            <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"8px 8px 6px",boxShadow:G.shadowSm}}>
-              <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6,padding:"0 4px"}}>Institute filter</div>
-              <InstFilter columns="repeat(2,minmax(0,1fr))" compact/>
+        <div style={{flex:1,overflowY:"auto",padding:mobileLiteMode?`12px 12px ${mobileBottomNavPad}`:`14px 16px ${mobileBottomNavPad}`,WebkitOverflowScrolling:"touch"}}>
+          <div className="ledgr-card" style={{background:G.heroBg,borderRadius:24,padding:"20px 18px 18px",boxShadow:G.shadowLg,marginBottom:18}}>
+            <div style={{fontSize:52,fontWeight:800,fontFamily:G.display,letterSpacing:-2.8,lineHeight:1,color:"#fff"}}>{filtered.length}</div>
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.68)",letterSpacing:0.25,marginTop:4,marginBottom:16}}>classes visible right now</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <span style={{background:"rgba(255,255,255,0.16)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:999,padding:"6px 14px",fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.88)"}}><b style={{color:"#fff"}}>{quickHomeSummary.loggedToday}</b> today</span>
+              <span style={{background:"rgba(255,255,255,0.16)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:999,padding:"6px 14px",fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.88)"}}><b style={{color:"#fff"}}>{quickHomeSummary.monthEntries}</b> this month</span>
             </div>
           </div>
-        )}
-        <div style={{padding:institutes.length>1?(mobileLiteMode?"0 12px 8px":"0 14px 10px"):(mobileLiteMode?"12px 12px 8px":"12px 14px 10px")}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
+
+          {institutes.length>1&&(
+            <>
+              <div style={{fontSize:10.5,fontWeight:700,color:G.textM,letterSpacing:1.1,textTransform:"uppercase",margin:"0 4px 10px",fontFamily:G.mono}}>Institute</div>
+              <InstFilter compact scroll/>
+            </>
+          )}
+
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,margin:"18px 4px 12px"}}>
             <div>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55}}>Your classes</div>
-              <div style={{fontSize:16.5,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.25,marginTop:2}}>{filtered.length} visible right now</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:G.textM,letterSpacing:1.1,textTransform:"uppercase",fontFamily:G.mono}}>Your Classes</div>
+              <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3,marginTop:4}}>{filtered.length} class{filtered.length===1?"":"es"} ready</div>
             </div>
-            <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,color:G.textS,fontFamily:G.mono}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:5,background:G.surface,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:800,color:G.textS,fontFamily:G.mono}}>
               {Math.min(filtered.length, visibleMobileClasses.length)}/{filtered.length} shown
             </span>
           </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            <span style={{background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:"#1D4ED8"}}>{quickHomeSummary.loggedToday} today</span>
-            <span style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:G.textM}}>{quickHomeSummary.monthEntries} this month</span>
-            <span style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11,fontWeight:800,fontFamily:G.mono,color:G.textM}}>{quickHomeSummary.active} classes</span>
-          </div>
-        </div>
-        {/* Class list */}
-        <div style={{flex:1,overflowY:"auto",padding:mobileLiteMode?`0 12px ${mobileBottomNavPad}`:`0 14px ${mobileBottomNavPad}`,WebkitOverflowScrolling:"touch"}}>
+
           {activeClasses.length===0?(
             <div style={{textAlign:"center",padding:"60px 20px"}}>
               <div style={{fontSize:52,marginBottom:16}}>📚</div>
@@ -4010,25 +4287,24 @@ function ClassTrackerInner({user}){
           ):(
             <div style={{display:"flex",flexDirection:"column",gap:mobileLiteMode?8:10}}>
               {visibleMobileClasses.map(cls=>(
-                <ClassCard key={cls.id} cls={cls} compact={mobileLiteMode} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}} onDelete={()=>setLeaveModal(cls.id)} onHold={()=>setMobileClassSheetId(cls.id)}/>
+                <ClassCard key={cls.id} cls={cls} compact dense={mobileLiteMode} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}} onDelete={()=>setLeaveModal(cls.id)} onHold={()=>setMobileClassSheetId(cls.id)}/>
               ))}
               {hasMoreMobileClasses&&(
                 <button onClick={()=>setMobileClassLimit(limit=>Math.min(filtered.length, limit + mobileBatchSize))}
                   className="ledgr-card ledgr-pressable"
-                  style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 16px",fontSize:14,fontWeight:700,color:G.textS,fontFamily:G.sans,cursor:"pointer",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}>
+                  style={{background:G.classCardBg,border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 16px",fontSize:14,fontWeight:700,color:G.textS,fontFamily:G.sans,cursor:"pointer",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}>
                   Load {Math.min(mobileBatchSize, filtered.length - visibleMobileClasses.length)} more classes
                 </button>
               )}
               <div className="ledgr-card"
                 onClick={()=>setView("addClass")}
-                style={{borderRadius:18,border:`2px dashed ${G.border}`,padding:"20px",display:"flex",alignItems:"center",justifyContent:"center",gap:12,cursor:"pointer",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}
+                style={{borderRadius:18,border:`2px dashed ${G.border}`,padding:"20px",display:"flex",alignItems:"center",justifyContent:"center",gap:12,cursor:"pointer",background:G.classCardBg,WebkitTapHighlightColor:"transparent",boxShadow:G.shadowSm}}
                 onPointerDown={e=>{e.currentTarget.style.background=G.greenL;e.currentTarget.style.borderColor=G.green;}}
-                onPointerUp={e=>{e.currentTarget.style.background="linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)";e.currentTarget.style.borderColor=G.border;}}
-                onPointerCancel={e=>{e.currentTarget.style.background="linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)";e.currentTarget.style.borderColor=G.border;}}>
+                onPointerUp={e=>{e.currentTarget.style.background=G.classCardBg;e.currentTarget.style.borderColor=G.border;}}
+                onPointerCancel={e=>{e.currentTarget.style.background=G.classCardBg;e.currentTarget.style.borderColor=G.border;}}>
                 <span style={{width:34,height:34,borderRadius:12,background:G.greenL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:G.green,flexShrink:0}}>+</span>
                 <span style={{fontSize:15,fontWeight:600,color:G.textM,fontFamily:G.display}}>Add New Class</span>
               </div>
-              {/* Tagline */}
               <div style={{textAlign:"center",padding:"20px 0 4px"}}>
                 <span style={{fontSize:12,color:G.textL,fontFamily:G.sans,letterSpacing:0.3}}>Every class. Every teacher. One place.</span>
               </div>
@@ -4275,7 +4551,7 @@ function ClassTrackerInner({user}){
     };
 
     return(
-      <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
+      <div style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>setView("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={NavRight} showProfileMenu={!isMobile}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
@@ -4322,7 +4598,7 @@ function ClassTrackerInner({user}){
       }
     };
     return(
-      <div key={cls.id} className="ledgr-page" style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}} onTouchStart={handleDetailTouchStart} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;}}>
+      <div key={cls.id} className="ledgr-page" style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}} onTouchStart={handleDetailTouchStart} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<GhostBtn onClick={()=>setView("home")} style={{color:"rgba(255,255,255,0.85)",borderColor:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)"}}>← Classes</GhostBtn>}
@@ -4496,7 +4772,7 @@ function ClassTrackerInner({user}){
     };
 
     return(
-    <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
+    <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
       <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>{setSelectedGroup(null);setView("home");}} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
         right={<GhostBtn onClick={()=>{setSelectedGroup(null);setView("home");}}>← Back</GhostBtn>}/>
       <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px calc(80px + env(safe-area-inset-bottom, 0px))"}}>
@@ -4688,7 +4964,7 @@ function ClassTrackerInner({user}){
     const navBtnStyle={background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",fontFamily:G.sans};
 
     return(
-      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
+      <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<button onClick={()=>safeNav(mobileBackTarget)} style={navBtnStyle}>← Back</button>}/>
@@ -4797,7 +5073,7 @@ function ClassTrackerInner({user}){
     const tNotes=(Array.isArray(data.trash?.notes)?data.trash.notes:[]).sort((a,b)=>b.deletedAt-a.deletedAt);
     const daysLeft=ts=>Math.max(0,30-Math.floor((Date.now()-ts)/(1000*60*60*24)));
     return(
-      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
+      <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
         {sharedModals}
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>safeNav("stats")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={<GhostBtn onClick={()=>safeNav(mobileBackTarget)}>← Back</GhostBtn>} showProfileMenu={!isMobile}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:`32px 32px ${isMobile ? mobileBottomNavPad : "72px"}`}}>
@@ -4901,7 +5177,7 @@ function ClassTrackerInner({user}){
     const topicSuggestionApplied=form.status==="inprogress"&&!!lastTopicSuggestion&&String(form.title||"").trim()===lastTopicSuggestion;
 
     return(
-      <div style={{height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans}}>
+      <div style={{...teacherThemeShell,height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans}}>
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<>
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)"}}>← Back</GhostBtn>
