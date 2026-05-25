@@ -6042,15 +6042,15 @@ function AdminPanelInner({user}){
           </div>
         )}
         {aggregateGroups.map(group=>(
-          <div key={group.className} style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,marginBottom:mobile?14:16,overflow:"hidden",boxShadow:G.shadowSm}}>
-            <div style={{padding:mobile?"13px 14px":"14px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg}}>
+          <div key={group.className} style={{background:G.surface,borderRadius:mobile?14:12,border:`1px solid ${G.border}`,marginBottom:mobile?12:16,overflow:"hidden",boxShadow:G.shadowSm}}>
+            <div style={{padding:mobile?"11px 12px":"14px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:mobile?17:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{group.className}</div>
-                  <div style={{fontSize:13,color:G.textM,marginTop:3,lineHeight:1.5}}>
+                  <div style={{fontSize:mobile?16:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{group.className}</div>
+                  <div style={{fontSize:mobile?12.5:13,color:G.textM,marginTop:3,lineHeight:1.45}}>
                     {group.subjectList.length>0 ? `Subjects: ${group.subjectList.join(", ")}` : "Subjects: —"}
                   </div>
-                  <div style={{fontSize:13,color:G.textL,marginTop:2,lineHeight:1.5}}>
+                  <div style={{fontSize:mobile?12.5:13,color:G.textL,marginTop:2,lineHeight:1.45}}>
                     Teachers: {group.teacherList.join(", ") || "—"}
                   </div>
                 </div>
@@ -6059,18 +6059,18 @@ function AdminPanelInner({user}){
                 </span>
               </div>
             </div>
-            <div style={{padding:mobile?"10px 10px 2px":"10px 12px 4px"}}>
+            <div style={{padding:mobile?"8px 8px 1px":"10px 12px 4px"}}>
               {group.entries.map((entry, idx)=>{
                 const tag = TAG_STYLES[entry.tag] || TAG_STYLES.note;
                 const status = STATUS_STYLES[entry.status] || null;
                 const title = entry.title || "Untitled entry";
                 return(
-                  <div key={entry.id || `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`} style={{border:`1px solid ${G.border}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+                  <div key={entry.id || `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`} style={{border:`1px solid ${G.border}`,borderRadius:mobile?11:10,marginBottom:mobile?8:10,overflow:"hidden"}}>
                     <div style={{height:3,background:tag.bg}}/>
-                    <div style={{padding:mobile?"11px 12px":"11px 13px"}}>
+                    <div style={{padding:mobile?"10px 11px":"11px 13px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
                         <div style={{minWidth:0,flex:1}}>
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:5}}>
                             <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"3px 9px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:600}}>
                               {formatExportPdfDate(entry.dateKey)}
                             </span>
@@ -6082,11 +6082,11 @@ function AdminPanelInner({user}){
                             {status&&<span style={{background:status.bg,color:status.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontWeight:700}}>{status.label}</span>}
                             <span style={{background:tag.bg,color:tag.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
                           </div>
-                          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{title}</div>
-                          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:4}}>
+                          <div style={{fontSize:mobile?14:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{title}</div>
+                          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:3}}>
                             {entry.teacherName} · {entry.subject || "No subject"}
                           </div>
-                          {entry.body&&<div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:7,whiteSpace:"pre-wrap"}}>{entry.body}</div>}
+                          {entry.body&&<div style={{fontSize:mobile?13:14,color:G.textM,lineHeight:1.55,marginTop:6,whiteSpace:"pre-wrap"}}>{entry.body}</div>}
                         </div>
                         <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.classId, entry.dateKey, entry.id, entry.title)}
                           style={{width:28,height:28,borderRadius:8,background:G.redL,border:"none",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
@@ -6132,15 +6132,15 @@ function AdminPanelInner({user}){
     return (
       <>
         {fullViewGroups.map(group=>(
-          <div key={group.className} style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,marginBottom:mobile?14:16,overflow:"hidden",boxShadow:G.shadowSm}}>
-            <div style={{padding:mobile?"13px 14px":"14px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg}}>
+          <div key={group.className} style={{background:G.surface,borderRadius:mobile?14:12,border:`1px solid ${G.border}`,marginBottom:mobile?12:16,overflow:"hidden",boxShadow:G.shadowSm}}>
+            <div style={{padding:mobile?"11px 12px":"14px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:mobile?17:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{group.className}</div>
-                  <div style={{fontSize:13,color:G.textM,marginTop:3,lineHeight:1.5}}>
+                  <div style={{fontSize:mobile?16:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{group.className}</div>
+                  <div style={{fontSize:mobile?12.5:13,color:G.textM,marginTop:3,lineHeight:1.45}}>
                     {group.subjectList.length?`Subjects: ${group.subjectList.join(", ")}`:"Subjects: —"}
                   </div>
-                  <div style={{fontSize:13,color:G.textL,marginTop:2,lineHeight:1.5}}>
+                  <div style={{fontSize:mobile?12.5:13,color:G.textL,marginTop:2,lineHeight:1.45}}>
                     Teachers: {group.teacherList.join(", ") || "—"}
                   </div>
                 </div>
@@ -6149,17 +6149,17 @@ function AdminPanelInner({user}){
                 </span>
               </div>
             </div>
-            <div style={{padding:mobile?"10px 10px 2px":"10px 12px 4px"}}>
+            <div style={{padding:mobile?"8px 8px 1px":"10px 12px 4px"}}>
               {group.entries.map((entry, idx)=>{
                 const tag = TAG_STYLES[entry.tag] || TAG_STYLES.note;
                 const status = STATUS_STYLES[entry.status] || null;
                 return(
-                  <div key={entry.id || `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`} style={{border:`1px solid ${G.border}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+                  <div key={entry.id || `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`} style={{border:`1px solid ${G.border}`,borderRadius:mobile?11:10,marginBottom:mobile?8:10,overflow:"hidden"}}>
                     <div style={{height:3,background:tag.bg}}/>
-                    <div style={{padding:mobile?"11px 12px":"11px 13px"}}>
+                    <div style={{padding:mobile?"10px 11px":"11px 13px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
                         <div style={{minWidth:0,flex:1}}>
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:5}}>
                             <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"3px 9px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:600}}>
                               {formatExportPdfDate(entry.dateKey)}
                             </span>
@@ -6171,11 +6171,11 @@ function AdminPanelInner({user}){
                             {status&&<span style={{background:status.bg,color:status.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontWeight:700}}>{status.label}</span>}
                             <span style={{background:tag.bg,color:tag.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
                           </div>
-                          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{entry.title || "Untitled entry"}</div>
-                          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:4}}>
+                          <div style={{fontSize:mobile?14:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{entry.title || "Untitled entry"}</div>
+                          <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:3}}>
                             {entry.teacherName} · {entry.subject || "No subject"}
                           </div>
-                          {entry.body&&<div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:7,whiteSpace:"pre-wrap"}}>{entry.body}</div>}
+                          {entry.body&&<div style={{fontSize:mobile?13:14,color:G.textM,lineHeight:1.55,marginTop:6,whiteSpace:"pre-wrap"}}>{entry.body}</div>}
                         </div>
                         <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.classId, entry.dateKey, entry.id, entry.title)}
                           style={{width:28,height:28,borderRadius:8,background:G.redL,border:"none",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
@@ -6216,11 +6216,11 @@ function AdminPanelInner({user}){
 
     return (
       <>
-        <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:mobile?"14px 14px 13px":"16px 18px",boxShadow:reduceEffects?"none":G.shadowSm,marginBottom:16}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
-            <div>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>Selection summary</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+      <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:mobile?14:16,padding:mobile?"12px 12px 11px":"16px 18px",boxShadow:reduceEffects?"none":G.shadowSm,marginBottom:mobile?12:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>Selection summary</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
                 <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>
                   {selP3.teacherName}
                 </span>
@@ -6243,13 +6243,13 @@ function AdminPanelInner({user}){
               {overviewPeriodText}
             </span>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:mobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:10,marginTop:14}}>
+          <div style={{display:"grid",gridTemplateColumns:mobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:10,marginTop:12}}>
             {statCard("Entries", summary.entryCount)}
             {statCard("Taught time", summary.totalMinutes>0 ? formatDurationShort(summary.totalMinutes) : "—", summary.totalMinutes>0 ? "#1B8A4C" : G.textM)}
             {statCard("Active days", summary.activeDays || "—")}
             {statCard("Last update", summary.lastAgo || "No uploads", summary.lastAgo ? G.blue : G.textM)}
           </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
             {summary.statusBreakdown.length>0 ? summary.statusBreakdown.map(status=>(
               <span key={status.key} style={{background:status.bg,color:status.text,borderRadius:999,padding:"5px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>
                 {status.count} {status.label.replace(/^[^\s]+\s/,"")}
@@ -6279,8 +6279,8 @@ function AdminPanelInner({user}){
         {p4Entries&&p4Entries.map(([dk,entries])=>{
           const dayMinutes = entries.reduce((sum,note)=>sum + entryDurationMinutes(note),0);
           return(
-            <div key={dk} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,marginBottom:16,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowSm}}>
-              <div style={{padding:mobile?"12px 14px":"13px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            <div key={dk} style={{background:G.surface,borderRadius:mobile?14:14,border:`1px solid ${G.border}`,marginBottom:mobile?12:16,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowSm}}>
+              <div style={{padding:mobile?"10px 12px":"13px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <div style={{fontSize:13,fontWeight:700,color:G.textM,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>
                   {formatDateLabel(dk)}
                 </div>
@@ -6293,16 +6293,16 @@ function AdminPanelInner({user}){
                   </span>
                 </div>
               </div>
-              <div style={{padding:mobile?"6px 10px":"6px 12px"}}>
+              <div style={{padding:mobile?"4px 8px":"6px 12px"}}>
                 {entries.map((note,i)=>{
                   const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
                   const status=note.status&&STATUS_STYLES[note.status]?STATUS_STYLES[note.status]:null;
                   return(
-                    <div key={note.id||i} style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:12,margin:"8px 0",overflow:"hidden"}}>
+                    <div key={note.id||i} style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:mobile?11:12,margin:mobile?"6px 0":"8px 0",overflow:"hidden"}}>
                       <div style={{height:3,background:status?.dot || tag.bg}}/>
-                      <div style={{padding:mobile?"11px 12px":"12px 14px",display:"grid",gridTemplateColumns:mobile?"1fr":"120px minmax(0,1fr) auto",gap:12,alignItems:"center"}}>
+                      <div style={{padding:mobile?"10px 11px":"12px 14px",display:"grid",gridTemplateColumns:mobile?"1fr":"120px minmax(0,1fr) auto",gap:mobile?10:12,alignItems:"center"}}>
                         <div style={{minWidth:0}}>
-                          <div style={{fontFamily:G.display,fontSize:mobile?16:17,fontWeight:700,color:G.text,lineHeight:1}}>
+                          <div style={{fontFamily:G.display,fontSize:mobile?15:17,fontWeight:700,color:G.text,lineHeight:1}}>
                             {note.timeStart?fmt12(note.timeStart):"No time"}
                           </div>
                           <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:4}}>
@@ -6310,15 +6310,15 @@ function AdminPanelInner({user}){
                           </div>
                         </div>
                         <div style={{minWidth:0}}>
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:5}}>
                             {status&&<span style={{background:status.bg,color:status.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{status.label}</span>}
                             <span style={{background:tag.bg,color:tag.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
                           </div>
-                          <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>
+                          <div style={{fontSize:mobile?14:15,fontWeight:700,color:G.text,fontFamily:G.display}}>
                             {note.title || "Untitled entry"}
                           </div>
                           {note.body&&(
-                            <div style={{fontSize:13,color:G.textM,marginTop:5,lineHeight:1.6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
+                            <div style={{fontSize:13,color:G.textM,marginTop:4,lineHeight:1.55,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
                               {note.body}
                             </div>
                           )}
@@ -8144,16 +8144,9 @@ function AdminPanelInner({user}){
       overflowX:"hidden",
       background:G.bg,
       fontFamily:G.sans,
-      paddingBottom:"calc(108px + env(safe-area-inset-bottom, 0px))",
+      paddingBottom:"calc(96px + env(safe-area-inset-bottom, 0px))",
     };
-    const mobilePageInnerStyle = { padding:"14px 14px 0" };
-    const mobileHeroContext = mobileSurface==="profile"
-      ? "Profile settings"
-      : !selInst
-        ? "All institutes"
-        : tab==="teacher"
-          ? "Teacher view"
-          : "Class view";
+    const mobilePageInnerStyle = { padding:"12px 12px 0" };
     const mobileBottomKey = mobileSurface==="profile"
       ? "profile"
       : !selInst
@@ -8162,29 +8155,37 @@ function AdminPanelInner({user}){
           ? "teachers"
           : "classes";
 
+    const MobileMotionStyles = () => (
+      <style>{`
+        .admin-mobile-touch{
+          -webkit-tap-highlight-color: transparent;
+          transition: transform 160ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+          will-change: transform;
+        }
+        .admin-mobile-touch:active{
+          transform: scale(0.986);
+        }
+        .admin-mobile-card-press:active{
+          transform: scale(0.992);
+        }
+      `}</style>
+    );
+
     const MobileNav = ()=>(
-      <div style={{padding:"14px 14px 0"}}>
+      <div style={{padding:"12px 12px 0"}}>
         <div style={{
-          background:G.navy,
-          borderRadius:32,
-          padding:"18px 18px 16px",
-          boxShadow:reduceEffects ? "none" : "0 20px 44px rgba(26,47,90,0.18)",
+          background:"#FFFFFF",
+          border:`1px solid ${G.border}`,
+          borderRadius:24,
+          padding:"14px 16px",
+          boxShadow:reduceEffects ? "none" : "0 14px 34px rgba(15,23,42,0.08)",
         }}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14}}>
-            <div style={{display:"flex",alignItems:"center",gap:14,minWidth:0,flex:1}}>
-              <div style={{width:52,height:52,background:G.blueV,borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.18)"}}>
-                <svg width="26" height="26" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
-              </div>
-              <div style={{minWidth:0}}>
-                <div style={{fontFamily:G.display,fontSize:28,fontWeight:800,color:"#fff",lineHeight:1,letterSpacing:-0.7}}>Ledgr</div>
-                <div style={{fontSize:12,letterSpacing:2.6,color:"rgba(255,255,255,0.48)",fontFamily:G.mono,textTransform:"uppercase",marginTop:6}}>Admin workspace</div>
-              </div>
+          <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+            <div style={{width:46,height:46,background:G.blueV,borderRadius:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.18)"}}>
+              <svg width="24" height="24" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
             </div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
-              <div style={{background:"rgba(255,255,255,0.11)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:18,padding:"8px 12px",minWidth:94}}>
-                <div style={{fontSize:10,letterSpacing:1.4,textTransform:"uppercase",fontFamily:G.mono,color:"rgba(255,255,255,0.42)"}}>Active</div>
-                <div style={{fontSize:14,fontWeight:700,color:"#fff",fontFamily:G.sans,marginTop:4,whiteSpace:"nowrap"}}>{mobileHeroContext}</div>
-              </div>
+            <div style={{minWidth:0}}>
+              <div style={{fontFamily:G.display,fontSize:26,fontWeight:800,color:G.text,lineHeight:1,letterSpacing:-0.7}}>Ledgr</div>
             </div>
           </div>
         </div>
@@ -8211,25 +8212,25 @@ function AdminPanelInner({user}){
       width:"100%",
       background:danger ? "#FFF4F4" : "#FFFFFF",
       border:danger ? "1px solid #F4CACA" : `1px solid ${G.border}`,
-      borderRadius:18,
-      padding:"14px 15px",
+      borderRadius:16,
+      padding:"12px 14px",
       display:"flex",
       alignItems:"center",
       gap:12,
       cursor:"pointer",
       textAlign:"left",
-      boxShadow:reduceEffects ? "none" : G.shadowSm,
+      boxShadow:reduceEffects ? "none" : "0 10px 22px rgba(15,23,42,0.05)",
       WebkitTapHighlightColor:"transparent",
     });
 
     const MobileProfileAction = ({ icon, title, subtitle, onClick, danger = false, badge = null }) => (
-      <button onClick={onClick} style={mobileProfileActionStyle(danger)}>
-        <div style={{width:42,height:42,borderRadius:14,background:danger ? "#FDE6E6" : "#EEF4FF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-          <AppIcon icon={icon} size={20} color={danger ? G.red : G.blue} />
+      <button className="admin-mobile-touch" onClick={onClick} style={mobileProfileActionStyle(danger)}>
+        <div style={{width:40,height:40,borderRadius:13,background:danger ? "#FDE6E6" : "#EEF4FF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <AppIcon icon={icon} size={19} color={danger ? G.red : G.blue} />
         </div>
         <div style={{minWidth:0,flex:1}}>
-          <div style={{fontSize:15,fontWeight:700,color:danger ? G.red : G.text,fontFamily:G.sans}}>{title}</div>
-          <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>{subtitle}</div>
+          <div style={{fontSize:14,fontWeight:700,color:danger ? G.red : G.text,fontFamily:G.sans}}>{title}</div>
+          <div style={{fontSize:12,color:G.textM,marginTop:3,lineHeight:1.45}}>{subtitle}</div>
         </div>
         {badge!=null && badge!==0 && (
           <span style={{background:danger ? "#FCA5A5" : G.blueL,color:danger ? "#7F1D1D" : G.blue,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,flexShrink:0}}>
@@ -8242,45 +8243,46 @@ function AdminPanelInner({user}){
 
     const MobileProfileScreen = () => (
       <div style={mobilePageShellStyle}>
+        <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         <AdminToastBanner message={adminToast} />
         <MobileNav/>
         <div style={mobilePageInnerStyle}>
-          <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
+          <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14}}>
               <div style={{display:"flex",gap:12,minWidth:0,flex:1}}>
-                <div style={{width:52,height:52,borderRadius:18,background:"#EEF4FF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:800,color:G.blue,fontFamily:G.display,flexShrink:0}}>
+                <div style={{width:48,height:48,borderRadius:17,background:"#EEF4FF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,fontWeight:800,color:G.blue,fontFamily:G.display,flexShrink:0}}>
                   {(user?.email||"A").charAt(0).toUpperCase()}
                 </div>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Admin settings</div>
-                  <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:8}}>Administrator</div>
-                  <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:10,wordBreak:"break-word"}}>{user?.email || "—"}</div>
+                  <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:7}}>Administrator</div>
+                  <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8,wordBreak:"break-word"}}>{user?.email || "—"}</div>
                 </div>
               </div>
-              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"7px 11px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
                 {currentSession()}
               </span>
             </div>
-            <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:16}}>
-              Mobile admin settings, workspace totals, and recovery tools now live here so the main workspace stays clean and focused.
+            <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:14}}>
+              Workspace totals, recovery tools, and sign-out live here so the admin flow stays focused on institutes, classes, and teachers.
             </div>
           </div>
 
-          <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14}}>
+          <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12}}>
               <div>
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Workspace snapshot</div>
-                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:8}}>Everything at a glance</div>
+                <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Everything at a glance</div>
               </div>
               {loadingUids.size>0&&(
-                <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"7px 11px",fontSize:11,fontWeight:700,fontFamily:G.mono}}>
+                <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono}}>
                   Syncing {loadingUids.size}
                 </span>
               )}
             </div>
-            {renderAdminProfileStatGrid()}
+            {renderAdminProfileStatGrid(true)}
           </div>
 
           <div style={{display:"grid",gap:10}}>
@@ -8337,15 +8339,16 @@ function AdminPanelInner({user}){
         setFullView(null);
       };
       return (
-        <div style={{padding:"10px 14px 0"}}>
-          <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:18,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,boxShadow:reduceEffects ? "none" : G.shadowSm,overflow:"hidden"}}>
+        <div style={{padding:"8px 12px 0"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
             <button
+              className="admin-mobile-touch"
               onClick={goMobileBack}
-              style={{display:"inline-flex",alignItems:"center",gap:6,height:34,borderRadius:11,border:`1px solid ${G.border}`,background:"#F8FAFC",padding:"0 11px",cursor:"pointer",color:G.textS,fontFamily:G.sans,fontSize:12,fontWeight:700,flexShrink:0}}>
+              style={{display:"inline-flex",alignItems:"center",gap:6,height:34,borderRadius:13,border:`1px solid ${G.border}`,background:"#FFFFFF",padding:"0 11px",cursor:"pointer",color:G.textS,fontFamily:G.sans,fontSize:12,fontWeight:700,flexShrink:0,boxShadow:reduceEffects ? "none" : G.shadowSm}}>
               <AppIcon icon={IconChevronLeft} size={15} color={G.textS} />
               Back
             </button>
-            <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0,overflowX:"auto",scrollbarWidth:"none"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0,overflowX:"auto",scrollbarWidth:"none",padding:"4px 2px"}}>
               <span onClick={openMobileInstituteHome} style={{fontSize:12,color:G.textL,cursor:"pointer",fontFamily:G.sans,whiteSpace:"nowrap"}}>Institutes</span>
               {mobileStep>=1&&selInst&&<><AppIcon icon={IconChevronRight} size={13} color={G.textL} /><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);setFullView(null);}} style={{fontSize:12,color:mobileStep===1?"#111827":G.textM,cursor:"pointer",fontFamily:G.sans,fontWeight:mobileStep===1?700:600,whiteSpace:"nowrap"}}>{selInst}</span></>}
               {mobileStep>=2&&selP2&&<><AppIcon icon={IconChevronRight} size={13} color={G.textL} /><span onClick={step2Action} style={{fontSize:12,color:mobileStep===2?"#111827":G.textM,cursor:"pointer",fontFamily:G.sans,fontWeight:mobileStep===2?700:600,whiteSpace:"nowrap"}}>{p2Label(selP2)}</span></>}
@@ -8362,23 +8365,25 @@ function AdminPanelInner({user}){
           { key:"profile", label:"Profile", icon:IconUser, onClick:openMobileProfile },
         ]
       : [
+          { key:"institutes", label:"All institutes", icon:IconBuilding, onClick:openMobileInstituteHome },
           { key:"classes", label:"Classes", icon:IconSchool, onClick:()=>openMobileWorkspaceTab("class") },
           { key:"teachers", label:"Teachers", icon:IconUsersGroup, onClick:()=>openMobileWorkspaceTab("teacher") },
           { key:"profile", label:"Profile", icon:IconUser, onClick:openMobileProfile },
         ];
 
     const MobileBottomNav = () => (
-      <div style={{position:"fixed",left:12,right:12,bottom:"max(12px, calc(env(safe-area-inset-bottom, 0px) + 12px))",zIndex:150,pointerEvents:"none"}}>
-        <div style={{background:"rgba(255,255,255,0.98)",border:`1px solid ${G.border}`,borderRadius:28,padding:"10px 12px",boxShadow:reduceEffects ? "none" : "0 24px 50px rgba(15,23,42,0.12)",display:"grid",gridTemplateColumns:`repeat(${mobileBottomItems.length}, minmax(0, 1fr))`,gap:8,pointerEvents:"auto"}}>
+      <div style={{position:"fixed",left:10,right:10,bottom:"max(10px, calc(env(safe-area-inset-bottom, 0px) + 10px))",zIndex:150,pointerEvents:"none"}}>
+        <div style={{background:"rgba(255,255,255,0.98)",border:`1px solid ${G.border}`,borderRadius:24,padding:"8px 10px",boxShadow:reduceEffects ? "none" : "0 18px 36px rgba(15,23,42,0.12)",display:"grid",gridTemplateColumns:`repeat(${mobileBottomItems.length}, minmax(0, 1fr))`,gap:6,pointerEvents:"auto"}}>
           {mobileBottomItems.map(item=>{
             const active = mobileBottomKey===item.key;
             return (
               <button
+                className="admin-mobile-touch"
                 key={item.key}
                 onClick={item.onClick}
                 style={{
-                  minHeight:58,
-                  borderRadius:20,
+                  minHeight:54,
+                  borderRadius:18,
                   border:"none",
                   background:active ? "#E8F0FF" : "transparent",
                   color:active ? G.navy : G.textL,
@@ -8386,16 +8391,17 @@ function AdminPanelInner({user}){
                   flexDirection:"column",
                   alignItems:"center",
                   justifyContent:"center",
-                  gap:5,
+                  gap:4,
+                  padding:"0 6px",
                   cursor:"pointer",
                   fontFamily:G.sans,
-                  fontSize:12,
+                  fontSize:11.5,
                   fontWeight:active ? 800 : 700,
                   WebkitTapHighlightColor:"transparent",
                   transition:"background 0.18s ease,color 0.18s ease",
                 }}>
-                <AppIcon icon={item.icon} size={20} color={active ? G.navy : G.textL} />
-                <span style={{lineHeight:1.1,whiteSpace:"nowrap"}}>{item.label}</span>
+                <AppIcon icon={item.icon} size={19} color={active ? G.navy : G.textL} />
+                <span style={{lineHeight:1.05,whiteSpace:"normal",textAlign:"center"}}>{item.label}</span>
               </button>
             );
           })}
@@ -8404,20 +8410,20 @@ function AdminPanelInner({user}){
     );
 
     const mobileWorkspaceCardStyle = {
-      background:"linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%)",
+      background:"#FFFFFF",
       border:`1px solid ${G.border}`,
-      borderRadius:24,
-      padding:"18px 18px 16px",
-      boxShadow:reduceEffects ? "none" : "0 18px 38px rgba(26,47,90,0.08)",
+      borderRadius:20,
+      padding:"14px 14px 13px",
+      boxShadow:reduceEffects ? "none" : "0 14px 30px rgba(15,23,42,0.06)",
     };
     const mobileControlStackStyle = {
       background:"rgba(255,255,255,0.96)",
       border:`1px solid ${G.border}`,
-      borderRadius:20,
-      padding:"12px",
+      borderRadius:18,
+      padding:"10px",
       boxShadow:reduceEffects ? "none" : G.shadowSm,
       position:"sticky",
-      top:106,
+      top:10,
       zIndex:12,
       backdropFilter:"blur(10px)",
       WebkitBackdropFilter:"blur(10px)",
@@ -8425,9 +8431,10 @@ function AdminPanelInner({user}){
     const mobileRowCardStyle = {
       background:G.surface,
       border:`1px solid ${G.border}`,
-      borderRadius:20,
-      padding:"16px",
-      boxShadow:reduceEffects ? "none" : G.shadowSm,
+      borderRadius:18,
+      padding:"13px 14px",
+      boxShadow:reduceEffects ? "none" : "0 10px 22px rgba(15,23,42,0.05)",
+      transition:"transform 0.16s cubic-bezier(.2,.8,.2,1), box-shadow 0.18s ease",
     };
     const mobileTonePillStyle = (tone = "neutral") => {
       if(tone === "primary"){
@@ -8453,8 +8460,8 @@ function AdminPanelInner({user}){
           alignItems:"center",
           gap:6,
           borderRadius:999,
-          padding:"7px 12px",
-          fontSize:12,
+          padding:"6px 10px",
+          fontSize:11,
           fontFamily:G.mono,
           fontWeight:700,
           lineHeight:1.2,
@@ -8468,10 +8475,10 @@ function AdminPanelInner({user}){
       alignItems:"center",
       justifyContent:"center",
       gap:8,
-      minHeight:42,
-      borderRadius:14,
-      padding:"0 14px",
-      fontSize:13,
+      minHeight:38,
+      borderRadius:12,
+      padding:"0 12px",
+      fontSize:12,
       fontWeight:700,
       fontFamily:G.sans,
       cursor:"pointer",
@@ -8480,6 +8487,7 @@ function AdminPanelInner({user}){
       background:kind==="primary" ? G.navy : "#fff",
       color:kind==="primary" ? "#fff" : G.textS,
       boxShadow:kind==="primary" && !reduceEffects ? G.shadowSm : "none",
+      transition:"transform 0.16s cubic-bezier(.2,.8,.2,1), background 0.18s ease, color 0.18s ease",
     });
     const mobileCountDot = (filled = false) => ({
       width:14,
@@ -8496,15 +8504,17 @@ function AdminPanelInner({user}){
     // ── STEP 0: Institute list ────────────────────────────────────────────────
     if(mobileStep===0) return(
       <div style={mobilePageShellStyle}>
+        <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         <MobileNav/>
         <div style={mobilePageInnerStyle}>
-          <div style={{fontSize:11,fontWeight:700,color:G.textL,letterSpacing:1.5,fontFamily:G.sans,textTransform:"uppercase",marginBottom:12}}>Institutes</div>
+          <div style={{fontSize:11,fontWeight:700,color:G.textL,letterSpacing:1.5,fontFamily:G.sans,textTransform:"uppercase",marginBottom:10}}>Institutes</div>
           {renderSearchInput(instSearch,setInstSearch,"Search institutes",true)}
-          <div style={{fontSize:12,color:G.textL,margin:"10px 2px 12px"}}>{visibleInstitutes.length} of {institutes.length} institutes</div>
+          <div style={{fontSize:12,color:G.textL,margin:"8px 2px 10px"}}>{visibleInstitutes.length} of {institutes.length} institutes</div>
           <button onClick={openAllLegacySectionRepair}
-            style={{display:"inline-flex",alignItems:"center",gap:8,background:"#EEF4FF",color:G.blue,border:"1px solid #C7D7F5",borderRadius:999,padding:"8px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:G.sans,margin:"0 2px 12px"}}>
+            className="admin-mobile-touch"
+            style={{display:"inline-flex",alignItems:"center",gap:8,background:"#EEF4FF",color:G.blue,border:"1px solid #C7D7F5",borderRadius:999,padding:"7px 11px",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:G.sans,margin:"0 2px 10px"}}>
             Repair all institutes
           </button>
               {visibleInstitutes.map((inst,idx)=>{
@@ -8538,13 +8548,14 @@ function AdminPanelInner({user}){
                 onTouchEnd={e=>endInstituteTouch(e, inst, { longPressDrag:true })}
                 onTouchCancel={()=>cancelInstituteTouch(inst)}
                 data-inst={inst}
+                className="admin-mobile-touch admin-mobile-card-press"
                 style={{
                   background:isDragOver?G.blueL:G.surface,
-                  borderRadius:14,
+                  borderRadius:18,
                   border:isDragging?`2px dashed ${G.blue}`:`1px solid ${isDragOver?G.blue:G.border}`,
-                  padding:"16px",marginBottom:10,
+                  padding:"14px",marginBottom:8,
                   display:"flex",justifyContent:"space-between",alignItems:"center",
-                  boxShadow:isDragging?"0 8px 24px rgba(0,0,0,0.15)":G.shadowSm,
+                  boxShadow:isDragging?"0 8px 24px rgba(0,0,0,0.15)":"0 10px 22px rgba(15,23,42,0.05)",
                   cursor:"grab",transition:"all 0.15s",
                   opacity:isDragging?0.5:1,
                   transform:isDragging?"scale(1.01)":"scale(1)",
@@ -8553,22 +8564,22 @@ function AdminPanelInner({user}){
                   WebkitTapHighlightColor:"transparent",
                 }}>
                 {/* Drag handle — pure CSS dots, renders on all platforms */}
-                <div style={{display:"flex",flexDirection:"column",justifyContent:"space-between",width:14,height:20,flexShrink:0,marginRight:12,cursor:"grab",padding:"2px 0",userSelect:"none",WebkitUserSelect:"none"}}>
+                <div style={{display:"flex",flexDirection:"column",justifyContent:"space-between",width:12,height:18,flexShrink:0,marginRight:10,cursor:"grab",padding:"1px 0",userSelect:"none",WebkitUserSelect:"none"}}>
                   {[0,1,2].map(r=>(
-                    <div key={r} style={{display:"flex",justifyContent:"space-between",width:14}}>
+                    <div key={r} style={{display:"flex",justifyContent:"space-between",width:12}}>
                       <div style={{width:4,height:4,borderRadius:"50%",background:"#B8CEC2"}}/>
                       <div style={{width:4,height:4,borderRadius:"50%",background:"#B8CEC2"}}/>
                     </div>
                   ))}
                 </div>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:17,fontWeight:700,color:isDragOver?G.blue:G.text,fontFamily:G.display}}>{inst}</div>
-                  <div style={{display:"flex",gap:8,marginTop:6}}>
-                    <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 10px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>{clsCount} class{clsCount!==1?"es":""}</span>
-                    <span style={{fontSize:13,color:G.textM,fontFamily:G.sans,alignSelf:"center"}}>{tCount} teacher{tCount!==1?"s":""}</span>
+                  <div style={{fontSize:16,fontWeight:800,color:isDragOver?G.blue:G.text,fontFamily:G.display,lineHeight:1.15}}>{inst}</div>
+                  <div style={{display:"flex",gap:8,marginTop:7,flexWrap:"wrap"}}>
+                    <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 9px",fontSize:11.5,fontFamily:G.mono,fontWeight:700}}>{clsCount} class{clsCount!==1?"es":""}</span>
+                    <span style={{fontSize:12.5,color:G.textM,fontFamily:G.sans,alignSelf:"center"}}>{tCount} teacher{tCount!==1?"s":""}</span>
                   </div>
                 </div>
-                <span style={{fontSize:20,color:G.textL}}>›</span>
+                <span style={{width:32,height:32,borderRadius:12,background:"#F8FAFC",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:G.textL,flexShrink:0}}>›</span>
               </div>
             );
           })}
@@ -8583,6 +8594,7 @@ function AdminPanelInner({user}){
     );
     if(mobileStep===1) return(
       <div style={mobilePageShellStyle}>
+        <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
@@ -8602,39 +8614,39 @@ function AdminPanelInner({user}){
         <AdminToastBanner message={adminToast} />
         <MobileNav/><MobileBreadcrumb/>
         <div style={mobilePageInnerStyle}>
-          <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
+          <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>
                   Institute workspace
                 </div>
-                <h2 style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,margin:"10px 0 0",lineHeight:1.05}}>
+                <h2 style={{fontSize:25,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.05}}>
                   {selInst}
                 </h2>
-                <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:10}}>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8}}>
                   {currentSession()} session · {tab==="class" ? visibleInstClassCountLabel : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
                 </div>
               </div>
-              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"7px 12px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
+              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"6px 10px",fontSize:11,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
                 {overviewPeriodText}
               </span>
             </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
               {mobilePill(`${instClasses.length} classes`, "soft")}
               {mobilePill(`${selectedInstitutePeriodCount} logs`, "soft")}
               {mobilePill(`${formatDurationShort(classSubjectSummary.totalMinutes)} taught`, "good")}
             </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
-              <button onClick={openMobileInstituteOverview} style={mobileActionButtonStyle("primary")}>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+              <button className="admin-mobile-touch" onClick={openMobileInstituteOverview} style={mobileActionButtonStyle("primary")}>
                 Institute overview
               </button>
-              <button onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("ghost")}>
+              <button className="admin-mobile-touch" onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("ghost")}>
                 Export
               </button>
             </div>
           </div>
 
-          <div style={{...mobileControlStackStyle,marginBottom:14}}>
+          <div style={{...mobileControlStackStyle,marginBottom:12}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
               <div>
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Current view</div>
@@ -8642,7 +8654,7 @@ function AdminPanelInner({user}){
                   {tab==="class" ? "Classes" : "Teachers"}
                 </div>
               </div>
-              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"7px 11px",fontSize:11,fontWeight:700,fontFamily:G.mono}}>
+              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono}}>
                 Use bottom nav to switch
               </span>
             </div>
@@ -8655,11 +8667,11 @@ function AdminPanelInner({user}){
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
               {tab==="class"&&selInst&&(
-                <button onClick={openLegacySectionRepair} style={mobileActionButtonStyle("ghost")}>
+                <button className="admin-mobile-touch" onClick={openLegacySectionRepair} style={mobileActionButtonStyle("ghost")}>
                   Legacy repair
                 </button>
               )}
-              <button onClick={()=>openAggregateView(tab)} style={mobileActionButtonStyle("ghost")}>
+              <button className="admin-mobile-touch" onClick={()=>openAggregateView(tab)} style={mobileActionButtonStyle("ghost")}>
                 {tab==="class" ? "Open all classes" : "Open all teachers"}
               </button>
             </div>
@@ -8706,15 +8718,16 @@ function AdminPanelInner({user}){
                     <div
                       key={cls.raw}
                       onClick={()=>openClassSelection(cls.raw)}
+                      className="admin-mobile-touch admin-mobile-card-press"
                       style={{...mobileRowCardStyle,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
                       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
                         <div style={{display:"flex",gap:12,minWidth:0,flex:1}}>
                           <div style={{width:5,alignSelf:"stretch",borderRadius:999,background:group.accent,opacity:0.85}}/>
                           <div style={{minWidth:0,flex:1}}>
-                            <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05}}>
+                            <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05}}>
                               {cls.display}
                             </div>
-                            <div style={{fontSize:13,color:G.textM,marginTop:6,lineHeight:1.5}}>
+                            <div style={{fontSize:12.5,color:G.textM,marginTop:5,lineHeight:1.5}}>
                               {group.label} cluster · {cls.teachers.length} active teacher{cls.teachers.length!==1?"s":""} · {activityLabel}
                             </div>
                           </div>
@@ -8727,7 +8740,7 @@ function AdminPanelInner({user}){
                         </div>
                       </div>
                       {cls.subjects.length>0&&(
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:14}}>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}}>
                           {cls.subjects.map(s=>(
                             <span key={s} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 11px",fontSize:12,fontFamily:G.sans,color:G.textS}}>
                               {s}
@@ -8735,7 +8748,7 @@ function AdminPanelInner({user}){
                           ))}
                         </div>
                       )}
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginTop:14}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginTop:12}}>
                         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                           {mobilePill(`${cls.teachers.length} teachers`, "blue", `${cls.raw}_teachers`)}
                           {mobilePill(activityLabel, "soft", `${cls.raw}_activity`)}
@@ -8760,6 +8773,7 @@ function AdminPanelInner({user}){
               <div
                 key={t.uid}
                 onClick={()=>openTeacherSelection(t.uid)}
+                className="admin-mobile-touch admin-mobile-card-press"
                 style={{...mobileRowCardStyle,cursor:"pointer",marginBottom:10,WebkitTapHighlightColor:"transparent"}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
                   <div style={{display:"flex",gap:12,minWidth:0,flex:1}}>
@@ -8767,10 +8781,10 @@ function AdminPanelInner({user}){
                       {initial}
                     </div>
                     <div style={{minWidth:0,flex:1}}>
-                      <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.1}}>
+                      <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.1}}>
                         {name}
                       </div>
-                      <div style={{fontSize:13,color:G.textM,marginTop:6,lineHeight:1.5}}>
+                      <div style={{fontSize:12.5,color:G.textM,marginTop:5,lineHeight:1.5}}>
                         {classCount} class{classCount!==1?"es":""} in this institute · {activityLabel}
                       </div>
                       {otherInsts.length>0&&<AlsoAtInstitutes institutes={otherInsts} />}
@@ -8780,7 +8794,7 @@ function AdminPanelInner({user}){
                     ›
                   </span>
                 </div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
                   {mobilePill(activityLabel, "soft", `${t.uid}_activity`)}
                   {mobilePill(`${classCount} classes`, "blue", `${t.uid}_classes`)}
                 </div>
@@ -8806,6 +8820,7 @@ function AdminPanelInner({user}){
     // ── STEP 2: Classes for teacher / Teachers for class ─────────────────────
     if(mobileStep===2) return(
       <div style={mobilePageShellStyle}>
+        <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
@@ -8819,16 +8834,16 @@ function AdminPanelInner({user}){
             const nextLabel = tab==="teacher" ? "class timelines" : "teacher histories";
             return (
               <>
-                <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
+                <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
                     <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>
                         {selInst} · {tab==="teacher" ? "Teacher workspace" : "Class workspace"}
                       </div>
-                      <h2 style={{fontSize:27,fontWeight:800,color:G.text,fontFamily:G.display,margin:"10px 0 0",lineHeight:1.05}}>
+                      <h2 style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.05}}>
                         {p2Label(selP2)}
                       </h2>
-                      <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:10}}>
+                      <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8}}>
                         {tab==="teacher"
                           ? `${selectedTeacher} · choose a class or open the full grouped view`
                           : `${selInst} · choose a teacher or open the full grouped view`}
@@ -8836,7 +8851,7 @@ function AdminPanelInner({user}){
                     </div>
                     {mobilePill(overviewPeriodText, "blue", "step2_period")}
                   </div>
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
                     {mobilePill(`${p3Items.length} ${tab==="teacher" ? "classes" : "teachers"}`, "soft", "step2_count")}
                     {mobilePill(`${totalEntries} entries`, "soft", "step2_entries")}
                     {tab==="class" && selectedClass?.subjects?.length
@@ -8845,17 +8860,17 @@ function AdminPanelInner({user}){
                         ? mobilePill(instTeacherMeta[selP2]?.label || "No recent activity", "good", "step2_activity")
                         : null}
                   </div>
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
-                    <button onClick={openScopedFullView} style={mobileActionButtonStyle("primary")}>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+                    <button className="admin-mobile-touch" onClick={openScopedFullView} style={mobileActionButtonStyle("primary")}>
                       Full timeline
                     </button>
-                    <button onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("ghost")}>
+                    <button className="admin-mobile-touch" onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("ghost")}>
                       Export
                     </button>
                   </div>
                 </div>
 
-                <div style={{...mobileControlStackStyle,marginBottom:14}}>
+                <div style={{...mobileControlStackStyle,marginBottom:12}}>
                   {renderSearchInput(
                     p3Search,
                     setP3Search,
@@ -8883,13 +8898,14 @@ function AdminPanelInner({user}){
                           }
                           setMobileStep(3);
                         }}
+                        className="admin-mobile-touch admin-mobile-card-press"
                         style={{cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
                         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
                           <div style={{minWidth:0,flex:1}}>
-                            <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05}}>
+                            <div style={{fontSize:19,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05}}>
                               {tab==="teacher" ? item.display : item.name}
                             </div>
-                            <div style={{fontSize:13,color:G.textM,marginTop:6,lineHeight:1.55}}>
+                            <div style={{fontSize:12.5,color:G.textM,marginTop:5,lineHeight:1.5}}>
                               {tab==="teacher"
                                 ? [item.subject || "No subject", item.institute || selInst, lastEntryCaption(item.lastActivityTs || null)].filter(Boolean).join(" · ")
                                 : [item.subject || "No subject", instTeacherMeta[item.uid]?.label || lastEntryCaption(item.lastActivityTs || item.lastActive || null)].filter(Boolean).join(" · ")}
@@ -8899,7 +8915,7 @@ function AdminPanelInner({user}){
                             ›
                           </span>
                         </div>
-                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
                           {mobilePill(`${item.entryCount || 0} ${(item.entryCount || 0)===1?"entry":"entries"}`, "blue", `${item.classId||item.uid}_entries`)}
                           {tab==="teacher"
                             ? mobilePill(item.subject || "Subject pending", "soft", `${item.classId}_subject`)
@@ -8907,11 +8923,11 @@ function AdminPanelInner({user}){
                         </div>
                       </div>
                       {tab==="teacher"&&(
-                        <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                        <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                           <div style={{fontSize:12,color:G.textL,fontFamily:G.sans}}>
                             Open this class for the teacher timeline or remove the class from this teacher.
                           </div>
-                          <button onClick={()=>handleDeleteClass(selP2,item.classId,item.display,fullData[selP2]?.profile?.name||"Teacher")}
+                          <button className="admin-mobile-touch" onClick={()=>handleDeleteClass(selP2,item.classId,item.display,fullData[selP2]?.profile?.name||"Teacher")}
                             style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:10,padding:"8px 12px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6,WebkitTapHighlightColor:"transparent"}}>
                             🗑 Delete class
                           </button>
@@ -8937,6 +8953,7 @@ function AdminPanelInner({user}){
     if(mobileStep===3&&(isInstituteOverviewStep||selP3||isAggregateSelection||isScopedFullView)) {
       return(
         <div style={mobilePageShellStyle}>
+          <MobileMotionStyles />
           {binView&&<AdminBinModal/>}
           {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
           {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
@@ -8961,22 +8978,22 @@ function AdminPanelInner({user}){
               const timelineSummary = selectedTimelineSummary || null;
               return (
                 <>
-                  <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
+                  <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
                       <div style={{minWidth:0,flex:1}}>
                         <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>
                           {isInstituteOverviewStep ? "Institute detail" : isScopedFullView ? "Grouped timeline" : isAggregateSelection ? "Aggregate timeline" : "Selection timeline"}
                         </div>
-                        <h2 style={{fontSize:27,fontWeight:800,color:G.text,fontFamily:G.display,margin:"10px 0 0",lineHeight:1.05}}>
+                        <h2 style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.05}}>
                           {stepTitle}
                         </h2>
-                        <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:10}}>
+                        <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8}}>
                           {stepSubtitle}
                         </div>
                       </div>
                       {mobilePill(overviewPeriodText, "blue", "step3_period")}
                     </div>
-                    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
                       {isInstituteOverviewStep&&mobilePill(`${instClasses.length} classes`, "soft", "step3_classes")}
                       {isInstituteOverviewStep&&mobilePill(`${selectedInstitutePeriodCount} logs`, "soft", "step3_logs")}
                       {isInstituteOverviewStep&&mobilePill(`${formatDurationShort(classSubjectSummary.totalMinutes)} taught`, "good", "step3_taught")}
@@ -8988,9 +9005,9 @@ function AdminPanelInner({user}){
                   </div>
 
                   <div style={{...mobileWorkspaceCardStyle,padding:0,overflow:"hidden"}}>
-                    <div style={{position:"sticky",top:106,zIndex:13,background:"rgba(255,255,255,0.97)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderBottom:`1px solid ${G.border}`}}>
-                      <div style={{padding:"14px 14px 12px"}}>
-                        <div style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 12px 10px"}}>
+                    <div style={{position:"sticky",top:10,zIndex:13,background:"rgba(255,255,255,0.97)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderBottom:`1px solid ${G.border}`}}>
+                      <div style={{padding:"10px 10px 9px"}}>
+                        <div style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:16,padding:"10px 10px 8px"}}>
                           <PeriodSelector
                             period={period}
                             onChangePeriod={handlePeriodChange}
@@ -9001,8 +9018,8 @@ function AdminPanelInner({user}){
                             onChangeRangeEnd={handleRangeEndChange}
                           />
                         </div>
-                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
-                          <button onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("primary")}>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                          <button className="admin-mobile-touch" onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("primary")}>
                             Export
                           </button>
                           {isScopedFullView&&mobilePill("Grouped by class", "soft", "step3_grouped")}
@@ -9011,7 +9028,7 @@ function AdminPanelInner({user}){
                         </div>
                       </div>
                     </div>
-                    <div style={{padding:"14px"}}>
+                    <div style={{padding:"10px"}}>
                       {isInstituteOverviewStep
                         ? renderOverviewPanel()
                         : isScopedFullView
