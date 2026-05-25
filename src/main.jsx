@@ -3,9 +3,6 @@ import { createRoot } from "react-dom/client";
 import { onAuth, getUserRole, logout } from "./firebase";
 import { Spinner } from "./shared.jsx";
 import Auth from "./Auth";
-const ClassTracker = lazy(() => import("./ClassTracker"));
-const AdminAuth = lazy(() => import("./AdminAuth"));
-const AdminPanel = lazy(() => import("./AdminPanel"));
 import { getAppMode, getTeacherAppUrl, isNativeApp } from "./platform";
 
 // Web keeps the existing split build. Native uses one shared shell.
@@ -13,6 +10,58 @@ const APP_MODE = getAppMode();
 const IS_ADMIN_APP = APP_MODE === "admin";
 const IS_NATIVE_SHELL = APP_MODE === "native";
 const ADMIN_INVITE_STORAGE_KEY = "ct_admin_invite_token";
+const CHUNK_RELOAD_STORAGE_KEY = "ct_chunk_reload_attempt";
+const CHUNK_RELOAD_QUERY_KEY = "__ct_chunk";
+
+function isDynamicImportFailure(error) {
+  const message = error?.message || String(error || "");
+  return /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk [\d]+ failed/i.test(message);
+}
+
+function buildChunkRetryUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set(CHUNK_RELOAD_QUERY_KEY, Date.now().toString(36));
+  return url.toString();
+}
+
+function clearChunkRetryState() {
+  if (typeof window === "undefined") return;
+  const key = `${CHUNK_RELOAD_STORAGE_KEY}:${APP_MODE}`;
+  window.sessionStorage.removeItem(key);
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(CHUNK_RELOAD_QUERY_KEY)) return;
+  url.searchParams.delete(CHUNK_RELOAD_QUERY_KEY);
+  window.history.replaceState({}, "", url.toString());
+}
+
+function forceChunkRefresh() {
+  if (typeof window === "undefined") return;
+  const key = `${CHUNK_RELOAD_STORAGE_KEY}:${APP_MODE}`;
+  window.sessionStorage.setItem(key, "1");
+  window.location.replace(buildChunkRetryUrl());
+}
+
+async function importWithChunkRecovery(loader) {
+  try {
+    const mod = await loader();
+    clearChunkRetryState();
+    return mod;
+  } catch (error) {
+    if (typeof window !== "undefined" && isDynamicImportFailure(error)) {
+      const key = `${CHUNK_RELOAD_STORAGE_KEY}:${APP_MODE}`;
+      if (window.sessionStorage.getItem(key) !== "1") {
+        forceChunkRefresh();
+        return new Promise(() => {});
+      }
+    }
+    throw error;
+  }
+}
+
+const lazyWithChunkRecovery = (loader) => lazy(() => importWithChunkRecovery(loader));
+const ClassTracker = lazyWithChunkRecovery(() => import("./ClassTracker"));
+const AdminAuth = lazyWithChunkRecovery(() => import("./AdminAuth"));
+const AdminPanel = lazyWithChunkRecovery(() => import("./AdminPanel"));
 
 function hasPendingAdminInvite() {
   if (typeof window === "undefined") return false;
@@ -25,6 +74,10 @@ function App() {
   const [role,        setRole]        = useState(null);
   const [roleLoading, setRoleLoading] = useState(false);
   const hasAdminInvite = hasPendingAdminInvite();
+
+  useEffect(() => {
+    clearChunkRetryState();
+  }, []);
 
   // Prevents onAuth's async getUserRole from overwriting the role
   // after handleAdminVerified has already set it correctly.
@@ -131,6 +184,7 @@ function RuntimeErrorBridge({ children }) {
 function FatalAppScreen({ error }) {
   const message = error?.message || String(error || "Unknown error");
   const surfaceLabel = IS_ADMIN_APP ? "admin panel" : (IS_NATIVE_SHELL ? "app" : "teacher panel");
+  const chunkFailure = isDynamicImportFailure(error);
   return (
     <div style={{ minHeight:"100vh", background:"#F5F7FA", display:"flex", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Inter',sans-serif" }}>
       <div style={{ width:"100%", maxWidth:460, background:"#FFFFFF", border:"1px solid #DCE3EA", borderRadius:24, boxShadow:"0 16px 40px rgba(16,24,40,0.12)", padding:"28px 24px" }}>
@@ -139,7 +193,9 @@ function FatalAppScreen({ error }) {
         </div>
         <div style={{ fontSize:24, fontWeight:800, color:"#101828", marginBottom:8, fontFamily:"'Poppins',sans-serif" }}>Something went wrong</div>
         <div style={{ fontSize:14, lineHeight:1.7, color:"#475467", marginBottom:18 }}>
-          {`The app hit a runtime error before the ${surfaceLabel} could finish loading.`}
+          {chunkFailure
+            ? `The ${surfaceLabel} updated in the background and this screen is holding an older file reference. Refresh once to load the latest version.`
+            : `The app hit a runtime error before the ${surfaceLabel} could finish loading.`}
         </div>
         <div style={{ fontSize:12, fontWeight:700, color:"#667085", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
           Error Details
@@ -150,9 +206,9 @@ function FatalAppScreen({ error }) {
         </pre>
         <button
           type="button"
-          onClick={() => window.location.reload()}
+          onClick={() => chunkFailure ? forceChunkRefresh() : window.location.reload()}
           style={{ marginTop:18, width:"100%", border:"none", borderRadius:14, background:"#16324F", color:"#fff", padding:"13px 18px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
-          Reload
+          {chunkFailure ? "Refresh app" : "Reload"}
         </button>
       </div>
     </div>
