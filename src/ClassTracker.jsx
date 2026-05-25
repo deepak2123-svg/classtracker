@@ -3565,36 +3565,41 @@ function ClassTrackerInner({user}){
       : []
   ), [data?._meta?.pendingAdminClassNotices]);
   const notificationCount = pendingAdminClassNotices.length;
-  const teacherActiveClasses = useMemo(() => (
-    [...(data.classes || []).filter(c => !c.left)].sort((a,b)=>(b.created||0)-(a.created||0))
-  ), [data.classes]);
-  const teacherInstitutes = useMemo(() => (
-    [...new Set(teacherActiveClasses.map(c => c?.institute || ""))].filter(Boolean)
-  ), [teacherActiveClasses]);
-  const teacherVisibleClasses = useMemo(() => (
-    instFilter==="all" ? teacherActiveClasses : teacherActiveClasses.filter(c=>c.institute===instFilter)
-  ), [teacherActiveClasses, instFilter]);
-  const deferredTeacherVisibleClasses = React.useDeferredValue(teacherVisibleClasses);
-  const teacherClassMetricsMap = useMemo(() => {
-    const metricsMap = {};
+  const teacherHomeModel = useMemo(() => {
+    const activeClasses = [...(data.classes || []).filter(c => !c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
+    const institutes = [...new Set(activeClasses.map(c => c?.institute || ""))].filter(Boolean);
+    const visibleClasses = instFilter==="all" ? activeClasses : activeClasses.filter(c=>c.institute===instFilter);
+    const classMetricsMap = {};
     (data.classes || []).forEach(cls => {
       if(!cls?.id) return;
-      metricsMap[cls.id] = buildClassEntryMetrics(data.notes?.[cls.id] || {});
+      classMetricsMap[cls.id] = buildClassEntryMetrics(data.notes?.[cls.id] || {});
     });
-    return metricsMap;
-  }, [data.classes, data.notes]);
-  const teacherQuickHomeSummary = useMemo(() => (
-    buildTeacherQuickHomeSummary(teacherActiveClasses, data.notes)
-  ), [teacherActiveClasses, data.notes]);
-  const knownInstituteNames = useMemo(() => (
-    [...new Set([
+    const quickHomeSummary = buildTeacherQuickHomeSummary(activeClasses, data.notes);
+    const knownInstituteNames = [...new Set([
       ...globalInstitutes,
       ...(data.classes || []).map(cls => cls?.institute || ""),
       ...((data.trash?.classes || []).map(cls => cls?.institute || "")),
     ].map(name => String(name || "").trim()).filter(Boolean))]
-      .sort((a,b)=>a.localeCompare(b))
-  ), [globalInstitutes, data.classes, data.trash?.classes]);
-  const instituteColorMap = useMemo(() => buildInstituteColorMap(knownInstituteNames), [knownInstituteNames]);
+      .sort((a,b)=>a.localeCompare(b));
+    return {
+      activeClasses,
+      institutes,
+      visibleClasses,
+      classMetricsMap,
+      quickHomeSummary,
+      knownInstituteNames,
+    };
+  }, [data.classes, data.notes, data.trash?.classes, globalInstitutes, instFilter]);
+  const teacherActiveClasses = teacherHomeModel.activeClasses;
+  const teacherInstitutes = teacherHomeModel.institutes;
+  const teacherFilteredClasses = teacherHomeModel.visibleClasses;
+  const deferredTeacherVisibleClasses = React.useDeferredValue(teacherHomeModel.visibleClasses);
+  const teacherClassMetricsMap = teacherHomeModel.classMetricsMap;
+  const teacherQuickHomeSummary = teacherHomeModel.quickHomeSummary;
+  const instituteColorMap = useMemo(
+    () => buildInstituteColorMap(teacherHomeModel.knownInstituteNames),
+    [teacherHomeModel.knownInstituteNames]
+  );
   ACTIVE_INSTITUTE_COLOR_MAP = instituteColorMap;
   const adminNoticeItems = useMemo(() => (
     pendingAdminClassNotices
@@ -5386,8 +5391,8 @@ function ClassTrackerInner({user}){
   // ══════════════════════════════════════════════════════════════════════
   if(view==="classDetail" && activeClass){
     const cls=activeClass;
-    const swipePool = teacherVisibleClasses.some(entry => String(entry?.id || "") === String(cls.id || ""))
-      ? teacherVisibleClasses
+    const swipePool = teacherFilteredClasses.some(entry => String(entry?.id || "") === String(cls.id || ""))
+      ? teacherFilteredClasses
       : teacherActiveClasses;
     const currentDetailIndex = swipePool.findIndex(entry => String(entry?.id || "") === String(cls.id || ""));
     const leftSwipeClass = currentDetailIndex >= 0 && swipePool.length > 1
