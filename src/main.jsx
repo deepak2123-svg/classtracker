@@ -130,6 +130,7 @@ function RuntimeErrorBridge({ children }) {
 
 function FatalAppScreen({ error }) {
   const message = error?.message || String(error || "Unknown error");
+  const surfaceLabel = IS_ADMIN_APP ? "admin panel" : (IS_NATIVE_SHELL ? "app" : "teacher panel");
   return (
     <div style={{ minHeight:"100vh", background:"#F5F7FA", display:"flex", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Inter',sans-serif" }}>
       <div style={{ width:"100%", maxWidth:460, background:"#FFFFFF", border:"1px solid #DCE3EA", borderRadius:24, boxShadow:"0 16px 40px rgba(16,24,40,0.12)", padding:"28px 24px" }}>
@@ -138,7 +139,7 @@ function FatalAppScreen({ error }) {
         </div>
         <div style={{ fontSize:24, fontWeight:800, color:"#101828", marginBottom:8, fontFamily:"'Poppins',sans-serif" }}>Something went wrong</div>
         <div style={{ fontSize:14, lineHeight:1.7, color:"#475467", marginBottom:18 }}>
-          The app hit a runtime error before the teacher panel could finish loading.
+          {`The app hit a runtime error before the ${surfaceLabel} could finish loading.`}
         </div>
         <div style={{ fontSize:12, fontWeight:700, color:"#667085", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
           Error Details
