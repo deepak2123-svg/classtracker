@@ -2,6 +2,18 @@ import React, { useState, useEffect, useMemo, Component } from "react";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import {
+  IconBuilding,
+  IconChartBar,
+  IconChevronLeft,
+  IconChevronRight,
+  IconLogout,
+  IconSchool,
+  IconSettings,
+  IconTrash,
+  IconUser,
+  IconUsersGroup,
+} from "@tabler/icons-react";
+import {
   logout, getAllTeachers, getTeacherFullData,
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
   getAllInstituteSections, saveInstituteGradeGroups, deleteInstituteGradeGroup,
@@ -59,6 +71,17 @@ const PANEL_RAIL_THEMES = {
     text: "#1A5A3E",
   },
 };
+
+const APP_ICON_STROKE = 2.05;
+
+function AppIcon({ icon, size = 18, color = "currentColor", stroke = APP_ICON_STROKE, style = {} }){
+  if(!icon) return null;
+  if(typeof icon === "function" || (typeof icon === "object" && icon !== null && "$$typeof" in icon)){
+    const Icon = icon;
+    return <Icon size={size} color={color} stroke={stroke} style={{display:"block",flexShrink:0,...style}} />;
+  }
+  return <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",lineHeight:1,...style}}>{icon}</span>;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function currentSession(){
@@ -3438,6 +3461,7 @@ function AdminPanelInner({user}){
     return { start:`${today.slice(0,7)}-01`, end:today };
   });
   const [mobileStep,  setMobileStep]  = useState(0);
+  const [mobileSurface, setMobileSurface] = useState("workspace"); // workspace | profile
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
@@ -3644,6 +3668,7 @@ function AdminPanelInner({user}){
   // but skip synthetic pushes while we are restoring a prior entry.
   const currentNavState = useMemo(() => ({
     view,
+    mobileSurface,
     mobileStep,
     instDetailView: instDetailView || null,
     selInst: selInst || null,
@@ -3651,14 +3676,14 @@ function AdminPanelInner({user}){
     selP2: selP2 || null,
     selP3: selP3 || null,
     fullView: fullView || null,
-  }), [view, mobileStep, instDetailView, selInst, tab, selP2, selP3, fullView]);
+  }), [view, mobileSurface, mobileStep, instDetailView, selInst, tab, selP2, selP3, fullView]);
   const currentNavKey = useMemo(() => JSON.stringify(currentNavState), [currentNavState]);
   const buildAdminHistoryUrl = React.useCallback((state, navToken = 0) => {
     if(typeof window === "undefined") return "";
     const base = `${window.location.pathname}${window.location.search}`;
     const scope = state.view === "manage"
       ? `manage-${state.mobileStep || 0}`
-      : `${state.view || "main"}-${state.mobileStep || 0}-${state.tab || "class"}`;
+      : `${state.view || "main"}-${state.mobileSurface || "workspace"}-${state.mobileStep || 0}-${state.tab || "class"}`;
     return `${base}#admin-${scope}-${navToken}`;
   }, []);
 
@@ -3695,6 +3720,7 @@ function AdminPanelInner({user}){
       setProfileOpen(false);
       setExportOpen(false);
       setView(restoredNavState.view ?? "main");
+      setMobileSurface(restoredNavState.mobileSurface === "profile" ? "profile" : "workspace");
       setMobileStep(typeof restoredNavState.mobileStep === "number" ? restoredNavState.mobileStep : 0);
       setInstDetailView(restoredNavState.instDetailView ?? null);
       setSelInst(restoredNavState.selInst ?? null);
@@ -4377,6 +4403,13 @@ function AdminPanelInner({user}){
     const fromFull=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).length,0);
     return Math.max(fromIndex,fromFull);
   },[teachers,fullData]);
+
+  const adminWorkspaceStats = useMemo(() => ([
+    { key:"institutes", value:institutes.length, label:"Institutes", icon:IconBuilding, tone:"#DBEAFE", color:G.blue },
+    { key:"teachers", value:teachers.length, label:"Teachers", icon:IconUsersGroup, tone:"#E8F8EF", color:"#198754" },
+    { key:"classes", value:totalClasses, label:"Classes", icon:IconSchool, tone:"#FEF3C7", color:G.amber },
+    { key:"entries", value:totalEntries, label:"Entries", icon:IconChartBar, tone:"#F3E8FF", color:"#7C3AED" },
+  ]), [institutes.length, teachers.length, totalClasses, totalEntries]);
 
   const instituteStats = useMemo(()=>{
     return institutes.reduce((acc, inst)=>{
@@ -5388,6 +5421,8 @@ function AdminPanelInner({user}){
 
   const clearDrilldown = () => { setSelP2(null); setSelP3(null); setFullView(null); };
   const resetNav=(newTab)=>{
+    setMobileSurface("workspace");
+    setProfileOpen(false);
     clearDrilldown();
     setP2Search("");
     setP3Search("");
@@ -5400,13 +5435,43 @@ function AdminPanelInner({user}){
   // This avoids the old "fan out dozens of reads at once" behavior that hurts
   // older Android devices.
   const onSelectInstitute = (inst) => {
+    setMobileSurface("workspace");
+    setProfileOpen(false);
     setSelInst(inst);
+    setTab("class");
     clearDrilldown();
     setP2Search("");
     setP3Search("");
     setActiveProgramFilter(null);
     setMobileStep(1);
     warmInstitute(inst);
+  };
+
+  const openMobileProfile = () => {
+    setProfileOpen(false);
+    setMobileSurface("profile");
+  };
+
+  const openMobileInstituteHome = () => {
+    setProfileOpen(false);
+    setMobileSurface("workspace");
+    setSelInst(null);
+    clearDrilldown();
+    setP2Search("");
+    setP3Search("");
+    setActiveProgramFilter(null);
+    setMobileStep(0);
+  };
+
+  const openMobileWorkspaceTab = (nextTab = "class") => {
+    setProfileOpen(false);
+    setMobileSurface("workspace");
+    if(!selInst){
+      setTab("class");
+      setMobileStep(0);
+      return;
+    }
+    resetNav(nextTab === "teacher" ? "teacher" : "class");
   };
 
   // Keep touch/scroll institute selection logic below the values it depends on.
@@ -5566,8 +5631,14 @@ function AdminPanelInner({user}){
         return;
       }
       if(isScopedFullView){
+        const cameDirectlyFromList = fullView?.source === "mobile-list";
         setFullView(null);
         setSelP3(null);
+        if(cameDirectlyFromList){
+          setSelP2(null);
+          setMobileStep(1);
+          return;
+        }
         setMobileStep(2);
         return;
       }
@@ -5836,31 +5907,46 @@ function AdminPanelInner({user}){
   })();
 
   const openTeacherSelection = (uid) => {
+    setMobileSurface("workspace");
     setSelP2(uid);
     setSelP3(null);
     setFullView(null);
     setP3Search("");
+    if(isMobile){
+      setFullView({ kind:"teacher", teacherUid:uid, teacherName:selectedTeacherName(uid), source:"mobile-list" });
+      ensureFullData(uid);
+      setMobileStep(3);
+      return;
+    }
     setMobileStep(2);
     ensureFullData(uid);
   };
 
   const openClassSelection = (raw) => {
+    setMobileSurface("workspace");
     setSelP2(raw);
     setSelP3(null);
     setFullView(null);
     setP3Search("");
+    if(isMobile){
+      setFullView({ kind:"class", classRaw:raw, source:"mobile-list" });
+      warmTeacherUids(instClasses.find(c=>c.raw===raw)?.teachers?.map(t=>t.uid) || []);
+      setMobileStep(3);
+      return;
+    }
     setMobileStep(2);
     warmTeacherUids(instClasses.find(c=>c.raw===raw)?.teachers?.map(t=>t.uid) || []);
   };
 
   const openScopedFullView = () => {
     if(!selP2) return;
+    setMobileSurface("workspace");
     setP3Search("");
     if(tab==="teacher"){
-      setFullView({ kind:"teacher", teacherUid:selP2, teacherName:selectedTeacherName(selP2) });
+      setFullView({ kind:"teacher", teacherUid:selP2, teacherName:selectedTeacherName(selP2), source:"step2" });
       ensureFullData(selP2);
     } else {
-      setFullView({ kind:"class", classRaw:selP2 });
+      setFullView({ kind:"class", classRaw:selP2, source:"step2" });
       warmTeacherUids(instClasses.find(c=>c.raw===selP2)?.teachers?.map(t=>t.uid) || []);
     }
     setSelP3(null);
@@ -5868,6 +5954,7 @@ function AdminPanelInner({user}){
   };
 
   const openAggregateView = (kind) => {
+    setMobileSurface("workspace");
     setSelP2(kind==="class" ? ALL_CLASSES_KEY : ALL_TEACHERS_KEY);
     setSelP3(null);
     setFullView(null);
@@ -8051,95 +8138,267 @@ function AdminPanelInner({user}){
   // ── MOBILE: renders each step as a standalone full-page view ────────────────
   // This avoids all flex-height issues that cause list clipping
   if(isMobile) {
+    const mobilePageShellStyle = {
+      minHeight:"100svh",
+      width:"100%",
+      overflowX:"hidden",
+      background:G.bg,
+      fontFamily:G.sans,
+      paddingBottom:"calc(108px + env(safe-area-inset-bottom, 0px))",
+    };
+    const mobilePageInnerStyle = { padding:"14px 14px 0" };
+    const mobileHeroContext = mobileSurface==="profile"
+      ? "Profile settings"
+      : !selInst
+        ? "All institutes"
+        : tab==="teacher"
+          ? "Teacher view"
+          : "Class view";
+    const mobileBottomKey = mobileSurface==="profile"
+      ? "profile"
+      : !selInst
+        ? "institutes"
+        : tab==="teacher"
+          ? "teachers"
+          : "classes";
+
     const MobileNav = ()=>(
-      <div style={{background:G.navy,minHeight:60,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.08)",gap:8,position:"sticky",top:0,zIndex:100}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:32,height:32,background:G.blueV,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
-          </div>
-          <div>
-            <div style={{fontFamily:G.display,fontSize:17,fontWeight:800,color:"#fff",lineHeight:1.1,letterSpacing:-0.4}}>Ledgr</div>
-            <div style={{fontSize:9,letterSpacing:2,color:"rgba(255,255,255,0.4)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</div>
+      <div style={{padding:"14px 14px 0"}}>
+        <div style={{
+          background:G.navy,
+          borderRadius:32,
+          padding:"18px 18px 16px",
+          boxShadow:reduceEffects ? "none" : "0 20px 44px rgba(26,47,90,0.18)",
+        }}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:14,minWidth:0,flex:1}}>
+              <div style={{width:52,height:52,background:G.blueV,borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.18)"}}>
+                <svg width="26" height="26" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
+              </div>
+              <div style={{minWidth:0}}>
+                <div style={{fontFamily:G.display,fontSize:28,fontWeight:800,color:"#fff",lineHeight:1,letterSpacing:-0.7}}>Ledgr</div>
+                <div style={{fontSize:12,letterSpacing:2.6,color:"rgba(255,255,255,0.48)",fontFamily:G.mono,textTransform:"uppercase",marginTop:6}}>Admin workspace</div>
+              </div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+              <div style={{background:"rgba(255,255,255,0.11)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:18,padding:"8px 12px",minWidth:94}}>
+                <div style={{fontSize:10,letterSpacing:1.4,textTransform:"uppercase",fontFamily:G.mono,color:"rgba(255,255,255,0.42)"}}>Active</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#fff",fontFamily:G.sans,marginTop:4,whiteSpace:"nowrap"}}>{mobileHeroContext}</div>
+              </div>
+            </div>
           </div>
         </div>
-        <div style={{position:"relative"}}>
-          <div onClick={()=>setProfileOpen(o=>!o)}
-            style={{height:36,display:"flex",alignItems:"center",gap:7,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",borderRadius:9,padding:"0 10px",cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s"}}>
-            <div style={{width:22,height:22,borderRadius:"50%",background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",flexShrink:0,fontFamily:G.sans}}>
-              {(user?.email||"A").charAt(0).toUpperCase()}
+      </div>
+    );
+
+    const renderAdminProfileStatGrid = (compact = false) => (
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:compact ? 8 : 10}}>
+        {adminWorkspaceStats.map(item=>(
+          <div key={item.key} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:compact ? 14 : 16,padding:compact ? "10px 12px" : "12px 14px",boxShadow:reduceEffects ? "none" : "0 10px 24px rgba(15,23,42,0.04)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+              <div style={{width:30,height:30,borderRadius:10,background:item.tone,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <AppIcon icon={item.icon} size={16} color={item.color} />
+              </div>
+              <div style={{fontSize:10,fontWeight:700,fontFamily:G.mono,letterSpacing:0.5,textTransform:"uppercase",color:G.textL}}>{item.label}</div>
             </div>
-            <span style={{fontSize:12,color:"rgba(255,255,255,0.9)",fontFamily:G.sans,fontWeight:600}}>Admin</span>
-            <span style={{fontSize:9,color:"rgba(255,255,255,0.45)"}}>{profileOpen?"▲":"▼"}</span>
+            <div style={{fontSize:compact ? 24 : 28,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:10}}>{item.value}</div>
           </div>
-          {profileOpen&&(<>
-            <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
-            <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#0F1E3D",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,boxShadow:"0 12px 40px rgba(0,0,0,0.5)",minWidth:240,overflow:"hidden"}}>
-              <div style={{padding:"14px 14px 11px",borderBottom:"1px solid rgba(255,255,255,0.09)"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:38,height:38,borderRadius:"50%",background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#fff",flexShrink:0,boxShadow:"0 0 0 2px rgba(59,130,246,0.35)"}}>
-                    {(user?.email||"A").charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.95)",fontFamily:G.sans}}>Administrator</div>
-                    <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2,fontFamily:G.mono,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:150}}>{user?.email||"—"}</div>
-                  </div>
+        ))}
+      </div>
+    );
+
+    const mobileProfileActionStyle = (danger = false) => ({
+      width:"100%",
+      background:danger ? "#FFF4F4" : "#FFFFFF",
+      border:danger ? "1px solid #F4CACA" : `1px solid ${G.border}`,
+      borderRadius:18,
+      padding:"14px 15px",
+      display:"flex",
+      alignItems:"center",
+      gap:12,
+      cursor:"pointer",
+      textAlign:"left",
+      boxShadow:reduceEffects ? "none" : G.shadowSm,
+      WebkitTapHighlightColor:"transparent",
+    });
+
+    const MobileProfileAction = ({ icon, title, subtitle, onClick, danger = false, badge = null }) => (
+      <button onClick={onClick} style={mobileProfileActionStyle(danger)}>
+        <div style={{width:42,height:42,borderRadius:14,background:danger ? "#FDE6E6" : "#EEF4FF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <AppIcon icon={icon} size={20} color={danger ? G.red : G.blue} />
+        </div>
+        <div style={{minWidth:0,flex:1}}>
+          <div style={{fontSize:15,fontWeight:700,color:danger ? G.red : G.text,fontFamily:G.sans}}>{title}</div>
+          <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>{subtitle}</div>
+        </div>
+        {badge!=null && badge!==0 && (
+          <span style={{background:danger ? "#FCA5A5" : G.blueL,color:danger ? "#7F1D1D" : G.blue,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,fontFamily:G.mono,flexShrink:0}}>
+            {badge}
+          </span>
+        )}
+        <AppIcon icon={IconChevronRight} size={18} color={danger ? G.red : G.textL} />
+      </button>
+    );
+
+    const MobileProfileScreen = () => (
+      <div style={mobilePageShellStyle}>
+        {binView&&<AdminBinModal/>}
+        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        <AdminToastBanner message={adminToast} />
+        <MobileNav/>
+        <div style={mobilePageInnerStyle}>
+          <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14}}>
+              <div style={{display:"flex",gap:12,minWidth:0,flex:1}}>
+                <div style={{width:52,height:52,borderRadius:18,background:"#EEF4FF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:800,color:G.blue,fontFamily:G.display,flexShrink:0}}>
+                  {(user?.email||"A").charAt(0).toUpperCase()}
+                </div>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Admin settings</div>
+                  <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:8}}>Administrator</div>
+                  <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:10,wordBreak:"break-word"}}>{user?.email || "—"}</div>
                 </div>
               </div>
-              <div style={{padding:"7px"}}>
-                <button onClick={()=>{setProfileOpen(false);setView("manage");}}
-                  style={{width:"100%",marginBottom:4,padding:"9px 10px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left"}}>
-                  <span style={{fontSize:16}}>⚙️</span>
-                  <div><div style={{fontSize:12,fontWeight:600}}>Control Centre</div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>Manage teachers &amp; access</div></div>
-                </button>
-                <button onClick={()=>{setProfileOpen(false);setManageTab("institutes");setInstDetailView(null);setView("manage");}}
-                  style={{width:"100%",marginBottom:4,padding:"9px 10px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left"}}>
-                  <span style={{fontSize:16}}>📚</span>
-                  <div><div style={{fontSize:12,fontWeight:600}}>Section Management</div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>Institutes &amp; timetables</div></div>
-                </button>
-                <button onClick={()=>{setProfileOpen(false);setBinView(true);}}
-                  style={{width:"100%",marginBottom:4,padding:"9px 10px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:"rgba(255,255,255,0.75)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left"}}>
-                  <span style={{fontSize:16}}>🗑️</span>
-                  <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>Recycle Bin</div><div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>Deleted items</div></div>
-                  {adminBin.length>0&&<span style={{background:"rgba(201,48,48,0.75)",color:"#fff",borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:700}}>{adminBin.length}</span>}
-                </button>
-                <div style={{height:1,background:"rgba(255,255,255,0.07)",margin:"5px 0"}}/>
-                <button onClick={()=>{setProfileOpen(false);logout();}}
-                  style={{width:"100%",padding:"9px 10px",background:"rgba(220,38,38,0.12)",border:"1px solid rgba(220,38,38,0.25)",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:"#FCA5A5",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left"}}>
-                  <span style={{fontSize:16}}>🚪</span>
-                  Sign Out
-                </button>
+              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"7px 11px",fontSize:11,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                {currentSession()}
+              </span>
+            </div>
+            <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:16}}>
+              Mobile admin settings, workspace totals, and recovery tools now live here so the main workspace stays clean and focused.
+            </div>
+          </div>
+
+          <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14}}>
+              <div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Workspace snapshot</div>
+                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:8}}>Everything at a glance</div>
               </div>
+              {loadingUids.size>0&&(
+                <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"7px 11px",fontSize:11,fontWeight:700,fontFamily:G.mono}}>
+                  Syncing {loadingUids.size}
+                </span>
+              )}
             </div>
-          </>)}
+            {renderAdminProfileStatGrid()}
+          </div>
+
+          <div style={{display:"grid",gap:10}}>
+            <MobileProfileAction
+              icon={IconSettings}
+              title="Control Centre"
+              subtitle="Manage teachers, admins, and access controls."
+              onClick={()=>{setView("manage");setMobileSurface("workspace");}}
+            />
+            <MobileProfileAction
+              icon={IconBuilding}
+              title="Section Management"
+              subtitle="Open institute, section, and timetable management."
+              onClick={()=>{setManageTab("institutes");setInstDetailView(null);setView("manage");setMobileSurface("workspace");}}
+            />
+            <MobileProfileAction
+              icon={IconTrash}
+              title="Recycle Bin"
+              subtitle="Review deleted classes, institutes, and entries."
+              badge={adminBin.length>0 ? adminBin.length : null}
+              onClick={()=>setBinView(true)}
+            />
+            <MobileProfileAction
+              icon={IconLogout}
+              title="Sign Out"
+              subtitle="Leave the admin workspace on this device."
+              danger
+              onClick={()=>logout()}
+            />
+          </div>
         </div>
+        <MobileBottomNav/>
       </div>
     );
 
-    const MobileFooter = ()=>(
-      <div style={{textAlign:"center",padding:"20px 0 10px",borderTop:`1px solid ${G.border}`,marginTop:8}}>
-        <span style={{fontSize:11,color:G.textL,fontFamily:G.sans,letterSpacing:0.2}}>Every class. Every teacher. One place.</span>
-      </div>
-    );
-    const MobileBreadcrumb = ()=>(<>{mobileStep>0&&(
-        <div style={{background:G.navyS,padding:"8px 14px",display:"flex",alignItems:"center",gap:5,fontSize:12,fontFamily:G.sans,overflow:"hidden"}}>
-          <span onClick={()=>{setMobileStep(0);setSelInst(null);resetNav();}} style={{color:"rgba(255,255,255,0.45)",cursor:"pointer",flexShrink:0}}>Inst.</span>
-          {mobileStep>=1&&selInst&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);setFullView(null);}} style={{color:mobileStep===1?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===1?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{selInst}</span></>}
-          {mobileStep>=2&&selP2&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span onClick={()=>{if(isAggregateSelection){setMobileStep(1);setSelP3(null);} else {setMobileStep(2);setSelP3(null);setFullView(null);}}} style={{color:mobileStep===2?"#fff":"rgba(255,255,255,0.45)",cursor:"pointer",fontWeight:mobileStep===2?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>{p2Label(selP2)}</span></>}
-          {mobileStep>=3&&(isInstituteOverviewStep||selP3||isAggregateSelection||isScopedFullView)&&<><span style={{color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span><span style={{color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:110}}>{mobileStep3Label}</span></>}
-          <button onClick={goMobileBack} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",borderRadius:7,padding:"5px 12px",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:12,fontFamily:G.sans,fontWeight:600,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>← Back</button>
-        </div>
-      )}</>
-    );
-
-    const MobileStats = ()=>(
-      <div style={{background:G.navyS,padding:"10px 12px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
-          {[{n:institutes.length,l:"institutes"},{n:teachers.length,l:"teachers"},{n:totalClasses,l:"classes"},{n:totalEntries,l:"entries"}].map(({n,l})=>(
-            <div key={l} style={{background:"rgba(255,255,255,0.07)",borderRadius:8,padding:"9px 12px"}}>
-              <div style={{fontSize:22,fontWeight:700,color:G.blueV,fontFamily:G.display,lineHeight:1}}>{n}</div>
-              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:G.sans,marginTop:3}}>{l}</div>
+    const MobileBreadcrumb = () => {
+      if(mobileSurface==="profile" || mobileStep===0) return null;
+      const directFullView = fullView?.source === "mobile-list";
+      const step2Action = () => {
+        if(directFullView){
+          setFullView(null);
+          setSelP2(null);
+          setSelP3(null);
+          setMobileStep(1);
+          return;
+        }
+        if(isAggregateSelection){
+          setMobileStep(1);
+          setSelP3(null);
+          return;
+        }
+        setMobileStep(2);
+        setSelP3(null);
+        setFullView(null);
+      };
+      return (
+        <div style={{padding:"10px 14px 0"}}>
+          <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:18,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,boxShadow:reduceEffects ? "none" : G.shadowSm,overflow:"hidden"}}>
+            <button
+              onClick={goMobileBack}
+              style={{display:"inline-flex",alignItems:"center",gap:6,height:34,borderRadius:11,border:`1px solid ${G.border}`,background:"#F8FAFC",padding:"0 11px",cursor:"pointer",color:G.textS,fontFamily:G.sans,fontSize:12,fontWeight:700,flexShrink:0}}>
+              <AppIcon icon={IconChevronLeft} size={15} color={G.textS} />
+              Back
+            </button>
+            <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0,overflowX:"auto",scrollbarWidth:"none"}}>
+              <span onClick={openMobileInstituteHome} style={{fontSize:12,color:G.textL,cursor:"pointer",fontFamily:G.sans,whiteSpace:"nowrap"}}>Institutes</span>
+              {mobileStep>=1&&selInst&&<><AppIcon icon={IconChevronRight} size={13} color={G.textL} /><span onClick={()=>{setMobileStep(1);setSelP2(null);setSelP3(null);setFullView(null);}} style={{fontSize:12,color:mobileStep===1?"#111827":G.textM,cursor:"pointer",fontFamily:G.sans,fontWeight:mobileStep===1?700:600,whiteSpace:"nowrap"}}>{selInst}</span></>}
+              {mobileStep>=2&&selP2&&<><AppIcon icon={IconChevronRight} size={13} color={G.textL} /><span onClick={step2Action} style={{fontSize:12,color:mobileStep===2?"#111827":G.textM,cursor:"pointer",fontFamily:G.sans,fontWeight:mobileStep===2?700:600,whiteSpace:"nowrap"}}>{p2Label(selP2)}</span></>}
+              {mobileStep>=3&&(isInstituteOverviewStep||selP3||isAggregateSelection||isScopedFullView)&&<><AppIcon icon={IconChevronRight} size={13} color={G.textL} /><span style={{fontSize:12,color:G.text,fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap"}}>{mobileStep3Label}</span></>}
             </div>
-          ))}
+          </div>
+        </div>
+      );
+    };
+
+    const mobileBottomItems = !selInst
+      ? [
+          { key:"institutes", label:"All institutes", icon:IconBuilding, onClick:openMobileInstituteHome },
+          { key:"profile", label:"Profile", icon:IconUser, onClick:openMobileProfile },
+        ]
+      : [
+          { key:"classes", label:"Classes", icon:IconSchool, onClick:()=>openMobileWorkspaceTab("class") },
+          { key:"teachers", label:"Teachers", icon:IconUsersGroup, onClick:()=>openMobileWorkspaceTab("teacher") },
+          { key:"profile", label:"Profile", icon:IconUser, onClick:openMobileProfile },
+        ];
+
+    const MobileBottomNav = () => (
+      <div style={{position:"fixed",left:12,right:12,bottom:"max(12px, calc(env(safe-area-inset-bottom, 0px) + 12px))",zIndex:150,pointerEvents:"none"}}>
+        <div style={{background:"rgba(255,255,255,0.98)",border:`1px solid ${G.border}`,borderRadius:28,padding:"10px 12px",boxShadow:reduceEffects ? "none" : "0 24px 50px rgba(15,23,42,0.12)",display:"grid",gridTemplateColumns:`repeat(${mobileBottomItems.length}, minmax(0, 1fr))`,gap:8,pointerEvents:"auto"}}>
+          {mobileBottomItems.map(item=>{
+            const active = mobileBottomKey===item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={item.onClick}
+                style={{
+                  minHeight:58,
+                  borderRadius:20,
+                  border:"none",
+                  background:active ? "#E8F0FF" : "transparent",
+                  color:active ? G.navy : G.textL,
+                  display:"flex",
+                  flexDirection:"column",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  gap:5,
+                  cursor:"pointer",
+                  fontFamily:G.sans,
+                  fontSize:12,
+                  fontWeight:active ? 800 : 700,
+                  WebkitTapHighlightColor:"transparent",
+                  transition:"background 0.18s ease,color 0.18s ease",
+                }}>
+                <AppIcon icon={item.icon} size={20} color={active ? G.navy : G.textL} />
+                <span style={{lineHeight:1.1,whiteSpace:"nowrap"}}>{item.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -8232,14 +8491,15 @@ function AdminPanelInner({user}){
       flexShrink:0,
     });
 
+    if(mobileSurface==="profile") return <MobileProfileScreen/>;
+
     // ── STEP 0: Institute list ────────────────────────────────────────────────
     if(mobileStep===0) return(
-      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
+      <div style={mobilePageShellStyle}>
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         <MobileNav/>
-        <MobileStats/>
-        <div style={{padding:"12px 14px 40px"}}>
+        <div style={mobilePageInnerStyle}>
           <div style={{fontSize:11,fontWeight:700,color:G.textL,letterSpacing:1.5,fontFamily:G.sans,textTransform:"uppercase",marginBottom:12}}>Institutes</div>
           {renderSearchInput(instSearch,setInstSearch,"Search institutes",true)}
           <div style={{fontSize:12,color:G.textL,margin:"10px 2px 12px"}}>{visibleInstitutes.length} of {institutes.length} institutes</div>
@@ -8318,11 +8578,11 @@ function AdminPanelInner({user}){
             </div>
           )}
         </div>
-        <MobileFooter/>
+        <MobileBottomNav/>
       </div>
     );
     if(mobileStep===1) return(
-      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
+      <div style={mobilePageShellStyle}>
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
@@ -8341,7 +8601,7 @@ function AdminPanelInner({user}){
         {pendingSectionRenameModal}
         <AdminToastBanner message={adminToast} />
         <MobileNav/><MobileBreadcrumb/>
-        <div style={{padding:"14px 14px 40px"}}>
+        <div style={mobilePageInnerStyle}>
           <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
               <div style={{minWidth:0,flex:1}}>
@@ -8366,10 +8626,7 @@ function AdminPanelInner({user}){
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
               <button onClick={openMobileInstituteOverview} style={mobileActionButtonStyle("primary")}>
-                Open overview
-              </button>
-              <button onClick={()=>openAggregateView(tab)} style={mobileActionButtonStyle("ghost")}>
-                {tab==="class" ? "Full class timeline" : "Full teacher timeline"}
+                Institute overview
               </button>
               <button onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("ghost")}>
                 Export
@@ -8378,33 +8635,23 @@ function AdminPanelInner({user}){
           </div>
 
           <div style={{...mobileControlStackStyle,marginBottom:14}}>
-            <div style={{display:"flex",background:G.bg,border:`1px solid ${G.border}`,borderRadius:16,padding:4,gap:4}}>
-              {["class","teacher"].map(t=>(
-                <button
-                  key={t}
-                  onClick={()=>resetNav(t)}
-                  style={{
-                    flex:1,
-                    minHeight:42,
-                    borderRadius:12,
-                    border:"none",
-                    fontSize:14,
-                    fontWeight:700,
-                    cursor:"pointer",
-                    fontFamily:G.sans,
-                    background:tab===t ? G.navy : "transparent",
-                    color:tab===t ? "#fff" : G.textM,
-                  }}>
-                  {t==="class" ? "By class" : "By teacher"}
-                </button>
-              ))}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Current view</div>
+                <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>
+                  {tab==="class" ? "Classes" : "Teachers"}
+                </div>
+              </div>
+              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"7px 11px",fontSize:11,fontWeight:700,fontFamily:G.mono}}>
+                Use bottom nav to switch
+              </span>
             </div>
             <div style={{marginTop:10}}>
               {renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers in this institute",true)}
             </div>
             <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginTop:10,fontSize:12,color:G.textL,fontFamily:G.sans}}>
               <span>{tab==="class" ? visibleInstClassCountLabel : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}</span>
-              <span>{tab==="class" ? "Tap a class to continue" : "Tap a teacher to continue"}</span>
+              <span>{tab==="class" ? "Tap a class to open its full timeline" : "Tap a teacher to open their full timeline"}</span>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
               {tab==="class"&&selInst&&(
@@ -8413,7 +8660,7 @@ function AdminPanelInner({user}){
                 </button>
               )}
               <button onClick={()=>openAggregateView(tab)} style={mobileActionButtonStyle("ghost")}>
-                {tab==="class" ? "All classes" : "All teachers"}
+                {tab==="class" ? "Open all classes" : "Open all teachers"}
               </button>
             </div>
             {tab==="class"&&<div style={{marginTop:10}}>{renderProgramFilterBar(true)}</div>}
@@ -8552,18 +8799,19 @@ function AdminPanelInner({user}){
             </div>
           )}
         </div>
+        <MobileBottomNav/>
       </div>
     );
 
     // ── STEP 2: Classes for teacher / Teachers for class ─────────────────────
     if(mobileStep===2) return(
-      <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
+      <div style={mobilePageShellStyle}>
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         <AdminToastBanner message={adminToast} />
         <MobileNav/><MobileBreadcrumb/>
-        <div style={{padding:"14px 14px 40px"}}>
+        <div style={mobilePageInnerStyle}>
           {(()=>{
             const selectedClass = tab==="class" ? instClasses.find(c=>c.raw===selP2) : null;
             const selectedTeacher = tab==="teacher" ? fullData[selP2]?.profile?.name || teachers.find(t=>t.uid===selP2)?.name || p2Label(selP2) : null;
@@ -8681,19 +8929,20 @@ function AdminPanelInner({user}){
             );
           })()}
         </div>
+        <MobileBottomNav/>
       </div>
     );
 
     // ── STEP 3: Entries ───────────────────────────────────────────────────────
     if(mobileStep===3&&(isInstituteOverviewStep||selP3||isAggregateSelection||isScopedFullView)) {
       return(
-        <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
+        <div style={mobilePageShellStyle}>
           {binView&&<AdminBinModal/>}
           {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
           {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
           <AdminToastBanner message={adminToast} />
           <MobileNav/><MobileBreadcrumb/>
-          <div style={{padding:"14px 14px 40px"}}>
+          <div style={mobilePageInnerStyle}>
             {(()=>{
               const stepTitle = isInstituteOverviewStep
                 ? `${selInst} Overview`
@@ -8776,6 +9025,7 @@ function AdminPanelInner({user}){
               );
             })()}
           </div>
+          <MobileBottomNav/>
         </div>
       );
     }
@@ -8900,24 +9150,11 @@ function AdminPanelInner({user}){
           </div>
         </div>
         <div style={{minWidth:0,display:"flex",justifyContent:"center",overflow:"hidden"}}>
-          <div className="admin-header-metrics" style={{display:"flex",alignItems:"center",gap:8,overflowX:"auto",padding:"4px 0",scrollbarWidth:"none",msOverflowStyle:"none"}}>
-            {[
-              {n:institutes.length, l:"institutes"},
-              {n:teachers.length, l:"teachers"},
-              {n:totalClasses, l:"classes"},
-              {n:totalEntries, l:"entries"},
-            ].map(({n,l})=>(
-              <div key={l} style={{display:"flex",alignItems:"baseline",gap:6,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:999,padding:"7px 12px",flexShrink:0}}>
-                <span style={{fontSize:18,fontWeight:700,color:G.blueV,fontFamily:G.display,lineHeight:1}}>{n}</span>
-                <span style={{fontSize:12,color:"rgba(255,255,255,0.58)",fontFamily:G.mono}}>{l}</span>
-              </div>
-            ))}
-            {loadingUids.size>0&&(
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.72)",fontFamily:G.mono,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:999,padding:"7px 12px",flexShrink:0}}>
-                syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…
-              </div>
-            )}
-          </div>
+          {loadingUids.size>0&&(
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.72)",fontFamily:G.mono,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:999,padding:"7px 12px",flexShrink:0}}>
+              syncing {loadingUids.size} teacher{loadingUids.size>1?"s":""}…
+            </div>
+          )}
         </div>
         <div className="admin-nav-r" style={{display:"flex",alignItems:"center",gap:8}}>
           {/* ── Admin Profile Pill ─────────────────────────────────── */}
@@ -8951,36 +9188,54 @@ function AdminPanelInner({user}){
                 </div>
                 {/* Menu items */}
                 <div style={{padding:"8px"}}>
+                  <div style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"12px",marginBottom:8}}>
+                    <div style={{fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.42)",fontFamily:G.mono,marginBottom:10}}>Workspace snapshot</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+                      {adminWorkspaceStats.map(item=>(
+                        <div key={item.key} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"10px 10px 9px"}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+                            <div style={{width:26,height:26,borderRadius:9,background:"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <AppIcon icon={item.icon} size={14} color={item.color} />
+                            </div>
+                            <div style={{fontSize:9,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",color:"rgba(255,255,255,0.4)",fontFamily:G.mono}}>{item.label}</div>
+                          </div>
+                          <div style={{fontSize:20,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1,marginTop:9}}>{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <button onClick={()=>{setProfileOpen(false);setView("manage");}}
                     style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.11)"}
                     onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}>
                     <div style={{width:30,height:30,borderRadius:8,background:"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 1.41 14.14M4.93 4.93A10 10 0 0 0 3.52 19.07"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M8.46 8.46a5 5 0 0 0 0 7.07"/></svg>
+                      <AppIcon icon={IconSettings} size={15} color="rgba(255,255,255,0.7)" />
                     </div>
                     <div>
                       <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.88)"}}>Control Centre</div>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>Manage teachers &amp; access</div>
                     </div>
-                    <svg style={{marginLeft:"auto",flexShrink:0}} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    <AppIcon icon={IconChevronRight} size={13} color="rgba(255,255,255,0.3)" style={{marginLeft:"auto",flexShrink:0}} />
                   </button>
                   <button onClick={()=>{setProfileOpen(false);setManageTab("institutes");setInstDetailView(null);setView("manage");}}
                     style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(59,130,246,0.18)"}
                     onMouseLeave={e=>e.currentTarget.style.background="rgba(59,130,246,0.1)"}>
-                    <div style={{width:30,height:30,borderRadius:8,background:"rgba(59,130,246,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>📚</div>
+                    <div style={{width:30,height:30,borderRadius:8,background:"rgba(59,130,246,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <AppIcon icon={IconBuilding} size={16} color="#93C5FD" />
+                    </div>
                     <div>
                       <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.88)"}}>Section Management</div>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>Institutes, grades &amp; timetables</div>
                     </div>
-                    <svg style={{marginLeft:"auto",flexShrink:0}} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    <AppIcon icon={IconChevronRight} size={13} color="rgba(255,255,255,0.3)" style={{marginLeft:"auto",flexShrink:0}} />
                   </button>
                   <button onClick={()=>{setProfileOpen(false);setBinView(true);}}
                     style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.75)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"}
                     onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.05)"}>
                     <div style={{width:30,height:30,borderRadius:8,background:"rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                      <AppIcon icon={IconTrash} size={15} color="rgba(255,255,255,0.6)" />
                     </div>
                     <div>
                       <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)"}}>Recycle Bin</div>
@@ -8994,7 +9249,7 @@ function AdminPanelInner({user}){
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(220,38,38,0.2)"}
                     onMouseLeave={e=>e.currentTarget.style.background="rgba(220,38,38,0.12)"}>
                     <div style={{width:30,height:30,borderRadius:8,background:"rgba(220,38,38,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                      <AppIcon icon={IconLogout} size={15} color="#FCA5A5" />
                     </div>
                     Sign Out
                   </button>
