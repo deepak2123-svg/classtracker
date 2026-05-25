@@ -1,0 +1,1305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ledgr Admin Mobile Layers 2-4</title>
+  <style>
+    :root{
+      --ink:#0f172a;
+      --ink-soft:#475569;
+      --ink-muted:#7c8aa5;
+      --line:#d9e2ef;
+      --line-strong:#c6d3e6;
+      --page:#eef3f9;
+      --card:#ffffff;
+      --navy:#1f3c73;
+      --navy-deep:#16315f;
+      --navy-soft:#e8eefb;
+      --sky:#d9e8ff;
+      --sky-text:#2253a6;
+      --success:#dff5e8;
+      --success-text:#1b7a4a;
+      --warning:#fff0d7;
+      --warning-text:#b76a11;
+      --danger:#fde8e7;
+      --danger-text:#c03f35;
+      --violet:#efe7ff;
+      --violet-text:#7a50d8;
+      --teal:#dff6f6;
+      --teal-text:#137b78;
+      --indigo:#e4ecff;
+      --indigo-text:#365dc9;
+      --shadow:0 18px 44px rgba(34, 55, 94, 0.10);
+      --radius-xl:28px;
+      --radius-lg:22px;
+      --radius-md:16px;
+      --radius-sm:12px;
+      --sans:"Inter","Segoe UI",system-ui,sans-serif;
+      --display:"Poppins","Aptos","Segoe UI",sans-serif;
+    }
+
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:linear-gradient(180deg,#f7f9fc 0%, var(--page) 100%);color:var(--ink);font-family:var(--sans)}
+    body{padding:34px 22px 60px}
+
+    .page{
+      max-width:1520px;
+      margin:0 auto;
+    }
+
+    .intro{
+      display:grid;
+      grid-template-columns:1.2fr .8fr;
+      gap:18px;
+      margin-bottom:28px;
+    }
+
+    .hero,
+    .notes{
+      background:rgba(255,255,255,0.82);
+      border:1px solid rgba(217,226,239,0.95);
+      border-radius:30px;
+      padding:26px 28px;
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(14px);
+    }
+
+    .eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      background:var(--navy-soft);
+      color:var(--navy);
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+    }
+
+    h1{
+      margin:16px 0 10px;
+      font-family:var(--display);
+      font-size:42px;
+      line-height:1.05;
+      letter-spacing:-0.04em;
+    }
+
+    .hero p,
+    .notes p{
+      margin:0;
+      font-size:17px;
+      line-height:1.65;
+      color:var(--ink-soft);
+    }
+
+    .note-list{
+      display:grid;
+      gap:10px;
+      margin-top:16px;
+    }
+
+    .note-item{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      color:var(--ink-soft);
+      line-height:1.5;
+      font-size:15px;
+    }
+
+    .note-dot{
+      width:9px;
+      height:9px;
+      border-radius:50%;
+      background:var(--navy);
+      margin-top:8px;
+      flex:0 0 auto;
+    }
+
+    .gallery{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(320px,1fr));
+      gap:26px;
+      align-items:start;
+    }
+
+    .stack{
+      display:grid;
+      gap:14px;
+    }
+
+    .label{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:0 4px;
+    }
+
+    .label h2{
+      margin:0;
+      font-size:22px;
+      font-family:var(--display);
+      letter-spacing:-0.03em;
+    }
+
+    .label span{
+      color:var(--ink-muted);
+      font-size:13px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+    }
+
+    .phone{
+      width:100%;
+      min-height:840px;
+      background:linear-gradient(180deg,#f7faff 0%, #eef4fb 100%);
+      border:1px solid #d8e0ee;
+      border-radius:38px;
+      box-shadow:0 24px 64px rgba(22,49,95,0.12);
+      overflow:hidden;
+      position:relative;
+    }
+
+    .statusbar{
+      height:28px;
+      padding:18px 22px 0;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      font-size:14px;
+      color:#233f70;
+      font-weight:700;
+    }
+
+    .topbar{
+      margin:16px 16px 0;
+      padding:14px;
+      border-radius:24px;
+      background:linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      box-shadow:0 18px 30px rgba(18,49,95,0.22);
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      min-width:0;
+    }
+
+    .logo{
+      width:46px;
+      height:46px;
+      border-radius:16px;
+      background:linear-gradient(180deg,#4c8fff 0%,#2f68dc 100%);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:24px;
+      font-weight:800;
+      color:#fff;
+      flex:0 0 auto;
+    }
+
+    .brand-meta strong{
+      display:block;
+      font-size:18px;
+      font-family:var(--display);
+      letter-spacing:-0.03em;
+    }
+
+    .brand-meta small{
+      display:block;
+      margin-top:2px;
+      color:rgba(255,255,255,0.65);
+      text-transform:uppercase;
+      font-size:11px;
+      letter-spacing:.14em;
+      font-weight:700;
+    }
+
+    .admin-chip{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      background:rgba(255,255,255,0.10);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:18px;
+      padding:8px 10px;
+      flex:0 0 auto;
+    }
+
+    .avatar{
+      width:34px;
+      height:34px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#3777f0;
+      color:#fff;
+      font-weight:800;
+    }
+
+    .admin-chip span{
+      font-size:15px;
+      font-weight:700;
+    }
+
+    .content{
+      padding:16px;
+      display:grid;
+      gap:14px;
+    }
+
+    .context-card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:28px;
+      box-shadow:0 12px 26px rgba(34,55,94,0.08);
+      overflow:hidden;
+    }
+
+    .context-head{
+      padding:18px 18px 14px;
+      background:linear-gradient(180deg,#ffffff 0%,#f9fbfe 100%);
+      border-bottom:1px solid var(--line);
+    }
+
+    .breadcrumb{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:var(--ink-muted);
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      margin-bottom:10px;
+    }
+
+    .title-row{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+    }
+
+    .title-row h3{
+      margin:0;
+      font-size:18px;
+      line-height:1.25;
+      font-family:var(--display);
+      letter-spacing:-0.03em;
+    }
+
+    .mini-button,
+    .chip-button,
+    .ghost-button{
+      border:none;
+      border-radius:16px;
+      font-family:var(--sans);
+      font-weight:700;
+      cursor:default;
+    }
+
+    .mini-button{
+      background:var(--navy-soft);
+      color:var(--navy);
+      padding:10px 12px;
+      min-width:72px;
+    }
+
+    .hero-grid{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:12px;
+      align-items:start;
+    }
+
+    .summary-line{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:14px;
+    }
+
+    .stat-pill,
+    .filter-pill,
+    .subject-pill,
+    .badge,
+    .status-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      border-radius:999px;
+      padding:8px 12px;
+      font-size:13px;
+      font-weight:700;
+      white-space:nowrap;
+    }
+
+    .stat-pill{
+      background:#f6f9fc;
+      border:1px solid var(--line);
+      color:var(--ink-soft);
+    }
+
+    .stat-pill.primary{
+      background:var(--navy-soft);
+      color:var(--navy);
+      border-color:#c9d8f6;
+    }
+
+    .stat-pill.good{
+      background:var(--success);
+      color:var(--success-text);
+      border:1px solid #b7e6cb;
+    }
+
+    .summary-actions{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:14px;
+    }
+
+    .chip-button{
+      padding:12px 14px;
+      background:var(--navy);
+      color:#fff;
+      box-shadow:0 10px 18px rgba(31,60,115,0.18);
+    }
+
+    .ghost-button{
+      padding:12px 14px;
+      background:#fff;
+      color:var(--ink-soft);
+      border:1px solid var(--line);
+    }
+
+    .control-stack{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:14px;
+      box-shadow:0 10px 22px rgba(34,55,94,0.06);
+      display:grid;
+      gap:12px;
+      position:sticky;
+      top:16px;
+      z-index:2;
+    }
+
+    .segmented{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:6px;
+      padding:4px;
+      background:#f4f7fb;
+      border:1px solid var(--line);
+      border-radius:18px;
+    }
+
+    .segment{
+      border-radius:14px;
+      padding:12px 8px;
+      text-align:center;
+      font-size:14px;
+      font-weight:700;
+      color:var(--ink-muted);
+      background:transparent;
+    }
+
+    .segment.active{
+      background:var(--navy);
+      color:#fff;
+      box-shadow:0 10px 18px rgba(31,60,115,0.16);
+    }
+
+    .search{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      background:#f8fbff;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:13px 14px;
+      color:var(--ink-muted);
+      font-size:14px;
+    }
+
+    .filter-row,
+    .section-row,
+    .timeline-filters{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .filter-pill{
+      border:1px solid var(--line);
+      background:#fff;
+      color:var(--ink-soft);
+      padding:9px 13px;
+    }
+
+    .filter-pill.active{
+      background:var(--navy);
+      border-color:var(--navy);
+      color:#fff;
+    }
+
+    .filter-pill.indigo{background:var(--indigo); border-color:#cad9fb; color:var(--indigo-text);}
+    .filter-pill.teal{background:var(--teal); border-color:#bce9e7; color:var(--teal-text);}
+    .filter-pill.success{background:var(--success); border-color:#bee7ce; color:var(--success-text);}
+    .filter-pill.violet{background:var(--violet); border-color:#d8cbfb; color:var(--violet-text);}
+
+    .inline-meta{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      color:var(--ink-muted);
+      font-size:13px;
+      font-weight:600;
+    }
+
+    .list{
+      display:grid;
+      gap:10px;
+    }
+
+    .row-card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:14px;
+      box-shadow:0 10px 20px rgba(34,55,94,0.05);
+      display:grid;
+      gap:10px;
+    }
+
+    .row-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+    }
+
+    .row-title{
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+      min-width:0;
+    }
+
+    .row-band{
+      width:10px;
+      align-self:stretch;
+      border-radius:999px;
+      background:var(--indigo);
+      box-shadow:inset 0 0 0 1px rgba(54,93,201,0.12);
+      flex:0 0 auto;
+    }
+
+    .row-band.teal{background:var(--teal)}
+    .row-band.violet{background:var(--violet)}
+    .row-band.success{background:var(--success)}
+
+    .row-copy{
+      min-width:0;
+      flex:1;
+    }
+
+    .row-copy h4{
+      margin:0;
+      font-size:16px;
+      line-height:1.2;
+      font-family:var(--display);
+      letter-spacing:-0.03em;
+    }
+
+    .row-copy p{
+      margin:4px 0 0;
+      font-size:13px;
+      color:var(--ink-soft);
+      line-height:1.5;
+    }
+
+    .circle-status{
+      width:18px;
+      height:18px;
+      border-radius:50%;
+      border:2px solid #c7d5e8;
+      background:#fff;
+      flex:0 0 auto;
+      margin-top:2px;
+    }
+
+    .circle-status.filled{
+      border-color:#3cb372;
+      background:#3cb372;
+      box-shadow:0 0 0 4px rgba(60,179,114,0.14);
+    }
+
+    .menu-button{
+      width:40px;
+      height:40px;
+      border-radius:14px;
+      background:#f7f9fd;
+      border:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:var(--ink-muted);
+      font-weight:900;
+      flex:0 0 auto;
+    }
+
+    .subject-row{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+
+    .subject-pill{
+      background:#f7f9fc;
+      border:1px solid var(--line);
+      color:var(--ink-soft);
+    }
+
+    .row-foot{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    .badge{
+      background:var(--navy-soft);
+      color:var(--navy);
+      border:1px solid #cad8f4;
+    }
+
+    .badge.soft{
+      background:#f7f9fc;
+      border-color:var(--line);
+      color:var(--ink-soft);
+    }
+
+    .badge.good{
+      background:var(--success);
+      border:1px solid #bee7ce;
+      color:var(--success-text);
+    }
+
+    .row-cta{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      color:var(--navy);
+      font-weight:800;
+      font-size:13px;
+    }
+
+    .teacher-stack,
+    .entry-stack{
+      display:grid;
+      gap:10px;
+    }
+
+    .person-row{
+      display:grid;
+      grid-template-columns:auto 1fr auto;
+      gap:12px;
+      align-items:center;
+      padding:12px 14px;
+      border-radius:20px;
+      border:1px solid var(--line);
+      background:#fff;
+    }
+
+    .person-avatar{
+      width:42px;
+      height:42px;
+      border-radius:14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:var(--navy-soft);
+      color:var(--navy);
+      font-weight:800;
+      font-size:16px;
+    }
+
+    .person-copy strong{
+      display:block;
+      font-size:15px;
+      margin-bottom:3px;
+    }
+
+    .person-copy small{
+      color:var(--ink-soft);
+      font-size:13px;
+      line-height:1.5;
+    }
+
+    .person-meta{
+      text-align:right;
+    }
+
+    .person-meta strong{
+      display:block;
+      font-size:14px;
+      color:var(--navy);
+    }
+
+    .person-meta small{
+      color:var(--ink-muted);
+      font-size:12px;
+      font-weight:700;
+    }
+
+    .timeline-shell{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:28px;
+      padding:14px;
+      box-shadow:0 12px 26px rgba(34,55,94,0.06);
+    }
+
+    .timeline-top{
+      display:grid;
+      gap:10px;
+      margin-bottom:14px;
+    }
+
+    .kpi-grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+    }
+
+    .kpi{
+      background:#f8fbff;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:12px;
+    }
+
+    .kpi strong{
+      display:block;
+      font-size:20px;
+      font-family:var(--display);
+      letter-spacing:-0.03em;
+    }
+
+    .kpi small{
+      color:var(--ink-muted);
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+
+    .timeline{
+      position:relative;
+      display:grid;
+      gap:12px;
+      padding-left:18px;
+    }
+
+    .timeline::before{
+      content:"";
+      position:absolute;
+      left:8px;
+      top:4px;
+      bottom:4px;
+      width:2px;
+      background:linear-gradient(180deg,#d2dcf0 0%,#e7edf7 100%);
+    }
+
+    .entry{
+      position:relative;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:22px;
+      padding:14px;
+      box-shadow:0 10px 20px rgba(34,55,94,0.04);
+    }
+
+    .entry::before{
+      content:"";
+      position:absolute;
+      left:-15px;
+      top:18px;
+      width:12px;
+      height:12px;
+      border-radius:50%;
+      background:var(--navy);
+      box-shadow:0 0 0 5px #edf3fb;
+    }
+
+    .entry-top{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+    }
+
+    .entry-top strong{
+      display:block;
+      font-size:15px;
+      font-family:var(--display);
+      letter-spacing:-0.02em;
+    }
+
+    .entry-top small{
+      color:var(--ink-muted);
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+
+    .status-pill{
+      padding:7px 10px;
+      background:var(--success);
+      color:var(--success-text);
+      border:1px solid #bee7ce;
+      flex:0 0 auto;
+    }
+
+    .status-pill.warning{
+      background:var(--warning);
+      color:var(--warning-text);
+      border-color:#f3d7a5;
+    }
+
+    .status-pill.danger{
+      background:var(--danger);
+      color:var(--danger-text);
+      border-color:#f4c9c6;
+    }
+
+    .entry-meta{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-bottom:10px;
+    }
+
+    .entry-note{
+      margin:0;
+      padding:12px 13px;
+      border-radius:16px;
+      background:#f8fbff;
+      border:1px solid var(--line);
+      color:var(--ink-soft);
+      line-height:1.55;
+      font-size:13px;
+    }
+
+    .footer-bar{
+      margin:18px 18px 14px;
+      padding:8px;
+      border-radius:24px;
+      background:#fff;
+      border:1px solid var(--line);
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+      box-shadow:0 10px 18px rgba(34,55,94,0.06);
+    }
+
+    .footer-item{
+      border-radius:18px;
+      padding:10px 6px;
+      text-align:center;
+      color:var(--ink-muted);
+      font-size:12px;
+      font-weight:700;
+      text-transform:capitalize;
+    }
+
+    .footer-item.active{
+      background:var(--navy-soft);
+      color:var(--navy);
+    }
+
+    .callout{
+      background:rgba(255,255,255,0.86);
+      border:1px solid rgba(217,226,239,0.95);
+      border-radius:22px;
+      padding:16px 18px;
+      box-shadow:0 12px 24px rgba(34,55,94,0.06);
+    }
+
+    .callout strong{
+      display:block;
+      margin-bottom:8px;
+      font-size:15px;
+      font-family:var(--display);
+    }
+
+    .callout p{
+      margin:0;
+      font-size:14px;
+      line-height:1.6;
+      color:var(--ink-soft);
+    }
+
+    @media (max-width:1280px){
+      .gallery{grid-template-columns:1fr}
+      .intro{grid-template-columns:1fr}
+      .phone{max-width:430px;margin:0 auto}
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="intro">
+      <div class="hero">
+        <div class="eyebrow">Admin Mobile Direction</div>
+        <h1>Layers 2, 3, and 4 should feel like one guided workspace.</h1>
+        <p>
+          The mobile admin flow should move from <strong>browse</strong> to <strong>focus</strong> to <strong>act</strong>
+          without changing visual language every step. Instead of separate islands, each layer below uses the same
+          structure: context header, sticky control stack, compact list rows, and one dominant action path.
+        </p>
+      </div>
+      <div class="notes">
+        <div class="eyebrow">What Changes</div>
+        <div class="note-list">
+          <div class="note-item"><span class="note-dot"></span><span>Panel 2 becomes a coherent browsing workspace: institute summary, mode switch, search, program filter, and class rows live inside one control rhythm.</span></div>
+          <div class="note-item"><span class="note-dot"></span><span>Panel 3 becomes a focused bridge layer: one selected class or teacher, compact action chips, and a clean list for the next drilldown instead of oversized detached blocks.</span></div>
+          <div class="note-item"><span class="note-dot"></span><span>Panel 4 becomes a true mobile detail view: sticky date filters, visible context, KPI strip, and a beautiful entry timeline with topics, slots, duration, and notes.</span></div>
+          <div class="note-item"><span class="note-dot"></span><span>Delete/export actions stop shouting from every card. They move into calmer action chips or menus, so the information hierarchy becomes much easier to scan on a phone.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="gallery">
+      <div class="stack">
+        <div class="label">
+          <h2>Layer 2</h2>
+          <span>Institute Workspace</span>
+        </div>
+        <div class="phone">
+          <div class="statusbar">
+            <span>5:20</span>
+            <span>5G • 92%</span>
+          </div>
+          <div class="topbar">
+            <div class="brand">
+              <div class="logo">L</div>
+              <div class="brand-meta">
+                <strong>Ledgr</strong>
+                <small>Admin workspace</small>
+              </div>
+            </div>
+            <div class="admin-chip">
+              <div class="avatar">D</div>
+              <span>Admin</span>
+            </div>
+          </div>
+
+          <div class="content">
+            <div class="context-card">
+              <div class="context-head">
+                <div class="breadcrumb">Institutes · North Zone · Active centre</div>
+                <div class="hero-grid">
+                  <div>
+                    <div class="title-row">
+                      <h3>KIS SIP, Karnal, Haryana</h3>
+                    </div>
+                    <div class="summary-line">
+                      <div class="stat-pill primary">18 classes</div>
+                      <div class="stat-pill">4 logs today</div>
+                      <div class="stat-pill good">5h 45m taught</div>
+                    </div>
+                    <div class="summary-actions">
+                      <button class="chip-button">Open overview</button>
+                      <button class="ghost-button">Export</button>
+                    </div>
+                  </div>
+                  <button class="mini-button">Today</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="control-stack">
+              <div class="segmented">
+                <div class="segment active">By class</div>
+                <div class="segment">By teacher</div>
+              </div>
+              <div class="search">⌕ Search classes, subjects, teachers</div>
+              <div class="inline-meta">
+                <span>18 visible classes</span>
+                <span>Tap a row to continue</span>
+              </div>
+              <div class="filter-row">
+                <div class="filter-pill active">All 18</div>
+                <div class="filter-pill indigo">JEE 7</div>
+                <div class="filter-pill success">NEET 2</div>
+                <div class="filter-pill violet">Foundation 9</div>
+              </div>
+              <div class="filter-row">
+                <div class="filter-pill">Legacy repair</div>
+                <div class="filter-pill">Quiet classes</div>
+                <div class="filter-pill">High activity</div>
+              </div>
+            </div>
+
+            <div class="list">
+              <div class="row-card">
+                <div class="row-head">
+                  <div class="row-title">
+                    <div class="row-band"></div>
+                    <div class="row-copy">
+                      <h4>Virat 1</h4>
+                      <p>JEE cluster · 3 active teachers · Last activity 42 min ago</p>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:10px;align-items:center">
+                    <div class="circle-status filled"></div>
+                    <div class="menu-button">⋯</div>
+                  </div>
+                </div>
+                <div class="subject-row">
+                  <div class="subject-pill">Mathematics</div>
+                  <div class="subject-pill">Physical Chemistry</div>
+                  <div class="subject-pill">Physics</div>
+                </div>
+                <div class="row-foot">
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <div class="badge">3 teachers</div>
+                    <div class="badge soft">19 entries this month</div>
+                  </div>
+                  <div class="row-cta">Open class →</div>
+                </div>
+              </div>
+
+              <div class="row-card">
+                <div class="row-head">
+                  <div class="row-title">
+                    <div class="row-band teal"></div>
+                    <div class="row-copy">
+                      <h4>Madhav 2</h4>
+                      <p>JEE cluster · 2 active teachers · Quiet for 1 day</p>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:10px;align-items:center">
+                    <div class="circle-status"></div>
+                    <div class="menu-button">⋯</div>
+                  </div>
+                </div>
+                <div class="subject-row">
+                  <div class="subject-pill">Mathematics</div>
+                  <div class="subject-pill">Physical Chemistry</div>
+                  <div class="subject-pill">Physics</div>
+                </div>
+                <div class="row-foot">
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <div class="badge">2 teachers</div>
+                    <div class="badge soft">Needs follow-up</div>
+                  </div>
+                  <div class="row-cta">Open class →</div>
+                </div>
+              </div>
+
+              <div class="row-card">
+                <div class="row-head">
+                  <div class="row-title">
+                    <div class="row-band violet"></div>
+                    <div class="row-copy">
+                      <h4>Foundation A</h4>
+                      <p>Foundation cluster · 4 teachers · 7 sessions this week</p>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:10px;align-items:center">
+                    <div class="circle-status filled"></div>
+                    <div class="menu-button">⋯</div>
+                  </div>
+                </div>
+                <div class="subject-row">
+                  <div class="subject-pill">Science</div>
+                  <div class="subject-pill">Math</div>
+                  <div class="subject-pill">Reasoning</div>
+                </div>
+                <div class="row-foot">
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <div class="badge">4 teachers</div>
+                    <div class="badge good">Healthy activity</div>
+                  </div>
+                  <div class="row-cta">Open class →</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer-bar">
+            <div class="footer-item">home</div>
+            <div class="footer-item active">institutes</div>
+            <div class="footer-item">teachers</div>
+            <div class="footer-item">profile</div>
+          </div>
+        </div>
+        <div class="callout">
+          <strong>Layer 2 direction</strong>
+          <p>Everything important lives in one reading order now: context, filters, then rows. The class cards are denser, the actions are quieter, and the screen feels like one workflow instead of five unrelated widgets.</p>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="label">
+          <h2>Layer 3</h2>
+          <span>Selection Bridge</span>
+        </div>
+        <div class="phone">
+          <div class="statusbar">
+            <span>5:20</span>
+            <span>5G • 92%</span>
+          </div>
+          <div class="topbar">
+            <div class="brand">
+              <div class="logo">L</div>
+              <div class="brand-meta">
+                <strong>Ledgr</strong>
+                <small>Admin workspace</small>
+              </div>
+            </div>
+            <div class="admin-chip">
+              <div class="avatar">D</div>
+              <span>Admin</span>
+            </div>
+          </div>
+
+          <div class="content">
+            <div class="context-card">
+              <div class="context-head">
+                <div class="breadcrumb">Institute · Class detail</div>
+                <div class="title-row">
+                  <div>
+                    <h3>Virat 1</h3>
+                    <div class="summary-line" style="margin-top:8px">
+                      <div class="badge">KIS SIP</div>
+                      <div class="badge soft">3 teachers</div>
+                      <div class="badge soft">19 entries</div>
+                    </div>
+                  </div>
+                  <button class="mini-button">Back</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="control-stack">
+              <div class="filter-row">
+                <button class="chip-button">Full timeline</button>
+                <button class="ghost-button">Export</button>
+                <button class="ghost-button">Filters</button>
+              </div>
+              <div class="search">⌕ Search teachers in this class</div>
+              <div class="inline-meta">
+                <span>3 teachers assigned</span>
+                <span>Choose one for individual history</span>
+              </div>
+            </div>
+
+            <div class="teacher-stack">
+              <div class="person-row">
+                <div class="person-avatar">D</div>
+                <div class="person-copy">
+                  <strong>Deepak Kumar</strong>
+                  <small>2h 40m this week · Last upload 42 min ago · Handles Physics + Chemistry</small>
+                </div>
+                <div class="person-meta">
+                  <strong>11 entries</strong>
+                  <small>Open →</small>
+                </div>
+              </div>
+              <div class="person-row">
+                <div class="person-avatar">R</div>
+                <div class="person-copy">
+                  <strong>Radhika Sharma</strong>
+                  <small>1h 50m this week · Last upload today · Handles Mathematics</small>
+                </div>
+                <div class="person-meta">
+                  <strong>6 entries</strong>
+                  <small>Open →</small>
+                </div>
+              </div>
+              <div class="person-row">
+                <div class="person-avatar">A</div>
+                <div class="person-copy">
+                  <strong>Aman Singh</strong>
+                  <small>No upload today · Quiet for 1 day · Handles doubt sessions</small>
+                </div>
+                <div class="person-meta">
+                  <strong>2 entries</strong>
+                  <small>Open →</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer-bar">
+            <div class="footer-item">home</div>
+            <div class="footer-item active">institutes</div>
+            <div class="footer-item">teachers</div>
+            <div class="footer-item">profile</div>
+          </div>
+        </div>
+        <div class="callout">
+          <strong>Layer 3 direction</strong>
+          <p>This layer should feel like a bridge, not another dashboard. The selected class or teacher gets one compact context card, then the next choices appear in a single clean list with obvious drilldown affordances.</p>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="label">
+          <h2>Layer 4</h2>
+          <span>Timeline Detail</span>
+        </div>
+        <div class="phone">
+          <div class="statusbar">
+            <span>5:20</span>
+            <span>5G • 92%</span>
+          </div>
+          <div class="topbar">
+            <div class="brand">
+              <div class="logo">L</div>
+              <div class="brand-meta">
+                <strong>Ledgr</strong>
+                <small>Admin workspace</small>
+              </div>
+            </div>
+            <div class="admin-chip">
+              <div class="avatar">D</div>
+              <span>Admin</span>
+            </div>
+          </div>
+
+          <div class="content">
+            <div class="context-card">
+              <div class="context-head">
+                <div class="breadcrumb">Virat 1 · Deepak Kumar · Full history</div>
+                <div class="title-row">
+                  <div>
+                    <h3>Deepak Kumar — Virat 1</h3>
+                    <div class="summary-line" style="margin-top:8px">
+                      <div class="badge">KIS SIP</div>
+                      <div class="badge soft">Physics · Chemistry</div>
+                      <div class="badge soft">May 2026</div>
+                    </div>
+                  </div>
+                  <button class="mini-button">Back</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="timeline-shell">
+              <div class="timeline-top">
+                <div class="timeline-filters">
+                  <div class="filter-pill active">Today</div>
+                  <div class="filter-pill">7 days</div>
+                  <div class="filter-pill">Month</div>
+                  <div class="filter-pill">Custom</div>
+                  <div class="filter-pill">Export</div>
+                </div>
+                <div class="kpi-grid">
+                  <div class="kpi">
+                    <small>Entries</small>
+                    <strong>11</strong>
+                  </div>
+                  <div class="kpi">
+                    <small>Taught</small>
+                    <strong>7h 20m</strong>
+                  </div>
+                  <div class="kpi">
+                    <small>Topics</small>
+                    <strong>5</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div class="timeline">
+                <div class="entry">
+                  <div class="entry-top">
+                    <div>
+                      <small>Today · 9:00 AM to 10:30 AM</small>
+                      <strong>Current Electricity — Problem Solving Set</strong>
+                    </div>
+                    <div class="status-pill">Completed</div>
+                  </div>
+                  <div class="entry-meta">
+                    <div class="badge">90 min</div>
+                    <div class="badge soft">Topic started 18 May</div>
+                    <div class="badge soft">Teacher: Deepak</div>
+                  </div>
+                  <p class="entry-note">Finished numericals on drift velocity and current density. Marked Kirchhoff’s law worksheet as next continuation point for the coming class.</p>
+                </div>
+
+                <div class="entry">
+                  <div class="entry-top">
+                    <div>
+                      <small>23 May · 8:00 AM to 9:00 AM</small>
+                      <strong>Current Electricity — Kirchhoff’s Law Intro</strong>
+                    </div>
+                    <div class="status-pill warning">In progress</div>
+                  </div>
+                  <div class="entry-meta">
+                    <div class="badge">60 min</div>
+                    <div class="badge soft">Topic carried forward</div>
+                    <div class="badge soft">Batch response: Strong</div>
+                  </div>
+                  <p class="entry-note">Introduced loop law, solved 2 examples, and left bridge circuit problems for the next class because half the batch needed one more recap.</p>
+                </div>
+
+                <div class="entry">
+                  <div class="entry-top">
+                    <div>
+                      <small>20 May · 9:00 AM to 10:00 AM</small>
+                      <strong>Electrostatics Revision Checkpoint</strong>
+                    </div>
+                    <div class="status-pill danger">Pending follow-up</div>
+                  </div>
+                  <div class="entry-meta">
+                    <div class="badge">60 min</div>
+                    <div class="badge soft">Topic ended 20 May</div>
+                    <div class="badge soft">Needs doubt slot</div>
+                  </div>
+                  <p class="entry-note">Revision quality was mixed. Three students still struggled with potential difference vs field direction, so this needs a short doubt intervention before the next weekly test.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer-bar">
+            <div class="footer-item">home</div>
+            <div class="footer-item active">institutes</div>
+            <div class="footer-item">teachers</div>
+            <div class="footer-item">profile</div>
+          </div>
+        </div>
+        <div class="callout">
+          <strong>Layer 4 direction</strong>
+          <p>The last layer should feel like a real admin record surface. Instead of a detached export block and isolated cards, the admin sees filters, KPI context, and a readable teaching timeline in one continuous mobile detail screen.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
