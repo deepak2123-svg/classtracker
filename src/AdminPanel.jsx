@@ -3481,6 +3481,7 @@ function AdminPanelInner({user}){
   const [instMenuOpen, setInstMenuOpen]     = useState(null); // inst name whose ⋯ menu is open
   const [instSearch, setInstSearch]         = useState("");
   const [p2Search, setP2Search]             = useState("");
+  const [p3Search, setP3Search]             = useState("");
   const [activeProgramFilter, setActiveProgramFilter] = useState(null);
   const [repairingTeacherUid, setRepairingTeacherUid] = useState(null);
   const [instClassificationOpen, setInstClassificationOpen] = useState({});
@@ -4621,6 +4622,20 @@ function AdminPanelInner({user}){
     }
   },[selP2,tab,selInst,fullData,instClasses,instSectionsAll]);
 
+  const p3SearchKey = p3Search.trim().toLowerCase();
+  const visibleP3Items = useMemo(()=>{
+    if(!p3SearchKey) return p3Items;
+    return p3Items.filter(item=>{
+      if(tab==="teacher"){
+        const haystack = [item.display, item.subject, item.institute].filter(Boolean).join(" ").toLowerCase();
+        return haystack.includes(p3SearchKey);
+      }
+      const teacherName = fullData[item.uid]?.profile?.name || item.name || "";
+      const haystack = [teacherName, item.subject].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(p3SearchKey);
+    });
+  },[p3Items, p3SearchKey, tab, fullData]);
+
   // ── Archived (left) classes for teacher tab ───────────────────────────────
   const archivedP3Items=useMemo(()=>{
     if(!selP2||tab!=="teacher") return [];
@@ -5375,6 +5390,7 @@ function AdminPanelInner({user}){
   const resetNav=(newTab)=>{
     clearDrilldown();
     setP2Search("");
+    setP3Search("");
     setActiveProgramFilter(null);
     if(newTab)setTab(newTab);
     setMobileStep(s=>Math.min(s,1));
@@ -5387,6 +5403,7 @@ function AdminPanelInner({user}){
     setSelInst(inst);
     clearDrilldown();
     setP2Search("");
+    setP3Search("");
     setActiveProgramFilter(null);
     setMobileStep(1);
     warmInstitute(inst);
@@ -5822,6 +5839,7 @@ function AdminPanelInner({user}){
     setSelP2(uid);
     setSelP3(null);
     setFullView(null);
+    setP3Search("");
     setMobileStep(2);
     ensureFullData(uid);
   };
@@ -5830,12 +5848,14 @@ function AdminPanelInner({user}){
     setSelP2(raw);
     setSelP3(null);
     setFullView(null);
+    setP3Search("");
     setMobileStep(2);
     warmTeacherUids(instClasses.find(c=>c.raw===raw)?.teachers?.map(t=>t.uid) || []);
   };
 
   const openScopedFullView = () => {
     if(!selP2) return;
+    setP3Search("");
     if(tab==="teacher"){
       setFullView({ kind:"teacher", teacherUid:selP2, teacherName:selectedTeacherName(selP2) });
       ensureFullData(selP2);
@@ -8124,6 +8144,94 @@ function AdminPanelInner({user}){
       </div>
     );
 
+    const mobileWorkspaceCardStyle = {
+      background:"linear-gradient(180deg,#FFFFFF 0%,#F7FAFF 100%)",
+      border:`1px solid ${G.border}`,
+      borderRadius:24,
+      padding:"18px 18px 16px",
+      boxShadow:reduceEffects ? "none" : "0 18px 38px rgba(26,47,90,0.08)",
+    };
+    const mobileControlStackStyle = {
+      background:"rgba(255,255,255,0.96)",
+      border:`1px solid ${G.border}`,
+      borderRadius:20,
+      padding:"12px",
+      boxShadow:reduceEffects ? "none" : G.shadowSm,
+      position:"sticky",
+      top:106,
+      zIndex:12,
+      backdropFilter:"blur(10px)",
+      WebkitBackdropFilter:"blur(10px)",
+    };
+    const mobileRowCardStyle = {
+      background:G.surface,
+      border:`1px solid ${G.border}`,
+      borderRadius:20,
+      padding:"16px",
+      boxShadow:reduceEffects ? "none" : G.shadowSm,
+    };
+    const mobileTonePillStyle = (tone = "neutral") => {
+      if(tone === "primary"){
+        return { background:G.navy, color:"#fff", border:"1px solid transparent" };
+      }
+      if(tone === "good"){
+        return { background:"#DCFCE7", color:"#166534", border:"1px solid #BBF7D0" };
+      }
+      if(tone === "soft"){
+        return { background:G.bg, color:G.textS, border:`1px solid ${G.border}` };
+      }
+      if(tone === "blue"){
+        return { background:"#EEF4FF", color:G.blue, border:"1px solid #C7D7F5" };
+      }
+      return { background:"#FFFFFF", color:G.textS, border:`1px solid ${G.border}` };
+    };
+    const mobilePill = (label, tone = "neutral", key = null) => (
+      <span
+        key={key || label}
+        style={{
+          ...mobileTonePillStyle(tone),
+          display:"inline-flex",
+          alignItems:"center",
+          gap:6,
+          borderRadius:999,
+          padding:"7px 12px",
+          fontSize:12,
+          fontFamily:G.mono,
+          fontWeight:700,
+          lineHeight:1.2,
+          maxWidth:"100%",
+        }}>
+        {label}
+      </span>
+    );
+    const mobileActionButtonStyle = (kind = "primary") => ({
+      display:"inline-flex",
+      alignItems:"center",
+      justifyContent:"center",
+      gap:8,
+      minHeight:42,
+      borderRadius:14,
+      padding:"0 14px",
+      fontSize:13,
+      fontWeight:700,
+      fontFamily:G.sans,
+      cursor:"pointer",
+      WebkitTapHighlightColor:"transparent",
+      border:kind==="primary" ? "none" : `1px solid ${G.border}`,
+      background:kind==="primary" ? G.navy : "#fff",
+      color:kind==="primary" ? "#fff" : G.textS,
+      boxShadow:kind==="primary" && !reduceEffects ? G.shadowSm : "none",
+    });
+    const mobileCountDot = (filled = false) => ({
+      width:14,
+      height:14,
+      borderRadius:"50%",
+      border:`2px solid ${filled ? "#15803D" : G.textL}`,
+      background:filled ? "#22C55E" : "transparent",
+      boxShadow:filled ? "0 0 0 4px rgba(34,197,94,0.14)" : "none",
+      flexShrink:0,
+    });
+
     // ── STEP 0: Institute list ────────────────────────────────────────────────
     if(mobileStep===0) return(
       <div style={{minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.bg,fontFamily:G.sans}}>
@@ -8231,121 +8339,215 @@ function AdminPanelInner({user}){
           />
         )}
         {pendingSectionRenameModal}
+        <AdminToastBanner message={adminToast} />
         <MobileNav/><MobileBreadcrumb/>
-        <div style={{padding:"12px 14px 40px"}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:14}}>
-            <h2 style={{fontSize:20,fontWeight:700,color:G.text,fontFamily:G.display,margin:0,minWidth:0}}>{selInst}</h2>
-            <button onClick={()=>setExportOpen(true)}
-              style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export
-            </button>
-          </div>
-          <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",border:`1px solid ${G.border}`,borderRadius:16,padding:"16px 16px 14px",marginBottom:14,boxShadow:reduceEffects?"none":G.shadowSm}}>
+        <div style={{padding:"14px 14px 40px"}}>
+          <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>Institute overview &amp; charts</div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>
+                  Institute workspace
+                </div>
+                <h2 style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,margin:"10px 0 0",lineHeight:1.05}}>
+                  {selInst}
+                </h2>
+                <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:10}}>
+                  {currentSession()} session · {tab==="class" ? visibleInstClassCountLabel : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
+                </div>
               </div>
-              <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 10px",fontSize:11,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
+              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"7px 12px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
                 {overviewPeriodText}
               </span>
             </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
-              <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
-                {instClasses.length} classes
-              </span>
-              <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
-                {selectedInstitutePeriodCount} logs
-              </span>
-              <span style={{background:"#DCFCE7",border:"1px solid #BBF7D0",borderRadius:999,padding:"5px 10px",fontSize:12,color:"#166534",fontFamily:G.mono,fontWeight:700}}>
-                {formatDurationShort(classSubjectSummary.totalMinutes)} taught
-              </span>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+              {mobilePill(`${instClasses.length} classes`, "soft")}
+              {mobilePill(`${selectedInstitutePeriodCount} logs`, "soft")}
+              {mobilePill(`${formatDurationShort(classSubjectSummary.totalMinutes)} taught`, "good")}
             </div>
-            <button onClick={openMobileInstituteOverview}
-              style={{marginTop:14,display:"inline-flex",alignItems:"center",gap:8,background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
-              Open overview
-              <span aria-hidden="true">→</span>
-            </button>
-          </div>
-          <div style={{display:"flex",background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:3,marginBottom:16,gap:3}}>
-            {["class","teacher"].map(t=>(
-              <button key={t} onClick={()=>resetNav(t)}
-                style={{flex:1,padding:"9px 0",borderRadius:8,border:"none",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:G.sans,background:tab===t?G.navy:"none",color:tab===t?"#fff":G.textM}}>
-                {t==="class"?"By Class":"By Teacher"}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
+              <button onClick={openMobileInstituteOverview} style={mobileActionButtonStyle("primary")}>
+                Open overview
               </button>
-            ))}
+              <button onClick={()=>openAggregateView(tab)} style={mobileActionButtonStyle("ghost")}>
+                {tab==="class" ? "Full class timeline" : "Full teacher timeline"}
+              </button>
+              <button onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("ghost")}>
+                Export
+              </button>
+            </div>
           </div>
-          {renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers",true)}
-          <div style={{fontSize:12,color:G.textL,margin:"10px 2px 12px"}}>
-            {tab==="class"
-              ? visibleInstClassCountLabel
-              : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
+
+          <div style={{...mobileControlStackStyle,marginBottom:14}}>
+            <div style={{display:"flex",background:G.bg,border:`1px solid ${G.border}`,borderRadius:16,padding:4,gap:4}}>
+              {["class","teacher"].map(t=>(
+                <button
+                  key={t}
+                  onClick={()=>resetNav(t)}
+                  style={{
+                    flex:1,
+                    minHeight:42,
+                    borderRadius:12,
+                    border:"none",
+                    fontSize:14,
+                    fontWeight:700,
+                    cursor:"pointer",
+                    fontFamily:G.sans,
+                    background:tab===t ? G.navy : "transparent",
+                    color:tab===t ? "#fff" : G.textM,
+                  }}>
+                  {t==="class" ? "By class" : "By teacher"}
+                </button>
+              ))}
+            </div>
+            <div style={{marginTop:10}}>
+              {renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers in this institute",true)}
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginTop:10,fontSize:12,color:G.textL,fontFamily:G.sans}}>
+              <span>{tab==="class" ? visibleInstClassCountLabel : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}</span>
+              <span>{tab==="class" ? "Tap a class to continue" : "Tap a teacher to continue"}</span>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+              {tab==="class"&&selInst&&(
+                <button onClick={openLegacySectionRepair} style={mobileActionButtonStyle("ghost")}>
+                  Legacy repair
+                </button>
+              )}
+              <button onClick={()=>openAggregateView(tab)} style={mobileActionButtonStyle("ghost")}>
+                {tab==="class" ? "All classes" : "All teachers"}
+              </button>
+            </div>
+            {tab==="class"&&<div style={{marginTop:10}}>{renderProgramFilterBar(true)}</div>}
+            <div style={{marginTop:tab==="class" ? 2 : 10}}>
+              {renderWarmupBanner(true)}
+            </div>
           </div>
-          {selInst&&tab==="class"&&(
-            <button onClick={openLegacySectionRepair}
-              style={{display:"inline-flex",alignItems:"center",gap:8,background:"#EEF4FF",color:G.blue,border:"1px solid #C7D7F5",borderRadius:999,padding:"8px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:G.sans,margin:"0 2px 12px"}}>
-              Map or delete old sections
-            </button>
-          )}
-          {tab==="class"&&renderProgramFilterBar(true)}
-          {renderWarmupBanner(true)}
+
           {tab==="class"&&displayedProgramGroups.map(group=>(
-            <div key={group.key} style={{marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,margin:"0 2px 10px"}}>
-                <div style={{display:"inline-flex",alignItems:"center",gap:8}}>
-                  <button onClick={()=>setActiveProgramFilter(current => current === group.key ? null : group.key)}
-                    style={{display:"inline-flex",alignItems:"center",background:activeProgramFilter===group.key?group.accent:group.bg,color:activeProgramFilter===group.key?"#fff":group.accent,border:`1px solid ${activeProgramFilter===group.key?group.accent:group.border}`,borderRadius:999,padding:"6px 12px",fontSize:11,fontWeight:800,fontFamily:G.sans,letterSpacing:0.3,cursor:"pointer",boxShadow:activeProgramFilter===group.key?G.shadowSm:"none",WebkitTapHighlightColor:"transparent"}}>
+            <div key={group.key} style={{marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,margin:"0 4px 10px",flexWrap:"wrap"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <button
+                    onClick={()=>setActiveProgramFilter(current => current === group.key ? null : group.key)}
+                    style={{
+                      display:"inline-flex",
+                      alignItems:"center",
+                      gap:8,
+                      background:activeProgramFilter===group.key ? group.accent : "#fff",
+                      color:activeProgramFilter===group.key ? "#fff" : group.accent,
+                      border:`1px solid ${activeProgramFilter===group.key ? group.accent : group.border}`,
+                      borderRadius:999,
+                      padding:"8px 12px",
+                      fontSize:11,
+                      fontWeight:800,
+                      fontFamily:G.sans,
+                      letterSpacing:0.3,
+                      cursor:"pointer",
+                      boxShadow:activeProgramFilter===group.key && !reduceEffects ? G.shadowSm : "none",
+                    }}>
                     {group.label}
+                    <span style={{fontFamily:G.mono,fontWeight:700,opacity:0.9}}>{group.items.length}</span>
                   </button>
                   <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>
                     {group.items.length} class{group.items.length!==1?"es":""}
                   </span>
                 </div>
               </div>
-              {group.items.map(cls=>(
-                <div key={cls.raw} onClick={()=>openClassSelection(cls.raw)}
-                  style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",gap:12,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-                      <div style={{fontSize:16,fontWeight:700,color:G.text,flex:1,minWidth:0,lineHeight:1.25}}>{cls.display}</div>
-                      <span style={{width:30,height:30,borderRadius:10,background:"#F8FAFF",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:G.textL,flexShrink:0,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.75)"}}>›</span>
-                    </div>
-                    {cls.subjects.length>0&&(
-                      <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
-                        {cls.subjects.map(s=><span key={s} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:20,padding:"2px 9px",fontSize:12,fontFamily:G.sans,color:G.textS}}>{s}</span>)}
+              <div style={{display:"grid",gap:10}}>
+                {group.items.map(cls=>{
+                  const activityLabel = lastEntryCaption(cls.lastActivityTs || null);
+                  return(
+                    <div
+                      key={cls.raw}
+                      onClick={()=>openClassSelection(cls.raw)}
+                      style={{...mobileRowCardStyle,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+                        <div style={{display:"flex",gap:12,minWidth:0,flex:1}}>
+                          <div style={{width:5,alignSelf:"stretch",borderRadius:999,background:group.accent,opacity:0.85}}/>
+                          <div style={{minWidth:0,flex:1}}>
+                            <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05}}>
+                              {cls.display}
+                            </div>
+                            <div style={{fontSize:13,color:G.textM,marginTop:6,lineHeight:1.5}}>
+                              {group.label} cluster · {cls.teachers.length} active teacher{cls.teachers.length!==1?"s":""} · {activityLabel}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                          <div style={mobileCountDot(cls.teachers.some(t=>t.entryCount>0))}/>
+                          <span style={{width:36,height:36,borderRadius:12,background:"#F8FAFF",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:G.textL}}>
+                            ›
+                          </span>
+                        </div>
                       </div>
-                    )}
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginTop:12}}>
-                      <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,display:"inline-block"}}>{cls.teachers.length} teacher{cls.teachers.length!==1?"s":""}</span>
-                      {renderSectionDeleteButton(cls)}
+                      {cls.subjects.length>0&&(
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:14}}>
+                          {cls.subjects.map(s=>(
+                            <span key={s} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 11px",fontSize:12,fontFamily:G.sans,color:G.textS}}>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginTop:14}}>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                          {mobilePill(`${cls.teachers.length} teachers`, "blue", `${cls.raw}_teachers`)}
+                          {mobilePill(activityLabel, "soft", `${cls.raw}_activity`)}
+                        </div>
+                        {renderSectionDeleteButton(cls)}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  );
+                })}
+              </div>
             </div>
           ))}
+
           {tab==="teacher"&&visibleInstTeachers.map(t=>{
             const d=fullData[t.uid]||{};
             const name=d.profile?.name||t.name||"?";
             const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
             const activityLabel = instTeacherMeta[t.uid]?.label || lastEntryCaption(null);
+            const classCount = (d.classes||[]).filter(c=>sameInstituteName(c.institute, selInst)).length;
+            const initial = (name||"A").trim().charAt(0).toUpperCase();
             return(
-              <div key={t.uid} onClick={()=>openTeacherSelection(t.uid)}
-                style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:"14px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-                <div>
-                  <div style={{fontSize:16,fontWeight:700,color:G.text}}>{name}</div>
-                  <div style={{fontSize:12,color:G.textL,marginTop:4,fontFamily:G.mono}}>{activityLabel}</div>
-                  {otherInsts.length>0&&<AlsoAtInstitutes institutes={otherInsts} />}
+              <div
+                key={t.uid}
+                onClick={()=>openTeacherSelection(t.uid)}
+                style={{...mobileRowCardStyle,cursor:"pointer",marginBottom:10,WebkitTapHighlightColor:"transparent"}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+                  <div style={{display:"flex",gap:12,minWidth:0,flex:1}}>
+                    <div style={{width:40,height:40,borderRadius:14,background:"#EEF4FF",color:G.blue,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:800,fontFamily:G.display,flexShrink:0}}>
+                      {initial}
+                    </div>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.1}}>
+                        {name}
+                      </div>
+                      <div style={{fontSize:13,color:G.textM,marginTop:6,lineHeight:1.5}}>
+                        {classCount} class{classCount!==1?"es":""} in this institute · {activityLabel}
+                      </div>
+                      {otherInsts.length>0&&<AlsoAtInstitutes institutes={otherInsts} />}
+                    </div>
+                  </div>
+                  <span style={{width:36,height:36,borderRadius:12,background:"#F8FAFF",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:G.textL,flexShrink:0}}>
+                    ›
+                  </span>
                 </div>
-                <span style={{fontSize:20,color:G.textL}}>›</span>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+                  {mobilePill(activityLabel, "soft", `${t.uid}_activity`)}
+                  {mobilePill(`${classCount} classes`, "blue", `${t.uid}_classes`)}
+                </div>
               </div>
             );
           })}
+
           {instTeachers.length===0&&tab==="teacher"&&loadingUids.size>0&&(
-            <div style={{textAlign:"center",padding:"40px 0",color:G.textM}}>Loading teachers…</div>
+            <div style={{...mobileRowCardStyle,textAlign:"center",color:G.textM}}>
+              Loading teachers…
+            </div>
           )}
           {((tab==="class"&&displayedVisibleClassCount===0&&instClasses.length>0)||(tab==="teacher"&&visibleInstTeachers.length===0&&instTeachers.length>0))&&(
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"18px 16px",textAlign:"center",color:G.textM}}>
+            <div style={{...mobileRowCardStyle,textAlign:"center",color:G.textM}}>
               No {tab==="class"?"classes":"teachers"} match your search.
             </div>
           )}
@@ -8359,67 +8561,125 @@ function AdminPanelInner({user}){
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
+        <AdminToastBanner message={adminToast} />
         <MobileNav/><MobileBreadcrumb/>
-        <div style={{padding:"12px 14px 40px"}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:16}}>
-            <div>
-              <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{p2Label(selP2)}</h2>
-              <div style={{fontSize:14,color:G.textM}}>{selInst}</div>
-            </div>
-            {tab==="class"&&selP2&&(()=>{const cls=instClasses.find(c=>c.raw===selP2);return cls?(
-              <button onClick={()=>setExportOpen(true)}
-                style={{flexShrink:0,display:"flex",alignItems:"center",gap:6,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"8px 13px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent",marginTop:2}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Export
-              </button>
-            ):null;})()}
-          </div>
-          {selP2&&!isAggregateSelection&&(
-            <div style={{background:"linear-gradient(135deg,#FFFFFF 0%,#F7FAFF 100%)",borderRadius:12,border:`1px solid ${G.border}`,padding:"16px 18px",marginBottom:12}}>
-              <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>
-                {tab==="teacher"?"View all classes together":"View all teachers together"}
-              </div>
-              <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:5}}>
-                Open the full grouped view first, or continue below for one specific {tab==="teacher"?"class":"teacher"}.
-              </div>
-              <button onClick={openScopedFullView}
-                style={{marginTop:14,display:"inline-flex",alignItems:"center",gap:8,background:G.navy,color:"#fff",border:"none",borderRadius:9,padding:"10px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:G.sans}}>
-                View Full →
-              </button>
-            </div>
-          )}
-          {!isAggregateSelection&&p3Items.map(cls=>(
-            <div key={cls.classId||cls.uid}
-              style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,marginBottom:8,overflow:"hidden"}}>
-              <div onClick={()=>{
-                setFullView(null);
-                if(tab==="teacher") setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute||selInst});
-                else {
-                  const clsObj=instClasses.find(c=>c.raw===selP2);
-                  const subjectText = cls.subject || clsObj?.subjects?.join(", ") || "";
-                  setSelP3({teacherUid:cls.uid,classId:cls.classId,teacherName:cls.name,className:normaliseName(selP2),subject:subjectText});
-                  ensureFullData(cls.uid);
-                }
-                setMobileStep(3);
-              }}
-                style={{padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-                <div>
-                  <div style={{fontSize:16,fontWeight:700,color:G.text}}>{tab==="teacher"?cls.display:cls.name}</div>
-                  <div style={{fontSize:14,color:G.textM,marginTop:2}}>{tab==="teacher"?cls.subject:""}</div>
-                  <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontFamily:G.mono,marginTop:5,display:"inline-block"}}>{cls.entryCount} {cls.entryCount===1?"entry":"entries"}</span>
+        <div style={{padding:"14px 14px 40px"}}>
+          {(()=>{
+            const selectedClass = tab==="class" ? instClasses.find(c=>c.raw===selP2) : null;
+            const selectedTeacher = tab==="teacher" ? fullData[selP2]?.profile?.name || teachers.find(t=>t.uid===selP2)?.name || p2Label(selP2) : null;
+            const totalEntries = p3Items.reduce((sum,item)=>sum + (item.entryCount || 0),0);
+            const nextLabel = tab==="teacher" ? "class timelines" : "teacher histories";
+            return (
+              <>
+                <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>
+                        {selInst} · {tab==="teacher" ? "Teacher workspace" : "Class workspace"}
+                      </div>
+                      <h2 style={{fontSize:27,fontWeight:800,color:G.text,fontFamily:G.display,margin:"10px 0 0",lineHeight:1.05}}>
+                        {p2Label(selP2)}
+                      </h2>
+                      <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:10}}>
+                        {tab==="teacher"
+                          ? `${selectedTeacher} · choose a class or open the full grouped view`
+                          : `${selInst} · choose a teacher or open the full grouped view`}
+                      </div>
+                    </div>
+                    {mobilePill(overviewPeriodText, "blue", "step2_period")}
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+                    {mobilePill(`${p3Items.length} ${tab==="teacher" ? "classes" : "teachers"}`, "soft", "step2_count")}
+                    {mobilePill(`${totalEntries} entries`, "soft", "step2_entries")}
+                    {tab==="class" && selectedClass?.subjects?.length
+                      ? mobilePill(`${selectedClass.subjects.length} subjects`, "good", "step2_subjects")
+                      : tab==="teacher"
+                        ? mobilePill(instTeacherMeta[selP2]?.label || "No recent activity", "good", "step2_activity")
+                        : null}
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
+                    <button onClick={openScopedFullView} style={mobileActionButtonStyle("primary")}>
+                      Full timeline
+                    </button>
+                    <button onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("ghost")}>
+                      Export
+                    </button>
+                  </div>
                 </div>
-                <span style={{fontSize:20,color:G.textL}}>›</span>
-              </div>
-              {tab==="teacher"&&(
-                <div style={{borderTop:`1px solid ${G.border}`,background:G.bg,padding:"8px 16px",display:"flex",justifyContent:"flex-end"}}>
-                  <button onClick={()=>handleDeleteClass(selP2,cls.classId,cls.display,fullData[selP2]?.profile?.name||"Teacher")}
-                    style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:8,padding:"6px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:6,WebkitTapHighlightColor:"transparent"}}>
-                    🗑 Delete Class
-                  </button>
+
+                <div style={{...mobileControlStackStyle,marginBottom:14}}>
+                  {renderSearchInput(
+                    p3Search,
+                    setP3Search,
+                    tab==="teacher" ? "Search classes in this teacher view" : "Search teachers in this class",
+                    true
+                  )}
+                  <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginTop:10,fontSize:12,color:G.textL,fontFamily:G.sans}}>
+                    <span>{visibleP3Items.length} visible {nextLabel}</span>
+                    <span>Choose one item for individual history</span>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+
+                <div style={{display:"grid",gap:10}}>
+                  {!isAggregateSelection&&visibleP3Items.map(item=>(
+                    <div key={item.classId||item.uid} style={{...mobileRowCardStyle,overflow:"hidden"}}>
+                      <div
+                        onClick={()=>{
+                          setFullView(null);
+                          if(tab==="teacher") setSelP3({teacherUid:selP2,classId:item.classId,teacherName:fullData[selP2]?.profile?.name||"",className:item.display,subject:item.subject,institute:item.institute||selInst});
+                          else {
+                            const clsObj=instClasses.find(c=>c.raw===selP2);
+                            const subjectText = item.subject || clsObj?.subjects?.join(", ") || "";
+                            setSelP3({teacherUid:item.uid,classId:item.classId,teacherName:item.name,className:normaliseName(selP2),subject:subjectText});
+                            ensureFullData(item.uid);
+                          }
+                          setMobileStep(3);
+                        }}
+                        style={{cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+                          <div style={{minWidth:0,flex:1}}>
+                            <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05}}>
+                              {tab==="teacher" ? item.display : item.name}
+                            </div>
+                            <div style={{fontSize:13,color:G.textM,marginTop:6,lineHeight:1.55}}>
+                              {tab==="teacher"
+                                ? [item.subject || "No subject", item.institute || selInst, lastEntryCaption(item.lastActivityTs || null)].filter(Boolean).join(" · ")
+                                : [item.subject || "No subject", instTeacherMeta[item.uid]?.label || lastEntryCaption(item.lastActivityTs || item.lastActive || null)].filter(Boolean).join(" · ")}
+                            </div>
+                          </div>
+                          <span style={{width:36,height:36,borderRadius:12,background:"#F8FAFF",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:G.textL,flexShrink:0}}>
+                            ›
+                          </span>
+                        </div>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+                          {mobilePill(`${item.entryCount || 0} ${(item.entryCount || 0)===1?"entry":"entries"}`, "blue", `${item.classId||item.uid}_entries`)}
+                          {tab==="teacher"
+                            ? mobilePill(item.subject || "Subject pending", "soft", `${item.classId}_subject`)
+                            : mobilePill(item.subject || "Subject pending", "soft", `${item.uid}_subject`)}
+                        </div>
+                      </div>
+                      {tab==="teacher"&&(
+                        <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                          <div style={{fontSize:12,color:G.textL,fontFamily:G.sans}}>
+                            Open this class for the teacher timeline or remove the class from this teacher.
+                          </div>
+                          <button onClick={()=>handleDeleteClass(selP2,item.classId,item.display,fullData[selP2]?.profile?.name||"Teacher")}
+                            style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:10,padding:"8px 12px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6,WebkitTapHighlightColor:"transparent"}}>
+                            🗑 Delete class
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {!isAggregateSelection&&visibleP3Items.length===0&&(
+                    <div style={{...mobileRowCardStyle,textAlign:"center",color:G.textM}}>
+                      No {tab==="teacher" ? "classes" : "teachers"} match your search.
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     );
@@ -8431,45 +8691,90 @@ function AdminPanelInner({user}){
           {binView&&<AdminBinModal/>}
           {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
           {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
+          <AdminToastBanner message={adminToast} />
           <MobileNav/><MobileBreadcrumb/>
-          <div style={{padding:"12px 14px 40px"}}>
-            <h2 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:2}}>
-              {isInstituteOverviewStep ? `${selInst} Overview` : isScopedFullView ? fullViewTitle : isAggregateSelection ? aggregateTitle : `${selP3.teacherName} — ${selP3.className}`}
-            </h2>
-            <div style={{fontSize:14,color:G.textM,marginBottom:14}}>
-              {isInstituteOverviewStep
+          <div style={{padding:"14px 14px 40px"}}>
+            {(()=>{
+              const stepTitle = isInstituteOverviewStep
+                ? `${selInst} Overview`
+                : isScopedFullView
+                  ? fullViewTitle
+                  : isAggregateSelection
+                    ? aggregateTitle
+                    : `${selP3.teacherName} — ${selP3.className}`;
+              const stepSubtitle = isInstituteOverviewStep
                 ? `${selInst} · charts, teaching time, and recent institute activity`
                 : isScopedFullView
                   ? fullViewSubtitle
                   : isAggregateSelection
                     ? `${selInst} · grouped by class, chronological inside each class`
-                    : [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")}
-            </div>
-            {/* Period selector — Option B */}
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
-              <PeriodSelector
-                period={period}
-                onChangePeriod={handlePeriodChange}
-                compact
-                rangeStart={customRange.start}
-                rangeEnd={customRange.end}
-                onChangeRangeStart={handleRangeStartChange}
-                onChangeRangeEnd={handleRangeEndChange}
-              />
-            </div>
-            {/* Export — its own row, always visible */}
-            <button onClick={()=>setExportOpen(true)}
-              style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",background:G.navy,color:"#fff",border:"none",borderRadius:10,padding:"11px 0",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,minHeight:44,WebkitTapHighlightColor:"transparent",marginBottom:20}}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export
-            </button>
-            {isInstituteOverviewStep
-              ? renderOverviewPanel()
-              : isScopedFullView
-                ? renderFullViewEntries(true)
-                : isAggregateSelection
-                  ? renderAggregateEntries(true)
-                  : renderSelectedTimelineEntries(true)}
+                    : [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ");
+              const timelineSummary = selectedTimelineSummary || null;
+              return (
+                <>
+                  <div style={{...mobileWorkspaceCardStyle,marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>
+                          {isInstituteOverviewStep ? "Institute detail" : isScopedFullView ? "Grouped timeline" : isAggregateSelection ? "Aggregate timeline" : "Selection timeline"}
+                        </div>
+                        <h2 style={{fontSize:27,fontWeight:800,color:G.text,fontFamily:G.display,margin:"10px 0 0",lineHeight:1.05}}>
+                          {stepTitle}
+                        </h2>
+                        <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:10}}>
+                          {stepSubtitle}
+                        </div>
+                      </div>
+                      {mobilePill(overviewPeriodText, "blue", "step3_period")}
+                    </div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+                      {isInstituteOverviewStep&&mobilePill(`${instClasses.length} classes`, "soft", "step3_classes")}
+                      {isInstituteOverviewStep&&mobilePill(`${selectedInstitutePeriodCount} logs`, "soft", "step3_logs")}
+                      {isInstituteOverviewStep&&mobilePill(`${formatDurationShort(classSubjectSummary.totalMinutes)} taught`, "good", "step3_taught")}
+                      {isScopedFullView&&mobilePill(`${fullViewEntries.length} entries`, "soft", "step3_full_entries")}
+                      {isAggregateSelection&&mobilePill(`${aggregateEntries.length} entries`, "soft", "step3_agg_entries")}
+                      {selP3&&timelineSummary&&mobilePill(`${timelineSummary.entryCount} entries`, "soft", "step3_sel_entries")}
+                      {selP3&&timelineSummary&&mobilePill(timelineSummary.totalMinutes>0 ? formatDurationShort(timelineSummary.totalMinutes) : "Untimed logs", "good", "step3_sel_taught")}
+                    </div>
+                  </div>
+
+                  <div style={{...mobileWorkspaceCardStyle,padding:0,overflow:"hidden"}}>
+                    <div style={{position:"sticky",top:106,zIndex:13,background:"rgba(255,255,255,0.97)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderBottom:`1px solid ${G.border}`}}>
+                      <div style={{padding:"14px 14px 12px"}}>
+                        <div style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 12px 10px"}}>
+                          <PeriodSelector
+                            period={period}
+                            onChangePeriod={handlePeriodChange}
+                            compact
+                            rangeStart={customRange.start}
+                            rangeEnd={customRange.end}
+                            onChangeRangeStart={handleRangeStartChange}
+                            onChangeRangeEnd={handleRangeEndChange}
+                          />
+                        </div>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                          <button onClick={()=>setExportOpen(true)} style={mobileActionButtonStyle("primary")}>
+                            Export
+                          </button>
+                          {isScopedFullView&&mobilePill("Grouped by class", "soft", "step3_grouped")}
+                          {isAggregateSelection&&mobilePill("Chronological by class", "soft", "step3_aggregate")}
+                          {selP3&&selectedSubjectLabel&&mobilePill(selectedSubjectLabel, "soft", "step3_subject")}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{padding:"14px"}}>
+                      {isInstituteOverviewStep
+                        ? renderOverviewPanel()
+                        : isScopedFullView
+                          ? renderFullViewEntries(true)
+                          : isAggregateSelection
+                            ? renderAggregateEntries(true)
+                            : renderSelectedTimelineEntries(true)}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       );
