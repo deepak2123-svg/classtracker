@@ -286,21 +286,21 @@ function buildInstituteTone(bg){
   const base = String(bg || "#1F3A5F").toUpperCase();
   return {
     bg:base,
-    light:tintHex(base, 0.76),
-    surface:tintHex(base, 0.8),
-    pill:tintHex(base, 0.88),
-    border:tintHex(base, 0.66),
+    light:tintHex(base, 0.64),
+    surface:tintHex(base, 0.68),
+    pill:tintHex(base, 0.76),
+    border:tintHex(base, 0.5),
     ink:base,
     text:"#FFFFFF",
   };
 }
 
 const INSTITUTE_BASE_COLORS = [
-  "#1F3A5F", "#27445D", "#2C4A52", "#473652",
-  "#534036", "#2D4C44", "#334155", "#3F4B63",
-  "#3B3F58", "#2F4858", "#4A3F2A", "#314C37",
-  "#4B3453", "#354B63", "#2E4E57", "#5A3A32",
-  "#364152", "#224654", "#4A3D5F", "#3C4630",
+  "#2563EB", "#0F766E", "#7C3AED", "#EA580C",
+  "#DC2626", "#0891B2", "#059669", "#4F46E5",
+  "#BE185D", "#475569", "#B45309", "#0284C7",
+  "#7C2D12", "#166534", "#6D28D9", "#1D4ED8",
+  "#C2410C", "#0E7490", "#9333EA", "#15803D",
 ];
 
 function buildInstituteColorMap(names = []){
@@ -4992,11 +4992,11 @@ function ClassTrackerInner({user}){
           const label=inst==="all"?allLabel:inst;
           const pillBg=inst==="all"
             ? "#FFFFFF"
-            : (isSel ? (ic.surface || ic.pill || "#F5F7FB") : (ic.pill || "#F8FAFC"));
-          const pillText=G.text;
+            : ic.bg;
+          const pillText=inst==="all" ? G.text : "#FFFFFF";
           const pillBorder=inst==="all"
             ? (isSel ? "rgba(15,23,42,0.92)" : G.borderM)
-            : (isSel ? (ic.border || "rgba(15,23,42,0.92)") : (ic.border || G.borderM));
+            : (isSel ? "rgba(15,23,42,0.92)" : (ic.border || G.borderM));
           return(
             <button key={inst} title={label} onClick={()=>React.startTransition(()=>setInstFilter(inst))}
               style={{
@@ -5015,7 +5015,9 @@ function ClassTrackerInner({user}){
                 transition:"all 0.15s",
                 background:pillBg,
                 color:pillText,
-                boxShadow:isSel?"0 0 0 1px rgba(15,23,42,0.08)":"none",
+                boxShadow:inst==="all"
+                  ? (isSel ? "0 0 0 1px rgba(15,23,42,0.08)" : "none")
+                  : (isSel ? "0 10px 24px rgba(15,23,42,0.16)" : "none"),
                 opacity:1,
                 display:"flex",
                 alignItems:"center",
@@ -5024,7 +5026,7 @@ function ClassTrackerInner({user}){
                 lineHeight:1.15,
                 overflow:"hidden",
               }}>
-              <span style={{width:stacked?10:8,height:stacked?10:8,borderRadius:999,background:inst==="all" ? "#FFFFFF" : ic.bg,flexShrink:0,border:`1px solid ${inst==="all" ? "rgba(15,23,42,0.24)" : hexToRgba(ic.bg, 0.28)}`}}/>
+              <span style={{width:stacked?10:8,height:stacked?10:8,borderRadius:999,background:inst==="all" ? "#FFFFFF" : "rgba(255,255,255,0.96)",flexShrink:0,border:`1px solid ${inst==="all" ? "rgba(15,23,42,0.24)" : "rgba(255,255,255,0.46)"}`}}/>
               <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</span>
             </button>
           );
