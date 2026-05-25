@@ -4852,7 +4852,10 @@ function ClassTrackerInner({user}){
       const instFull=cls.institute||"";
       const instShort=instFull.length>28?instFull.slice(0,26)+"…":instFull;
       const cardBorder = "rgba(15,23,42,0.92)";
-      const sectionSurface = ic.bg;
+      const sectionSurface = ic.light;
+      const sectionTitleColor = ic.bg;
+      const institutePillFill = hexToRgba(ic.bg, 0.12);
+      const institutePillBorder = hexToRgba(ic.bg, 0.2);
       const beginHold = e => {
         if(!compact || !onHold || !e.touches?.length) return;
         const touch = e.touches[0];
@@ -4891,12 +4894,12 @@ function ClassTrackerInner({user}){
             onTouchEnd={clearHold}
             onTouchCancel={clearHold}
             style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
-            <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.92)`,padding:dense?"12px 14px":"13px 15px"}}>
+            <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.12)`,padding:dense?"12px 14px":"13px 15px"}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:dense?22:24,fontWeight:800,color:ic.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
+                  <div style={{fontSize:dense?22:24,fontWeight:800,color:sectionTitleColor,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
-                    <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid rgba(15,23,42,0.18)`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:institutePillFill,color:sectionTitleColor,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${institutePillBorder}`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                       {instShort || "No institute"}
                     </span>
@@ -4925,12 +4928,12 @@ function ClassTrackerInner({user}){
           onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";})}
           onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}
           onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}>
-          <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.92)`,padding:"14px 15px 13px"}}>
+          <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.12)`,padding:"14px 15px 13px"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:19,fontWeight:800,color:ic.text,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
+                <div style={{fontSize:19,fontWeight:800,color:sectionTitleColor,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid rgba(15,23,42,0.18)`,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:institutePillFill,color:sectionTitleColor,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${institutePillBorder}`,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                     <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                     {instShort || "No institute"}
                   </span>
@@ -4956,6 +4959,9 @@ function ClassTrackerInner({user}){
           const isSel=instFilter===inst;
           const ic=inst==="all"?{bg:"#111827",light:G.surfaceAlt,text:"#FFFFFF"}:instColor(inst);
           const label=inst==="all"?allLabel:inst;
+          const pillBg=inst==="all" ? ic.bg : ic.bg;
+          const pillText=inst==="all" ? "#FFFFFF" : "#FFFFFF";
+          const pillBorder=isSel ? "rgba(15,23,42,0.92)" : hexToRgba(ic.bg, 0.42);
           return(
             <button key={inst} title={label} onClick={()=>setInstFilter(inst)}
               style={{
@@ -4965,16 +4971,17 @@ function ClassTrackerInner({user}){
                 minHeight:stacked?54:(compact?36:44),
                 padding:stacked?"12px 15px":(compact?"8px 14px":"10px 14px"),
                 borderRadius:stacked?20:999,
-                border:`1.5px solid ${isSel ? "rgba(15,23,42,0.92)" : "rgba(15,23,42,0.28)"}`,
+                border:`1.5px solid ${pillBorder}`,
                 cursor:"pointer",
                 fontFamily:G.sans,
                 fontSize:stacked?12.5:(compact?12:12.5),
                 fontWeight:isSel?800:600,
                 WebkitTapHighlightColor:"transparent",
                 transition:"all 0.15s",
-                background:isSel?ic.bg:G.surface,
-                color:isSel?ic.text:G.text,
-                boxShadow:"none",
+                background:pillBg,
+                color:pillText,
+                boxShadow:isSel?"0 0 0 1px rgba(15,23,42,0.08)":"none",
+                opacity:isSel?1:0.94,
                 display:"flex",
                 alignItems:"center",
                 gap:9,
@@ -4982,7 +4989,7 @@ function ClassTrackerInner({user}){
                 lineHeight:1.15,
                 overflow:"hidden",
               }}>
-              <span style={{width:stacked?10:8,height:stacked?10:8,borderRadius:999,background:inst==="all"?ic.bg:ic.bg,flexShrink:0,border:isSel?"1px solid rgba(255,255,255,0.36)":"none"}}/>
+              <span style={{width:stacked?10:8,height:stacked?10:8,borderRadius:999,background:"rgba(255,255,255,0.92)",flexShrink:0,border:"1px solid rgba(255,255,255,0.32)"}}/>
               <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</span>
             </button>
           );
