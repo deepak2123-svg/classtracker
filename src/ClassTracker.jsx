@@ -698,6 +698,177 @@ function getSectionCardTodayDotStyles(todayEntries = 0){
   };
 }
 
+function timeValueToMinutes(timeValue){
+  if(!timeValue || typeof timeValue !== "string") return Number.POSITIVE_INFINITY;
+  const parts = timeValue.split(":").map(Number);
+  if(parts.length < 2 || parts.some(Number.isNaN)) return Number.POSITIVE_INFINITY;
+  return parts[0] * 60 + parts[1];
+}
+
+function calcEntryDurationMins(tStart, tEnd){
+  if(!tStart || !tEnd || typeof tStart !== "string" || typeof tEnd !== "string") return 0;
+  try{
+    const [sh, sm] = tStart.split(":").map(Number);
+    const [eh, em] = tEnd.split(":").map(Number);
+    if([sh, sm, eh, em].some(Number.isNaN)) return 0;
+    const duration = (eh * 60 + em) - (sh * 60 + sm);
+    return duration > 0 && duration < 480 ? duration : 0;
+  }catch(err){
+    return 0;
+  }
+}
+
+function compareTimelineEntriesAsc(a, b){
+  if(a.dateKey !== b.dateKey) return a.dateKey.localeCompare(b.dateKey);
+  if(a.startMins !== b.startMins) return a.startMins - b.startMins;
+  return a.createdAt - b.createdAt;
+}
+
+function compareTimelineEntriesForDisplay(a, b){
+  if(a.dateKey !== b.dateKey) return b.dateKey.localeCompare(a.dateKey);
+  if(a.startMins !== b.startMins) return a.startMins - b.startMins;
+  return a.createdAt - b.createdAt;
+}
+
+function normaliseTopicTitle(value){
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function formatTimelineMoment(dateKey, timeValue = ""){
+  if(!dateKey) return "Not yet";
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  if([year, month, day].some(Number.isNaN)) return dateKey;
+  const dateLabel = new Date(year, month - 1, day).toLocaleDateString("en-IN", {
+    day:"numeric",
+    month:"short",
+    year:"numeric",
+  });
+  if(!timeValue) return dateLabel;
+  return `${dateLabel} · ${fmt(timeValue)}`;
+}
+
+function collectClassTimelineEntries(classNotes = {}, { startKey = "", endKey = "" } = {}){
+  return Object.entries(classNotes || {})
+    .flatMap(([dateKey, entries]) => {
+      if(startKey && dateKey < startKey) return [];
+      if(endKey && dateKey > endKey) return [];
+      if(!Array.isArray(entries)) return [];
+      return entries.map((note, index) => ({
+        ...note,
+        dateKey,
+        durationMins:calcEntryDurationMins(note?.timeStart, note?.timeEnd),
+        startMins:timeValueToMinutes(note?.timeStart),
+        createdAt:Number(note?.created || 0) || 0,
+        timelineKey:`${dateKey}-${note?.id || "entry"}-${Number(note?.created || 0) || index}-${index}`,
+      }));
+    })
+    .sort(compareTimelineEntriesAsc);
+}
+
+function buildTopicJourney(entries = []){
+  const topicMap = new Map();
+
+  entries.forEach(entry => {
+    const title = normaliseTopicTitle(entry?.title);
+    if(!title) return;
+    const key = title.toLowerCase();
+    const current = topicMap.get(key) || {
+      key,
+      title,
+      sessions:0,
+      timedMinutes:0,
+      dayKeys:new Set(),
+      firstEntry:null,
+      lastEntry:null,
+      completedEntry:null,
+      latestBody:"",
+      latestStatus:"",
+      latestTag:"",
+    };
+    current.sessions += 1;
+    current.timedMinutes += entry.durationMins || 0;
+    current.dayKeys.add(entry.dateKey);
+    if(!current.firstEntry || compareTimelineEntriesAsc(entry, current.firstEntry) < 0){
+      current.firstEntry = entry;
+    }
+    if(!current.lastEntry || compareTimelineEntriesAsc(entry, current.lastEntry) > 0){
+      current.lastEntry = entry;
+      current.latestBody = String(entry?.body || "").trim();
+      current.latestStatus = String(entry?.status || "").trim();
+      current.latestTag = String(entry?.tag || "").trim();
+    }
+    if(entry?.status === "completed"){
+      if(!current.completedEntry || compareTimelineEntriesAsc(entry, current.completedEntry) > 0){
+        current.completedEntry = entry;
+      }
+    }
+    topicMap.set(key, current);
+  });
+
+  return [...topicMap.values()]
+    .map(topic => {
+      const latestReference = topic.completedEntry || topic.lastEntry;
+      const isCompleted = !!topic.completedEntry || topic.lastEntry?.status === "completed";
+      return {
+        ...topic,
+        activeDays:topic.dayKeys.size,
+        startedAtKey:topic.firstEntry?.dateKey || "",
+        startedAtTime:topic.firstEntry?.timeStart || "",
+        endedAtKey:latestReference?.dateKey || "",
+        endedAtTime:latestReference?.timeEnd || latestReference?.timeStart || "",
+        isCompleted,
+        isOngoing:!isCompleted,
+      };
+    })
+    .sort((a, b) => {
+      if(a.lastEntry && b.lastEntry) return compareTimelineEntriesAsc(b.lastEntry, a.lastEntry);
+      if(a.lastEntry) return -1;
+      if(b.lastEntry) return 1;
+      return a.title.localeCompare(b.title);
+    });
+}
+
+function buildClassTimelineSummary(classNotes = {}, options = {}){
+  const entriesAsc = collectClassTimelineEntries(classNotes, options);
+  const entries = [...entriesAsc].sort(compareTimelineEntriesForDisplay);
+  const timelineByDate = entries.reduce((acc, entry) => {
+    if(!acc[entry.dateKey]) acc[entry.dateKey] = [];
+    acc[entry.dateKey].push(entry);
+    return acc;
+  }, {});
+  const groupedTimeline = Object.entries(timelineByDate).map(([dateKey, groupEntries]) => ({
+    dateKey,
+    entries:groupEntries,
+    timedMinutes:groupEntries.reduce((sum, entry) => sum + (entry.durationMins || 0), 0),
+  }));
+  const topicSummaries = buildTopicJourney(entriesAsc);
+  const totalTimelineMinutes = entriesAsc.reduce((sum, entry) => sum + (entry.durationMins || 0), 0);
+  const timedSessionCount = entriesAsc.filter(entry => entry.durationMins > 0).length;
+  const untimedEntryCount = entriesAsc.length - timedSessionCount;
+  const firstEntry = entriesAsc[0] || null;
+  const latestEntry = entriesAsc[entriesAsc.length - 1] || null;
+  const latestTitledEntry = [...entriesAsc].reverse().find(entry => normaliseTopicTitle(entry?.title));
+  const ongoingTopic = topicSummaries.find(topic => topic.isOngoing) || null;
+  return {
+    entriesAsc,
+    entries,
+    groupedTimeline,
+    totalTimelineMinutes,
+    timedSessionCount,
+    untimedEntryCount,
+    activeDayCount:groupedTimeline.length,
+    maxDayMinutes:Math.max(1, ...groupedTimeline.map(group => group.timedMinutes || 0)),
+    firstEntry,
+    latestEntry,
+    latestTitledEntry,
+    topicSummaries,
+    topicCount:topicSummaries.length,
+    completedTopicCount:topicSummaries.filter(topic => topic.isCompleted).length,
+    ongoingTopic,
+    latestTopic:topicSummaries[0] || null,
+  };
+}
+
 // ── Ripple ────────────────────────────────────────────────────────────────────
 function rpl(e,white=false){
   const el=e.currentTarget,rect=el.getBoundingClientRect();
@@ -893,7 +1064,7 @@ function OverflowMenu({ items = [], buttonSize = 36 }) {
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
 function getPrimaryTeacherTab(view){
-  if(view==="stats") return "stats";
+  if(view==="stats" || view==="classTimeline") return "stats";
   return ["profile","trash","notifications"].includes(view) ? "profile" : "home";
 }
 
@@ -5629,25 +5800,6 @@ function ClassTrackerInner({user}){
       const min = m % 60;
       return min ? `${h}h ${min}m` : `${h}h`;
     }
-    function calcDurMins(tStart, tEnd){
-      if(!tStart || !tEnd || typeof tStart !== "string" || typeof tEnd !== "string") return 0;
-      try{
-        const sp = tStart.split(":");
-        const ep = tEnd.split(":");
-        if(sp.length < 2 || ep.length < 2) return 0;
-        const sh = Number(sp[0]), sm = Number(sp[1]);
-        const eh = Number(ep[0]), em = Number(ep[1]);
-        if([sh, sm, eh, em].some(Number.isNaN)) return 0;
-        const duration = (eh * 60 + em) - (sh * 60 + sm);
-        return duration > 0 && duration < 480 ? duration : 0;
-      }catch(e){ return 0; }
-    }
-    function timeToMinutes(timeValue){
-      if(!timeValue || typeof timeValue !== "string") return Number.POSITIVE_INFINITY;
-      const parts = timeValue.split(":").map(Number);
-      if(parts.length < 2 || parts.some(Number.isNaN)) return Number.POSITIVE_INFINITY;
-      return parts[0] * 60 + parts[1];
-    }
 
     const timelineClass = (data.classes || []).find(cls => String(cls?.id || "") === String(statsClassId || "")) || null;
     if(!timelineClass){
@@ -5669,37 +5821,19 @@ function ClassTrackerInner({user}){
 
     const timelineColor = instColor(timelineClass.institute);
     const timelineNotes = data.notes?.[timelineClass.id] || {};
-    const timelineEntries = Object.entries(timelineNotes)
-      .flatMap(([dateKey, entries]) => (
-        Array.isArray(entries) ? entries.map(note => ({
-          ...note,
-          dateKey,
-          durationMins:calcDurMins(note?.timeStart, note?.timeEnd),
-          startMins:timeToMinutes(note?.timeStart),
-          createdAt:Number(note?.created || 0) || 0,
-        })) : []
-      ))
-      .sort((a,b)=>{
-        if(a.dateKey !== b.dateKey) return b.dateKey.localeCompare(a.dateKey);
-        if(a.startMins !== b.startMins) return a.startMins - b.startMins;
-        return a.createdAt - b.createdAt;
-      });
-
-    const groupedTimeline = Object.entries(
-      timelineEntries.reduce((acc, entry) => {
-        if(!acc[entry.dateKey]) acc[entry.dateKey] = [];
-        acc[entry.dateKey].push(entry);
-        return acc;
-      }, {})
-    ).map(([dateKey, entries]) => {
-      const timedMinutes = entries.reduce((sum, entry) => sum + entry.durationMins, 0);
-      return { dateKey, entries, timedMinutes };
-    }).sort((a,b)=>b.dateKey.localeCompare(a.dateKey));
-
-    const totalTimelineMinutes = timelineEntries.reduce((sum, entry) => sum + entry.durationMins, 0);
-    const timedSessionCount = timelineEntries.filter(entry => entry.durationMins > 0).length;
-    const activeDayCount = groupedTimeline.length;
-    const maxDayMinutes = Math.max(1, ...groupedTimeline.map(group => group.timedMinutes || 0));
+    const timelineSummary = buildClassTimelineSummary(timelineNotes);
+    const timelineEntries = timelineSummary.entries;
+    const groupedTimeline = timelineSummary.groupedTimeline;
+    const totalTimelineMinutes = timelineSummary.totalTimelineMinutes;
+    const timedSessionCount = timelineSummary.timedSessionCount;
+    const activeDayCount = timelineSummary.activeDayCount;
+    const maxDayMinutes = timelineSummary.maxDayMinutes;
+    const untimedEntryCount = timelineSummary.untimedEntryCount;
+    const topicSummaries = timelineSummary.topicSummaries;
+    const latestTopic = timelineSummary.latestTopic;
+    const ongoingTopic = timelineSummary.ongoingTopic;
+    const firstEntry = timelineSummary.firstEntry;
+    const latestEntry = timelineSummary.latestEntry;
     const timelineBackButtonStyle = {
       background:"rgba(255,255,255,0.10)",
       border:"1px solid rgba(255,255,255,0.18)",
@@ -5742,14 +5876,40 @@ function ClassTrackerInner({user}){
               </span>
               {timelineClass.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.text,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:700,border:"1px solid rgba(15,23,42,0.18)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{timelineClass.subject}</span>}
             </div>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1.2fr 0.8fr",gap:10,marginTop:14}}>
+              <div style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.14)",borderRadius:16,padding:"12px 13px"}}>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.62)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6}}>
+                  {ongoingTopic ? "Current topic" : "Latest topic"}
+                </div>
+                <div style={{fontSize:17,fontWeight:800,color:"#FFFFFF",fontFamily:G.display,letterSpacing:-0.22,lineHeight:1.15}}>
+                  {ongoingTopic?.title || latestTopic?.title || "Topic details will appear as entries are added"}
+                </div>
+                {(ongoingTopic || latestTopic) && (
+                  <div style={{fontSize:12.5,color:"rgba(255,255,255,0.76)",lineHeight:1.55,marginTop:6}}>
+                    Started {formatTimelineMoment((ongoingTopic || latestTopic).startedAtKey, (ongoingTopic || latestTopic).startedAtTime)}
+                  </div>
+                )}
+              </div>
+              <div style={{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.14)",borderRadius:16,padding:"12px 13px"}}>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.62)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6}}>Latest log</div>
+                <div style={{fontSize:18,fontWeight:800,color:"#FFFFFF",fontFamily:G.display,letterSpacing:-0.22,lineHeight:1.15}}>
+                  {latestEntry ? formatTimelineMoment(latestEntry.dateKey, latestEntry.timeStart) : "No entries yet"}
+                </div>
+                <div style={{fontSize:12.5,color:"rgba(255,255,255,0.76)",lineHeight:1.55,marginTop:6}}>
+                  {latestEntry?.title ? `Topic: ${latestEntry.title}` : "Every class log for this section will stack here in order."}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:10,marginBottom:16}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(3,minmax(0,1fr))",gap:10,marginBottom:16}}>
             {[
               { label:"Timed total", value:fmtMins(totalTimelineMinutes) },
               { label:"Entries", value:String(timelineEntries.length) },
               { label:"Timed sessions", value:String(timedSessionCount) },
               { label:"Active days", value:String(activeDayCount) },
+              { label:"Topics tracked", value:String(timelineSummary.topicCount) },
+              { label:"Completed topics", value:String(timelineSummary.completedTopicCount) },
             ].map(item=>(
               <div key={item.label} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 14px 13px",boxShadow:G.shadowSm}}>
                 <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,letterSpacing:-0.45}}>{item.value}</div>
@@ -5758,9 +5918,102 @@ function ClassTrackerInner({user}){
             ))}
           </div>
 
-          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"16px 16px 15px",boxShadow:G.shadowSm,marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Timeline view</div>
-            <div style={{fontSize:14,color:G.textM,lineHeight:1.65}}>Every saved entry is shown chronologically here with its time block. Untimed entries stay in the timeline too, so nothing disappears from the class record.</div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(0,1fr))",gap:10,marginBottom:14}}>
+            {[
+              {
+                label:"First taught",
+                value:firstEntry ? formatTimelineMoment(firstEntry.dateKey, firstEntry.timeStart) : "No entries yet",
+                note:firstEntry?.title ? `Opened with ${firstEntry.title}` : "This becomes the section start point.",
+              },
+              {
+                label:"Latest recorded",
+                value:latestEntry ? formatTimelineMoment(latestEntry.dateKey, latestEntry.timeStart) : "No entries yet",
+                note:latestEntry?.title ? `Most recent topic: ${latestEntry.title}` : "New activity will appear here.",
+              },
+              {
+                label:"Untimed notes",
+                value:String(untimedEntryCount),
+                note:untimedEntryCount > 0 ? "These stay in the history even without duration." : "Every current entry here has a teaching time.",
+              },
+            ].map(item => (
+              <div key={item.label} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:7}}>{item.label}</div>
+                <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.18,lineHeight:1.2}}>{item.value}</div>
+                <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:7}}>{item.note}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5}}>Topic journey</div>
+                <div style={{fontSize:14,color:G.textL,marginTop:3}}>See when each topic started, when it closed, and how much time it took in this section.</div>
+              </div>
+              <div style={{fontSize:12.5,color:G.textM,fontWeight:700}}>{topicSummaries.length} tracked topic{topicSummaries.length!==1?"s":""}</div>
+            </div>
+            {topicSummaries.length === 0 ? (
+              <div style={{background:G.surface,borderRadius:18,border:`2px dashed ${G.border}`,padding:"28px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+                <div style={{width:56,height:56,borderRadius:16,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}><AppIcon icon={IconBook2} size={26} color={G.textM} /></div>
+                <div style={{fontSize:16,color:G.textM,fontWeight:700}}>Topic history will appear here</div>
+                <div style={{fontSize:14,color:G.textL,marginTop:6}}>Once titled entries are added, this section will show when each topic started and how it progressed.</div>
+              </div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {topicSummaries.map(topic => {
+                  const latestStatusTone = topic.latestStatus && STATUS_STYLES[topic.latestStatus] ? STATUS_STYLES[topic.latestStatus] : null;
+                  const latestTagTone = topic.latestTag && TAG_STYLES[topic.latestTag] ? TAG_STYLES[topic.latestTag] : null;
+                  return(
+                    <div key={topic.key} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
+                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.22,lineHeight:1.2}}>{topic.title}</div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
+                            <span style={{display:"inline-flex",alignItems:"center",gap:6,background:hexToRgba(timelineColor.bg, 0.12),color:timelineColor.bg,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,border:`1px solid ${hexToRgba(timelineColor.bg, 0.18)}`}}>
+                              <AppIcon icon={IconClockHour4} size={13} color="currentColor" />
+                              {fmtMins(topic.timedMinutes)}
+                            </span>
+                            <span style={{display:"inline-flex",alignItems:"center",gap:6,background:G.surfaceSoft,color:G.textM,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,border:`1px solid ${G.border}`}}>
+                              <AppIcon icon={IconHistory} size={13} color="currentColor" />
+                              {topic.sessions} session{topic.sessions!==1?"s":""}
+                            </span>
+                            <span style={{display:"inline-flex",alignItems:"center",gap:6,background:G.surfaceSoft,color:G.textM,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,border:`1px solid ${G.border}`}}>
+                              <AppIcon icon={IconCalendar} size={13} color="currentColor" />
+                              {topic.activeDays} active day{topic.activeDays!==1?"s":""}
+                            </span>
+                          </div>
+                        </div>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6,background:topic.isCompleted ? G.greenL : hexToRgba(timelineColor.bg, 0.12),color:topic.isCompleted ? G.green : timelineColor.bg,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:800,border:`1px solid ${topic.isCompleted ? "rgba(21,128,61,0.18)" : hexToRgba(timelineColor.bg, 0.18)}`}}>
+                          <span style={{width:8,height:8,borderRadius:999,background:topic.isCompleted ? G.green : timelineColor.bg}} />
+                          {topic.isCompleted ? "Completed" : "Ongoing"}
+                        </span>
+                      </div>
+
+                      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:10,marginTop:12}}>
+                        <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 12px"}}>
+                          <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5,marginBottom:5}}>Started</div>
+                          <div style={{fontSize:14,fontWeight:700,color:G.text,lineHeight:1.45}}>{formatTimelineMoment(topic.startedAtKey, topic.startedAtTime)}</div>
+                        </div>
+                        <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 12px"}}>
+                          <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5,marginBottom:5}}>{topic.isCompleted ? "Ended" : "Last seen"}</div>
+                          <div style={{fontSize:14,fontWeight:700,color:G.text,lineHeight:1.45}}>{formatTimelineMoment(topic.endedAtKey, topic.endedAtTime)}</div>
+                        </div>
+                      </div>
+
+                      {(latestStatusTone || latestTagTone || topic.latestBody) && (
+                        <div style={{marginTop:12,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 12px"}}>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:topic.latestBody ? 7 : 0}}>
+                            {latestTagTone && <span style={{background:latestTagTone.bg,color:latestTagTone.text,fontSize:11,borderRadius:999,padding:"4px 8px",fontFamily:G.mono,fontWeight:700}}>{latestTagTone.label}</span>}
+                            {latestStatusTone && <span style={{background:latestStatusTone.bg,color:latestStatusTone.text,fontSize:11,borderRadius:999,padding:"4px 8px",fontFamily:G.sans,fontWeight:700}}>{latestStatusTone.label}</span>}
+                          </div>
+                          {topic.latestBody && <div style={{fontSize:13.5,color:G.textS,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{topic.latestBody}</div>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {groupedTimeline.length===0 ? (
@@ -5771,6 +6024,13 @@ function ClassTrackerInner({user}){
             </div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5}}>Daily timeline</div>
+                  <div style={{fontSize:14,color:G.textL,marginTop:3}}>Every saved session, note, and time block for this section in chronological order.</div>
+                </div>
+                <div style={{fontSize:12.5,color:G.textM,fontWeight:700}}>{timelineEntries.length} entry{timelineEntries.length!==1?"ies":"y"}</div>
+              </div>
               {groupedTimeline.map(group=>(
                 <div key={group.dateKey} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12,flexWrap:"wrap"}}>
@@ -5792,7 +6052,7 @@ function ClassTrackerInner({user}){
                       const isLast = entryIndex === group.entries.length - 1;
                       const hasTime = entry.durationMins > 0;
                       return(
-                        <div key={`${group.dateKey}-${entry.id || entryIndex}`} style={{display:"flex",gap:12,alignItems:"stretch"}}>
+                        <div key={entry.timelineKey || `${group.dateKey}-${entry.id || entryIndex}`} style={{display:"flex",gap:12,alignItems:"stretch"}}>
                           <div style={{width:isMobile?78:96,flexShrink:0,textAlign:"right",paddingTop:2}}>
                             <div style={{fontSize:12.5,fontWeight:800,color:G.text,fontFamily:G.mono,lineHeight:1.35}}>{entry.timeStart ? formatPeriod(entry.timeStart, entry.timeEnd) : "No time"}</div>
                             <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,marginTop:4}}>{hasTime ? fmtMins(entry.durationMins) : "Untimed"}</div>
@@ -5834,19 +6094,6 @@ function ClassTrackerInner({user}){
       const h=Math.floor(m/60),min=m%60;
       return min?`${h}h ${min}m`:`${h}h`;
     }
-    function calcDurMins(tStart,tEnd){
-      if(!tStart||!tEnd||typeof tStart!=="string"||typeof tEnd!=="string")return 0;
-      try{
-        const sp=tStart.split(":");
-        const ep=tEnd.split(":");
-        if(sp.length<2||ep.length<2)return 0;
-        const sh=Number(sp[0]),sm=Number(sp[1]);
-        const eh=Number(ep[0]),em=Number(ep[1]);
-        if(isNaN(sh)||isNaN(sm)||isNaN(eh)||isNaN(em))return 0;
-        const d=(eh*60+em)-(sh*60+sm);
-        return d>0&&d<480?d:0; // cap at 8hrs — guards corrupt data
-      }catch(e){return 0;}
-    }
 
     // Date range for period
     const now=new Date();
@@ -5857,45 +6104,93 @@ function ClassTrackerInner({user}){
     } else if(statPeriod==="month"){
       rangeStart=new Date(now.getFullYear(),now.getMonth(),1);
     } else {
-      // session: April 1 of current academic year
+    // session: April 1 of current academic year
       const sesYear=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;
       rangeStart=new Date(sesYear,3,1);
     }
     const rangeStartKey=toKey(rangeStart);
     const todayK=todayKey();
 
-    // Compute stats per class
     const DAYS_SHORT=["Su","Mo","Tu","We","Th","Fr","Sa"];
-    const dayMins=[0,0,0,0,0,0,0]; // Sun–Sat totals
-    let grandTotal=0, grandSessions=0, longestSession=0;
+    const dayMins=[0,0,0,0,0,0,0];
+    let longestSession=0;
+    const activeDaySet = new Set();
+    const instituteBuckets = new Map();
 
     const classStats=data.classes.filter(c=>!c.left).map(cls=>{
       const ic=instColor(cls.institute);
-      let mins=0,sessions=0;
-      Object.entries(data.notes?.[cls.id]||{}).forEach(([dk,entries])=>{
-        if(dk<rangeStartKey||dk>todayK)return;
-        if(!Array.isArray(entries))return;
-        entries.forEach(e=>{
-          const d=calcDurMins(e.timeStart,e.timeEnd);
-          if(d>0){
-            mins+=d; sessions++;
-            dayMins[new Date(dk).getDay()]+=d;
-            if(d>longestSession)longestSession=d;
-          }
-        });
-      });
-      return{cls,ic,mins,sessions};
-    }).sort((a,b)=>(b.mins-a.mins) || a.cls.section.localeCompare(b.cls.section));
+      const classNotes = data.notes?.[cls.id] || {};
+      const periodSummary = buildClassTimelineSummary(classNotes, { startKey:rangeStartKey, endKey:todayK });
+      const allTimeSummary = buildClassTimelineSummary(classNotes);
 
-    grandTotal=classStats.reduce((a,c)=>a+c.mins,0);
-    grandSessions=classStats.reduce((a,c)=>a+c.sessions,0);
+      periodSummary.entriesAsc.forEach(entry => {
+        activeDaySet.add(entry.dateKey);
+        if(entry.durationMins > 0){
+          dayMins[new Date(entry.dateKey).getDay()] += entry.durationMins;
+          if(entry.durationMins > longestSession) longestSession = entry.durationMins;
+        }
+      });
+
+      const latestEntry = periodSummary.latestEntry || allTimeSummary.latestEntry || null;
+      const latestTopic = periodSummary.latestTopic || allTimeSummary.latestTopic || null;
+      const ongoingTopic = periodSummary.ongoingTopic || allTimeSummary.ongoingTopic || null;
+      const topicCount = periodSummary.topicCount || allTimeSummary.topicCount;
+      const completedTopicCount = periodSummary.completedTopicCount || allTimeSummary.completedTopicCount;
+      const bucketKey = String(cls.institute || "No institute").trim() || "No institute";
+      const currentBucket = instituteBuckets.get(bucketKey) || {
+        name:bucketKey,
+        color:ic,
+        mins:0,
+        sessions:0,
+        entries:0,
+        classCount:0,
+        topics:0,
+      };
+      currentBucket.mins += periodSummary.totalTimelineMinutes;
+      currentBucket.sessions += periodSummary.timedSessionCount;
+      currentBucket.entries += periodSummary.entries.length;
+      currentBucket.classCount += 1;
+      currentBucket.topics += topicCount;
+      instituteBuckets.set(bucketKey, currentBucket);
+
+      return{
+        cls,
+        ic,
+        mins:periodSummary.totalTimelineMinutes,
+        sessions:periodSummary.timedSessionCount,
+        entryCount:periodSummary.entries.length,
+        untimedEntryCount:periodSummary.untimedEntryCount,
+        activeDays:periodSummary.activeDayCount,
+        topicCount,
+        completedTopicCount,
+        latestEntry,
+        latestTopic,
+        ongoingTopic,
+        firstEntry:periodSummary.firstEntry || allTimeSummary.firstEntry || null,
+      };
+    }).sort((a,b)=>(b.mins-a.mins) || (b.entryCount-a.entryCount) || a.cls.section.localeCompare(b.cls.section));
+
+    const grandTotal=classStats.reduce((sum,item)=>sum+item.mins,0);
+    const grandSessions=classStats.reduce((sum,item)=>sum+item.sessions,0);
+    const grandEntries=classStats.reduce((sum,item)=>sum+item.entryCount,0);
+    const untimedEntries=classStats.reduce((sum,item)=>sum+item.untimedEntryCount,0);
+    const trackedTopics=classStats.reduce((sum,item)=>sum+item.topicCount,0);
+    const completedTopics=classStats.reduce((sum,item)=>sum+item.completedTopicCount,0);
     const avgSession=grandSessions>0?Math.round(grandTotal/grandSessions):0;
     const maxClassMins=Math.max(1, ...classStats.map(item=>item.mins || 0));
     const maxDayMins=Math.max(...dayMins,1);
     const statsBackTarget = teacherBackView === "profile" ? "profile" : "home";
     const statsContextLabel = statsBackTarget === "profile" ? "Profile insight" : "Teaching insight";
     const hasClasses = classStats.length > 0;
-    const hasTimedData = grandTotal > 0;
+    const hasTimedData = grandTotal > 0 || grandEntries > 0;
+    const instituteBreakdown = [...instituteBuckets.values()].sort((a,b)=>(b.mins-a.mins) || (b.entries-a.entries) || a.name.localeCompare(b.name));
+    const topClassStat = classStats[0] || null;
+    const latestLoggedEntry = classStats
+      .map(item => item.latestEntry)
+      .filter(Boolean)
+      .sort(compareTimelineEntriesAsc)
+      .pop() || null;
+    const strongestDayIndex = dayMins.findIndex(value => value === maxDayMins && value > 0);
 
     const navBtnStyle={background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",fontFamily:G.sans};
 
@@ -5931,39 +6226,52 @@ function ClassTrackerInner({user}){
             </div>
           ):(
             <>
-              {/* Hero */}
               <div style={{background:G.forest,borderRadius:20,padding:"20px",marginBottom:14,display:"flex",alignItems:"center",gap:16}}>
                 <div style={{width:52,height:52,borderRadius:14,background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><AppIcon icon={IconClockHour4} size={26} color="#fff" /></div>
-                <div>
+                <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Total Teaching Time</div>
                   <div style={{fontSize:36,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1,letterSpacing:-1}}>{fmtMins(grandTotal)}</div>
-                  <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginTop:4}}>{classStats.length} {classStats.length===1?"class":"classes"} · {grandSessions} sessions</div>
+                  <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginTop:4}}>{classStats.length} {classStats.length===1?"section":"sections"} · {grandEntries} entries · {grandSessions} timed sessions</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:12}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.12)",color:"#FFFFFF",borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,border:"1px solid rgba(255,255,255,0.14)"}}>
+                      <AppIcon icon={IconCalendar} size={13} color="currentColor" />
+                      {activeDaySet.size} active day{activeDaySet.size!==1?"s":""}
+                    </span>
+                    {topClassStat && (
+                      <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.12)",color:"#FFFFFF",borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,border:"1px solid rgba(255,255,255,0.14)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        <AppIcon icon={IconBook2} size={13} color="currentColor" />
+                        Top section: {topClassStat.cls.section}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Mini stats */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-                <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:14}}>
-                  <div style={{fontSize:11,fontWeight:700,color:G.textL,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Sessions</div>
-                  <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{grandSessions}</div>
-                  <div style={{fontSize:12,color:G.textM,marginTop:3}}>in {statPeriod==="week"?"this week":statPeriod==="month"?"this month":"this session"}</div>
-                </div>
-                <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:14}}>
-                  <div style={{fontSize:11,fontWeight:700,color:G.textL,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Avg / Session</div>
-                  <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(avgSession)}</div>
-                  <div style={{fontSize:12,color:G.textM,marginTop:3}}>longest: {fmtMins(longestSession)}</div>
-                </div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(3,minmax(0,1fr))",gap:10,marginBottom:14}}>
+                {[
+                  { label:"Entries", value:String(grandEntries), note:`Saved in ${statPeriod==="week"?"this week":statPeriod==="month"?"this month":"this session"}` },
+                  { label:"Avg / Session", value:fmtMins(avgSession), note:`Longest ${fmtMins(longestSession)}` },
+                  { label:"Active days", value:String(activeDaySet.size), note:strongestDayIndex >= 0 ? `Peak on ${DAYS_SHORT[strongestDayIndex]}` : "Waiting for timed data" },
+                  { label:"Tracked topics", value:String(trackedTopics), note:`${completedTopics} completed` },
+                  { label:"Untimed notes", value:String(untimedEntries), note:untimedEntries > 0 ? "Still shown in every class timeline" : "All current entries have time blocks" },
+                  { label:"Institutes", value:String(instituteBreakdown.length), note:"Unique color-coded teaching groups" },
+                ].map(item => (
+                  <div key={item.label} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:"14px 14px 13px",boxShadow:G.shadowSm}}>
+                    <div style={{fontSize:11,fontWeight:700,color:G.textL,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{item.label}</div>
+                    <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
+                    <div style={{fontSize:12,color:G.textM,marginTop:6,lineHeight:1.45}}>{item.note}</div>
+                  </div>
+                ))}
               </div>
 
               <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"13px 14px",boxShadow:G.shadowSm,marginBottom:14}}>
                 <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
                   {hasTimedData
-                    ? "Tap any class below to open its full entry timeline with dates, times, and notes."
-                    : "Time totals are still empty, but every class below is clickable so you can inspect its full entry timeline."}
+                    ? "Every section below opens its own full timeline with teaching hours, topic start/end markers, and each saved note in order."
+                    : "Even if time totals are still empty, every section below is clickable so you can inspect its full entry timeline."}
                 </div>
               </div>
 
-              {/* Day of week chart */}
               <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:14,marginBottom:14}}>
                 <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Hours by Day</div>
                 <div style={{display:"flex",alignItems:"flex-end",gap:6,height:72,marginBottom:8}}>
@@ -5981,29 +6289,109 @@ function ClassTrackerInner({user}){
                 </div>
               </div>
 
-              {/* Per-class breakdown */}
-              <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>By Class</div>
-              {classStats.map(({cls,ic,mins,sessions})=>{
-                const pct=mins>0?Math.round(mins/maxClassMins*100):0;
-                return(
-                  <button key={cls.id} type="button" onClick={()=>openStatsClassTimeline(cls.id)} style={{width:"100%",background:G.surface,borderRadius:14,border:`1.5px solid rgba(15,23,42,0.18)`,marginBottom:8,padding:"13px 14px",cursor:"pointer",textAlign:"left",boxShadow:G.shadowSm,WebkitTapHighlightColor:"transparent"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                      <div style={{width:10,height:10,alignSelf:"center",borderRadius:999,background:ic.bg,flexShrink:0,boxShadow:`0 0 0 3px ${hexToRgba(ic.bg, 0.12)}`}}/>
+              <div style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,padding:"14px 14px 12px",boxShadow:G.shadowSm,marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5}}>By institute</div>
+                    <div style={{fontSize:13.5,color:G.textL,marginTop:3}}>Same institute colors carry through here so the teaching mix stays easy to scan.</div>
+                  </div>
+                  {latestLoggedEntry && <div style={{fontSize:12.5,color:G.textM,fontWeight:700}}>Latest log {formatTimelineMoment(latestLoggedEntry.dateKey, latestLoggedEntry.timeStart)}</div>}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {instituteBreakdown.map(item => (
+                    <div key={item.name} style={{display:"flex",alignItems:"center",gap:10,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 12px 11px"}}>
+                      <span style={{width:12,height:12,borderRadius:999,background:item.color.bg,flexShrink:0,boxShadow:`0 0 0 3px ${hexToRgba(item.color.bg, 0.12)}`}} />
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                        <div style={{fontSize:12,color:G.textL,display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconBuilding} size={14} color={G.textL} />{cls.institute}{cls.subject?" · "+cls.subject:""}</div>
+                        <div style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</div>
+                        <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>{item.classCount} section{item.classCount!==1?"s":""} · {item.entries} entries · {item.topics} topic{item.topics!==1?"s":""}</div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0}}>
-                        <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(mins)}</div>
-                        <div style={{fontSize:11,color:G.textL,marginTop:2}}>{sessions>0 ? `${sessions} session${sessions!==1?"s":""}` : "No timed session"}</div>
+                        <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(item.mins)}</div>
+                        <div style={{fontSize:11,color:G.textL,marginTop:3}}>{item.sessions} timed session{item.sessions!==1?"s":""}</div>
                       </div>
-                      <AppIcon icon={IconChevronRight} size={18} color={G.textL} />
                     </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>By Class</div>
+              {classStats.map(({cls,ic,mins,sessions,entryCount,untimedEntryCount,activeDays,topicCount,completedTopicCount,latestEntry,latestTopic,ongoingTopic,firstEntry})=>{
+                const pct=mins>0?Math.round(mins/maxClassMins*100):0;
+                const featuredTopic = ongoingTopic || latestTopic;
+                const topicJourneyLabel = featuredTopic
+                  ? `${featuredTopic.isCompleted ? "Completed" : "Started"} ${formatTimelineMoment(featuredTopic.startedAtKey, featuredTopic.startedAtTime)}`
+                  : firstEntry
+                    ? `First log ${formatTimelineMoment(firstEntry.dateKey, firstEntry.timeStart)}`
+                    : "Open this timeline to start building the section story.";
+                return(
+                  <button key={cls.id} type="button" onClick={()=>openStatsClassTimeline(cls.id)} style={{width:"100%",background:G.surface,borderRadius:18,border:`1.5px solid rgba(15,23,42,0.18)`,marginBottom:10,padding:"15px 15px 14px",cursor:"pointer",textAlign:"left",boxShadow:G.shadowSm,WebkitTapHighlightColor:"transparent"}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
+                      <div style={{width:11,height:11,alignSelf:"center",borderRadius:999,background:ic.bg,flexShrink:0,boxShadow:`0 0 0 3px ${hexToRgba(ic.bg, 0.14)}`}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:6,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,color:G.textM,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}} />
+                            {cls.institute || "No institute"}
+                          </span>
+                          {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,color:G.textM,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(mins)}</div>
+                        <div style={{fontSize:11.5,color:G.textL,marginTop:4}}>{sessions>0 ? `${sessions} timed session${sessions!==1?"s":""}` : "No timed session yet"}</div>
+                      </div>
+                    </div>
+
+                    <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:8,marginBottom:12}}>
+                      {[
+                        { label:"Entries", value:String(entryCount) },
+                        { label:"Days", value:String(activeDays) },
+                        { label:"Topics", value:String(topicCount) },
+                        { label:"Untimed", value:String(untimedEntryCount) },
+                      ].map(item => (
+                        <div key={item.label} style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 10px 9px"}}>
+                          <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
+                          <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.48,marginTop:5}}>{item.label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 12px 11px",marginBottom:12}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>
+                          {featuredTopic ? (featuredTopic.isCompleted ? "Latest completed topic" : "Current topic") : "Topic journey"}
+                        </div>
+                        <div style={{fontSize:11.5,fontWeight:700,color:G.textM}}>{completedTopicCount} completed</div>
+                      </div>
+                      <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.15,lineHeight:1.2,marginTop:7}}>
+                        {featuredTopic?.title || latestEntry?.title || "Open full timeline to inspect topic-by-topic teaching history"}
+                      </div>
+                      <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:7}}>{topicJourneyLabel}</div>
+                      {featuredTopic && (
+                        <div style={{fontSize:12.5,color:G.textL,lineHeight:1.55,marginTop:5}}>
+                          {featuredTopic.isCompleted
+                            ? `Ended ${formatTimelineMoment(featuredTopic.endedAtKey, featuredTopic.endedAtTime)}`
+                            : `Last seen ${formatTimelineMoment(featuredTopic.endedAtKey, featuredTopic.endedAtTime)}`}
+                        </div>
+                      )}
+                    </div>
+
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <div style={{flex:1,height:6,background:G.border,borderRadius:20,overflow:"hidden"}}>
                         <div style={{height:"100%",borderRadius:20,background:ic.bg,width:`${Math.max(pct, mins>0 ? 8 : 0)}%`,transition:"width 0.24s ease-out"}}/>
                       </div>
                       <span style={{fontSize:11,fontWeight:700,color:ic.bg,fontFamily:G.mono,width:32,textAlign:"right"}}>{mins>0 ? `${pct}%` : "0%"}</span>
+                    </div>
+
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,flexWrap:"wrap"}}>
+                      <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5}}>
+                        {latestEntry ? `Latest log ${formatTimelineMoment(latestEntry.dateKey, latestEntry.timeStart)}` : "No logged activity yet"}
+                      </div>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:6,background:hexToRgba(ic.bg, 0.12),color:ic.bg,borderRadius:999,padding:"6px 10px",fontSize:12,fontWeight:800,border:`1px solid ${hexToRgba(ic.bg, 0.18)}`}}>
+                        Open full timeline
+                        <AppIcon icon={IconChevronRight} size={15} color="currentColor" />
+                      </span>
                     </div>
                   </button>
                 );
