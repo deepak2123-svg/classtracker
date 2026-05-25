@@ -238,25 +238,6 @@ async function loadNativeExportRuntime(){
   return nativeExportRuntimePromise;
 }
 
-const COLORS = [
-  {bg:"#2563EB",light:"#E8F0FF",text:"#1D4ED8"},
-  {bg:"#0F766E",light:"#E6F7F5",text:"#115E59"},
-  {bg:"#475569",light:"#EEF2F7",text:"#334155"},
-  {bg:"#C2410C",light:"#FFF4E8",text:"#9A3412"},
-  {bg:"#0F766E",light:"#E8F8F6",text:"#115E59"},
-  {bg:"#1D4ED8",light:"#EAF1FF",text:"#1E40AF"},
-  {bg:"#0369A1",light:"#E8F7FF",text:"#075985"},
-  {bg:"#334155",light:"#EFF4F8",text:"#334155"},
-];
-
-// Stable colour per institute name (same institute always same colour)
-function instColor(name) {
-  if (!name) return COLORS[0];
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xFFFFFF;
-  return COLORS[Math.abs(h) % COLORS.length];
-}
-
 function hexToRgba(hex, alpha = 1){
   const value = String(hex || "").replace("#", "").trim();
   if(value.length !== 6) return `rgba(15,23,42,${alpha})`;
@@ -265,6 +246,63 @@ function hexToRgba(hex, alpha = 1){
   const b = Number.parseInt(value.slice(4, 6), 16);
   if([r, g, b].some(Number.isNaN)) return `rgba(15,23,42,${alpha})`;
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function hslToHex(h, s, l){
+  const hue = ((Number(h) % 360) + 360) % 360;
+  const sat = Math.max(0, Math.min(100, Number(s))) / 100;
+  const light = Math.max(0, Math.min(100, Number(l))) / 100;
+  const chroma = (1 - Math.abs(2 * light - 1)) * sat;
+  const segment = hue / 60;
+  const x = chroma * (1 - Math.abs((segment % 2) - 1));
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  if(segment >= 0 && segment < 1){ red = chroma; green = x; }
+  else if(segment < 2){ red = x; green = chroma; }
+  else if(segment < 3){ green = chroma; blue = x; }
+  else if(segment < 4){ green = x; blue = chroma; }
+  else if(segment < 5){ red = x; blue = chroma; }
+  else { red = chroma; blue = x; }
+  const match = light - chroma / 2;
+  const toHex = value => Math.round((value + match) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(red)}${toHex(green)}${toHex(blue)}`.toUpperCase();
+}
+
+function buildInstituteTone(bg){
+  const base = String(bg || "#1F3A5F").toUpperCase();
+  return {
+    bg:base,
+    light:hexToRgba(base, 0.16),
+    text:"#FFFFFF",
+  };
+}
+
+const INSTITUTE_BASE_COLORS = [
+  "#1F3A5F", "#27445D", "#2C4A52", "#473652",
+  "#534036", "#2D4C44", "#334155", "#3F4B63",
+  "#3B3F58", "#2F4858", "#4A3F2A", "#314C37",
+  "#4B3453", "#354B63", "#2E4E57", "#5A3A32",
+  "#364152", "#224654", "#4A3D5F", "#3C4630",
+];
+
+function buildInstituteColorMap(names = []){
+  const uniqueNames = [...new Set((names || []).map(name => String(name || "").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const map = new Map();
+  uniqueNames.forEach((name, index) => {
+    const bg = INSTITUTE_BASE_COLORS[index] || hslToHex(210 + index * 37, 28, 30);
+    map.set(name, buildInstituteTone(bg));
+  });
+  return map;
+}
+
+let ACTIVE_INSTITUTE_COLOR_MAP = new Map();
+const DEFAULT_INSTITUTE_TONE = buildInstituteTone(INSTITUTE_BASE_COLORS[0]);
+
+function instColor(name) {
+  const key = String(name || "").trim();
+  if(!key) return DEFAULT_INSTITUTE_TONE;
+  return ACTIVE_INSTITUTE_COLOR_MAP.get(key) || DEFAULT_INSTITUTE_TONE;
 }
 
 function normaliseChoiceKey(value) {
@@ -308,6 +346,7 @@ const TEACHER_ALLOWED_VIEWS = new Set([
   "profile",
   "notifications",
   "stats",
+  "classTimeline",
   "trash",
   "classDetail",
   "addClass",
@@ -320,8 +359,9 @@ function sanitizeTeacherView(view) {
   return TEACHER_ALLOWED_VIEWS.has(key) ? key : "home";
 }
 
-function resolveTeacherView(view, { activeClass = null, editNote = null } = {}) {
+function resolveTeacherView(view, { activeClass = null, editNote = null, statsClassId = null } = {}) {
   const safeView = sanitizeTeacherView(view);
+  if (safeView === "classTimeline" && !statsClassId) return "stats";
   if ((safeView === "classDetail" || safeView === "addNote") && !activeClass) return "home";
   if (safeView === "editNote") {
     if (activeClass && editNote) return "editNote";
@@ -861,7 +901,7 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
   const [profileOpen, setProfileOpen] = React.useState(false);
 
   return(
-    <div style={{position:"sticky",top:0,zIndex:100,background:G.topbarBg,borderBottom:`1px solid ${G.topbarBorder}`,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",paddingTop:"env(safe-area-inset-top, 0px)"}}>
+    <div style={{position:"sticky",top:0,zIndex:100,background:G.topbarBg,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",paddingTop:"env(safe-area-inset-top, 0px)"}}>
       <div style={{minHeight:64,display:"flex",alignItems:"center",padding:"10px 16px 8px",gap:12,overflow:"visible"}}>
         <div
           onClick={onLogoClick}
@@ -3283,6 +3323,7 @@ function ClassTrackerInner({user}){
   }, [data.classes, instFilter]);
   const [leaveModal,setLeaveModal]     = useState(null);
   const [historyClassId,setHistoryClassId] = useState(null);
+  const [statsClassId,setStatsClassId] = useState(null);
   const [mobileClassSheetId,setMobileClassSheetId] = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
   const [exportOpen,setExportOpen]       = useState(false);
@@ -3312,6 +3353,8 @@ function ClassTrackerInner({user}){
   const lastForegroundRefreshAt = useRef(0);
   const classSwipeStartRef = useRef(null);
   const detailSwipeResetTimer = useRef(null);
+  const detailSwipeOffsetValueRef = useRef(0);
+  const detailSwipeOffsetRaf = useRef(0);
   const teacherHistoryTokenRef = useRef(1);
 
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
@@ -3340,6 +3383,16 @@ function ClassTrackerInner({user}){
   const teacherVisibleClasses = useMemo(() => (
     instFilter==="all" ? teacherActiveClasses : teacherActiveClasses.filter(c=>c.institute===instFilter)
   ), [teacherActiveClasses, instFilter]);
+  const knownInstituteNames = useMemo(() => (
+    [...new Set([
+      ...globalInstitutes,
+      ...(data.classes || []).map(cls => cls?.institute || ""),
+      ...((data.trash?.classes || []).map(cls => cls?.institute || "")),
+    ].map(name => String(name || "").trim()).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b))
+  ), [globalInstitutes, data.classes, data.trash?.classes]);
+  const instituteColorMap = useMemo(() => buildInstituteColorMap(knownInstituteNames), [knownInstituteNames]);
+  ACTIVE_INSTITUTE_COLOR_MAP = instituteColorMap;
   const adminNoticeItems = useMemo(() => (
     pendingAdminClassNotices
       .map(item => {
@@ -3479,6 +3532,10 @@ function ClassTrackerInner({user}){
     if(detailSwipeResetTimer.current){
       window.clearTimeout(detailSwipeResetTimer.current);
       detailSwipeResetTimer.current = null;
+    }
+    if(detailSwipeOffsetRaf.current){
+      window.cancelAnimationFrame(detailSwipeOffsetRaf.current);
+      detailSwipeOffsetRaf.current = 0;
     }
   }, []);
 
@@ -3744,7 +3801,15 @@ function ClassTrackerInner({user}){
     const backTarget = origin === "profile" ? "profile" : "home";
     safeNav("stats", () => {
       setTeacherBackView(backTarget);
+      setStatsClassId(null);
       setView("stats");
+    });
+  }
+  function openStatsClassTimeline(classId){
+    if(!classId) return;
+    safeNav("classTimeline", () => {
+      setStatsClassId(classId);
+      setView("classTimeline");
     });
   }
   const closeTeacherOverlay = React.useCallback(() => {
@@ -3791,6 +3856,22 @@ function ClassTrackerInner({user}){
       return false;
     }
   }, [isMobile]);
+
+  const commitDetailSwipeOffset = React.useCallback((nextOffset, immediate = true) => {
+    detailSwipeOffsetValueRef.current = nextOffset;
+    if(detailSwipeOffsetRaf.current){
+      window.cancelAnimationFrame(detailSwipeOffsetRaf.current);
+      detailSwipeOffsetRaf.current = 0;
+    }
+    if(immediate){
+      setDetailSwipeOffset(nextOffset);
+      return;
+    }
+    detailSwipeOffsetRaf.current = window.requestAnimationFrame(() => {
+      detailSwipeOffsetRaf.current = 0;
+      setDetailSwipeOffset(detailSwipeOffsetValueRef.current);
+    });
+  }, []);
 
   function showInlineToast(msg){
     setInlineToast(msg);
@@ -4055,8 +4136,8 @@ function ClassTrackerInner({user}){
     return source.toLocaleDateString("en-IN", { month:"long", year:"numeric" });
   }, [data.classes, user?.metadata?.creationTime]);
   const resolvedView = useMemo(
-    () => resolveTeacherView(view, { activeClass, editNote }),
-    [view, activeClass, editNote]
+    () => resolveTeacherView(view, { activeClass, editNote, statsClassId }),
+    [view, activeClass, editNote, statsClassId]
   );
 
   useEffect(() => {
@@ -4157,7 +4238,7 @@ function ClassTrackerInner({user}){
       const inst=newClass.institute.trim(),sec=newClass.section.trim(),subj=newClass.subject.trim();
       return{
         ...d,
-        classes:[...d.classes,{id,institute:inst,section:sec,subject:subj,colorIdx:d.classes.length%COLORS.length,created:createdAt}],
+        classes:[...d.classes,{id,institute:inst,section:sec,subject:subj,created:createdAt}],
         notes:{...d.notes,[id]:{}},
         institutes:mergeChoiceValues(d.institutes || [], [inst]),
         sections:mergeChoiceValues(d.sections || [], [sec]),
@@ -4599,8 +4680,8 @@ function ClassTrackerInner({user}){
       // Truncate long institute names with ellipsis
       const instFull=cls.institute||"";
       const instShort=instFull.length>28?instFull.slice(0,26)+"…":instFull;
-      const cardBorder = "rgba(15,23,42,0.88)";
-      const sectionSurface = hexToRgba(ic.bg, compact ? 0.20 : 0.18);
+      const cardBorder = "rgba(15,23,42,0.92)";
+      const sectionSurface = ic.bg;
       const beginHold = e => {
         if(!compact || !onHold || !e.touches?.length) return;
         const touch = e.touches[0];
@@ -4639,17 +4720,17 @@ function ClassTrackerInner({user}){
             onTouchEnd={clearHold}
             onTouchCancel={clearHold}
             style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
-            <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.20)`,padding:dense?"12px 14px":"13px 15px"}}>
+            <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.92)`,padding:dense?"12px 14px":"13px 15px"}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:dense?22:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
+                  <div style={{fontSize:dense?22:24,fontWeight:800,color:ic.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
-                    <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.96)",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid rgba(15,23,42,0.16)`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid rgba(15,23,42,0.18)`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                       {instShort || "No institute"}
                     </span>
                     {cls.subject && (
-                      <span style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.96)",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid rgba(15,23,42,0.16)`,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid rgba(15,23,42,0.18)`,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
                         {cls.subject}
                       </span>
                     )}
@@ -4673,16 +4754,16 @@ function ClassTrackerInner({user}){
           onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";})}
           onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}
           onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}>
-          <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.20)`,padding:"14px 15px 13px"}}>
+          <div style={{background:sectionSurface,borderBottom:`1px solid rgba(15,23,42,0.92)`,padding:"14px 15px 13px"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:19,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
+                <div style={{fontSize:19,fontWeight:800,color:ic.text,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.96)",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid rgba(15,23,42,0.16)`,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid rgba(15,23,42,0.18)`,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                     <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                     {instShort || "No institute"}
                   </span>
-                  {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.96)",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid rgba(15,23,42,0.16)`,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                  {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid rgba(15,23,42,0.18)`,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
@@ -4702,7 +4783,7 @@ function ClassTrackerInner({user}){
       <div style={scroll ? {display:"flex",gap:8,overflowX:"auto",padding:"0 0 4px",scrollbarWidth:"none"} : {display:"grid",gridTemplateColumns:stacked?"repeat(2,minmax(0,1fr))":columns,gap:stacked?10:(compact?6:8),padding:"0 0 2px"}}>
         {["all",...institutes].map(inst=>{
           const isSel=instFilter===inst;
-          const ic=inst==="all"?{bg:G.textS,light:G.surfaceAlt,text:G.textS}:instColor(inst);
+          const ic=inst==="all"?{bg:"#111827",light:G.surfaceAlt,text:"#FFFFFF"}:instColor(inst);
           const label=inst==="all"?allLabel:inst;
           return(
             <button key={inst} title={label} onClick={()=>setInstFilter(inst)}
@@ -4713,16 +4794,16 @@ function ClassTrackerInner({user}){
                 minHeight:stacked?54:(compact?36:44),
                 padding:stacked?"12px 15px":(compact?"8px 14px":"10px 14px"),
                 borderRadius:stacked?20:999,
-                border:`1px solid ${isSel ? G.borderM : G.border}`,
+                border:`1.5px solid ${isSel ? "rgba(15,23,42,0.92)" : "rgba(15,23,42,0.28)"}`,
                 cursor:"pointer",
                 fontFamily:G.sans,
                 fontSize:stacked?12.5:(compact?12:12.5),
                 fontWeight:isSel?800:600,
                 WebkitTapHighlightColor:"transparent",
                 transition:"all 0.15s",
-                background:isSel?G.surfaceAlt:G.surface,
-                color:isSel?G.text:G.textM,
-                boxShadow:G.shadowSm,
+                background:isSel?ic.bg:G.surface,
+                color:isSel?ic.text:G.text,
+                boxShadow:"none",
                 display:"flex",
                 alignItems:"center",
                 gap:9,
@@ -4730,7 +4811,7 @@ function ClassTrackerInner({user}){
                 lineHeight:1.15,
                 overflow:"hidden",
               }}>
-              <span style={{width:stacked?10:8,height:stacked?10:8,borderRadius:999,background:inst==="all"?G.textL:ic.bg,flexShrink:0}}/>
+              <span style={{width:stacked?10:8,height:stacked?10:8,borderRadius:999,background:inst==="all"?ic.bg:ic.bg,flexShrink:0,border:isSel?"1px solid rgba(255,255,255,0.36)":"none"}}/>
               <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</span>
             </button>
           );
@@ -4885,20 +4966,20 @@ function ClassTrackerInner({user}){
               const metrics=buildClassEntryMetrics(classNotes);
               const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
               const instFull=cls.institute||"";
-              const sectionSurface=hexToRgba(ic.bg, isSel ? 0.21 : 0.18);
+              const sectionSurface=ic.bg;
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
                   style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1.5px solid ${isSel ? "rgba(15,23,42,0.92)" : "rgba(15,23,42,0.82)"}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
-                  <div style={{background:sectionSurface,padding:"13px 13px 12px",borderBottom:`1px solid rgba(15,23,42,0.20)`}}>
+                  <div style={{background:sectionSurface,padding:"13px 13px 12px",borderBottom:`1px solid rgba(15,23,42,0.92)`}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
+                        <div style={{fontSize:16,fontWeight:800,color:ic.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
                         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
-                          <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.96)",border:`1px solid rgba(15,23,42,0.16)`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                             <span style={{width:7,height:7,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                             <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{instFull || "No institute"}</span>
                           </span>
-                          {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.96)",border:`1px solid rgba(15,23,42,0.16)`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                          {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
                         </div>
                       </div>
                       <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
@@ -4950,15 +5031,15 @@ function ClassTrackerInner({user}){
         ):(
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
             <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${G.border}`,background:G.pageBg,flexShrink:0}}>
-              <div style={{background:G.surface,border:`1px solid ${selColor.bg}22`,borderRadius:22,overflow:"hidden",boxShadow:G.shadowMd}}>
-                <div style={{background:selColor.light,padding:"16px 16px 14px",borderBottom:`1px solid ${selColor.bg}1A`}}>
+              <div style={{background:G.surface,border:`1px solid rgba(15,23,42,0.92)`,borderRadius:22,overflow:"hidden",boxShadow:G.shadowMd}}>
+                <div style={{background:selColor.bg,padding:"16px 16px 14px",borderBottom:`1px solid rgba(15,23,42,0.92)`}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:11,color:selColor.bg,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Class entry</div>
-                      <div style={{fontSize:22,fontWeight:800,color:selColor.bg,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.08}}>{selCls.section}</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.72)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Class entry</div>
+                      <div style={{fontSize:22,fontWeight:800,color:selColor.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.08}}>{selCls.section}</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                        <span style={{background:"#FFFFFF",border:`1px solid ${selColor.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:selColor.bg,fontFamily:G.sans,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCls.institute}</span>
-                        {selCls.subject&&<span style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textS,fontFamily:G.sans}}>{selCls.subject}</span>}
+                        <span style={{background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.text,fontFamily:G.sans,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCls.institute}</span>
+                        {selCls.subject&&<span style={{background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.text,fontFamily:G.sans}}>{selCls.subject}</span>}
                         <span style={{background:selStatusTone.background,border:`1px solid ${selStatusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:800,color:selStatusTone.color,fontFamily:G.sans}}>{selStatusTone.label}</span>
                       </div>
                     </div>
@@ -5108,7 +5189,7 @@ function ClassTrackerInner({user}){
         detailSwipeResetTimer.current = null;
       }
       setDetailSwipeTransitionMs(reduceEffects ? 0 : duration);
-      setDetailSwipeOffset(0);
+      commitDetailSwipeOffset(0);
     };
     const animateSiblingCardChange = (direction, distance = 96, gestureMs = 180) => {
       const targetClass = direction > 0 ? leftSwipeClass : rightSwipeClass;
@@ -5127,11 +5208,11 @@ function ClassTrackerInner({user}){
         detailSwipeResetTimer.current = null;
       }
       setDetailSwipeTransitionMs(settleMs);
-      setDetailSwipeOffset(direction > 0 ? viewportWidth : -viewportWidth);
+      commitDetailSwipeOffset(direction > 0 ? viewportWidth : -viewportWidth);
       detailSwipeResetTimer.current = window.setTimeout(() => {
         setActiveClass(targetClass);
         setDetailSwipeTransitionMs(0);
-        setDetailSwipeOffset(0);
+        commitDetailSwipeOffset(0);
         detailSwipeResetTimer.current = null;
       }, settleMs);
       return true;
@@ -5161,7 +5242,7 @@ function ClassTrackerInner({user}){
       const viewportWidth = getDetailViewportWidth();
       const resistedOffset = Math.sign(dx) * Math.min(Math.abs(dx), viewportWidth * 0.88);
       setDetailSwipeTransitionMs(0);
-      setDetailSwipeOffset(resistedOffset);
+      commitDetailSwipeOffset(resistedOffset, false);
     };
     const handleDetailTouchEnd = e => {
       const start = classSwipeStartRef.current;
@@ -5221,17 +5302,17 @@ function ClassTrackerInner({user}){
       const surfaceStatusTone = getTodayEntryStatusStyles(surfaceMetrics.todayEntries);
       return(
         <div key={`${panelKey}-${surfaceCls.id || "class"}`} style={{flex:"0 0 100%",width:"100%",height:"100%",overflowY:"auto",padding:`12px 14px ${mobileBottomNavPad}`,boxSizing:"border-box",WebkitOverflowScrolling:"touch",overscrollBehaviorY:"contain"}}>
-          <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${surfaceColor.bg}22`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd,marginBottom:14}}>
-            <div style={{background:surfaceColor.light,padding:"14px 14px 12px",borderBottom:`1px solid ${surfaceColor.bg}1A`}}>
+          <div className="ledgr-card" style={{background:G.surface,border:`1px solid rgba(15,23,42,0.92)`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd,marginBottom:14}}>
+            <div style={{background:surfaceColor.bg,padding:"14px 14px 12px",borderBottom:`1px solid rgba(15,23,42,0.92)`}}>
               <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:28,fontWeight:800,color:surfaceColor.bg,fontFamily:G.display,letterSpacing:-0.6,lineHeight:1.02}}>{surfaceCls.section}</div>
+                  <div style={{fontSize:28,fontWeight:800,color:surfaceColor.text,fontFamily:G.display,letterSpacing:-0.6,lineHeight:1.02}}>{surfaceCls.section}</div>
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",border:`1px solid ${surfaceColor.bg}22`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:surfaceColor.bg,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:G.text,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       <span style={{width:8,height:8,borderRadius:999,background:surfaceColor.bg,flexShrink:0}}/>
                       {surfaceCls.institute || "No institute"}
                     </span>
-                    {surfaceCls.subject&&<span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:G.textS,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{surfaceCls.subject}</span>}
+                    {surfaceCls.subject&&<span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:G.text,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{surfaceCls.subject}</span>}
                     <span style={{display:"inline-flex",alignItems:"center",gap:6,background:surfaceStatusTone.background,border:`1px solid ${surfaceStatusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:surfaceStatusTone.color,whiteSpace:"nowrap"}}>
                       <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
                       {surfaceStatusTone.label}
@@ -5539,6 +5620,210 @@ function ClassTrackerInner({user}){
   // ── TRASH ─────────────────────────────────────────────────────────────────
 
   // ══════════════════════════════════════════════════════════════════════
+  // STATS CLASS TIMELINE
+  // ══════════════════════════════════════════════════════════════════════
+  if(view==="classTimeline" && statsClassId){
+    function fmtMins(m){
+      if(!m || m <= 0) return "0m";
+      const h = Math.floor(m / 60);
+      const min = m % 60;
+      return min ? `${h}h ${min}m` : `${h}h`;
+    }
+    function calcDurMins(tStart, tEnd){
+      if(!tStart || !tEnd || typeof tStart !== "string" || typeof tEnd !== "string") return 0;
+      try{
+        const sp = tStart.split(":");
+        const ep = tEnd.split(":");
+        if(sp.length < 2 || ep.length < 2) return 0;
+        const sh = Number(sp[0]), sm = Number(sp[1]);
+        const eh = Number(ep[0]), em = Number(ep[1]);
+        if([sh, sm, eh, em].some(Number.isNaN)) return 0;
+        const duration = (eh * 60 + em) - (sh * 60 + sm);
+        return duration > 0 && duration < 480 ? duration : 0;
+      }catch(e){ return 0; }
+    }
+    function timeToMinutes(timeValue){
+      if(!timeValue || typeof timeValue !== "string") return Number.POSITIVE_INFINITY;
+      const parts = timeValue.split(":").map(Number);
+      if(parts.length < 2 || parts.some(Number.isNaN)) return Number.POSITIVE_INFINITY;
+      return parts[0] * 60 + parts[1];
+    }
+
+    const timelineClass = (data.classes || []).find(cls => String(cls?.id || "") === String(statsClassId || "")) || null;
+    if(!timelineClass){
+      return(
+        <TeacherStateFallback
+          themeShell={teacherThemeShell}
+          view={view}
+          resolvedView="stats"
+          activeClassId={statsClassId}
+          classCount={(data.classes || []).length}
+          notificationCount={notificationCount}
+          onResetHome={() => {
+            setStatsClassId(null);
+            _setView("stats");
+          }}
+        />
+      );
+    }
+
+    const timelineColor = instColor(timelineClass.institute);
+    const timelineNotes = data.notes?.[timelineClass.id] || {};
+    const timelineEntries = Object.entries(timelineNotes)
+      .flatMap(([dateKey, entries]) => (
+        Array.isArray(entries) ? entries.map(note => ({
+          ...note,
+          dateKey,
+          durationMins:calcDurMins(note?.timeStart, note?.timeEnd),
+          startMins:timeToMinutes(note?.timeStart),
+          createdAt:Number(note?.created || 0) || 0,
+        })) : []
+      ))
+      .sort((a,b)=>{
+        if(a.dateKey !== b.dateKey) return b.dateKey.localeCompare(a.dateKey);
+        if(a.startMins !== b.startMins) return a.startMins - b.startMins;
+        return a.createdAt - b.createdAt;
+      });
+
+    const groupedTimeline = Object.entries(
+      timelineEntries.reduce((acc, entry) => {
+        if(!acc[entry.dateKey]) acc[entry.dateKey] = [];
+        acc[entry.dateKey].push(entry);
+        return acc;
+      }, {})
+    ).map(([dateKey, entries]) => {
+      const timedMinutes = entries.reduce((sum, entry) => sum + entry.durationMins, 0);
+      return { dateKey, entries, timedMinutes };
+    }).sort((a,b)=>b.dateKey.localeCompare(a.dateKey));
+
+    const totalTimelineMinutes = timelineEntries.reduce((sum, entry) => sum + entry.durationMins, 0);
+    const timedSessionCount = timelineEntries.filter(entry => entry.durationMins > 0).length;
+    const activeDayCount = groupedTimeline.length;
+    const maxDayMinutes = Math.max(1, ...groupedTimeline.map(group => group.timedMinutes || 0));
+    const timelineBackButtonStyle = {
+      background:"rgba(255,255,255,0.10)",
+      border:"1px solid rgba(255,255,255,0.18)",
+      borderRadius:10,
+      padding:"8px 12px",
+      cursor:"pointer",
+      color:"rgba(255,255,255,0.88)",
+      fontSize:13,
+      fontWeight:700,
+      display:"flex",
+      alignItems:"center",
+      gap:6,
+      minHeight:40,
+      WebkitTapHighlightColor:"transparent",
+      fontFamily:G.sans,
+    };
+
+    return(
+      <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
+        {sharedModals}
+        <TopNav
+          user={user}
+          teacherName={teacherName}
+          data={data}
+          onLogoClick={()=>safeNav("stats")}
+          onSignOut={()=>setSignOutPrompt(true)}
+          onViewNotifications={()=>safeNav("notifications")}
+          notificationCount={notificationCount}
+          showProfileMenu={!isMobile}
+          right={<button onClick={()=>safeNav("stats")} style={timelineBackButtonStyle}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Stats</button>}
+        />
+        <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:`16px 14px ${isMobile ? mobileBottomNavPad : "48px"}`,maxWidth:760,margin:"0 auto",width:"100%"}}>
+          <div style={{background:timelineColor.bg,border:`1.5px solid rgba(15,23,42,0.92)`,borderRadius:22,padding:"18px 18px 16px",boxShadow:G.shadowMd,marginBottom:14}}>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.66)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.62,marginBottom:8}}>Class timeline</div>
+            <div style={{fontSize:28,fontWeight:800,color:"#FFFFFF",fontFamily:G.display,letterSpacing:-0.55,lineHeight:1.02}}>{timelineClass.section}</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:G.text,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:700,border:"1px solid rgba(15,23,42,0.18)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                <span style={{width:8,height:8,borderRadius:999,background:timelineColor.bg,flexShrink:0}}/>
+                {timelineClass.institute || "No institute"}
+              </span>
+              {timelineClass.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.text,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:700,border:"1px solid rgba(15,23,42,0.18)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{timelineClass.subject}</span>}
+            </div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:10,marginBottom:16}}>
+            {[
+              { label:"Timed total", value:fmtMins(totalTimelineMinutes) },
+              { label:"Entries", value:String(timelineEntries.length) },
+              { label:"Timed sessions", value:String(timedSessionCount) },
+              { label:"Active days", value:String(activeDayCount) },
+            ].map(item=>(
+              <div key={item.label} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 14px 13px",boxShadow:G.shadowSm}}>
+                <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,letterSpacing:-0.45}}>{item.value}</div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginTop:7}}>{item.label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"16px 16px 15px",boxShadow:G.shadowSm,marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Timeline view</div>
+            <div style={{fontSize:14,color:G.textM,lineHeight:1.65}}>Every saved entry is shown chronologically here with its time block. Untimed entries stay in the timeline too, so nothing disappears from the class record.</div>
+          </div>
+
+          {groupedTimeline.length===0 ? (
+            <div style={{background:G.surface,borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+              <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconClockHour4} size={28} color={G.textM} /></div>
+              <div style={{fontSize:16,color:G.textM,fontWeight:600}}>No entries for this class yet</div>
+              <div style={{fontSize:14,color:G.textL,marginTop:6}}>Once entries are added, this timeline will show every date and time block here.</div>
+            </div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {groupedTimeline.map(group=>(
+                <div key={group.dateKey} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+                    <div>
+                      <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{formatDateLabel(group.dateKey)}</div>
+                      <div style={{fontSize:12,color:G.textM,marginTop:3}}>{group.entries.length} entry{group.entries.length!==1?"ies":"y"} · {fmtMins(group.timedMinutes)}</div>
+                    </div>
+                    <div style={{minWidth:isMobile?96:132,flex:isMobile?1:"0 0 132px",maxWidth:isMobile?"100%":"132px"}}>
+                      <div style={{height:8,background:G.border,borderRadius:999,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${group.timedMinutes > 0 ? Math.max(8, Math.round((group.timedMinutes / maxDayMinutes) * 100)) : 0}%`,background:timelineColor.bg,borderRadius:999,transition:"width 180ms ease-out"}}/>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    {group.entries.map((entry, entryIndex)=>{
+                      const tag = (entry?.tag && TAG_STYLES[entry.tag]) || TAG_STYLES.note;
+                      const statusTone = entry?.status && STATUS_STYLES[entry.status] ? STATUS_STYLES[entry.status] : null;
+                      const isLast = entryIndex === group.entries.length - 1;
+                      const hasTime = entry.durationMins > 0;
+                      return(
+                        <div key={`${group.dateKey}-${entry.id || entryIndex}`} style={{display:"flex",gap:12,alignItems:"stretch"}}>
+                          <div style={{width:isMobile?78:96,flexShrink:0,textAlign:"right",paddingTop:2}}>
+                            <div style={{fontSize:12.5,fontWeight:800,color:G.text,fontFamily:G.mono,lineHeight:1.35}}>{entry.timeStart ? formatPeriod(entry.timeStart, entry.timeEnd) : "No time"}</div>
+                            <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,marginTop:4}}>{hasTime ? fmtMins(entry.durationMins) : "Untimed"}</div>
+                          </div>
+                          <div style={{width:18,position:"relative",display:"flex",justifyContent:"center",flexShrink:0}}>
+                            {!isLast && <div style={{position:"absolute",top:12,bottom:-14,width:2,borderRadius:999,background:hexToRgba(timelineColor.bg, 0.24)}}/>}
+                            <div style={{width:12,height:12,borderRadius:999,background:timelineColor.bg,border:"2px solid #FFFFFF",boxShadow:`0 0 0 1px ${hexToRgba(timelineColor.bg, 0.22)}`,marginTop:6}}/>
+                          </div>
+                          <div style={{flex:1,minWidth:0,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:16,padding:"12px 13px 11px"}}>
+                            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:(entry.title || entry.body) ? 8 : 0}}>
+                              <span style={{background:tag.bg,color:tag.text,fontSize:11.5,borderRadius:999,padding:"4px 9px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
+                              {statusTone && <span style={{background:statusTone.bg,color:statusTone.text,fontSize:11.5,borderRadius:999,padding:"4px 9px",fontFamily:G.sans,fontWeight:700}}>{statusTone.label}</span>}
+                            </div>
+                            <div style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.2,lineHeight:1.2}}>{entry.title || "Class entry"}</div>
+                            {entry.body && <div style={{fontSize:14,color:G.textS,lineHeight:1.6,marginTop:6,whiteSpace:"pre-wrap"}}>{entry.body}</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {renderTeacherBottomBar("stats")}
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
   // STATS VIEW — teaching hours breakdown
   // ══════════════════════════════════════════════════════════════════════
   if(view==="stats"){
@@ -5600,15 +5885,17 @@ function ClassTrackerInner({user}){
         });
       });
       return{cls,ic,mins,sessions};
-    }).filter(c=>c.mins>0).sort((a,b)=>b.mins-a.mins);
+    }).sort((a,b)=>(b.mins-a.mins) || a.cls.section.localeCompare(b.cls.section));
 
     grandTotal=classStats.reduce((a,c)=>a+c.mins,0);
     grandSessions=classStats.reduce((a,c)=>a+c.sessions,0);
     const avgSession=grandSessions>0?Math.round(grandTotal/grandSessions):0;
-    const maxClassMins=classStats.length>0?classStats[0].mins:1;
+    const maxClassMins=Math.max(1, ...classStats.map(item=>item.mins || 0));
     const maxDayMins=Math.max(...dayMins,1);
     const statsBackTarget = teacherBackView === "profile" ? "profile" : "home";
     const statsContextLabel = statsBackTarget === "profile" ? "Profile insight" : "Teaching insight";
+    const hasClasses = classStats.length > 0;
+    const hasTimedData = grandTotal > 0;
 
     const navBtnStyle={background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",fontFamily:G.sans};
 
@@ -5636,11 +5923,11 @@ function ClassTrackerInner({user}){
             ))}
           </div>
 
-          {grandTotal===0?(
+          {!hasClasses?(
             <div style={{background:G.surface,borderRadius:16,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center"}}>
               <div style={{width:62,height:62,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconChartBar} size={30} color={G.textM} /></div>
-              <div style={{fontSize:16,fontWeight:600,color:G.textM}}>No entries with time data yet</div>
-              <div style={{fontSize:14,color:G.textL,marginTop:6}}>Add class time when logging entries to see stats</div>
+              <div style={{fontSize:16,fontWeight:600,color:G.textM}}>No classes yet</div>
+              <div style={{fontSize:14,color:G.textL,marginTop:6}}>Once classes are added, their teaching timelines will appear here.</div>
             </div>
           ):(
             <>
@@ -5668,6 +5955,14 @@ function ClassTrackerInner({user}){
                 </div>
               </div>
 
+              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"13px 14px",boxShadow:G.shadowSm,marginBottom:14}}>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
+                  {hasTimedData
+                    ? "Tap any class below to open its full entry timeline with dates, times, and notes."
+                    : "Time totals are still empty, but every class below is clickable so you can inspect its full entry timeline."}
+                </div>
+              </div>
+
               {/* Day of week chart */}
               <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:14,marginBottom:14}}>
                 <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Hours by Day</div>
@@ -5689,27 +5984,28 @@ function ClassTrackerInner({user}){
               {/* Per-class breakdown */}
               <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>By Class</div>
               {classStats.map(({cls,ic,mins,sessions})=>{
-                const pct=Math.round(mins/maxClassMins*100);
+                const pct=mins>0?Math.round(mins/maxClassMins*100):0;
                 return(
-                  <div key={cls.id} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,marginBottom:8,padding:"13px 14px"}}>
+                  <button key={cls.id} type="button" onClick={()=>openStatsClassTimeline(cls.id)} style={{width:"100%",background:G.surface,borderRadius:14,border:`1.5px solid rgba(15,23,42,0.18)`,marginBottom:8,padding:"13px 14px",cursor:"pointer",textAlign:"left",boxShadow:G.shadowSm,WebkitTapHighlightColor:"transparent"}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                      <div style={{width:4,alignSelf:"stretch",borderRadius:999,background:ic.bg,flexShrink:0}}/>
+                      <div style={{width:10,height:10,alignSelf:"center",borderRadius:999,background:ic.bg,flexShrink:0,boxShadow:`0 0 0 3px ${hexToRgba(ic.bg, 0.12)}`}}/>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                         <div style={{fontSize:12,color:G.textL,display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconBuilding} size={14} color={G.textL} />{cls.institute}{cls.subject?" · "+cls.subject:""}</div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0}}>
                         <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(mins)}</div>
-                        <div style={{fontSize:11,color:G.textL,marginTop:2}}>{sessions} session{sessions!==1?"s":""}</div>
+                        <div style={{fontSize:11,color:G.textL,marginTop:2}}>{sessions>0 ? `${sessions} session${sessions!==1?"s":""}` : "No timed session"}</div>
                       </div>
+                      <AppIcon icon={IconChevronRight} size={18} color={G.textL} />
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <div style={{flex:1,height:6,background:G.border,borderRadius:20,overflow:"hidden"}}>
-                        <div style={{height:"100%",borderRadius:20,background:ic.bg,width:pct+"%",transition:"width 0.6s cubic-bezier(0.22,1,0.36,1)"}}/>
+                        <div style={{height:"100%",borderRadius:20,background:ic.bg,width:`${Math.max(pct, mins>0 ? 8 : 0)}%`,transition:"width 0.24s ease-out"}}/>
                       </div>
-                      <span style={{fontSize:11,fontWeight:700,color:ic.bg,fontFamily:G.mono,width:32,textAlign:"right"}}>{pct}%</span>
+                      <span style={{fontSize:11,fontWeight:700,color:ic.bg,fontFamily:G.mono,width:32,textAlign:"right"}}>{mins>0 ? `${pct}%` : "0%"}</span>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </>
@@ -5820,7 +6116,7 @@ function ClassTrackerInner({user}){
     const form=isEdit?editNote:newNote;
     const setForm=isEdit?setEditNote:setNewNote;
     const save=isEdit?saveEdit:addNote;
-    const color=activeClass?instColor(activeClass.institute):COLORS[0];
+    const color=activeClass?instColor(activeClass.institute):DEFAULT_INSTITUTE_TONE;
     const hasExtraDetails=Boolean((form.title||"").trim()||(form.body||"").trim());
     const saveLabel=isEdit?"Save Changes":hasExtraDetails?"Save Entry":"Quick Save";
     const lastTopicSuggestion=form.status==="inprogress" ? (getClassUrgencyMeta(activeClass).lastTopic||"").trim() : "";
