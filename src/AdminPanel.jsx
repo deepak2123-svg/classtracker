@@ -3510,111 +3510,6 @@ function AdminPanelInner({user}){
     skipClickUntil:0,
   });
 
-  const clearInstituteLongPress = React.useCallback(() => {
-    const state = instituteTouchStateRef.current;
-    if(state.longPressTimer){
-      window.clearTimeout(state.longPressTimer);
-      state.longPressTimer = null;
-    }
-  }, []);
-  const resetInstituteTouchVisuals = React.useCallback((target) => {
-    if(!target) return;
-    target.style.boxShadow = "";
-    target.style.transform = "";
-  }, []);
-  const resetInstituteTouchState = React.useCallback((target = instituteTouchStateRef.current.target) => {
-    clearInstituteLongPress();
-    resetInstituteTouchVisuals(target);
-    const state = instituteTouchStateRef.current;
-    state.activeInst = null;
-    state.startX = 0;
-    state.startY = 0;
-    state.moved = false;
-    state.target = null;
-  }, [clearInstituteLongPress, resetInstituteTouchVisuals]);
-  const suppressInstituteGhostClick = React.useCallback((inst) => {
-    const state = instituteTouchStateRef.current;
-    state.skipClickInst = inst;
-    state.skipClickUntil = Date.now() + 360;
-  }, []);
-  const shouldSkipInstituteClick = React.useCallback((inst) => {
-    const state = instituteTouchStateRef.current;
-    return state.skipClickInst === inst && state.skipClickUntil > Date.now();
-  }, []);
-  const handleInstituteSelect = React.useCallback((inst) => {
-    if(shouldSkipInstituteClick(inst)) return;
-    onSelectInstitute(inst);
-  }, [onSelectInstitute, shouldSkipInstituteClick]);
-  const beginInstituteTouch = React.useCallback((event, inst, { longPressDrag = false } = {}) => {
-    const touch = event.touches?.[0];
-    const target = event.currentTarget;
-    if(!touch || !target) return;
-    const state = instituteTouchStateRef.current;
-    clearInstituteLongPress();
-    state.activeInst = inst;
-    state.startX = touch.clientX;
-    state.startY = touch.clientY;
-    state.moved = false;
-    state.target = target;
-    if(longPressDrag){
-      state.longPressTimer = window.setTimeout(() => {
-        const currentState = instituteTouchStateRef.current;
-        if(currentState.activeInst !== inst || currentState.target !== target || currentState.moved) return;
-        dragInstRef.current = inst;
-        setDragInst(inst);
-        target.style.boxShadow = "0 8px 24px rgba(0,0,0,0.18)";
-        target.style.transform = "scale(1.02)";
-      }, 400);
-    }
-  }, [clearInstituteLongPress]);
-  const moveInstituteTouch = React.useCallback((event, { longPressDrag = false } = {}) => {
-    const state = instituteTouchStateRef.current;
-    const touch = event.touches?.[0];
-    if(!touch) return;
-    const dx = touch.clientX - state.startX;
-    const dy = touch.clientY - state.startY;
-    if(!state.moved && (Math.abs(dx) > 8 || Math.abs(dy) > 4)){
-      state.moved = true;
-      clearInstituteLongPress();
-    }
-    if(!longPressDrag || !dragInstRef.current) return;
-    event.preventDefault();
-    const hovered = document.elementFromPoint(touch.clientX, touch.clientY);
-    const card = hovered?.closest?.("[data-inst]");
-    if(card && card.dataset.inst !== dragInstRef.current) setDragOverInst(card.dataset.inst);
-  }, [clearInstituteLongPress]);
-  const endInstituteTouch = React.useCallback((event, inst, { longPressDrag = false } = {}) => {
-    const state = instituteTouchStateRef.current;
-    const target = state.target || event.currentTarget;
-    const didMove = state.moved;
-    const draggingInst = dragInstRef.current;
-    suppressInstituteGhostClick(inst);
-    clearInstituteLongPress();
-    if(longPressDrag && draggingInst && dragOverInst && dragOverInst !== draggingInst){
-      const from = institutes.indexOf(draggingInst);
-      const to = institutes.indexOf(dragOverInst);
-      if(from >= 0 && to >= 0){
-        const reordered = [...institutes];
-        const [moved] = reordered.splice(from, 1);
-        reordered.splice(to, 0, moved);
-        saveInstOrder(reordered);
-      }
-    } else if(!didMove && !draggingInst){
-      onSelectInstitute(inst);
-    }
-    setDragInst(null);
-    setDragOverInst(null);
-    dragInstRef.current = null;
-    resetInstituteTouchState(target);
-  }, [clearInstituteLongPress, dragOverInst, institutes, onSelectInstitute, resetInstituteTouchState, saveInstOrder, suppressInstituteGhostClick]);
-  const cancelInstituteTouch = React.useCallback((inst) => {
-    suppressInstituteGhostClick(inst);
-    setDragInst(null);
-    setDragOverInst(null);
-    dragInstRef.current = null;
-    resetInstituteTouchState();
-  }, [resetInstituteTouchState, suppressInstituteGhostClick]);
-
   const handlePeriodChange = React.useCallback((nextPeriod)=>{
     if(nextPeriod==="range"){
       setCustomRange(current=>{
@@ -5496,6 +5391,115 @@ function AdminPanelInner({user}){
     setMobileStep(1);
     warmInstitute(inst);
   };
+
+  // Keep touch/scroll institute selection logic below the values it depends on.
+  // These callbacks read institutes, saveInstOrder, and onSelectInstitute in
+  // their dependency arrays, so declaring them earlier can trip a TDZ error in
+  // production builds.
+  const clearInstituteLongPress = React.useCallback(() => {
+    const state = instituteTouchStateRef.current;
+    if(state.longPressTimer){
+      window.clearTimeout(state.longPressTimer);
+      state.longPressTimer = null;
+    }
+  }, []);
+  const resetInstituteTouchVisuals = React.useCallback((target) => {
+    if(!target) return;
+    target.style.boxShadow = "";
+    target.style.transform = "";
+  }, []);
+  const resetInstituteTouchState = React.useCallback((target = instituteTouchStateRef.current.target) => {
+    clearInstituteLongPress();
+    resetInstituteTouchVisuals(target);
+    const state = instituteTouchStateRef.current;
+    state.activeInst = null;
+    state.startX = 0;
+    state.startY = 0;
+    state.moved = false;
+    state.target = null;
+  }, [clearInstituteLongPress, resetInstituteTouchVisuals]);
+  const suppressInstituteGhostClick = React.useCallback((inst) => {
+    const state = instituteTouchStateRef.current;
+    state.skipClickInst = inst;
+    state.skipClickUntil = Date.now() + 360;
+  }, []);
+  const shouldSkipInstituteClick = React.useCallback((inst) => {
+    const state = instituteTouchStateRef.current;
+    return state.skipClickInst === inst && state.skipClickUntil > Date.now();
+  }, []);
+  const handleInstituteSelect = React.useCallback((inst) => {
+    if(shouldSkipInstituteClick(inst)) return;
+    onSelectInstitute(inst);
+  }, [onSelectInstitute, shouldSkipInstituteClick]);
+  const beginInstituteTouch = React.useCallback((event, inst, { longPressDrag = false } = {}) => {
+    const touch = event.touches?.[0];
+    const target = event.currentTarget;
+    if(!touch || !target) return;
+    const state = instituteTouchStateRef.current;
+    clearInstituteLongPress();
+    state.activeInst = inst;
+    state.startX = touch.clientX;
+    state.startY = touch.clientY;
+    state.moved = false;
+    state.target = target;
+    if(longPressDrag){
+      state.longPressTimer = window.setTimeout(() => {
+        const currentState = instituteTouchStateRef.current;
+        if(currentState.activeInst !== inst || currentState.target !== target || currentState.moved) return;
+        dragInstRef.current = inst;
+        setDragInst(inst);
+        target.style.boxShadow = "0 8px 24px rgba(0,0,0,0.18)";
+        target.style.transform = "scale(1.02)";
+      }, 400);
+    }
+  }, [clearInstituteLongPress]);
+  const moveInstituteTouch = React.useCallback((event, { longPressDrag = false } = {}) => {
+    const state = instituteTouchStateRef.current;
+    const touch = event.touches?.[0];
+    if(!touch) return;
+    const dx = touch.clientX - state.startX;
+    const dy = touch.clientY - state.startY;
+    if(!state.moved && (Math.abs(dx) > 8 || Math.abs(dy) > 4)){
+      state.moved = true;
+      clearInstituteLongPress();
+    }
+    if(!longPressDrag || !dragInstRef.current) return;
+    event.preventDefault();
+    const hovered = document.elementFromPoint(touch.clientX, touch.clientY);
+    const card = hovered?.closest?.("[data-inst]");
+    if(card && card.dataset.inst !== dragInstRef.current) setDragOverInst(card.dataset.inst);
+  }, [clearInstituteLongPress]);
+  const endInstituteTouch = React.useCallback((event, inst, { longPressDrag = false } = {}) => {
+    const state = instituteTouchStateRef.current;
+    const target = state.target || event.currentTarget;
+    const didMove = state.moved;
+    const draggingInst = dragInstRef.current;
+    suppressInstituteGhostClick(inst);
+    clearInstituteLongPress();
+    if(longPressDrag && draggingInst && dragOverInst && dragOverInst !== draggingInst){
+      const from = institutes.indexOf(draggingInst);
+      const to = institutes.indexOf(dragOverInst);
+      if(from >= 0 && to >= 0){
+        const reordered = [...institutes];
+        const [moved] = reordered.splice(from, 1);
+        reordered.splice(to, 0, moved);
+        saveInstOrder(reordered);
+      }
+    } else if(!didMove && !draggingInst){
+      onSelectInstitute(inst);
+    }
+    setDragInst(null);
+    setDragOverInst(null);
+    dragInstRef.current = null;
+    resetInstituteTouchState(target);
+  }, [clearInstituteLongPress, dragOverInst, institutes, onSelectInstitute, resetInstituteTouchState, saveInstOrder, suppressInstituteGhostClick]);
+  const cancelInstituteTouch = React.useCallback((inst) => {
+    suppressInstituteGhostClick(inst);
+    setDragInst(null);
+    setDragOverInst(null);
+    dragInstRef.current = null;
+    resetInstituteTouchState();
+  }, [resetInstituteTouchState, suppressInstituteGhostClick]);
 
   const openMobileInstituteOverview = () => {
     setSelP2(null);
