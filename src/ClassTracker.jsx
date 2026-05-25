@@ -269,11 +269,28 @@ function hslToHex(h, s, l){
   return `#${toHex(red)}${toHex(green)}${toHex(blue)}`.toUpperCase();
 }
 
+function tintHex(hex, towardWhite = 0.84){
+  const value = String(hex || "").replace("#", "").trim();
+  if(value.length !== 6) return "#EEF3F8";
+  const mix = Math.max(0, Math.min(1, Number(towardWhite)));
+  const toInt = part => Number.parseInt(part, 16);
+  const r = toInt(value.slice(0, 2));
+  const g = toInt(value.slice(2, 4));
+  const b = toInt(value.slice(4, 6));
+  if([r, g, b].some(Number.isNaN)) return "#EEF3F8";
+  const blend = channel => Math.round(channel + (255 - channel) * mix).toString(16).padStart(2, "0");
+  return `#${blend(r)}${blend(g)}${blend(b)}`.toUpperCase();
+}
+
 function buildInstituteTone(bg){
   const base = String(bg || "#1F3A5F").toUpperCase();
   return {
     bg:base,
-    light:hexToRgba(base, 0.16),
+    light:tintHex(base, 0.76),
+    surface:tintHex(base, 0.8),
+    pill:tintHex(base, 0.88),
+    border:tintHex(base, 0.66),
+    ink:base,
     text:"#FFFFFF",
   };
 }
@@ -4866,10 +4883,10 @@ function ClassTrackerInner({user}){
       const instFull=cls.institute||"";
       const instShort=instFull.length>28?instFull.slice(0,26)+"…":instFull;
       const cardBorder = "rgba(15,23,42,0.92)";
-      const sectionSurface = "#FFFFFF";
-      const sectionTitleColor = G.text;
-      const institutePillFill = "#FFFFFF";
-      const institutePillBorder = G.border;
+      const sectionSurface = ic.surface || ic.light || "#EEF3F8";
+      const sectionTitleColor = ic.ink || G.text;
+      const institutePillFill = ic.pill || "#FFFFFF";
+      const institutePillBorder = ic.border || G.border;
       const beginHold = e => {
         if(!compact || !onHold || !e.touches?.length) return;
         const touch = e.touches[0];
@@ -4971,11 +4988,15 @@ function ClassTrackerInner({user}){
       <div style={scroll ? {display:"flex",gap:8,overflowX:"auto",padding:"0 0 4px",scrollbarWidth:"none"} : {display:"grid",gridTemplateColumns:stacked?"repeat(2,minmax(0,1fr))":columns,gap:stacked?10:(compact?6:8),padding:"0 0 2px"}}>
         {["all",...institutes].map(inst=>{
           const isSel=instFilter===inst;
-          const ic=inst==="all"?{bg:G.textL,light:G.surfaceAlt,text:G.text}:instColor(inst);
+          const ic=inst==="all"?{bg:G.textL,light:G.surfaceAlt,surface:"#FFFFFF",pill:"#FFFFFF",border:G.borderM,text:G.text,ink:G.text}:instColor(inst);
           const label=inst==="all"?allLabel:inst;
-          const pillBg="#FFFFFF";
+          const pillBg=inst==="all"
+            ? "#FFFFFF"
+            : (isSel ? (ic.surface || ic.pill || "#F5F7FB") : (ic.pill || "#F8FAFC"));
           const pillText=G.text;
-          const pillBorder=isSel ? "rgba(15,23,42,0.92)" : G.borderM;
+          const pillBorder=inst==="all"
+            ? (isSel ? "rgba(15,23,42,0.92)" : G.borderM)
+            : (isSel ? (ic.border || "rgba(15,23,42,0.92)") : (ic.border || G.borderM));
           return(
             <button key={inst} title={label} onClick={()=>React.startTransition(()=>setInstFilter(inst))}
               style={{
@@ -5157,16 +5178,16 @@ function ClassTrackerInner({user}){
               const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(data.notes?.[cls.id]||{});
               const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
               const instFull=cls.institute||"";
-              const sectionSurface=ic.bg;
+              const sectionSurface=ic.surface || ic.light || "#EEF3F8";
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
                   style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1.5px solid ${isSel ? "rgba(15,23,42,0.92)" : "rgba(15,23,42,0.82)"}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
-                  <div style={{background:sectionSurface,padding:"13px 13px 12px",borderBottom:`1px solid rgba(15,23,42,0.92)`}}>
+                  <div style={{background:sectionSurface,padding:"13px 13px 12px",borderBottom:`1px solid ${G.border}`}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:16,fontWeight:800,color:ic.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
+                        <div style={{fontSize:16,fontWeight:800,color:ic.ink || G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
                         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
-                          <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:ic.pill || "#FFFFFF",border:`1px solid ${ic.border || G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                             <span style={{width:7,height:7,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                             <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{instFull || "No institute"}</span>
                           </span>
