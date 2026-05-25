@@ -459,31 +459,19 @@ function ConfirmModal({message, confirmLabel="Delete", onConfirm, onClose}){
 }
 
 
-// ── Saving Guard Modal ────────────────────────────────────────────────────────
-function SavingGuardModal({onWait, onLeave}){
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
-      <div style={{background:"#fff",borderRadius:22,padding:"26px 22px",width:"100%",maxWidth:340,boxShadow:"0 24px 64px rgba(0,0,0,0.25)",textAlign:"center"}}>
-        <div style={{width:56,height:56,borderRadius:16,background:"#FEF3C7",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",color:"#B45309"}}>
-          <AppIcon icon={IconDeviceFloppy} size={28} color="#B45309" />
-        </div>
-        <h3 style={{fontSize:18,fontWeight:700,color:"#111827",fontFamily:"'Poppins',sans-serif",marginBottom:8}}>Still saving…</h3>
-        <p style={{fontSize:14,color:"#6B7280",marginBottom:24,lineHeight:1.6,fontFamily:"'Inter',sans-serif"}}>
-          Your entry is being saved. Leaving now may lose your last change.
-        </p>
-        <div style={{display:"flex",gap:10}}>
-          <button onClick={onWait}
-            style={{flex:1,padding:"13px",borderRadius:12,border:"none",background:"#152B22",fontSize:15,fontWeight:700,cursor:"pointer",color:"#fff",fontFamily:"'Inter',sans-serif",minHeight:48,WebkitTapHighlightColor:"transparent"}}>
-            Wait for save
-          </button>
-          <button onClick={onLeave}
-            style={{flex:1,padding:"13px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#fff",fontSize:15,fontWeight:600,cursor:"pointer",color:"#6B7280",fontFamily:"'Inter',sans-serif",minHeight:48,WebkitTapHighlightColor:"transparent"}}>
-            Leave anyway
-          </button>
-        </div>
-      </div>
-    </div>
+function hasLiveEntryDraft(form){
+  if(!form) return false;
+  return Boolean(
+    String(form.title || "").trim() ||
+    String(form.body || "").trim() ||
+    String(form.status || "").trim() ||
+    String(form.timeStart || "").trim() ||
+    String(form.timeEnd || "").trim()
   );
+}
+
+function buildTeacherDraftStorageKey(userId, classId, dateKey, noteId = "new"){
+  return `classlog_entry_draft_${userId}_${classId}_${dateKey}_${noteId}`;
 }
 
 
@@ -3489,6 +3477,8 @@ function ClassTrackerInner({user}){
   const [loading,setLoading]   = useState(true);
   const [saving,setSaving]     = useState(false);
   const [saveErr,setSaveErr]   = useState(false);
+  const [draftSaving,setDraftSaving] = useState(false);
+  const [lastCloudSavedAt,setLastCloudSavedAt] = useState(0);
   const [view,_setView]         = useState("home");
   const [activeClass,setActiveClass] = useState(null);
   const [selectedDate,setSelectedDate] = useState(todayKey());
@@ -3521,7 +3511,6 @@ function ClassTrackerInner({user}){
   const [inlineToast,setInlineToast]     = useState(null);
   const inlineToastTimer                 = useRef(null);
   const [confirmModal,setConfirmModal]   = useState(null);
-  const [savingGuard,setSavingGuard]     = useState(null); // {onLeave} — shown mid-save
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
   const [isWeakDevice,setIsWeakDevice]   = useState(false);
   const [reduceEffects,setReduceEffects] = useState(false);
@@ -3537,7 +3526,9 @@ function ClassTrackerInner({user}){
   const [cloudRevision,setCloudRevision] = useState(0);
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
+  const noteDraftTimer = useRef(null);
   const lastSyncedFingerprint = useRef("");
+  const hydratedDraftKeyRef = useRef("");
   const lastForegroundRefreshAt = useRef(0);
   const classSwipeStartRef = useRef(null);
   const detailSwipeResetTimer = useRef(null);
@@ -3552,6 +3543,21 @@ function ClassTrackerInner({user}){
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
   const mobileBottomNavPad = "calc(88px + env(safe-area-inset-bottom, 0px))";
+  const isEntryComposerView = view==="addNote" || view==="editNote";
+  const activeEntryDraftForm = isEntryComposerView ? (view==="editNote" ? editNote : newNote) : null;
+  const activeEntryDraftKey = useMemo(() => {
+    if(!isEntryComposerView || !activeClass?.id) return "";
+    return buildTeacherDraftStorageKey(
+      user.uid,
+      activeClass.id,
+      selectedDate,
+      view==="editNote" ? (editNote?.id || "edit") : "new"
+    );
+  }, [activeClass?.id, editNote?.id, isEntryComposerView, selectedDate, user.uid, view]);
+  const hasActiveEntryDraft = useMemo(
+    () => hasLiveEntryDraft(activeEntryDraftForm),
+    [activeEntryDraftForm]
+  );
   const teacherThemeVars = useMemo(() => getTeacherThemeVars(teacherTheme), [teacherTheme]);
   const teacherThemeShell = useMemo(() => ({
     ...teacherThemeVars,
@@ -3707,6 +3713,14 @@ function ClassTrackerInner({user}){
     }catch(e){}
   }, [pendingSaveKey, cloudRevision]);
 
+  const clearEntryDraft = React.useCallback((draftKey = activeEntryDraftKey) => {
+    if(!draftKey) return;
+    try{ localStorage.removeItem(draftKey); }catch(e){}
+    if(hydratedDraftKeyRef.current === draftKey){
+      hydratedDraftKeyRef.current = "";
+    }
+  }, [activeEntryDraftKey]);
+
   useEffect(()=>{
     // Load admin-created institutes list and section definitions
     getGlobalInstitutes().then(list => setGlobalInstitutes(list)).catch(()=>{});
@@ -3736,10 +3750,62 @@ function ClassTrackerInner({user}){
     try{ localStorage.setItem(TEACHER_THEME_STORAGE_KEY, teacherTheme); }catch(e){}
   },[teacherTheme]);
 
+  useEffect(() => {
+    if(isEntryComposerView) return;
+    setDraftSaving(false);
+  }, [isEntryComposerView]);
+
+  React.useLayoutEffect(() => {
+    if(!isEntryComposerView || !activeEntryDraftKey) return;
+    if(hydratedDraftKeyRef.current === activeEntryDraftKey) return;
+    hydratedDraftKeyRef.current = activeEntryDraftKey;
+    try{
+      const raw = localStorage.getItem(activeEntryDraftKey);
+      if(!raw) return;
+      const parsed = JSON.parse(raw);
+      if(!parsed?.form) return;
+      if(view === "editNote"){
+        setEditNote(prev => prev ? ({ ...prev, ...parsed.form }) : prev);
+      }else{
+        setNewNote(prev => ({ ...prev, ...parsed.form }));
+      }
+      if(hasLiveEntryDraft(parsed.form)) setShowNoteDetails(true);
+    }catch(e){}
+  }, [activeEntryDraftKey, isEntryComposerView, view]);
+
+  useEffect(() => {
+    if(!isEntryComposerView || !activeEntryDraftKey || hydratedDraftKeyRef.current !== activeEntryDraftKey) return;
+    window.clearTimeout(noteDraftTimer.current);
+    if(!hasActiveEntryDraft){
+      clearEntryDraft(activeEntryDraftKey);
+      setDraftSaving(false);
+      return;
+    }
+    setDraftSaving(true);
+    noteDraftTimer.current = window.setTimeout(() => {
+      const savedAt = Date.now();
+      try{
+        localStorage.setItem(activeEntryDraftKey, JSON.stringify({
+          form: activeEntryDraftForm,
+          savedAt,
+          classId: activeClass?.id || "",
+          dateKey: selectedDate,
+          view,
+        }));
+      }catch(e){}
+      setDraftSaving(false);
+    }, 220);
+    return () => window.clearTimeout(noteDraftTimer.current);
+  }, [activeClass?.id, activeEntryDraftForm, activeEntryDraftKey, clearEntryDraft, hasActiveEntryDraft, isEntryComposerView, selectedDate, view]);
+
   useEffect(() => () => {
     if(detailSwipeResetTimer.current){
       window.clearTimeout(detailSwipeResetTimer.current);
       detailSwipeResetTimer.current = null;
+    }
+    if(noteDraftTimer.current){
+      window.clearTimeout(noteDraftTimer.current);
+      noteDraftTimer.current = null;
     }
     if(detailSwipeOffsetRaf.current){
       window.cancelAnimationFrame(detailSwipeOffsetRaf.current);
@@ -3939,6 +4005,7 @@ function ClassTrackerInner({user}){
           lastSyncedFingerprint.current = nextFingerprint;
           setSaving(false);
           setSaveErr(false);
+          setLastCloudSavedAt(Date.now());
           // Clear any pending offline save since we saved successfully
           try{localStorage.removeItem("classlog_pending_"+user.uid);}catch(e){}
         })
@@ -3962,7 +4029,7 @@ function ClassTrackerInner({user}){
     },1000);
     return()=>clearTimeout(saveTimer.current);
   },[data,loading,allowCloudSync,user.uid,pendingSaveKey,cloudRevision,storePendingDraft,isOffline]);
-  // Safe navigation — shows in-app warning if save is in flight
+  // Safe navigation — background autosave continues without blocking navigation
   // ── Browser history integration — enables Android back gesture ──────────────
   // On mount: seed the base history entry so back never exits the app accidentally
   useEffect(() => {
@@ -3999,11 +4066,7 @@ function ClassTrackerInner({user}){
   }, [getTeacherHashView]);
 
   function safeNav(destination, action){
-    if(saving){
-      setSavingGuard({onLeave: action || (()=>setView(destination))});
-    } else {
-      action ? action() : setView(destination);
-    }
+    action ? action() : setView(destination);
   }
   function openStatsView(origin = "home"){
     const backTarget = origin === "profile" ? "profile" : "home";
@@ -4026,11 +4089,10 @@ function ClassTrackerInner({user}){
     if(exportOpen){ setExportOpen(false); return true; }
     if(signOutPrompt){ setSignOutPrompt(false); return true; }
     if(confirmModal){ setConfirmModal(null); return true; }
-    if(savingGuard){ setSavingGuard(null); return true; }
     if(leaveModal){ setLeaveModal(null); return true; }
     if(teacherNoticePrompt){ setTeacherNoticePrompt(null); return true; }
     return false;
-  }, [confirmModal, exportOpen, historyClassId, leaveModal, mobileClassSheetId, savingGuard, signOutPrompt, teacherNoticePrompt]);
+  }, [confirmModal, exportOpen, historyClassId, leaveModal, mobileClassSheetId, signOutPrompt, teacherNoticePrompt]);
   useEffect(() => {
     if(!Capacitor.isNativePlatform()) return undefined;
     const listenerPromise = CapacitorApp.addListener("backButton", () => {
@@ -4157,6 +4219,7 @@ function ClassTrackerInner({user}){
       try{localStorage.removeItem(pendingSaveKey);}catch(e){}
       setCloudRevision(restored?.revision || 0);
       lastSyncedFingerprint.current = dataFingerprint(data);
+      setLastCloudSavedAt(Date.now());
       setRestoringBackup(false);
       setLoadIssue(null);
       setDataWarning(null);
@@ -4190,6 +4253,7 @@ function ClassTrackerInner({user}){
             lastSyncedFingerprint.current = nextFingerprint;
             setSaving(false);
             setSaveErr(false);
+            setLastCloudSavedAt(Date.now());
             try{localStorage.removeItem(pendingSaveKey);}catch(e){}
             showInlineToast("Back online — changes saved successfully");
           })
@@ -4413,13 +4477,87 @@ function ClassTrackerInner({user}){
   const trashCount=(data.trash?.classes||[]).length+(data.trash?.notes||[]).length;
 
   const SaveBadge=()=>{
-    if(!saving&&!saveErr) return null;
     const isOfflineSave=saveErr&&isOffline;
+    let badge = null;
+    if(saveErr){
+      badge = isOfflineSave
+        ? {
+            title:"Saved locally",
+            subtitle:"Will sync when you reconnect",
+            icon:IconDeviceFloppy,
+            background:"#FFF7ED",
+            border:"#FED7AA",
+            color:"#B45309",
+          }
+        : {
+            title:"Sync issue",
+            subtitle:"Retrying in the background",
+            icon:IconAlertTriangle,
+            background:"#FEF2F2",
+            border:"#FECACA",
+            color:G.red,
+          };
+    } else if(saving){
+      badge = {
+        title:"Saving",
+        subtitle:"Syncing changes quietly",
+        icon:IconRefresh,
+        background:"#EEF4FF",
+        border:"#C7D7F5",
+        color:G.blue,
+      };
+    } else if(isEntryComposerView && hasActiveEntryDraft){
+      badge = draftSaving
+        ? {
+            title:"Saving draft",
+            subtitle:"Typing is being preserved",
+            icon:IconDeviceFloppy,
+            background:"#F8FAFC",
+            border:G.border,
+            color:G.textS,
+          }
+        : {
+            title:"Draft saved",
+            subtitle:"Kept in the background",
+            icon:IconCheck,
+            background:"#EFFCF4",
+            border:"#BBF7D0",
+            color:G.green,
+          };
+    } else if(lastCloudSavedAt){
+      badge = {
+        title:"All changes saved",
+        subtitle:"Synced in the background",
+        icon:IconCheck,
+        background:"#EFFCF4",
+        border:"#BBF7D0",
+        color:G.green,
+      };
+    }
+    if(!badge) return null;
     return(
-      <div style={{position:"fixed",top:70,right:16,borderRadius:20,padding:"5px 14px",fontSize:13,fontFamily:G.mono,zIndex:999,
-        background:isOfflineSave?"#B45309":saveErr?G.red:G.navy,
-        color:"#fff",boxShadow:G.shadowMd,letterSpacing:0.3,display:"flex",alignItems:"center",gap:6}}>
-        {isOfflineSave?"📱 saved locally":saveErr?"⚠ save failed":"saving…"}
+      <div style={{
+        position:"fixed",
+        top:68,
+        right:14,
+        zIndex:999,
+        display:"flex",
+        alignItems:"center",
+        gap:10,
+        background:badge.background,
+        border:`1px solid ${badge.border}`,
+        borderRadius:999,
+        padding:"7px 12px",
+        boxShadow:G.shadowMd,
+        maxWidth:"calc(100vw - 28px)",
+      }}>
+        <div style={{width:28,height:28,borderRadius:999,background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <AppIcon icon={badge.icon} size={15} color={badge.color} />
+        </div>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:badge.color,fontFamily:G.sans,lineHeight:1.1,whiteSpace:"nowrap"}}>{badge.title}</div>
+          <div style={{fontSize:11,color:G.textL,fontFamily:G.sans,lineHeight:1.15,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{badge.subtitle}</div>
+        </div>
       </div>
     );
   };
@@ -4536,12 +4674,16 @@ function ClassTrackerInner({user}){
     const note={id:Date.now().toString(),...newNote,status:newNote.status||"",teacherName,created:Date.now()};
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
     void triggerAppHaptic("entry");
+    clearEntryDraft();
+    setDraftSaving(false);
     setShowNoteDetails(false);
     setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});setView("classDetail");
   };
   const saveEdit=()=>{
     if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};});
+    clearEntryDraft();
+    setDraftSaving(false);
     setShowNoteDetails(false);
     setEditNote(null);setView("classDetail");
   };
@@ -4636,7 +4778,6 @@ function ClassTrackerInner({user}){
           {inlineToast}
         </div>
       )}
-      {savingGuard && <SavingGuardModal onWait={()=>setSavingGuard(null)} onLeave={()=>{setSavingGuard(null);savingGuard.onLeave();}}/>}
       {confirmModal && <ConfirmModal message={confirmModal.message} confirmLabel={confirmModal.label||"Delete"} onConfirm={confirmModal.onConfirm} onClose={()=>setConfirmModal(null)}/>}
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
