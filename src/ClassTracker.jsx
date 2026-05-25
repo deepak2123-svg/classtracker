@@ -3551,9 +3551,24 @@ function ClassTrackerInner({user}){
   const teacherActiveClasses = useMemo(() => (
     [...(data.classes || []).filter(c => !c.left)].sort((a,b)=>(b.created||0)-(a.created||0))
   ), [data.classes]);
+  const teacherInstitutes = useMemo(() => (
+    [...new Set(teacherActiveClasses.map(c => c?.institute || ""))].filter(Boolean)
+  ), [teacherActiveClasses]);
   const teacherVisibleClasses = useMemo(() => (
     instFilter==="all" ? teacherActiveClasses : teacherActiveClasses.filter(c=>c.institute===instFilter)
   ), [teacherActiveClasses, instFilter]);
+  const deferredTeacherVisibleClasses = React.useDeferredValue(teacherVisibleClasses);
+  const teacherClassMetricsMap = useMemo(() => {
+    const metricsMap = {};
+    (data.classes || []).forEach(cls => {
+      if(!cls?.id) return;
+      metricsMap[cls.id] = buildClassEntryMetrics(data.notes?.[cls.id] || {});
+    });
+    return metricsMap;
+  }, [data.classes, data.notes]);
+  const teacherQuickHomeSummary = useMemo(() => (
+    buildTeacherQuickHomeSummary(teacherActiveClasses, data.notes)
+  ), [teacherActiveClasses, data.notes]);
   const knownInstituteNames = useMemo(() => (
     [...new Set([
       ...globalInstitutes,
@@ -4764,8 +4779,8 @@ function ClassTrackerInner({user}){
 
   if(view==="profile"){
     const activeClasses=[...(data.classes||[]).filter(c=>!c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
-    const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
-    const quickHomeSummary=buildTeacherQuickHomeSummary(activeClasses, data.notes);
+    const institutes=teacherInstitutes;
+    const quickHomeSummary=teacherQuickHomeSummary;
 
     return(
       <div style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
@@ -4809,18 +4824,18 @@ function ClassTrackerInner({user}){
     const activeClasses=teacherActiveClasses;
     // Only show institutes that have at least one active (non-trashed) class.
     // Empty institutes (all classes deleted) are hidden from filter and header count.
-    const institutes=[...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
-    const filtered=teacherVisibleClasses;
+    const institutes=teacherInstitutes;
+    const filtered=deferredTeacherVisibleClasses;
     const visibleMobileClasses=filtered.slice(0,mobileClassLimit);
     const hasMoreMobileClasses=filtered.length>visibleMobileClasses.length;
-    const quickHomeSummary=buildTeacherQuickHomeSummary(activeClasses, data.notes);
+    const quickHomeSummary=teacherQuickHomeSummary;
 
     // For tablet/desktop split view
     const selCls=activeClasses.find(c=>c.id===activeClass?.id)||activeClasses[0]||null;
     const selColor=selCls?instColor(selCls.institute):instColor("");
     const selNotes=selCls?getClassNotes(selCls.id):{};
     const selDateNotes=selCls?getDateNotes(selCls.id,selectedDate):[];
-    const selMetrics=selCls?buildClassEntryMetrics(selNotes):null;
+    const selMetrics=selCls?(teacherClassMetricsMap[selCls.id] || buildClassEntryMetrics(selNotes)):null;
 
     // Nav buttons — same on all screen sizes
     const NavRight = !isMobile ? <>
@@ -4834,8 +4849,7 @@ function ClassTrackerInner({user}){
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
     const ClassCard = ({cls, onClick, compact = false, dense = false, onDelete = null, onHold = null}) => {
       const ic=instColor(cls.institute);
-      const classNotes=data.notes?.[cls.id]||{};
-      const metrics=buildClassEntryMetrics(classNotes);
+      const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(data.notes?.[cls.id]||{});
       const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
       const holdTimerRef = React.useRef(null);
       const holdStartRef = React.useRef(null);
@@ -4963,7 +4977,7 @@ function ClassTrackerInner({user}){
           const pillText=G.text;
           const pillBorder=isSel ? "rgba(15,23,42,0.92)" : G.borderM;
           return(
-            <button key={inst} title={label} onClick={()=>setInstFilter(inst)}
+            <button key={inst} title={label} onClick={()=>React.startTransition(()=>setInstFilter(inst))}
               style={{
                 width:scroll?"auto":"100%",
                 minWidth:scroll?0:0,
@@ -5140,8 +5154,7 @@ function ClassTrackerInner({user}){
             {filtered.map(cls=>{
               const ic=instColor(cls.institute);
               const isSel=selCls?.id===cls.id;
-              const classNotes=data.notes?.[cls.id]||{};
-              const metrics=buildClassEntryMetrics(classNotes);
+              const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(data.notes?.[cls.id]||{});
               const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
               const instFull=cls.institute||"";
               const sectionSurface=ic.bg;
@@ -5476,7 +5489,7 @@ function ClassTrackerInner({user}){
       const surfaceColor = instColor(surfaceCls.institute);
       const surfaceClassNotes = getClassNotes(surfaceCls.id);
       const surfaceDateNotes = getDateNotes(surfaceCls.id, selectedDate);
-      const surfaceMetrics = buildClassEntryMetrics(surfaceClassNotes);
+      const surfaceMetrics = teacherClassMetricsMap[surfaceCls.id] || buildClassEntryMetrics(surfaceClassNotes);
       const surfaceStatusTone = getTodayEntryStatusStyles(surfaceMetrics.todayEntries);
       return(
         <div key={`${panelKey}-${surfaceCls.id || "class"}`} style={{flex:"0 0 100%",width:"100%",height:"100%",overflowY:"auto",padding:`12px 14px ${mobileBottomNavPad}`,boxSizing:"border-box",WebkitOverflowScrolling:"touch",overscrollBehaviorY:"contain"}}>
