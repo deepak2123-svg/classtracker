@@ -4099,6 +4099,28 @@ function AdminPanelInner({user}){
     return String(data?.profile?.email || teacher?.email || "").trim();
   }, [fullData]);
 
+  // Keep the canonical institute list defined before any derived summaries use it.
+  const institutes=useMemo(()=>{
+    const set=new Set();
+    // Primary: admin-created global list from config/institutes (accurate, mobile-safe)
+    globalInstList.forEach(i=>{ if(i) set.add(i.trim()); });
+    // Supplement: teacher index catches institutes not yet in admin list (legacy data)
+    teachers.forEach(t=>{
+      (t.institutes||[]).forEach(i=>{ if(i) set.add(i.trim()); });
+    });
+    // Supplement: fullData for any institute added after last index sync
+    Object.values(fullData).forEach(d=>{
+      (d.classes||[]).forEach(c=>{ if(c.institute) set.add(c.institute.trim()); });
+      (d.profile?.institutes||[]).forEach(i=>{ if(i) set.add(String(i).trim()); });
+    });
+    // Remove locally deleted institutes
+    deletedInstitutes.forEach(i=>set.delete(i));
+    // Preserve admin-defined order from globalInstList, append any extras at end
+    const ordered = globalInstList.filter(i=>set.has(i));
+    const extras   = Array.from(set).filter(i=>!globalInstList.includes(i)).sort();
+    return [...ordered, ...extras];
+  },[globalInstList,teachers,fullData,deletedInstitutes]);
+
   const teacherOnlyList = useMemo(
     () => teachers.filter(t => roles[t.uid] !== "admin"),
     [teachers, roles]
@@ -4719,28 +4741,6 @@ function AdminPanelInner({user}){
     }
     setPanelCollapsed(prev=>({...prev,[key]:willCollapse}));
   }, [PANEL_LIMITS, panelCollapsed, panelW, clampPanelWidth]);
-
-  // ── Derived: institutes ───────────────────────────────────────────────────
-  const institutes=useMemo(()=>{
-    const set=new Set();
-    // Primary: admin-created global list from config/institutes (accurate, mobile-safe)
-    globalInstList.forEach(i=>{ if(i) set.add(i.trim()); });
-    // Supplement: teacher index catches institutes not yet in admin list (legacy data)
-    teachers.forEach(t=>{
-      (t.institutes||[]).forEach(i=>{ if(i) set.add(i.trim()); });
-    });
-    // Supplement: fullData for any institute added after last index sync
-    Object.values(fullData).forEach(d=>{
-      (d.classes||[]).forEach(c=>{ if(c.institute) set.add(c.institute.trim()); });
-      (d.profile?.institutes||[]).forEach(i=>{ if(i) set.add(String(i).trim()); });
-    });
-    // Remove locally deleted institutes
-    deletedInstitutes.forEach(i=>set.delete(i));
-    // Preserve admin-defined order from globalInstList, append any extras at end
-    const ordered = globalInstList.filter(i=>set.has(i));
-    const extras   = Array.from(set).filter(i=>!globalInstList.includes(i)).sort();
-    return [...ordered, ...extras];
-  },[globalInstList,teachers,fullData,deletedInstitutes]);
 
   const totalEntries=useMemo(()=>{
     let t=0;
