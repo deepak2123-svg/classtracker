@@ -44,7 +44,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
-import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, formatDateLabel, fmt, formatPeriod } from "./shared.jsx";
+import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, formatDateLabel, fmt, formatPeriod, getSectionTone } from "./shared.jsx";
 
 const TEACHER_THEME_STORAGE_KEY = "classlog_teacher_theme";
 const LOCAL_SANS_FONT = "'Inter',sans-serif";
@@ -4995,7 +4995,7 @@ function ClassTrackerInner({user}){
 
     // For tablet/desktop split view
     const selCls=activeClasses.find(c=>c.id===activeClass?.id)||activeClasses[0]||null;
-    const selColor=selCls?instColor(selCls.institute):instColor("");
+    const selColor=selCls?getSectionTone(selCls.section):getSectionTone("");
     const selNotes=selCls?getClassNotes(selCls.id):{};
     const selDateNotes=selCls?getDateNotes(selCls.id,selectedDate):[];
     const selMetrics=selCls?(teacherClassMetricsMap[selCls.id] || buildClassEntryMetrics(selNotes)):null;
@@ -5011,7 +5011,7 @@ function ClassTrackerInner({user}){
 
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
     const ClassCard = ({cls, onClick, compact = false, dense = false, onDelete = null, onHold = null}) => {
-      const ic=instColor(cls.institute);
+      const ic=getSectionTone(cls.section);
       const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(data.notes?.[cls.id]||{});
       const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
       const holdTimerRef = React.useRef(null);
@@ -5321,7 +5321,7 @@ function ClassTrackerInner({user}){
           </div>}
           <div style={{flex:1,overflowY:"auto",padding:"10px"}}>
             {filtered.map(cls=>{
-              const ic=instColor(cls.institute);
+              const ic=getSectionTone(cls.section);
               const isSel=selCls?.id===cls.id;
               const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(data.notes?.[cls.id]||{});
               const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
@@ -5655,7 +5655,7 @@ function ClassTrackerInner({user}){
       };
     });
     const renderDetailSurface = (surfaceCls, panelKey) => {
-      const surfaceColor = instColor(surfaceCls.institute);
+      const surfaceColor = getSectionTone(surfaceCls.section);
       const surfaceClassNotes = getClassNotes(surfaceCls.id);
       const surfaceDateNotes = getDateNotes(surfaceCls.id, selectedDate);
       const surfaceMetrics = teacherClassMetricsMap[surfaceCls.id] || buildClassEntryMetrics(surfaceClassNotes);
@@ -6008,7 +6008,7 @@ function ClassTrackerInner({user}){
       );
     }
 
-    const timelineColor = instColor(timelineClass.institute);
+    const timelineColor = getSectionTone(timelineClass.section);
     const timelineNotes = data.notes?.[timelineClass.id] || {};
     const timelineSummary = buildClassTimelineSummary(timelineNotes);
     const timelineEntries = timelineSummary.entries;
@@ -6307,7 +6307,7 @@ function ClassTrackerInner({user}){
     const instituteBuckets = new Map();
 
     const classStats=data.classes.filter(c=>!c.left).map(cls=>{
-      const ic=instColor(cls.institute);
+      const ic=getSectionTone(cls.section);
       const classNotes = data.notes?.[cls.id] || {};
       const periodSummary = buildClassTimelineSummary(classNotes, { startKey:rangeStartKey, endKey:todayK });
       const allTimeSummary = buildClassTimelineSummary(classNotes);
@@ -6621,7 +6621,7 @@ function ClassTrackerInner({user}){
               <p style={{fontSize:14,fontFamily:G.sans,color:G.textM,textTransform:"uppercase",marginBottom:14,fontWeight:600}}>Deleted Classes ({tClasses.length})</p>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {tClasses.map(tc=>{
-                  const color=instColor(tc.institute);
+                  const color=getSectionTone(tc.section);
                   const ec=Object.values(tc.savedNotes||{}).reduce((s,arr)=>s+(Array.isArray(arr)?arr.length:0),0);
                   const dl=daysLeft(tc.deletedAt);
                   return(
@@ -6693,7 +6693,7 @@ function ClassTrackerInner({user}){
     const form=isEdit?editNote:newNote;
     const setForm=isEdit?setEditNote:setNewNote;
     const save=isEdit?saveEdit:addNote;
-    const color=activeClass?instColor(activeClass.institute):DEFAULT_INSTITUTE_TONE;
+    const color=activeClass?getSectionTone(activeClass.section):getSectionTone("");
     const hasExtraDetails=Boolean((form.title||"").trim()||(form.body||"").trim());
     const saveLabel=isEdit?"Save Changes":hasExtraDetails?"Save Entry":"Quick Save";
     const lastTopicSuggestion=form.status==="inprogress" ? (getClassUrgencyMeta(activeClass).lastTopic||"").trim() : "";

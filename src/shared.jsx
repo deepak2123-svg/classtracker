@@ -9,6 +9,35 @@ export const COLORS = [
   { bg:"#334155", light:"#EFF4F8", text:"#334155" },
 ];
 
+export const SECTION_TONES = [
+  { bg:"#1D4ED8", light:"#E8F0FF", surface:"#DCE9FF", pill:"#F8FBFF", border:"#AFCBFF", ink:"#1E3A8A", text:"#FFFFFF" },
+  { bg:"#2563EB", light:"#EAF2FF", surface:"#DFEBFF", pill:"#F8FBFF", border:"#BED4FF", ink:"#1D4ED8", text:"#FFFFFF" },
+  { bg:"#0F766E", light:"#E7F7F3", surface:"#D7F0EA", pill:"#F6FCFA", border:"#A7DED1", ink:"#115E59", text:"#FFFFFF" },
+  { bg:"#0891B2", light:"#E7F7FC", surface:"#D9F0F7", pill:"#F7FCFE", border:"#A9DAE8", ink:"#0E7490", text:"#FFFFFF" },
+  { bg:"#15803D", light:"#ECFDF3", surface:"#DCF7E7", pill:"#F7FEFA", border:"#B7E6C8", ink:"#166534", text:"#FFFFFF" },
+  { bg:"#0F6B78", light:"#E6F4F6", surface:"#D8ECEF", pill:"#F6FCFD", border:"#B0D8DE", ink:"#155E75", text:"#FFFFFF" },
+  { bg:"#1E40AF", light:"#E7EEFF", surface:"#D9E5FF", pill:"#F7FAFF", border:"#AFC3F1", ink:"#1E3A8A", text:"#FFFFFF" },
+  { bg:"#047857", light:"#E8FBF3", surface:"#D8F4E8", pill:"#F6FCF9", border:"#AFE2CA", ink:"#065F46", text:"#FFFFFF" },
+];
+
+function normaliseSectionToneKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function hashToneKey(value) {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = ((hash << 5) + hash + value.charCodeAt(i)) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+export function getSectionTone(name) {
+  const key = normaliseSectionToneKey(name);
+  if (!key) return SECTION_TONES[0];
+  return SECTION_TONES[hashToneKey(key) % SECTION_TONES.length];
+}
+
 export const STATUS_STYLES = {
   started:    { bg:"#DBEAFE", text:"#1D4ED8", label:"🔵 Started",     dot:"#3B82F6" },
   inprogress: { bg:"#FEF3C7", text:"#B45309", label:"🟡 In Progress", dot:"#F59E0B" },
