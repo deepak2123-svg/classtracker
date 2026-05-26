@@ -74,6 +74,7 @@ const PANEL_RAIL_THEMES = {
 };
 
 const APP_ICON_STROKE = 2.05;
+let instituteGlanceExportRuntimePromise = null;
 
 function AppIcon({ icon, size = 18, color = "currentColor", stroke = APP_ICON_STROKE, style = {} }){
   if(!icon) return null;
@@ -82,6 +83,21 @@ function AppIcon({ icon, size = 18, color = "currentColor", stroke = APP_ICON_ST
     return <Icon size={size} color={color} stroke={stroke} style={{display:"block",flexShrink:0,...style}} />;
   }
   return <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",lineHeight:1,...style}}>{icon}</span>;
+}
+
+async function loadInstituteGlanceExportRuntime(){
+  if(!instituteGlanceExportRuntimePromise){
+    instituteGlanceExportRuntimePromise = Promise.all([
+      import("jspdf"),
+      import("jspdf-autotable"),
+      import("jszip"),
+    ]).then(([jspdfModule, autoTableModule, jszipModule]) => ({
+      jsPDF: jspdfModule.jsPDF,
+      autoTable: autoTableModule.default,
+      JSZip: jszipModule.default,
+    }));
+  }
+  return instituteGlanceExportRuntimePromise;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2536,16 +2552,231 @@ async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLab
   });
   anchor.click();
 }
-async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
-  const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel });
-  const { jsPDF } = await import("jspdf");
-  const pdf = new jsPDF({
-    orientation:"portrait",
-    unit:"pt",
-    format:[canvas.width / 2, canvas.height / 2],
+function instituteGlancePdfFilename(instituteName){
+  return `${slugifyDownloadPart(instituteName)}_centre_summary_${todayKey()}.pdf`;
+}
+async function buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLabel }){
+  const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
+  const doc = new jsPDF({ unit:"pt", format:"a4" });
+  const margin = 40;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const contentWidth = pageWidth - margin * 2;
+  let cursorY = 42;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  doc.text("All institutes at a glance", margin, cursorY);
+  cursorY += 22;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10.5);
+  doc.setTextColor(75, 85, 99);
+  doc.text(generatedOnLabel, margin, cursorY);
+  cursorY += 18;
+
+  doc.setFontSize(12.5);
+  doc.text(
+    doc.splitTextToSize("Compact centre summary with uploaded teachers, pending follow-up, sections taught, and study hours.", contentWidth),
+    margin,
+    cursorY
+  );
+  cursorY += 32;
+
+  const summaryLines = [
+    `Institutes: ${summary.totalInstitutes || 0}`,
+    `Teachers updated: ${summary.filledToday || 0}/${summary.totalTeachers || 0}`,
+    `Pending today: ${summary.missingToday || 0}`,
+    `Sections taught: ${summary.sectionsTaught || 0}`,
+    `Study hours: ${formatDurationShort(summary.totalStudyMinutes || 0)}`,
+  ];
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(17, 24, 39);
+  doc.text(summaryLines.join("  •  "), margin, cursorY);
+  cursorY += 18;
+
+  autoTable(doc, {
+    startY: cursorY,
+    head: [[
+      "Institute",
+      "Updated",
+      "Pending",
+      "Sections",
+      "Hours",
+      "Filled teachers",
+      "Pending teachers",
+    ]],
+    body: (rows || []).map(row => [
+      row.institute || "No institute",
+      row.noTeachersSignedUp ? "No sign-ups" : `${row.filledToday || 0}/${row.totalTeachers || 0}`,
+      row.noTeachersSignedUp ? "No sign-ups" : String(row.missingToday || 0),
+      String(row.sectionsTaught || 0),
+      formatDurationShort(row.totalStudyMinutes || 0),
+      row.noTeachersSignedUp
+        ? "No one has signed up in this centre yet."
+        : (row.filledNames || []).length
+          ? row.filledNames.join(", ")
+          : "No teacher has uploaded today yet.",
+      row.noTeachersSignedUp
+        ? "No sign-ups yet."
+        : (row.missingNames || []).length
+          ? row.missingNames.join(", ")
+          : "Everyone linked to this centre has filled today.",
+    ]),
+    margin:{ left:margin, right:margin, bottom:36 },
+    styles:{
+      font:"helvetica",
+      fontSize:8.5,
+      cellPadding:6,
+      lineColor:[221, 227, 237],
+      lineWidth:0.5,
+      textColor:[31, 41, 55],
+      valign:"top",
+      overflow:"linebreak",
+    },
+    headStyles:{
+      fillColor:[26, 47, 90],
+      textColor:[255, 255, 255],
+      fontStyle:"bold",
+      fontSize:8.5,
+    },
+    columnStyles:{
+      0:{ cellWidth:95 },
+      1:{ cellWidth:46, halign:"center" },
+      2:{ cellWidth:46, halign:"center" },
+      3:{ cellWidth:48, halign:"center" },
+      4:{ cellWidth:55, halign:"center" },
+      5:{ cellWidth:116 },
+      6:{ cellWidth:"auto" },
+    },
+    didParseCell: (data) => {
+      if(data.section === "body" && data.column.index === 0){
+        const row = rows?.[data.row.index];
+        if(row?.noTeachersSignedUp){
+          data.cell.styles.fillColor = [248, 250, 252];
+        }
+      }
+    },
   });
-  pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width / 2, canvas.height / 2, undefined, "FAST");
+
+  return doc;
+}
+async function buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel }){
+  const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
+  const doc = new jsPDF({ unit:"pt", format:"a4" });
+  const margin = 40;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const contentWidth = pageWidth - margin * 2;
+  let cursorY = 42;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  doc.text(row.institute || "Institute summary", margin, cursorY);
+  cursorY += 22;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10.5);
+  doc.setTextColor(75, 85, 99);
+  doc.text(generatedOnLabel, margin, cursorY);
+  cursorY += 18;
+
+  const overviewLine = row.noTeachersSignedUp
+    ? "No teachers have signed up in this centre yet."
+    : `${row.filledToday || 0}/${row.totalTeachers || 0} teachers filled today • ${row.missingToday || 0} pending • ${row.sectionsTaught || 0} sections taught • ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
+  doc.setFontSize(12.5);
+  doc.text(doc.splitTextToSize(overviewLine, contentWidth), margin, cursorY);
+  cursorY += row.noTeachersSignedUp ? 36 : 28;
+
+  if(row.noTeachersSignedUp){
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(17, 24, 39);
+    doc.text("No sign-ups yet", margin, cursorY);
+    cursorY += 18;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11.5);
+    doc.setTextColor(75, 85, 99);
+    doc.text(
+      doc.splitTextToSize("This centre currently has 0 linked teachers, so this is not an \"everyone filled\" case.", contentWidth),
+      margin,
+      cursorY
+    );
+    return doc;
+  }
+
+  autoTable(doc, {
+    startY: cursorY,
+    head: [["Teacher", "Sections taught", "Logs", "Study hours"]],
+    body: (row.filledTeacherRows || []).length
+      ? row.filledTeacherRows.map(teacher => [
+          teacher.name || "Teacher",
+          (teacher.sectionNames || []).length ? teacher.sectionNames.join(", ") : "Uploaded without a section name",
+          String(teacher.todayEntries || 0),
+          teacher.totalMinutes > 0
+            ? formatDurationShort(teacher.totalMinutes)
+            : teacher.untimedEntries > 0
+              ? "Untimed"
+              : "0m",
+        ])
+      : [["No teacher has uploaded today's entry yet.", "", "", ""]],
+    margin:{ left:margin, right:margin },
+    styles:{
+      font:"helvetica",
+      fontSize:9,
+      cellPadding:6,
+      lineColor:[221, 227, 237],
+      lineWidth:0.5,
+      textColor:[31, 41, 55],
+      valign:"top",
+      overflow:"linebreak",
+    },
+    headStyles:{
+      fillColor:[26, 47, 90],
+      textColor:[255, 255, 255],
+      fontStyle:"bold",
+      fontSize:9,
+    },
+    columnStyles:{
+      0:{ cellWidth:110 },
+      1:{ cellWidth:300 },
+      2:{ cellWidth:42, halign:"center" },
+      3:{ cellWidth:60, halign:"center" },
+    },
+  });
+
+  cursorY = (doc.lastAutoTable?.finalY || cursorY) + 20;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(17, 24, 39);
+  doc.text("Teachers pending today", margin, cursorY);
+  cursorY += 16;
+
+  const pendingText = (row.missingNames || []).length
+    ? row.missingNames.join(", ")
+    : "Everyone linked to this centre has filled today.";
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(75, 85, 99);
+  doc.text(doc.splitTextToSize(pendingText, contentWidth), margin, cursorY);
+  return doc;
+}
+async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
+  const pdf = await buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLabel });
   pdf.save(`all_institutes_at_a_glance_${todayKey()}.pdf`);
+}
+async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel }){
+  const pdf = await buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel });
+  pdf.save(instituteGlancePdfFilename(row?.institute || "institute"));
+}
+async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel }){
+  const { JSZip } = await loadInstituteGlanceExportRuntime();
+  const zip = new JSZip();
+  for(const row of (rows || [])){
+    const pdf = await buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel });
+    zip.file(instituteGlancePdfFilename(row?.institute || "institute"), pdf.output("arraybuffer"));
+  }
+  const blob = await zip.generateAsync({ type:"blob" });
+  triggerBlobDownload(blob, `all_institute_pdfs_${todayKey()}.zip`);
 }
 function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
   // returns flat array of {dateKey, entry} sorted by date desc, time asc
@@ -4032,6 +4263,7 @@ function AdminPanelInner({user}){
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
   const [instituteGlanceExportBusy, setInstituteGlanceExportBusy] = useState("");
+  const [instituteGlanceRowExportBusy, setInstituteGlanceRowExportBusy] = useState("");
   const [instituteGlanceReport, setInstituteGlanceReport] = useState(() => ({
     rows: [],
     summary: EMPTY_INSTITUTE_GLANCE_SUMMARY,
@@ -4542,41 +4774,62 @@ function AdminPanelInner({user}){
     if(!pendingUids.length) return seedReport;
 
     let firstError = null;
-    let loadedSincePublish = 0;
-    const publishBatchSize = isMobile ? 12 : (isWeakDevice || mobileLiteMode) ? 6 : 4;
-    for(let i=0;i<pendingUids.length;i+=1){
-      const uid = pendingUids[i];
-      try {
-        const data = await getTeacherFullData(uid);
-        if(jobId !== instituteGlanceJobRef.current) return null;
-        if(data){
-          hydratedFullData[uid] = data;
-          instituteGlanceDataRef.current[uid] = data;
+    let nextPendingIndex = 0;
+    let publishedLoaded = loaded;
+    const maxConcurrentLoads = Math.max(
+      1,
+      Math.min(
+        pendingUids.length,
+        isMobile
+          ? (isWeakDevice || mobileLiteMode ? 3 : 4)
+          : (isWeakDevice ? 5 : 8)
+      )
+    );
+    const publishBatchSize = isMobile ? 16 : 4;
+    const publishProgress = () => {
+      const snapshot = buildInstituteGlanceSnapshot(hydratedFullData);
+      const nextReport = {
+        ...snapshot,
+        loading: loaded < total,
+        loaded,
+        total,
+        ready: loaded >= total && snapshot.loadedInstitutes >= snapshot.totalInstitutes && !firstError,
+        error: firstError?.message || "",
+      };
+      scheduleInstituteGlanceReport(nextReport);
+      publishedLoaded = loaded;
+    };
+
+    const worker = async () => {
+      while(true){
+        const pendingIndex = nextPendingIndex;
+        nextPendingIndex += 1;
+        if(pendingIndex >= pendingUids.length) return;
+
+        const uid = pendingUids[pendingIndex];
+        try {
+          const data = await getTeacherFullData(uid);
+          if(jobId !== instituteGlanceJobRef.current) return;
+          if(data){
+            hydratedFullData[uid] = data;
+            instituteGlanceDataRef.current[uid] = data;
+          }
+        } catch (error) {
+          if(jobId !== instituteGlanceJobRef.current) return;
+          if(!firstError) firstError = error;
         }
-      } catch (error) {
-        if(jobId !== instituteGlanceJobRef.current) return null;
-        if(!firstError) firstError = error;
+
+        loaded += 1;
+        const shouldPublishProgress = loaded >= total || (loaded - publishedLoaded) >= publishBatchSize || !!firstError;
+        if(shouldPublishProgress){
+          publishProgress();
+        }
       }
-      loaded += 1;
-      loadedSincePublish += 1;
-      const shouldPublishProgress = loaded >= total || loadedSincePublish >= publishBatchSize || !!firstError;
-      if(shouldPublishProgress){
-        const snapshot = buildInstituteGlanceSnapshot(hydratedFullData);
-        const nextReport = {
-          ...snapshot,
-          loading: loaded < total,
-          loaded,
-          total,
-          ready: loaded >= total && snapshot.loadedInstitutes >= snapshot.totalInstitutes && !firstError,
-          error: firstError?.message || "",
-        };
-        scheduleInstituteGlanceReport(nextReport);
-        loadedSincePublish = 0;
-      }
-      if((isWeakDevice || mobileLiteMode) && i < pendingUids.length - 1){
-        await new Promise(resolve => window.setTimeout(resolve, 45));
-      }
-    }
+    };
+
+    await Promise.all(
+      Array.from({ length:maxConcurrentLoads }, () => worker())
+    );
 
     if(jobId !== instituteGlanceJobRef.current) return null;
 
@@ -4647,6 +4900,14 @@ function AdminPanelInner({user}){
     setMobileStep(1);
   }, []);
 
+  const getInstituteGlanceGeneratedOnLabel = React.useCallback(() => `Generated ${new Date().toLocaleString("en-IN",{
+    day:"numeric",
+    month:"short",
+    year:"numeric",
+    hour:"numeric",
+    minute:"2-digit",
+  })}`, []);
+
   const exportInstituteGlance = React.useCallback(async (format) => {
     if(instituteGlanceExportBusy) return;
     setInstituteGlanceExportBusy(format);
@@ -4655,15 +4916,11 @@ function AdminPanelInner({user}){
       if(!report) return;
       const rows = report.rows || [];
       const summary = report.summary || EMPTY_INSTITUTE_GLANCE_SUMMARY;
-      const generatedOnLabel = `Generated ${new Date().toLocaleString("en-IN",{
-        day:"numeric",
-        month:"short",
-        year:"numeric",
-        hour:"numeric",
-        minute:"2-digit",
-      })}`;
+      const generatedOnLabel = getInstituteGlanceGeneratedOnLabel();
       if(format === "png"){
         await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel });
+      } else if(format === "zip"){
+        await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel });
       } else {
         await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel });
       }
@@ -4673,7 +4930,24 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceExportBusy("");
     }
-  }, [instituteGlanceExportBusy, instituteGlanceReport.ready, loadInstituteGlanceReport]);
+  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceExportBusy, instituteGlanceReport.ready, loadInstituteGlanceReport]);
+
+  const exportInstituteGlanceRowPdf = React.useCallback(async (row) => {
+    if(!row?.institute || !row.ready || instituteGlanceRowExportBusy) return;
+    const busyKey = row.institute;
+    setInstituteGlanceRowExportBusy(busyKey);
+    try {
+      await downloadInstituteGlanceInstitutePdf({
+        row,
+        generatedOnLabel:getInstituteGlanceGeneratedOnLabel(),
+      });
+    } catch (error) {
+      console.error("institute glance row export failed", error);
+      window.alert("Could not export this centre PDF. Please try again.");
+    } finally {
+      setInstituteGlanceRowExportBusy("");
+    }
+  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceRowExportBusy]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
@@ -5188,7 +5462,8 @@ function AdminPanelInner({user}){
   const instituteGlanceProgressPct = instituteGlanceReport.total
     ? Math.max(0, Math.min(100, Math.round((instituteGlanceReport.loaded / instituteGlanceReport.total) * 100)))
     : 0;
-  const instituteGlanceExportDisabled = instituteGlanceExportBusy || !instituteGlanceReport.ready || !!instituteGlanceReport.error;
+  const instituteGlanceAnyExportBusy = !!instituteGlanceExportBusy || !!instituteGlanceRowExportBusy;
+  const instituteGlanceExportDisabled = instituteGlanceAnyExportBusy || !instituteGlanceReport.ready || !!instituteGlanceReport.error;
   const instituteGlanceHoldListOnMobile = isMobile && instituteGlanceReport.loading && !instituteGlanceReport.ready;
 
   const renderInstituteGlanceStatGrid = (compact = false) => (
@@ -5210,7 +5485,7 @@ function AdminPanelInner({user}){
 
   const renderInstituteGlanceActions = (compact = false) => {
     const baseButtonStyle = {
-      minWidth:compact ? 74 : 82,
+      minWidth:compact ? 84 : 92,
       height:compact ? 36 : 38,
       padding:"0 12px",
       borderRadius:12,
@@ -5245,7 +5520,7 @@ function AdminPanelInner({user}){
             cursor:instituteGlanceExportDisabled ? "not-allowed" : "pointer",
           }}>
           <AppIcon icon={IconDownload} size={15} color={G.text} />
-          {instituteGlanceExportBusy==="pdf" ? "PDF..." : "PDF"}
+          {instituteGlanceExportBusy==="pdf" ? "PDF..." : "All PDF"}
         </button>
         <button
           className="admin-mobile-touch"
@@ -5257,7 +5532,19 @@ function AdminPanelInner({user}){
             cursor:instituteGlanceExportDisabled ? "not-allowed" : "pointer",
           }}>
           <AppIcon icon={IconDownload} size={15} color={G.text} />
-          {instituteGlanceExportBusy==="png" ? "PNG..." : "PNG"}
+          {instituteGlanceExportBusy==="png" ? "PNG..." : "All PNG"}
+        </button>
+        <button
+          className="admin-mobile-touch"
+          onClick={()=>exportInstituteGlance("zip")}
+          disabled={!!instituteGlanceExportDisabled}
+          style={{
+            ...baseButtonStyle,
+            opacity:instituteGlanceExportDisabled ? 0.5 : 1,
+            cursor:instituteGlanceExportDisabled ? "not-allowed" : "pointer",
+          }}>
+          <AppIcon icon={IconDownload} size={15} color={G.text} />
+          {instituteGlanceExportBusy==="zip" ? "ZIP..." : "ZIP PDFs"}
         </button>
       </div>
     );
@@ -5268,11 +5555,11 @@ function AdminPanelInner({user}){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
         <div>
           <div style={{fontSize:13,fontWeight:700,color:G.text,fontFamily:G.sans}}>
-            {instituteGlanceReport.loading ? "Loading centres one by one" : "All centres are ready"}
+            {instituteGlanceReport.loading ? "Loading centres in parallel" : "All centres are ready"}
           </div>
           <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:4}}>
             {instituteGlanceReport.loading
-              ? "Teacher records sync in the background and each centre updates in calmer batches for smoother mobile scrolling."
+              ? "Teacher records now sync in parallel, while the mobile screen waits to show the full list until it can stay stable."
               : "Review uploaded teachers, pending follow-up, sections taught, and study hours for every centre."}
           </div>
         </div>
@@ -5328,11 +5615,47 @@ function AdminPanelInner({user}){
     );
   };
 
-  const renderInstituteGlanceFilledTeacherTable = (row) => {
+  const renderInstituteGlanceFilledTeacherTable = (row, compact = false) => {
     if(!row?.filledTeacherRows?.length){
       return (
         <div style={{marginTop:10,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:14,padding:"12px 13px",fontSize:12.5,color:"#9A3412",lineHeight:1.55}}>
           No teacher has uploaded today&apos;s entry for this centre yet.
+        </div>
+      );
+    }
+    if(compact){
+      return (
+        <div style={{display:"grid",gap:9,marginTop:10}}>
+          {(row.filledTeacherRows || []).map(teacher => {
+            const hoursLabel = teacher.totalMinutes > 0
+              ? formatDurationShort(teacher.totalMinutes)
+              : teacher.untimedEntries > 0
+                ? "Untimed"
+                : "0m";
+            const sectionCaption = teacher.sectionNames?.length
+              ? teacher.sectionNames.join(", ")
+              : "Uploaded without a section name";
+            return (
+              <div
+                key={`${row.institute}_${teacher.uid}`}
+                style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 12px 13px"}}>
+                <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.35}}>{teacher.name}</div>
+                <div style={{fontSize:12,color:G.textM,lineHeight:1.5,marginTop:5}}>{sectionCaption}</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:10}}>
+                  {[
+                    { label:"Sections", value:teacher.sectionCount },
+                    { label:"Logs", value:teacher.todayEntries },
+                    { label:"Hours", value:hoursLabel },
+                  ].map(item=>(
+                    <div key={`${teacher.uid}_${item.label}`} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:12,padding:"9px 10px"}}>
+                      <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.5,textTransform:"uppercase"}}>{item.label}</div>
+                      <div style={{fontSize:16,fontWeight:800,color:G.text,lineHeight:1.1,marginTop:6}}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       );
     }
@@ -5492,7 +5815,7 @@ function AdminPanelInner({user}){
                         <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
                           Uploaded teachers are listed below with their sections taught, total logs, and study hours for today.
                         </div>
-                        {renderInstituteGlanceFilledTeacherTable(row)}
+                        {renderInstituteGlanceFilledTeacherTable(row, isMobile)}
                       </div>
 
                       <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:"12px 13px"}}>
@@ -5505,11 +5828,36 @@ function AdminPanelInner({user}){
               )}
 
               {canOpen&&(
-                <div style={{display:"flex",justifyContent:"flex-end",marginTop:12}}>
+                <div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",marginTop:12}}>
+                  <button
+                    type="button"
+                    className="admin-mobile-touch"
+                    onClick={()=>exportInstituteGlanceRowPdf(row)}
+                    disabled={!!instituteGlanceRowExportBusy}
+                    style={{
+                      minHeight:36,
+                      padding:"0 12px",
+                      borderRadius:12,
+                      border:`1px solid ${G.border}`,
+                      background:"#FFFFFF",
+                      color:G.text,
+                      fontSize:12.5,
+                      fontWeight:800,
+                      fontFamily:G.sans,
+                      cursor:instituteGlanceRowExportBusy ? "not-allowed" : "pointer",
+                      opacity:instituteGlanceRowExportBusy && instituteGlanceRowExportBusy !== row.institute ? 0.65 : 1,
+                      display:"inline-flex",
+                      alignItems:"center",
+                      gap:6,
+                    }}>
+                    <AppIcon icon={IconDownload} size={14} color={G.text} />
+                    <span>{instituteGlanceRowExportBusy===row.institute ? "PDF..." : "Centre PDF"}</span>
+                  </button>
                   <button
                     type="button"
                     className="admin-mobile-touch"
                     onClick={()=>openInstituteFromGlance(row)}
+                    disabled={!!instituteGlanceRowExportBusy}
                     style={{
                       minHeight:36,
                       padding:"0 12px",
@@ -5520,7 +5868,8 @@ function AdminPanelInner({user}){
                       fontSize:12.5,
                       fontWeight:800,
                       fontFamily:G.sans,
-                      cursor:"pointer",
+                      cursor:instituteGlanceRowExportBusy ? "not-allowed" : "pointer",
+                      opacity:instituteGlanceRowExportBusy ? 0.7 : 1,
                       display:"inline-flex",
                       alignItems:"center",
                       gap:6,
