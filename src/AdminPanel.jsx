@@ -4662,6 +4662,17 @@ function AdminPanelInner({user}){
     [teachers, roles]
   );
 
+  const instituteGlanceTeacherList = useMemo(
+    () => teachers.filter(teacher => {
+      if(!teacher?.uid) return false;
+      if(roles[teacher.uid] !== "admin") return true;
+      if(Number(teacher.classCount || 0) > 0) return true;
+      const loadedClasses = fullData[teacher.uid]?.classes;
+      return Array.isArray(loadedClasses) && loadedClasses.length > 0;
+    }),
+    [fullData, roles, teachers]
+  );
+
   const getInstituteTeacherUids = React.useCallback((inst) => {
     return teachers
       .filter(t => teacherBelongsToInstitute(t, inst))
@@ -4712,7 +4723,7 @@ function AdminPanelInner({user}){
   const buildInstituteGlanceSnapshot = React.useCallback((fullDataMap = {}) => {
     const rows = buildInstituteGlanceRows({
       institutes,
-      teachers: teacherOnlyList,
+      teachers: instituteGlanceTeacherList,
       fullDataMap,
       resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
     });
@@ -4722,7 +4733,7 @@ function AdminPanelInner({user}){
       loadedInstitutes: rows.filter(row => row.ready).length,
       totalInstitutes: rows.length,
     };
-  }, [instSectionsAll, institutes, teacherOnlyList]);
+  }, [instSectionsAll, instituteGlanceTeacherList, institutes]);
 
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
@@ -4752,7 +4763,7 @@ function AdminPanelInner({user}){
     if(!force && currentReport.ready && !currentReport.error) return currentReport;
 
     const jobId = ++instituteGlanceJobRef.current;
-    const teacherUids = teacherOnlyList.map(t => t.uid).filter(Boolean);
+    const teacherUids = instituteGlanceTeacherList.map(t => t.uid).filter(Boolean);
     const total = teacherUids.length;
     const cachedMap = force ? {} : instituteGlanceDataRef.current;
     const hydratedFullData = { ...fullData, ...cachedMap };
@@ -4844,7 +4855,7 @@ function AdminPanelInner({user}){
     };
     scheduleInstituteGlanceReport(finalReport);
     return finalReport;
-  }, [buildInstituteGlanceSnapshot, fullData, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport, teacherOnlyList]);
+  }, [buildInstituteGlanceSnapshot, fullData, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
 
   const openMobileCentreSummary = React.useCallback(() => {
     setProfileOpen(false);
@@ -4912,7 +4923,7 @@ function AdminPanelInner({user}){
     if(instituteGlanceExportBusy) return;
     setInstituteGlanceExportBusy(format);
     try {
-      const report = await loadInstituteGlanceReport({ force: !instituteGlanceReport.ready });
+      const report = await loadInstituteGlanceReport({ force:true });
       if(!report) return;
       const rows = report.rows || [];
       const summary = report.summary || EMPTY_INSTITUTE_GLANCE_SUMMARY;
@@ -4930,15 +4941,20 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceExportBusy("");
     }
-  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceExportBusy, instituteGlanceReport.ready, loadInstituteGlanceReport]);
+  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceExportBusy, loadInstituteGlanceReport]);
 
   const exportInstituteGlanceRowPdf = React.useCallback(async (row) => {
     if(!row?.institute || !row.ready || instituteGlanceRowExportBusy) return;
     const busyKey = row.institute;
     setInstituteGlanceRowExportBusy(busyKey);
     try {
+      const report = await loadInstituteGlanceReport({ force:true });
+      const freshRow = (report?.rows || []).find(item => sameInstituteName(item?.institute, row.institute));
+      if(!freshRow){
+        throw new Error("Could not rebuild the latest centre summary for this institute.");
+      }
       await downloadInstituteGlanceInstitutePdf({
-        row,
+        row:freshRow,
         generatedOnLabel:getInstituteGlanceGeneratedOnLabel(),
       });
     } catch (error) {
@@ -4947,7 +4963,7 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceRowExportBusy("");
     }
-  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceRowExportBusy]);
+  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceRowExportBusy, loadInstituteGlanceReport]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
