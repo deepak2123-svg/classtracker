@@ -3566,6 +3566,7 @@ function ClassTrackerInner({user}){
     ...teacherThemeVars,
     colorScheme:teacherTheme,
   }), [teacherThemeVars, teacherTheme]);
+  const isDarkTeacherTheme = teacherTheme === "dark";
   const [mobileClassLimit, setMobileClassLimit] = useState(mobileBatchSize);
   const sectionChangeSessionSeenRef = useRef(new Set());
   const pendingAdminClassNotices = useMemo(() => (
@@ -3610,6 +3611,20 @@ function ClassTrackerInner({user}){
     [teacherHomeModel.knownInstituteNames]
   );
   ACTIVE_INSTITUTE_COLOR_MAP = instituteColorMap;
+  const instituteFilterToneMap = useMemo(() => {
+    const map = new Map();
+    teacherActiveClasses.forEach(cls => {
+      const instituteName = String(cls?.institute || "").trim();
+      if(!instituteName || map.has(instituteName)) return;
+      map.set(instituteName, getSectionTone(cls?.section || instituteName));
+    });
+    teacherInstitutes.forEach(instituteName => {
+      const key = String(instituteName || "").trim();
+      if(!key || map.has(key)) return;
+      map.set(key, getSectionTone(key));
+    });
+    return map;
+  }, [teacherActiveClasses, teacherInstitutes]);
   const adminNoticeItems = useMemo(() => (
     pendingAdminClassNotices
       .map(item => {
@@ -5047,11 +5062,14 @@ function ClassTrackerInner({user}){
       // Truncate long institute names with ellipsis
       const instFull=cls.institute||"";
       const instShort=instFull.length>28?instFull.slice(0,26)+"…":instFull;
-      const cardBorder = "rgba(15,23,42,0.92)";
-      const sectionSurface = ic.surface || ic.light || "#EEF3F8";
-      const sectionTitleColor = ic.ink || G.text;
-      const institutePillFill = ic.pill || "#FFFFFF";
-      const institutePillBorder = ic.border || G.border;
+      const cardBorder = isDarkTeacherTheme ? G.borderM : "rgba(15,23,42,0.92)";
+      const sectionSurface = isDarkTeacherTheme ? hexToRgba(ic.bg, 0.18) : (ic.surface || ic.light || "#EEF3F8");
+      const sectionTitleColor = isDarkTeacherTheme ? G.text : (ic.ink || G.text);
+      const institutePillFill = isDarkTeacherTheme ? "rgba(255,255,255,0.08)" : (ic.pill || "#FFFFFF");
+      const institutePillBorder = isDarkTeacherTheme ? "rgba(255,255,255,0.14)" : (ic.border || G.border);
+      const institutePillText = isDarkTeacherTheme ? G.textS : G.text;
+      const subjectPillFill = isDarkTeacherTheme ? "rgba(255,255,255,0.08)" : "#FFFFFF";
+      const subjectPillBorder = isDarkTeacherTheme ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.18)";
       const beginHold = e => {
         if(!compact || !onHold || !e.touches?.length) return;
         const touch = e.touches[0];
@@ -5095,12 +5113,12 @@ function ClassTrackerInner({user}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:dense?22:24,fontWeight:800,color:sectionTitleColor,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.02,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.section}</div>
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
-                    <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:institutePillFill,color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${institutePillBorder}`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:institutePillFill,color:institutePillText,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${institutePillBorder}`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                       {instShort || "No institute"}
                     </span>
                     {cls.subject && (
-                      <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid rgba(15,23,42,0.18)`,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      <span style={{display:"inline-flex",alignItems:"center",background:subjectPillFill,color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,fontFamily:G.sans,border:`1px solid ${subjectPillBorder}`,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
                         {cls.subject}
                       </span>
                     )}
@@ -5129,11 +5147,11 @@ function ClassTrackerInner({user}){
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:19,fontWeight:800,color:sectionTitleColor,fontFamily:G.display,letterSpacing:-0.3,lineHeight:1.08,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:institutePillFill,color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${institutePillBorder}`,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:7,background:institutePillFill,color:institutePillText,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${institutePillBorder}`,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                     <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                     {instShort || "No institute"}
                   </span>
-                  {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid rgba(15,23,42,0.18)`,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                  {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:subjectPillFill,color:G.text,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${subjectPillBorder}`,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>
@@ -5153,15 +5171,17 @@ function ClassTrackerInner({user}){
       <div style={scroll ? {display:"flex",gap:8,overflowX:"auto",padding:"0 0 4px",scrollbarWidth:"none"} : {display:"grid",gridTemplateColumns:stacked?"repeat(2,minmax(0,1fr))":columns,gap:stacked?10:(compact?6:8),padding:"0 0 2px"}}>
         {["all",...institutes].map(inst=>{
           const isSel=instFilter===inst;
-          const ic=inst==="all"?{bg:G.textL,light:G.surfaceAlt,surface:"#FFFFFF",pill:"#FFFFFF",border:G.borderM,text:G.text,ink:G.text}:instColor(inst);
+          const ic=inst==="all"
+            ? {bg:G.textL,light:G.surfaceAlt,surface:G.surface,pill:G.surface,border:G.borderM,text:G.text,ink:G.text}
+            : (instituteFilterToneMap.get(inst) || getSectionTone(inst));
           const label=inst==="all"?allLabel:inst;
           const pillBg=inst==="all"
-            ? "#FFFFFF"
-            : ic.bg;
-          const pillText=inst==="all" ? G.text : "#FFFFFF";
+            ? (isDarkTeacherTheme ? G.surfaceAlt : G.surface)
+            : (isSel ? ic.bg : (ic.surface || ic.light || G.surfaceAlt));
+          const pillText=inst==="all" ? G.text : (isSel ? "#FFFFFF" : (ic.ink || G.text));
           const pillBorder=inst==="all"
-            ? (isSel ? "rgba(15,23,42,0.92)" : G.borderM)
-            : (isSel ? "rgba(15,23,42,0.92)" : (ic.border || G.borderM));
+            ? (isSel ? G.borderM : G.border)
+            : (isSel ? (ic.bg || G.borderM) : (ic.border || G.borderM));
           return(
             <button key={inst} title={label} onClick={()=>React.startTransition(()=>setInstFilter(inst))}
               style={{
@@ -5191,7 +5211,7 @@ function ClassTrackerInner({user}){
                 lineHeight:1.15,
                 overflow:"hidden",
               }}>
-              <span style={{width:stacked?10:8,height:stacked?10:8,borderRadius:999,background:inst==="all" ? "#FFFFFF" : "rgba(255,255,255,0.96)",flexShrink:0,border:`1px solid ${inst==="all" ? "rgba(15,23,42,0.24)" : "rgba(255,255,255,0.46)"}`}}/>
+              <span style={{width:stacked?10:8,height:stacked?10:8,borderRadius:999,background:inst==="all" ? (isDarkTeacherTheme ? G.textS : "#FFFFFF") : (isSel ? "rgba(255,255,255,0.96)" : ic.bg),flexShrink:0,border:`1px solid ${inst==="all" ? G.borderM : (isSel ? "rgba(255,255,255,0.46)" : (ic.border || G.borderM))}`}}/>
               <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</span>
             </button>
           );
@@ -5345,20 +5365,24 @@ function ClassTrackerInner({user}){
               const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(data.notes?.[cls.id]||{});
               const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
               const instFull=cls.institute||"";
-              const sectionSurface=ic.surface || ic.light || "#EEF3F8";
+              const sectionSurface=isDarkTeacherTheme ? hexToRgba(ic.bg, 0.18) : (ic.surface || ic.light || "#EEF3F8");
+              const institutePillFill = isDarkTeacherTheme ? "rgba(255,255,255,0.08)" : (ic.pill || "#FFFFFF");
+              const institutePillBorder = isDarkTeacherTheme ? "rgba(255,255,255,0.14)" : (ic.border || G.border);
+              const subjectPillFill = isDarkTeacherTheme ? "rgba(255,255,255,0.08)" : "#FFFFFF";
+              const subjectPillBorder = isDarkTeacherTheme ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.18)";
               return(
                 <div key={cls.id} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());}}
-                  style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:"#FFFFFF",border:`1.5px solid ${isSel ? "rgba(15,23,42,0.92)" : "rgba(15,23,42,0.82)"}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
+                  style={{borderRadius:18,marginBottom:8,cursor:"pointer",background:G.surface,border:`1.5px solid ${isSel ? G.borderM : G.border}`,boxShadow:G.shadowSm,transition:"all 0.14s ease",overflow:"hidden"}}>
                   <div style={{background:sectionSurface,padding:"13px 13px 12px",borderBottom:`1px solid ${G.border}`}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:16,fontWeight:800,color:ic.ink || G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
                         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
-                          <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:ic.pill || "#FFFFFF",border:`1px solid ${ic.border || G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:institutePillFill,border:`1px solid ${institutePillBorder}`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:isDarkTeacherTheme ? G.textS : G.text,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                             <span style={{width:7,height:7,borderRadius:999,background:ic.bg,flexShrink:0}}/>
                             <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{instFull || "No institute"}</span>
                           </span>
-                          {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                          {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:subjectPillFill,border:`1px solid ${subjectPillBorder}`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:G.text,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
                         </div>
                       </div>
                       <div style={{display:"flex",alignItems:"flex-start",gap:8,flexShrink:0}}>

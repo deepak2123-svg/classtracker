@@ -1703,6 +1703,53 @@ function shortDateLabel(ts){
   if(!ts) return "";
   return new Date(ts).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
 }
+function longDateLabel(ts){
+  if(!ts) return "";
+  return new Date(ts).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"});
+}
+function currentMonthKey(now = new Date()){
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+function countEntriesForMonth(classNotes = {}, monthKey = currentMonthKey()){
+  return Object.entries(classNotes || {}).reduce((sum, [dk, entries]) => {
+    if(!dk.startsWith(monthKey) || !Array.isArray(entries)) return sum;
+    return sum + entries.length;
+  }, 0);
+}
+function firstClassCreatedTs(classes = []){
+  return (classes || []).reduce((earliest, cls) => {
+    const created = Number(cls?.created || 0) || 0;
+    if(!created) return earliest;
+    if(!earliest) return created;
+    return Math.min(earliest, created);
+  }, 0) || null;
+}
+function instituteGlanceLastActivityLabel(teacherRow){
+  if(teacherRow?.lastEntryTs){
+    return longDateLabel(teacherRow.lastEntryTs);
+  }
+  if(teacherRow?.joinedAtTs){
+    return `Signed up ${longDateLabel(teacherRow.joinedAtTs)}`;
+  }
+  return "No logs yet";
+}
+function instituteGlanceTodayStatusLabel(teacherRow){
+  return teacherRow?.updatedToday ? "Filled today" : "Pending today";
+}
+function instituteGlanceTeacherHoursLabel(teacherRow){
+  return teacherRow?.totalMinutes > 0
+    ? formatDurationShort(teacherRow.totalMinutes)
+    : teacherRow?.untimedEntries > 0
+      ? "Untimed"
+      : "0m";
+}
+function instituteGlanceTeacherSectionCaption(teacherRow){
+  return teacherRow?.sectionNames?.length
+    ? teacherRow.sectionNames.join(", ")
+    : teacherRow?.updatedToday
+      ? "Uploaded without a section name"
+      : "No section was taught today";
+}
 function lastEntryCaption(ts){
   if(!ts) return "Last entry: no logs yet";
   const relative = daysAgo(ts);
@@ -1881,13 +1928,17 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
   const classesHere = data
     ? (data.classes || []).filter(cls => sameInstituteName(cls?.institute, instituteName))
     : [];
+  const monthKey = currentMonthKey();
   const sectionMap = new Map();
   let todayEntries = 0;
+  let monthEntries = 0;
   let totalMinutes = 0;
   let untimedEntries = 0;
 
   classesHere.forEach(cls => {
-    const notesToday = getEntriesInRange((data.notes || {})[cls.id] || {}, 1);
+    const classNotes = (data.notes || {})[cls.id] || {};
+    const notesToday = getEntriesInRange(classNotes, 1);
+    monthEntries += countEntriesForMonth(classNotes, monthKey);
     if(!notesToday.length) return;
 
     const resolvedSection = typeof resolveSectionName === "function"
@@ -1915,6 +1966,9 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
   const lastEntry = data
     ? classesHere.reduce((latest, cls) => Math.max(latest, lastEntryTs((data.notes || {})[cls.id] || {}) || 0), 0)
     : Number(teacher?.lastActive || 0) || 0;
+  const joinedAtTs = classesHere.length
+    ? firstClassCreatedTs(classesHere)
+    : firstClassCreatedTs(data?.classes || []);
   const sections = Array.from(sectionMap.values()).sort((a, b) => {
     if((b.totalMinutes || 0) !== (a.totalMinutes || 0)) return (b.totalMinutes || 0) - (a.totalMinutes || 0);
     if((b.entryCount || 0) !== (a.entryCount || 0)) return (b.entryCount || 0) - (a.entryCount || 0);
@@ -1926,8 +1980,15 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     name: getTeacherDisplayNameFromMap(teacher, fullDataMap),
     loaded: !!data,
     todayEntries,
+    monthEntries,
     updatedToday: todayEntries > 0,
     lastEntryTs: lastEntry || null,
+    joinedAtTs: joinedAtTs || null,
+    lastActivityLabel: instituteGlanceLastActivityLabel({
+      lastEntryTs:lastEntry || null,
+      joinedAtTs:joinedAtTs || null,
+    }),
+    todayStatusLabel: instituteGlanceTodayStatusLabel({ updatedToday:todayEntries > 0 }),
     sectionCount: sections.length,
     sectionNames: sections.map(section => section.name),
     sections,
@@ -1956,7 +2017,9 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
     const missingTeachers = teacherRows
       .filter(item => !item.updatedToday)
       .sort((a, b) => {
-        if((a.lastEntryTs || 0) !== (b.lastEntryTs || 0)) return (a.lastEntryTs || 0) - (b.lastEntryTs || 0);
+        const aSortTs = a.lastEntryTs || a.joinedAtTs || 0;
+        const bSortTs = b.lastEntryTs || b.joinedAtTs || 0;
+        if(aSortTs !== bSortTs) return aSortTs - bSortTs;
         return exportTextSorter.compare(a.name || "", b.name || "");
       });
     const orderedTeachers = [...filledTeachers, ...missingTeachers];
@@ -2555,137 +2618,270 @@ async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLab
 function instituteGlancePdfFilename(instituteName){
   return `${slugifyDownloadPart(instituteName)}_centre_summary_${todayKey()}.pdf`;
 }
+function drawInstituteGlancePdfStatCard(doc, { x, y, width, height, label, value }){
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(221, 227, 237);
+  doc.roundedRect(x, y, width, height, 12, 12, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(107, 114, 128);
+  doc.text(String(label || "").toUpperCase(), x + 12, y + 16);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.setTextColor(17, 24, 39);
+  doc.text(String(value || "0"), x + 12, y + 41);
+}
+function buildInstituteGlanceAllTeacherPdfBody(row){
+  return (row?.teacherRows || []).map(teacher => [
+    teacher.name || "Teacher",
+    teacher.todayStatusLabel || instituteGlanceTodayStatusLabel(teacher),
+    instituteGlanceTeacherSectionCaption(teacher),
+    String(teacher.todayEntries || 0),
+    String(teacher.monthEntries || 0),
+    teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher),
+    instituteGlanceTeacherHoursLabel(teacher),
+  ]);
+}
+function buildInstituteGlancePendingTeacherPdfBody(row){
+  return (row?.pendingTeacherRows || []).map(teacher => [
+    teacher.name || "Teacher",
+    String(teacher.monthEntries || 0),
+    teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher),
+  ]);
+}
 async function buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLabel }){
   const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
-  const doc = new jsPDF({ unit:"pt", format:"a4" });
-  const margin = 40;
+  const doc = new jsPDF({ unit:"pt", format:"a4", orientation:"landscape" });
+  const margin = 30;
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = pageWidth - margin * 2;
-  let cursorY = 42;
+  let cursorY = 36;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
+  doc.setFontSize(28);
   doc.text("All institutes at a glance", margin, cursorY);
-  cursorY += 22;
+  cursorY += 24;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10.5);
+  doc.setFontSize(11);
   doc.setTextColor(75, 85, 99);
   doc.text(generatedOnLabel, margin, cursorY);
-  cursorY += 18;
+  cursorY += 22;
 
-  doc.setFontSize(12.5);
+  doc.setFontSize(14);
   doc.text(
-    doc.splitTextToSize("Compact centre summary with uploaded teachers, pending follow-up, sections taught, and study hours.", contentWidth),
+    doc.splitTextToSize("Centre-wise teacher tables with today’s status, month entries, sections taught, last activity, and study hours.", contentWidth),
     margin,
     cursorY
   );
-  cursorY += 32;
+  cursorY += 30;
 
-  const summaryLines = [
-    `Institutes: ${summary.totalInstitutes || 0}`,
-    `Teachers updated: ${summary.filledToday || 0}/${summary.totalTeachers || 0}`,
-    `Pending today: ${summary.missingToday || 0}`,
-    `Sections taught: ${summary.sectionsTaught || 0}`,
-    `Study hours: ${formatDurationShort(summary.totalStudyMinutes || 0)}`,
-  ];
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.setTextColor(17, 24, 39);
-  doc.text(summaryLines.join("  •  "), margin, cursorY);
-  cursorY += 18;
-
-  autoTable(doc, {
-    startY: cursorY,
-    head: [[
-      "Institute",
-      "Updated",
-      "Pending",
-      "Sections",
-      "Hours",
-      "Filled teachers",
-      "Pending teachers",
-    ]],
-    body: (rows || []).map(row => [
-      row.institute || "No institute",
-      row.noTeachersSignedUp ? "No sign-ups" : `${row.filledToday || 0}/${row.totalTeachers || 0}`,
-      row.noTeachersSignedUp ? "No sign-ups" : String(row.missingToday || 0),
-      String(row.sectionsTaught || 0),
-      formatDurationShort(row.totalStudyMinutes || 0),
-      row.noTeachersSignedUp
-        ? "No one has signed up in this centre yet."
-        : (row.filledNames || []).length
-          ? row.filledNames.join(", ")
-          : "No teacher has uploaded today yet.",
-      row.noTeachersSignedUp
-        ? "No sign-ups yet."
-        : (row.missingNames || []).length
-          ? row.missingNames.join(", ")
-          : "Everyone linked to this centre has filled today.",
-    ]),
-    margin:{ left:margin, right:margin, bottom:36 },
-    styles:{
-      font:"helvetica",
-      fontSize:8.5,
-      cellPadding:6,
-      lineColor:[221, 227, 237],
-      lineWidth:0.5,
-      textColor:[31, 41, 55],
-      valign:"top",
-      overflow:"linebreak",
-    },
-    headStyles:{
-      fillColor:[26, 47, 90],
-      textColor:[255, 255, 255],
-      fontStyle:"bold",
-      fontSize:8.5,
-    },
-    columnStyles:{
-      0:{ cellWidth:95 },
-      1:{ cellWidth:46, halign:"center" },
-      2:{ cellWidth:46, halign:"center" },
-      3:{ cellWidth:48, halign:"center" },
-      4:{ cellWidth:55, halign:"center" },
-      5:{ cellWidth:116 },
-      6:{ cellWidth:"auto" },
-    },
-    didParseCell: (data) => {
-      if(data.section === "body" && data.column.index === 0){
-        const row = rows?.[data.row.index];
-        if(row?.noTeachersSignedUp){
-          data.cell.styles.fillColor = [248, 250, 252];
-        }
-      }
-    },
+  const statGap = 10;
+  const statWidth = (contentWidth - statGap * 4) / 5;
+  [
+    { label:"Institutes", value:String(summary.totalInstitutes || 0) },
+    { label:"Teachers updated", value:`${summary.filledToday || 0}/${summary.totalTeachers || 0}` },
+    { label:"Pending today", value:String(summary.missingToday || 0) },
+    { label:"Sections taught", value:String(summary.sectionsTaught || 0) },
+    { label:"Study hours", value:formatDurationShort(summary.totalStudyMinutes || 0) },
+  ].forEach((item, index) => {
+    drawInstituteGlancePdfStatCard(doc, {
+      x: margin + index * (statWidth + statGap),
+      y: cursorY,
+      width: statWidth,
+      height: 58,
+      label: item.label,
+      value: item.value,
+    });
   });
+  cursorY += 80;
+
+  for(const row of (rows || [])){
+    if(cursorY > pageHeight - 210){
+      doc.addPage();
+      cursorY = margin;
+    }
+
+    const headerHeight = row.noTeachersSignedUp ? 118 : 146;
+    doc.setFillColor(238, 244, 255);
+    doc.setDrawColor(199, 215, 245);
+    doc.roundedRect(margin, cursorY, contentWidth, headerHeight, 16, 16, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.setTextColor(17, 24, 39);
+    doc.text(row.institute || "Institute summary", margin + 16, cursorY + 22);
+
+    const badgeLabel = row.noTeachersSignedUp ? "No sign-ups" : `${row.filledToday || 0}/${row.totalTeachers || 0} filled`;
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(191, 219, 254);
+    doc.roundedRect(pageWidth - margin - 118, cursorY + 14, 102, 28, 14, 14, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12.5);
+    doc.setTextColor(29, 78, 216);
+    doc.text(badgeLabel, pageWidth - margin - 106, cursorY + 33);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
+    doc.setTextColor(75, 85, 99);
+    const overviewLine = row.noTeachersSignedUp
+      ? "No teachers have signed up in this centre yet."
+      : `${row.totalTeachers || 0} teachers • ${row.filledToday || 0} filled today • ${row.missingToday || 0} pending • ${row.sectionsTaught || 0} sections taught • ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
+    doc.text(doc.splitTextToSize(overviewLine, contentWidth - 150), margin + 16, cursorY + 50);
+
+    const rowStatY = cursorY + headerHeight - 56;
+    const rowStatWidth = (contentWidth - 16 * 2 - 10 * 3) / 4;
+    [
+      { label:"Updated", value:`${row.filledToday || 0}/${row.totalTeachers || 0}` },
+      { label:"Pending", value:String(row.missingToday || 0) },
+      { label:"Sections taught", value:String(row.sectionsTaught || 0) },
+      { label:"Study hours", value:formatDurationShort(row.totalStudyMinutes || 0) },
+    ].forEach((item, index) => {
+      drawInstituteGlancePdfStatCard(doc, {
+        x: margin + 16 + index * (rowStatWidth + 10),
+        y: rowStatY,
+        width: rowStatWidth,
+        height: 44,
+        label:item.label,
+        value:item.value,
+      });
+    });
+
+    cursorY += headerHeight + 16;
+
+    if(row.noTeachersSignedUp){
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11.5);
+      doc.setTextColor(75, 85, 99);
+      doc.text(
+        doc.splitTextToSize("This centre currently has 0 linked teachers, so this is not an \"everyone filled\" case.", contentWidth),
+        margin,
+        cursorY
+      );
+      cursorY += 30;
+      continue;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text("All teachers today", margin, cursorY);
+    cursorY += 10;
+
+    autoTable(doc, {
+      startY: cursorY,
+      head: [["Teacher", "Status", "Sections", "Today", "This month", "Last entry", "Study hours"]],
+      body: buildInstituteGlanceAllTeacherPdfBody(row),
+      margin:{ left:margin, right:margin },
+      styles:{
+        font:"helvetica",
+        fontSize:8.8,
+        cellPadding:6,
+        lineColor:[221, 227, 237],
+        lineWidth:0.5,
+        textColor:[31, 41, 55],
+        valign:"top",
+        overflow:"linebreak",
+      },
+      headStyles:{
+        fillColor:[248, 250, 252],
+        textColor:[107, 114, 128],
+        fontStyle:"bold",
+        fontSize:8.2,
+      },
+      columnStyles:{
+        0:{ cellWidth:120 },
+        1:{ cellWidth:74, halign:"center" },
+        2:{ cellWidth:225 },
+        3:{ cellWidth:42, halign:"center" },
+        4:{ cellWidth:58, halign:"center" },
+        5:{ cellWidth:105 },
+        6:{ cellWidth:68, halign:"center" },
+      },
+      didParseCell: (data) => {
+        if(data.section === "body" && data.column.index === 1){
+          const teacher = row.teacherRows?.[data.row.index];
+          if(teacher?.updatedToday){
+            data.cell.styles.fillColor = [236, 253, 243];
+            data.cell.styles.textColor = [22, 101, 52];
+            data.cell.styles.fontStyle = "bold";
+          } else {
+            data.cell.styles.fillColor = [255, 247, 237];
+            data.cell.styles.textColor = [180, 83, 9];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      },
+    });
+
+    cursorY = (doc.lastAutoTable?.finalY || cursorY) + 16;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text("Teachers pending today", margin, cursorY);
+    cursorY += 10;
+
+    autoTable(doc, {
+      startY: cursorY,
+      head: [["Teacher", "This month", "Last entry"]],
+      body: buildInstituteGlancePendingTeacherPdfBody(row).length
+        ? buildInstituteGlancePendingTeacherPdfBody(row)
+        : [["Everyone linked to this centre has filled today.", "", ""]],
+      margin:{ left:margin, right:margin, bottom:24 },
+      styles:{
+        font:"helvetica",
+        fontSize:9,
+        cellPadding:6,
+        lineColor:[221, 227, 237],
+        lineWidth:0.5,
+        textColor:[31, 41, 55],
+        valign:"top",
+        overflow:"linebreak",
+      },
+      headStyles:{
+        fillColor:[248, 250, 252],
+        textColor:[107, 114, 128],
+        fontStyle:"bold",
+        fontSize:8.4,
+      },
+      columnStyles:{
+        0:{ cellWidth:210 },
+        1:{ cellWidth:70, halign:"center" },
+        2:{ cellWidth:150 },
+      },
+    });
+
+    cursorY = (doc.lastAutoTable?.finalY || cursorY) + 22;
+  }
 
   return doc;
 }
 async function buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel }){
   const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
-  const doc = new jsPDF({ unit:"pt", format:"a4" });
-  const margin = 40;
+  const doc = new jsPDF({ unit:"pt", format:"a4", orientation:"landscape" });
+  const margin = 30;
   const pageWidth = doc.internal.pageSize.getWidth();
   const contentWidth = pageWidth - margin * 2;
-  let cursorY = 42;
+  let cursorY = 36;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
+  doc.setFontSize(28);
   doc.text(row.institute || "Institute summary", margin, cursorY);
-  cursorY += 22;
+  cursorY += 24;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10.5);
+  doc.setFontSize(11);
   doc.setTextColor(75, 85, 99);
   doc.text(generatedOnLabel, margin, cursorY);
   cursorY += 18;
 
   const overviewLine = row.noTeachersSignedUp
     ? "No teachers have signed up in this centre yet."
-    : `${row.filledToday || 0}/${row.totalTeachers || 0} teachers filled today • ${row.missingToday || 0} pending • ${row.sectionsTaught || 0} sections taught • ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
-  doc.setFontSize(12.5);
+    : `${row.totalTeachers || 0} teachers • ${row.filledToday || 0} filled today • ${row.missingToday || 0} pending • ${row.sectionsTaught || 0} sections taught • ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
+  doc.setFontSize(14);
   doc.text(doc.splitTextToSize(overviewLine, contentWidth), margin, cursorY);
-  cursorY += row.noTeachersSignedUp ? 36 : 28;
+  cursorY += row.noTeachersSignedUp ? 34 : 30;
 
   if(row.noTeachersSignedUp){
     doc.setFont("helvetica", "bold");
@@ -2704,22 +2900,90 @@ async function buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel }){
     return doc;
   }
 
+  const statGap = 10;
+  const statWidth = (contentWidth - statGap * 3) / 4;
+  [
+    { label:"Updated", value:`${row.filledToday || 0}/${row.totalTeachers || 0}` },
+    { label:"Pending", value:String(row.missingToday || 0) },
+    { label:"Sections taught", value:String(row.sectionsTaught || 0) },
+    { label:"Study hours", value:formatDurationShort(row.totalStudyMinutes || 0) },
+  ].forEach((item, index) => {
+    drawInstituteGlancePdfStatCard(doc, {
+      x: margin + index * (statWidth + statGap),
+      y: cursorY,
+      width: statWidth,
+      height: 56,
+      label:item.label,
+      value:item.value,
+    });
+  });
+  cursorY += 74;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text("All teachers today", margin, cursorY);
+  cursorY += 10;
+
   autoTable(doc, {
     startY: cursorY,
-    head: [["Teacher", "Sections taught", "Logs", "Study hours"]],
-    body: (row.filledTeacherRows || []).length
-      ? row.filledTeacherRows.map(teacher => [
-          teacher.name || "Teacher",
-          (teacher.sectionNames || []).length ? teacher.sectionNames.join(", ") : "Uploaded without a section name",
-          String(teacher.todayEntries || 0),
-          teacher.totalMinutes > 0
-            ? formatDurationShort(teacher.totalMinutes)
-            : teacher.untimedEntries > 0
-              ? "Untimed"
-              : "0m",
-        ])
-      : [["No teacher has uploaded today's entry yet.", "", "", ""]],
+    head: [["Teacher", "Status", "Sections taught", "Today", "This month", "Last entry", "Study hours"]],
+    body: buildInstituteGlanceAllTeacherPdfBody(row),
     margin:{ left:margin, right:margin },
+    styles:{
+      font:"helvetica",
+      fontSize:8.8,
+      cellPadding:6,
+      lineColor:[221, 227, 237],
+      lineWidth:0.5,
+      textColor:[31, 41, 55],
+      valign:"top",
+      overflow:"linebreak",
+    },
+    headStyles:{
+      fillColor:[248, 250, 252],
+      textColor:[107, 114, 128],
+      fontStyle:"bold",
+      fontSize:8.2,
+    },
+    columnStyles:{
+      0:{ cellWidth:120 },
+      1:{ cellWidth:74, halign:"center" },
+      2:{ cellWidth:225 },
+      3:{ cellWidth:42, halign:"center" },
+      4:{ cellWidth:58, halign:"center" },
+      5:{ cellWidth:105 },
+      6:{ cellWidth:68, halign:"center" },
+    },
+    didParseCell: (data) => {
+      if(data.section === "body" && data.column.index === 1){
+        const teacher = row.teacherRows?.[data.row.index];
+        if(teacher?.updatedToday){
+          data.cell.styles.fillColor = [236, 253, 243];
+          data.cell.styles.textColor = [22, 101, 52];
+          data.cell.styles.fontStyle = "bold";
+        } else {
+          data.cell.styles.fillColor = [255, 247, 237];
+          data.cell.styles.textColor = [180, 83, 9];
+          data.cell.styles.fontStyle = "bold";
+        }
+      }
+    },
+  });
+
+  cursorY = (doc.lastAutoTable?.finalY || cursorY) + 20;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(17, 24, 39);
+  doc.text("Teachers pending today", margin, cursorY);
+  cursorY += 10;
+  autoTable(doc, {
+    startY: cursorY,
+    head: [["Teacher", "This month", "Last entry"]],
+    body: buildInstituteGlancePendingTeacherPdfBody(row).length
+      ? buildInstituteGlancePendingTeacherPdfBody(row)
+      : [["Everyone linked to this centre has filled today.", "", ""]],
+    margin:{ left:margin, right:margin, bottom:24 },
     styles:{
       font:"helvetica",
       fontSize:9,
@@ -2731,33 +2995,17 @@ async function buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel }){
       overflow:"linebreak",
     },
     headStyles:{
-      fillColor:[26, 47, 90],
-      textColor:[255, 255, 255],
+      fillColor:[248, 250, 252],
+      textColor:[107, 114, 128],
       fontStyle:"bold",
-      fontSize:9,
+      fontSize:8.4,
     },
     columnStyles:{
-      0:{ cellWidth:110 },
-      1:{ cellWidth:300 },
-      2:{ cellWidth:42, halign:"center" },
-      3:{ cellWidth:60, halign:"center" },
+      0:{ cellWidth:210 },
+      1:{ cellWidth:70, halign:"center" },
+      2:{ cellWidth:150 },
     },
   });
-
-  cursorY = (doc.lastAutoTable?.finalY || cursorY) + 20;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(17, 24, 39);
-  doc.text("Teachers pending today", margin, cursorY);
-  cursorY += 16;
-
-  const pendingText = (row.missingNames || []).length
-    ? row.missingNames.join(", ")
-    : "Everyone linked to this centre has filled today.";
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.setTextColor(75, 85, 99);
-  doc.text(doc.splitTextToSize(pendingText, contentWidth), margin, cursorY);
   return doc;
 }
 async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
@@ -5599,73 +5847,63 @@ function AdminPanelInner({user}){
     </div>
   );
 
-  const renderInstituteGlanceTeacherNameList = (names = [], emptyLabel) => {
-    if(!names.length){
-      return (
-        <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
-          {emptyLabel}
-        </div>
-      );
-    }
-    return (
-      <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-        {names.map(name=>(
-          <span
-            key={name}
-            style={{
-              display:"inline-flex",
-              alignItems:"center",
-              background:"#FFFFFF",
-              border:`1px solid ${G.border}`,
-              borderRadius:999,
-              padding:"5px 10px",
-              fontSize:12,
-              fontWeight:700,
-              color:G.text,
-              lineHeight:1.35,
-            }}>
-            {name}
-          </span>
-        ))}
-      </div>
-    );
-  };
+  const getInstituteGlanceTeacherHoursLabel = (teacher) => (
+    teacher?.totalMinutes > 0
+      ? formatDurationShort(teacher.totalMinutes)
+      : teacher?.untimedEntries > 0
+        ? "Untimed"
+        : "0m"
+  );
 
-  const renderInstituteGlanceFilledTeacherTable = (row, compact = false) => {
-    if(!row?.filledTeacherRows?.length){
+  const getInstituteGlanceTeacherSectionCaption = (teacher) => (
+    teacher?.sectionNames?.length
+      ? teacher.sectionNames.join(", ")
+      : teacher?.updatedToday
+        ? "Uploaded without a section name"
+        : "No section was taught today"
+  );
+
+  const getInstituteGlanceStatusTone = (teacher) => (
+    teacher?.updatedToday
+      ? { bg:"#DCFCE7", border:"#BBF7D0", color:"#166534" }
+      : { bg:"#FFF7ED", border:"#FED7AA", color:"#B45309" }
+  );
+
+  const renderInstituteGlanceAllTeacherTable = (row, compact = false) => {
+    const teacherRows = row?.teacherRows || [];
+    if(!teacherRows.length){
       return (
         <div style={{marginTop:10,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:14,padding:"12px 13px",fontSize:12.5,color:"#9A3412",lineHeight:1.55}}>
-          No teacher has uploaded today&apos;s entry for this centre yet.
+          No teacher records are linked to this centre yet.
         </div>
       );
     }
     if(compact){
       return (
         <div style={{display:"grid",gap:9,marginTop:10}}>
-          {(row.filledTeacherRows || []).map(teacher => {
-            const hoursLabel = teacher.totalMinutes > 0
-              ? formatDurationShort(teacher.totalMinutes)
-              : teacher.untimedEntries > 0
-                ? "Untimed"
-                : "0m";
-            const sectionCaption = teacher.sectionNames?.length
-              ? teacher.sectionNames.join(", ")
-              : "Uploaded without a section name";
+          {teacherRows.map(teacher => {
+            const tone = getInstituteGlanceStatusTone(teacher);
             return (
               <div
                 key={`${row.institute}_${teacher.uid}`}
                 style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 12px 13px"}}>
-                <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.35}}>{teacher.name}</div>
-                <div style={{fontSize:12,color:G.textM,lineHeight:1.5,marginTop:5}}>{sectionCaption}</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:10}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+                  <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.35,flex:1,minWidth:0}}>{teacher.name}</div>
+                  <span style={{display:"inline-flex",alignItems:"center",background:tone.bg,border:`1px solid ${tone.border}`,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,color:tone.color,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                    {teacher.todayStatusLabel}
+                  </span>
+                </div>
+                <div style={{fontSize:12,color:G.textM,lineHeight:1.5,marginTop:5}}>{getInstituteGlanceTeacherSectionCaption(teacher)}</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10}}>
                   {[
-                    { label:"Sections", value:teacher.sectionCount },
-                    { label:"Logs", value:teacher.todayEntries },
-                    { label:"Hours", value:hoursLabel },
+                    { label:"Today logs", value:teacher.todayEntries },
+                    { label:"This month", value:teacher.monthEntries },
+                    { label:"Last entry", value:teacher.lastActivityLabel },
+                    { label:"Study hours", value:getInstituteGlanceTeacherHoursLabel(teacher) },
                   ].map(item=>(
                     <div key={`${teacher.uid}_${item.label}`} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:12,padding:"9px 10px"}}>
                       <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.5,textTransform:"uppercase"}}>{item.label}</div>
-                      <div style={{fontSize:16,fontWeight:800,color:G.text,lineHeight:1.1,marginTop:6}}>{item.value}</div>
+                      <div style={{fontSize:item.label==="Last entry" ? 12.5 : 16,fontWeight:800,color:G.text,lineHeight:1.25,marginTop:6}}>{item.value}</div>
                     </div>
                   ))}
                 </div>
@@ -5677,42 +5915,100 @@ function AdminPanelInner({user}){
     }
     return (
       <div style={{marginTop:10,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        <div style={{minWidth:520,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",background:"#FFFFFF"}}>
-          <div style={{display:"grid",gridTemplateColumns:"minmax(200px,2.3fr) minmax(72px,0.75fr) minmax(72px,0.75fr) minmax(86px,0.9fr)",gap:0,background:"#F8FAFC",borderBottom:`1px solid ${G.border}`}}>
-            {["Teacher", "Sections", "Logs", "Study hours"].map(label=>(
+        <div style={{minWidth:980,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",background:"#FFFFFF"}}>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(170px,1.6fr) minmax(120px,0.85fr) minmax(250px,1.95fr) minmax(74px,0.55fr) minmax(92px,0.7fr) minmax(130px,0.9fr) minmax(92px,0.72fr)",gap:0,background:"#F8FAFC",borderBottom:`1px solid ${G.border}`}}>
+            {["Teacher", "Status", "Sections", "Today", "This month", "Last entry", "Study hours"].map(label=>(
               <div key={label} style={{padding:"10px 12px",fontSize:10.5,fontWeight:800,color:G.textL,fontFamily:G.mono,letterSpacing:0.7,textTransform:"uppercase"}}>
                 {label}
               </div>
             ))}
           </div>
-          {(row.filledTeacherRows || []).map((teacher, index) => {
-            const hoursLabel = teacher.totalMinutes > 0
-              ? formatDurationShort(teacher.totalMinutes)
-              : teacher.untimedEntries > 0
-                ? "Untimed"
-                : "0m";
-            const sectionCaption = teacher.sectionNames?.length
-              ? teacher.sectionNames.join(", ")
-              : "Uploaded without a section name";
+          {teacherRows.map((teacher, index) => {
+            const tone = getInstituteGlanceStatusTone(teacher);
             return (
               <div
                 key={`${row.institute}_${teacher.uid}`}
                 style={{
                   display:"grid",
-                  gridTemplateColumns:"minmax(200px,2.3fr) minmax(72px,0.75fr) minmax(72px,0.75fr) minmax(86px,0.9fr)",
+                  gridTemplateColumns:"minmax(170px,1.6fr) minmax(120px,0.85fr) minmax(250px,1.95fr) minmax(74px,0.55fr) minmax(92px,0.7fr) minmax(130px,0.9fr) minmax(92px,0.72fr)",
                   gap:0,
-                  borderBottom:index < row.filledTeacherRows.length - 1 ? `1px solid ${G.border}` : "none",
+                  borderBottom:index < teacherRows.length - 1 ? `1px solid ${G.border}` : "none",
                 }}>
                 <div style={{padding:"11px 12px"}}>
                   <div style={{fontSize:13.5,fontWeight:800,color:G.text,lineHeight:1.35}}>{teacher.name}</div>
-                  <div style={{fontSize:11.5,color:G.textM,lineHeight:1.45,marginTop:4}}>{sectionCaption}</div>
                 </div>
-                <div style={{padding:"11px 12px",fontSize:13,fontWeight:800,color:G.text,lineHeight:1.35,display:"flex",alignItems:"center"}}>{teacher.sectionCount}</div>
+                <div style={{padding:"11px 12px",display:"flex",alignItems:"center"}}>
+                  <span style={{display:"inline-flex",alignItems:"center",background:tone.bg,border:`1px solid ${tone.border}`,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:800,color:tone.color,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                    {teacher.todayStatusLabel}
+                  </span>
+                </div>
+                <div style={{padding:"11px 12px",fontSize:12.5,color:G.textM,lineHeight:1.5}}>{getInstituteGlanceTeacherSectionCaption(teacher)}</div>
                 <div style={{padding:"11px 12px",fontSize:13,fontWeight:800,color:G.text,lineHeight:1.35,display:"flex",alignItems:"center"}}>{teacher.todayEntries}</div>
-                <div style={{padding:"11px 12px",fontSize:13,fontWeight:800,color:teacher.totalMinutes > 0 ? "#166534" : G.textM,lineHeight:1.35,display:"flex",alignItems:"center"}}>{hoursLabel}</div>
+                <div style={{padding:"11px 12px",fontSize:13,fontWeight:800,color:G.text,lineHeight:1.35,display:"flex",alignItems:"center"}}>{teacher.monthEntries}</div>
+                <div style={{padding:"11px 12px",fontSize:12.5,fontWeight:700,color:G.textS,lineHeight:1.45,display:"flex",alignItems:"center"}}>{teacher.lastActivityLabel}</div>
+                <div style={{padding:"11px 12px",fontSize:13,fontWeight:800,color:teacher.totalMinutes > 0 ? "#166534" : G.textM,lineHeight:1.35,display:"flex",alignItems:"center"}}>{getInstituteGlanceTeacherHoursLabel(teacher)}</div>
               </div>
             );
           })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderInstituteGlancePendingTeacherTable = (row, compact = false) => {
+    const pendingRows = row?.pendingTeacherRows || [];
+    if(!pendingRows.length){
+      return (
+        <div style={{fontSize:12.5,color:"#166534",lineHeight:1.55}}>
+          Everyone linked to this centre has filled today.
+        </div>
+      );
+    }
+    if(compact){
+      return (
+        <div style={{display:"grid",gap:8,marginTop:10}}>
+          {pendingRows.map(teacher => (
+            <div key={`${row.institute}_${teacher.uid}_pending`} style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 12px"}}>
+              <div style={{fontSize:13.5,fontWeight:800,color:G.text,lineHeight:1.35}}>{teacher.name}</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:9}}>
+                <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:12,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.5,textTransform:"uppercase"}}>This month</div>
+                  <div style={{fontSize:15,fontWeight:800,color:G.text,lineHeight:1.15,marginTop:5}}>{teacher.monthEntries}</div>
+                </div>
+                <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:12,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.5,textTransform:"uppercase"}}>Last entry</div>
+                  <div style={{fontSize:12.5,fontWeight:700,color:G.textS,lineHeight:1.3,marginTop:5}}>{teacher.lastActivityLabel}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return (
+      <div style={{marginTop:10,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        <div style={{minWidth:520,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",background:"#FFFFFF"}}>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(190px,1.5fr) minmax(90px,0.7fr) minmax(180px,1fr)",gap:0,background:"#F8FAFC",borderBottom:`1px solid ${G.border}`}}>
+            {["Teacher", "This month", "Last entry"].map(label=>(
+              <div key={label} style={{padding:"10px 12px",fontSize:10.5,fontWeight:800,color:G.textL,fontFamily:G.mono,letterSpacing:0.7,textTransform:"uppercase"}}>
+                {label}
+              </div>
+            ))}
+          </div>
+          {pendingRows.map((teacher, index) => (
+            <div
+              key={`${row.institute}_${teacher.uid}_pending`}
+              style={{
+                display:"grid",
+                gridTemplateColumns:"minmax(190px,1.5fr) minmax(90px,0.7fr) minmax(180px,1fr)",
+                gap:0,
+                borderBottom:index < pendingRows.length - 1 ? `1px solid ${G.border}` : "none",
+              }}>
+              <div style={{padding:"11px 12px",fontSize:13.5,fontWeight:800,color:G.text,lineHeight:1.35}}>{teacher.name}</div>
+              <div style={{padding:"11px 12px",fontSize:13,fontWeight:800,color:G.text,lineHeight:1.35,display:"flex",alignItems:"center"}}>{teacher.monthEntries}</div>
+              <div style={{padding:"11px 12px",fontSize:12.5,fontWeight:700,color:G.textS,lineHeight:1.45,display:"flex",alignItems:"center"}}>{teacher.lastActivityLabel}</div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -5827,16 +6123,19 @@ function AdminPanelInner({user}){
                   ) : (
                     <>
                       <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:"12px 13px"}}>
-                        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8}}>Teachers who filled today</div>
+                        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8}}>All teachers today</div>
                         <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
-                          Uploaded teachers are listed below with their sections taught, total logs, and study hours for today.
+                          Every linked teacher is listed below with whether they filled today, sections taught, total logs for today, month entries, last entry date, and study hours.
                         </div>
-                        {renderInstituteGlanceFilledTeacherTable(row, isMobile)}
+                        {renderInstituteGlanceAllTeacherTable(row, isMobile)}
                       </div>
 
                       <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:"12px 13px"}}>
                         <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8}}>Teachers pending today</div>
-                        {renderInstituteGlanceTeacherNameList(row.missingNames, "Everyone linked to this centre has filled today.")}
+                        <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
+                          Pending teachers now include their month entry count and the last time they logged. If they have never logged, the table shows when they first signed up.
+                        </div>
+                        {renderInstituteGlancePendingTeacherTable(row, isMobile)}
                       </div>
                     </>
                   )}
@@ -5902,65 +6201,67 @@ function AdminPanelInner({user}){
     );
   };
 
-  const InstituteGlanceModal = () => {
-    if(!instituteGlanceOpen) return null;
+  const DesktopCentreSummaryPage = () => {
+    if(isMobile || !instituteGlanceOpen) return null;
     return (
-      <>
-        <div
-          onClick={closeInstituteGlancePanel}
-          style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",backdropFilter:"blur(4px)",zIndex:450}}
-        />
-        <div style={{position:"fixed",inset:0,zIndex:451,display:"flex",alignItems:"center",justifyContent:"center",padding:isMobile ? 14 : 24,pointerEvents:"none"}}>
-          <div style={{width:"min(920px,100%)",maxHeight:"min(88vh,920px)",overflow:"auto",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:isMobile ? 24 : 28,boxShadow:"0 30px 80px rgba(15,23,42,0.22)",padding:isMobile ? 16 : 22,pointerEvents:"auto"}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
-              <div>
-                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
-                <div style={{fontSize:isMobile ? 24 : 28,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.05}}>Centre summary</div>
-                <div style={{fontSize:13,color:G.textM,marginTop:8,lineHeight:1.6}}>Today&apos;s uploaded teachers, pending follow-up, sections taught, and study hours for every centre.</div>
+      <div style={{flex:1,overflowY:"auto",background:"linear-gradient(180deg,#F2F6FC 0%,#F8FAFC 100%)",padding:"22px 24px 28px"}}>
+        <div style={{maxWidth:1500,margin:"0 auto"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:16}}>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>All institutes at a glance</div>
+              <h1 style={{fontSize:34,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.02}}>Centre summary</h1>
+              <div style={{fontSize:14,color:G.textM,lineHeight:1.65,marginTop:10,maxWidth:980}}>
+                Review uploaded teachers, pending follow-up, sections taught, study hours, month entries, and last activity for every centre without leaving the admin workspace.
               </div>
-              <button
-                className="admin-mobile-touch"
-                onClick={closeInstituteGlancePanel}
-                style={{width:38,height:38,borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",fontSize:20,color:G.textL,cursor:"pointer",flexShrink:0}}>
-                ×
-              </button>
             </div>
-            <div style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:18,padding:isMobile ? "14px 14px 15px" : "16px 16px 18px"}}>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-                <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
-                  <div style={{fontSize:isMobile ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Centre summary</div>
-                  <div style={{fontSize:12.5,color:G.textM,lineHeight:1.6,marginTop:8}}>
-                    Open this only when you need it. The mobile view now loads teacher data in calmer batches so the screen stays steadier while the centre tables fill in.
-                  </div>
+            <button
+              type="button"
+              onClick={closeInstituteGlancePanel}
+              style={{height:42,padding:"0 16px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:13,fontWeight:800,fontFamily:G.sans,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:8,boxShadow:G.shadowSm,flexShrink:0}}>
+              <AppIcon icon={IconChevronLeft} size={15} color={G.text} />
+              Back to admin
+            </button>
+          </div>
+
+          <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:26,padding:"18px 18px 20px",boxShadow:"0 18px 48px rgba(15,23,42,0.08)"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Desktop workspace view</div>
+                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.08}}>All institutes at a glance</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.65,marginTop:8,maxWidth:920}}>
+                  This desktop page keeps the full centre summary inside the app, with roomy tables for every teacher and direct export actions for the combined PDF, individual centre PDFs, and the ZIP bundle.
                 </div>
-                {instituteGlanceReport.loading&&(
-                  <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
-                    {instituteGlanceReadyCount}/{Math.max(instituteGlanceReport.totalInstitutes || 0, instituteGlanceReport.summary.totalInstitutes || 0)} ready
-                  </span>
-                )}
               </div>
-              {renderInstituteGlanceProgressBlock(isMobile)}
-              {!!instituteGlanceReport.error&&(
-                <div style={{marginTop:14,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:16,padding:"14px 15px"}}>
-                  <div style={{fontSize:13,fontWeight:700,color:"#9A3412",fontFamily:G.sans}}>Could not load the report</div>
-                  <div style={{fontSize:12.5,color:"#9A3412",lineHeight:1.55,marginTop:6}}>
-                    {instituteGlanceReport.error}
-                  </div>
-                  <button className="admin-mobile-touch" onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)} style={{marginTop:12,padding:"9px 12px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFFFFF",color:"#9A3412",fontSize:12.5,fontWeight:700,fontFamily:G.sans,cursor:"pointer"}}>
-                    Retry
-                  </button>
-                </div>
+              {instituteGlanceReport.loading&&(
+                <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                  {instituteGlanceReadyCount}/{Math.max(instituteGlanceReport.totalInstitutes || 0, instituteGlanceReport.summary.totalInstitutes || 0)} ready
+                </span>
               )}
-              {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(isMobile)}
-              {renderInstituteGlanceActions(isMobile)}
-              <div style={{marginTop:12}}>
-                {renderSharedInstituteGlanceList({ interactive:true })}
+            </div>
+
+            {renderInstituteGlanceProgressBlock(false)}
+
+            {!!instituteGlanceReport.error&&(
+              <div style={{marginTop:14,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:16,padding:"14px 15px"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#9A3412",fontFamily:G.sans}}>Could not load the report</div>
+                <div style={{fontSize:12.5,color:"#9A3412",lineHeight:1.55,marginTop:6}}>
+                  {instituteGlanceReport.error}
+                </div>
+                <button className="admin-mobile-touch" onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)} style={{marginTop:12,padding:"9px 12px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFFFFF",color:"#9A3412",fontSize:12.5,fontWeight:700,fontFamily:G.sans,cursor:"pointer"}}>
+                  Retry
+                </button>
               </div>
+            )}
+
+            {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(false)}
+            {renderInstituteGlanceActions(false)}
+
+            <div style={{marginTop:16}}>
+              {renderSharedInstituteGlanceList({ interactive:true })}
             </div>
           </div>
         </div>
-      </>
+      </div>
     );
   };
 
@@ -11238,7 +11539,10 @@ function AdminPanelInner({user}){
       )}
       {pendingSectionRenameModal}
       <AdminToastBanner message={adminToast} />
-      <InstituteGlanceModal />
+      {instituteGlanceOpen && !isMobile ? (
+        <DesktopCentreSummaryPage />
+      ) : (
+        <>
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
       {mobileStep>0&&(
         <div className="admin-mobile-back" style={{background:G.navyS,borderBottom:`1px solid rgba(255,255,255,0.08)`,padding:"8px 14px",flexShrink:0,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -11580,7 +11884,6 @@ function AdminPanelInner({user}){
 
             {selP2&&!isAggregateSelection&&tab==="teacher"&&p3Items.map(cls=>{
               const isSel=selP3?.classId===cls.classId;
-              const tName=fullData[selP2]?.profile?.name||"";
               return(
                 <div key={cls.classId}
                   style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent",paddingRight:8}}
@@ -11596,11 +11899,6 @@ function AdminPanelInner({user}){
                       </span>
                     </div>
                   </div>
-                  <button onClick={e=>{e.stopPropagation();handleDeleteClass(selP2,cls.classId,cls.display,tName);}}
-                    title="Delete class"
-                    style={{marginTop:6,width:"100%",padding:"5px 0",background:G.redL,border:"1px solid #F5CACA",borderRadius:7,fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-                    🗑 Delete
-                  </button>
                 </div>
               );
             })}
@@ -11761,6 +12059,8 @@ function AdminPanelInner({user}){
       <div style={{flexShrink:0,height:26,background:G.navy,borderTop:"1px solid rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"center"}}>
         <span style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontFamily:"'Inter',sans-serif",letterSpacing:0.3}}>Every class. Every teacher. One place.</span>
       </div>
+        </>
+      )}
     </div>
   );
 }
