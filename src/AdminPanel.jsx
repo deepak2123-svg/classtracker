@@ -1784,6 +1784,28 @@ function fitCanvasText(ctx, value, maxWidth){
   }
   return best;
 }
+function wrapCanvasText(ctx, value, maxWidth){
+  const words = String(value || "").trim().split(/\s+/).filter(Boolean);
+  if(!words.length) return [];
+  const lines = [];
+  let current = "";
+  words.forEach(word => {
+    const next = current ? `${current} ${word}` : word;
+    if(ctx.measureText(next).width <= maxWidth){
+      current = next;
+      return;
+    }
+    if(current){
+      lines.push(current);
+      current = word;
+      return;
+    }
+    lines.push(fitCanvasText(ctx, word, maxWidth));
+    current = "";
+  });
+  if(current) lines.push(current);
+  return lines;
+}
 function drawCanvasPill(ctx, { x, y, label, bg, border, color, font = "700 20px 'Inter',sans-serif", padX = 16, height = 46 }){
   ctx.save();
   ctx.font = font;
@@ -1806,6 +1828,84 @@ function triggerBlobDownload(blob, filename){
   const anchor = Object.assign(document.createElement("a"), { href:url, download:filename });
   anchor.click();
   window.setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function getTeacherInstituteListFromMap(teacher, fullDataMap){
+  const list = [];
+  const add = (value) => {
+    const next = String(value || "").trim();
+    if(!next) return;
+    if(list.some(existing => sameInstituteName(existing, next))) return;
+    list.push(next);
+  };
+  (teacher?.institutes || []).forEach(add);
+  const data = fullDataMap?.[teacher?.uid];
+  (data?.profile?.institutes || []).forEach(add);
+  (data?.classes || []).forEach(cls => add(cls?.institute));
+  return list;
+}
+function teacherBelongsToInstituteFromMap(teacher, instituteName, fullDataMap){
+  if(!teacher || !instituteName) return false;
+  return getTeacherInstituteListFromMap(teacher, fullDataMap).some(inst => sameInstituteName(inst, instituteName));
+}
+function getTeacherDisplayNameFromMap(teacher, fullDataMap){
+  return fullDataMap?.[teacher?.uid]?.profile?.name || teacher?.name || "Teacher";
+}
+function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {} }){
+  return institutes.map(inst => {
+    const instTeachers = teachers
+      .filter(teacher => teacherBelongsToInstituteFromMap(teacher, inst, fullDataMap))
+      .map(teacher => {
+        const data = fullDataMap?.[teacher.uid];
+        const classesHere = data
+          ? (data.classes || []).filter(cls => sameInstituteName(cls?.institute, inst))
+          : [];
+        const todayEntries = data
+          ? classesHere.reduce((sum, cls) => sum + getEntriesInRange((data.notes || {})[cls.id] || {}, 1).length, 0)
+          : 0;
+        const lastEntry = data
+          ? classesHere.reduce((latest, cls) => Math.max(latest, lastEntryTs((data.notes || {})[cls.id] || {}) || 0), 0)
+          : Number(teacher?.lastActive || 0) || 0;
+        return {
+          uid: teacher.uid,
+          name: getTeacherDisplayNameFromMap(teacher, fullDataMap),
+          loaded: !!data,
+          todayEntries,
+          updatedToday: todayEntries > 0,
+          lastEntryTs: lastEntry || null,
+        };
+      })
+      .sort((a, b) => {
+        if(!!a.updatedToday !== !!b.updatedToday) return a.updatedToday ? 1 : -1;
+        if((a.lastEntryTs || 0) !== (b.lastEntryTs || 0)) return (a.lastEntryTs || 0) - (b.lastEntryTs || 0);
+        return exportTextSorter.compare(a.name || "", b.name || "");
+      });
+
+    const filledTeachers = instTeachers.filter(item => item.updatedToday);
+    const missingTeachers = instTeachers.filter(item => !item.updatedToday);
+    const loadedTeachers = instTeachers.filter(item => item.loaded).length;
+    const totalTeachers = instTeachers.length;
+
+    return {
+      institute: inst,
+      totalTeachers,
+      filledToday: filledTeachers.length,
+      missingToday: missingTeachers.length,
+      missingNames: missingTeachers.map(item => item.name),
+      filledNames: filledTeachers.map(item => item.name),
+      loadedTeachers,
+      completionPct: totalTeachers ? Math.round((filledTeachers.length / totalTeachers) * 100) : 0,
+    };
+  });
+}
+function summariseInstituteGlanceRows(rows = []){
+  return rows.reduce((acc, row) => {
+    acc.totalInstitutes += 1;
+    acc.totalTeachers += row.totalTeachers || 0;
+    acc.filledToday += row.filledToday || 0;
+    acc.missingToday += row.missingToday || 0;
+    acc.loadedTeachers += row.loadedTeachers || 0;
+    return acc;
+  }, { totalInstitutes:0, totalTeachers:0, filledToday:0, missingToday:0, loadedTeachers:0 });
 }
 async function downloadTeacherStatusShareImage({ instituteName, rows, summary, generatedOnLabel }){
   await waitForCanvasFonts();
@@ -1981,6 +2081,189 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
     download:`${slugifyDownloadPart(instituteName)}_teacher_entry_status_${todayKey()}.png`,
   });
   anchor.click();
+}
+async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
+  await waitForCanvasFonts();
+  const width = 1180;
+  const cardX = 36;
+  const cardY = 36;
+  const cardWidth = width - cardX * 2;
+  const contentX = cardX + 30;
+  const contentWidth = cardWidth - 60;
+  const rowMeta = [];
+
+  const measureCanvas = document.createElement("canvas");
+  measureCanvas.width = width;
+  measureCanvas.height = 400;
+  const measureCtx = measureCanvas.getContext("2d");
+  if(!measureCtx) throw new Error("Canvas is not available.");
+
+  rows.forEach(row => {
+    measureCtx.font = "600 18px 'Inter',sans-serif";
+    const missingText = row.missingNames.length
+      ? `Pending today: ${row.missingNames.join(", ")}`
+      : "Everyone has filled today's entry.";
+    const missingLines = wrapCanvasText(measureCtx, missingText, contentWidth - 40);
+    rowMeta.push({
+      missingLines,
+      height: 118 + Math.max(0, missingLines.length - 1) * 22,
+    });
+  });
+
+  const headerHeight = 246;
+  const rowsHeight = rowMeta.reduce((sum, item) => sum + item.height + 14, 0);
+  const cardHeight = headerHeight + rowsHeight + 26;
+  const height = cardY * 2 + cardHeight;
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const ctx = canvas.getContext("2d");
+  if(!ctx) throw new Error("Canvas is not available.");
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = "#F4F7FB";
+  ctx.fillRect(0, 0, width, height);
+
+  drawRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 30);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fill();
+  ctx.strokeStyle = "#DDE3ED";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  let cursorY = cardY + 30;
+  ctx.fillStyle = "#111827";
+  ctx.font = "800 34px 'Poppins',sans-serif";
+  ctx.textBaseline = "top";
+  ctx.fillText("All institutes at a glance", contentX, cursorY);
+
+  cursorY += 48;
+  ctx.fillStyle = "#4B5563";
+  ctx.font = "600 18px 'Inter',sans-serif";
+  ctx.fillText(
+    fitCanvasText(ctx, generatedOnLabel, contentWidth),
+    contentX,
+    cursorY
+  );
+
+  cursorY += 34;
+  ctx.fillStyle = "#6B7280";
+  ctx.font = "500 20px 'Inter',sans-serif";
+  ctx.fillText(
+    fitCanvasText(ctx, "Institute-wise teacher entry completion for today, including who still needs to log.", contentWidth),
+    contentX,
+    cursorY
+  );
+
+  cursorY += 44;
+  let chipX = contentX;
+  chipX += drawCanvasPill(ctx, {
+    x: chipX,
+    y: cursorY,
+    label: `${summary.filledToday}/${summary.totalTeachers} teachers updated`,
+    bg: "#DCFCE7",
+    border: "#BBF7D0",
+    color: "#166534",
+    font: "700 20px 'Inter',sans-serif",
+    padX: 18,
+    height: 48,
+  }) + 12;
+  chipX += drawCanvasPill(ctx, {
+    x: chipX,
+    y: cursorY,
+    label: `${summary.missingToday} pending`,
+    bg: "#FEF3C7",
+    border: "#FCD34D",
+    color: "#B45309",
+    font: "700 20px 'Inter',sans-serif",
+    padX: 18,
+    height: 48,
+  }) + 12;
+  drawCanvasPill(ctx, {
+    x: chipX,
+    y: cursorY,
+    label: `${summary.totalInstitutes} institutes`,
+    bg: "#EEF4FF",
+    border: "#C7D7F5",
+    color: "#1D4ED8",
+    font: "700 20px 'Inter',sans-serif",
+    padX: 18,
+    height: 48,
+  });
+
+  cursorY += 78;
+  rows.forEach((row, index) => {
+    const meta = rowMeta[index];
+    const rowTop = cursorY;
+    drawRoundedRect(ctx, contentX, rowTop, contentWidth, meta.height, 24);
+    ctx.fillStyle = "#F8FAFC";
+    ctx.fill();
+    ctx.strokeStyle = "#DDE3ED";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = "#111827";
+    ctx.font = "800 28px 'Poppins',sans-serif";
+    ctx.fillText(fitCanvasText(ctx, row.institute, contentWidth - 290), contentX + 20, rowTop + 18);
+
+    const badgeLabel = `${row.filledToday}/${row.totalTeachers} filled`;
+    ctx.font = "700 18px 'Inter',sans-serif";
+    const badgeWidth = ctx.measureText(badgeLabel).width + 36;
+    drawCanvasPill(ctx, {
+      x: contentX + contentWidth - badgeWidth - 18,
+      y: rowTop + 16,
+      label: badgeLabel,
+      bg: row.missingToday ? "#EEF4FF" : "#DCFCE7",
+      border: row.missingToday ? "#C7D7F5" : "#BBF7D0",
+      color: row.missingToday ? "#1D4ED8" : "#166534",
+      font: "700 18px 'Inter',sans-serif",
+      padX: 18,
+      height: 40,
+    });
+
+    ctx.fillStyle = "#4B5563";
+    ctx.font = "600 18px 'Inter',sans-serif";
+    ctx.fillText(
+      `${row.totalTeachers} teacher${row.totalTeachers === 1 ? "" : "s"} · ${row.missingToday} pending today`,
+      contentX + 20,
+      rowTop + 58
+    );
+
+    ctx.fillStyle = row.missingToday ? "#334155" : "#166534";
+    ctx.font = "600 18px 'Inter',sans-serif";
+    meta.missingLines.forEach((line, lineIndex) => {
+      ctx.fillText(line, contentX + 20, rowTop + 86 + lineIndex * 22);
+    });
+
+    cursorY += meta.height + 14;
+  });
+
+  return canvas;
+}
+async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel }){
+  const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel });
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+  if(blob){
+    triggerBlobDownload(blob, `all_institutes_at_a_glance_${todayKey()}.png`);
+    return;
+  }
+  const anchor = Object.assign(document.createElement("a"), {
+    href:canvas.toDataURL("image/png"),
+    download:`all_institutes_at_a_glance_${todayKey()}.png`,
+  });
+  anchor.click();
+}
+async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
+  const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel });
+  const { jsPDF } = await import("jspdf");
+  const pdf = new jsPDF({
+    orientation:"portrait",
+    unit:"pt",
+    format:[canvas.width / 2, canvas.height / 2],
+  });
+  pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width / 2, canvas.height / 2, undefined, "FAST");
+  pdf.save(`all_institutes_at_a_glance_${todayKey()}.pdf`);
 }
 function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
   // returns flat array of {dateKey, entry} sorted by date desc, time asc
@@ -3465,6 +3748,8 @@ function AdminPanelInner({user}){
   const [mobileSurface, setMobileSurface] = useState("workspace"); // workspace | profile
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
+  const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
+  const [instituteGlanceExportBusy, setInstituteGlanceExportBusy] = useState("");
   const [panelW,       setPanelW]       = useState({p1:175, p2:205, p3:200}); // resizable
   const [panelCollapsed, setPanelCollapsed] = useState({p1:false, p2:false, p3:false});
   const [panelDragging, setPanelDragging] = useState(false);
@@ -3814,6 +4099,25 @@ function AdminPanelInner({user}){
     return String(data?.profile?.email || teacher?.email || "").trim();
   }, [fullData]);
 
+  const teacherOnlyList = useMemo(
+    () => teachers.filter(t => roles[t.uid] !== "admin"),
+    [teachers, roles]
+  );
+
+  const allInstituteGlanceRows = useMemo(
+    () => buildInstituteGlanceRows({
+      institutes,
+      teachers: teacherOnlyList,
+      fullDataMap: fullData,
+    }),
+    [institutes, teacherOnlyList, fullData]
+  );
+
+  const allInstituteGlanceSummary = useMemo(
+    () => summariseInstituteGlanceRows(allInstituteGlanceRows),
+    [allInstituteGlanceRows]
+  );
+
   const getInstituteTeacherUids = React.useCallback((inst) => {
     return teachers
       .filter(t => teacherBelongsToInstitute(t, inst))
@@ -3856,6 +4160,56 @@ function AdminPanelInner({user}){
       warmInstitute(instDetailView);
     }
   },[instDetailView, warmInstitute]);
+
+  const refreshAllInstituteGlance = React.useCallback(async () => {
+    await warmTeacherUids(teacherOnlyList.map(t => t.uid));
+  }, [teacherOnlyList, warmTeacherUids]);
+
+  const openInstituteGlancePanel = React.useCallback(() => {
+    setInstituteGlanceOpen(true);
+    refreshAllInstituteGlance().catch(() => {});
+  }, [refreshAllInstituteGlance]);
+
+  const closeInstituteGlancePanel = React.useCallback(() => {
+    setInstituteGlanceOpen(false);
+  }, []);
+
+  const exportInstituteGlance = React.useCallback(async (format) => {
+    if(instituteGlanceExportBusy) return;
+    setInstituteGlanceExportBusy(format);
+    try {
+      const hydratedFullData = { ...fullData };
+      for(const teacher of teacherOnlyList){
+        if(!hydratedFullData[teacher.uid]){
+          const loaded = await ensureFullData(teacher.uid);
+          if(loaded) hydratedFullData[teacher.uid] = loaded;
+        }
+      }
+      const rows = buildInstituteGlanceRows({
+        institutes,
+        teachers: teacherOnlyList,
+        fullDataMap: hydratedFullData,
+      });
+      const summary = summariseInstituteGlanceRows(rows);
+      const generatedOnLabel = `Generated ${new Date().toLocaleString("en-IN",{
+        day:"numeric",
+        month:"short",
+        year:"numeric",
+        hour:"numeric",
+        minute:"2-digit",
+      })}`;
+      if(format === "png"){
+        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel });
+      } else {
+        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel });
+      }
+    } catch (error) {
+      console.error("institute glance export failed", error);
+      window.alert("Could not export the institute glance summary. Please try again.");
+    } finally {
+      setInstituteGlanceExportBusy("");
+    }
+  }, [ensureFullData, fullData, instituteGlanceExportBusy, institutes, teacherOnlyList]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
@@ -4476,7 +4830,8 @@ function AdminPanelInner({user}){
   },[selInst,teachers,fullData,instSectionsAll]);
 
   const instSearchKey = instSearch.trim().toLowerCase();
-  const p2SearchKey = p2Search.trim().toLowerCase();
+  const suppressMobileCurrentViewSearch = isMobile && mobileSurface !== "profile" && mobileStep === 1;
+  const p2SearchKey = suppressMobileCurrentViewSearch ? "" : p2Search.trim().toLowerCase();
 
   const visibleInstitutes = useMemo(()=>{
     if(!instSearchKey) return institutes;
@@ -5452,6 +5807,7 @@ function AdminPanelInner({user}){
   const openMobileProfile = () => {
     setProfileOpen(false);
     setMobileSurface("profile");
+    refreshAllInstituteGlance().catch(() => {});
   };
 
   const openMobileInstituteHome = () => {
@@ -8468,6 +8824,153 @@ function AdminPanelInner({user}){
       </button>
     );
 
+    const instituteGlanceRowsPreview = allInstituteGlanceRows;
+    const instituteGlancePendingCount = Math.max(0, allInstituteGlanceSummary.totalTeachers - allInstituteGlanceSummary.loadedTeachers);
+    const renderInstituteGlanceList = (compact = false, maxRows = null) => {
+      const rows = maxRows ? instituteGlanceRowsPreview.slice(0, maxRows) : instituteGlanceRowsPreview;
+      if(!rows.length){
+        return (
+          <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
+            No institutes are available yet.
+          </div>
+        );
+      }
+      return (
+        <div style={{display:"grid",gap:compact ? 8 : 10}}>
+          {rows.map(row => {
+            const tone = row.missingToday === 0
+              ? { bg:"#ECFDF3", border:"#BBF7D0", pillBg:"#DCFCE7", pillColor:"#166534", meta:"#1B5E20" }
+              : row.completionPct >= 50
+                ? { bg:"#EEF4FF", border:"#C7D7F5", pillBg:"#DBEAFE", pillColor:G.blue, meta:"#1E3A8A" }
+                : { bg:"#FFF7ED", border:"#FED7AA", pillBg:"#FFEDD5", pillColor:"#B45309", meta:"#9A3412" };
+            return (
+              <div key={row.institute} style={{background:compact ? "#FFFFFF" : tone.bg,border:`1px solid ${compact ? G.border : tone.border}`,borderRadius:compact ? 16 : 18,padding:compact ? "11px 12px" : "12px 13px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:compact ? 13.5 : 14.5,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.35}}>
+                      {row.institute}
+                    </div>
+                    <div style={{fontSize:compact ? 11.5 : 12,color:compact ? G.textM : tone.meta,marginTop:4,lineHeight:1.5}}>
+                      {row.filledToday} of {row.totalTeachers} teachers filled today
+                    </div>
+                  </div>
+                  <span style={{background:compact ? G.blueL : tone.pillBg,color:compact ? G.blue : tone.pillColor,borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap",flexShrink:0}}>
+                    {row.missingToday === 0 ? "All done" : `${row.missingToday} pending`}
+                  </span>
+                </div>
+                <div style={{fontSize:11.5,color:G.textM,lineHeight:1.55,marginTop:8}}>
+                  {row.missingNames.length
+                    ? `Pending today: ${row.missingNames.join(", ")}`
+                    : "Everyone has filled today's entry."}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
+    const InstituteGlanceSummaryCard = ({ compact = false, showOpenButton = false }) => {
+      const exportButtonStyle = {
+        minWidth:compact ? 76 : 82,
+        height:compact ? 34 : 36,
+        padding:"0 12px",
+        borderRadius:12,
+        border:`1px solid ${G.border}`,
+        background:"#FFFFFF",
+        color:G.text,
+        fontSize:12,
+        fontWeight:700,
+        fontFamily:G.sans,
+        cursor:"pointer",
+        display:"inline-flex",
+        alignItems:"center",
+        justifyContent:"center",
+        gap:6,
+        WebkitTapHighlightColor:"transparent",
+      };
+      return (
+        <div style={{...mobileWorkspaceCardStyle,marginBottom:12,padding:compact ? "14px 14px 15px" : mobileWorkspaceCardStyle.padding}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
+              <div style={{fontSize:compact ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Daily teacher entry summary</div>
+              <div style={{fontSize:12.5,color:G.textM,lineHeight:1.6,marginTop:8}}>
+                See who has filled today and who still needs follow-up, centre by centre.
+              </div>
+            </div>
+            {instituteGlancePendingCount>0&&(
+              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                Syncing {instituteGlancePendingCount}
+              </span>
+            )}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:compact ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
+            {[
+              { label:"Institutes", value:allInstituteGlanceSummary.totalInstitutes },
+              { label:"Teachers updated", value:`${allInstituteGlanceSummary.filledToday}/${allInstituteGlanceSummary.totalTeachers}` },
+              { label:"Pending today", value:allInstituteGlanceSummary.missingToday },
+            ].map(item=>(
+              <div key={item.label} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
+                <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.6,textTransform:"uppercase"}}>{item.label}</div>
+                <div style={{fontSize:compact ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+            <button className="admin-mobile-touch" onClick={()=>exportInstituteGlance("pdf")} style={exportButtonStyle}>
+              <AppIcon icon={IconDownload} size={15} color={G.text} />
+              {instituteGlanceExportBusy==="pdf" ? "PDF..." : "PDF"}
+            </button>
+            <button className="admin-mobile-touch" onClick={()=>exportInstituteGlance("png")} style={exportButtonStyle}>
+              <AppIcon icon={IconDownload} size={15} color={G.text} />
+              {instituteGlanceExportBusy==="png" ? "PNG..." : "PNG"}
+            </button>
+            {showOpenButton&&(
+              <button className="admin-mobile-touch" onClick={openInstituteGlancePanel} style={{...exportButtonStyle,background:G.navy,color:"#FFFFFF",border:"1px solid transparent"}}>
+                Open full
+              </button>
+            )}
+          </div>
+          <div style={{marginTop:12}}>
+            {renderInstituteGlanceList(compact, compact ? 3 : null)}
+          </div>
+          {showOpenButton && instituteGlanceRowsPreview.length > 3 && (
+            <button
+              className="admin-mobile-touch"
+              onClick={openInstituteGlancePanel}
+              style={{marginTop:10,background:"transparent",border:"none",padding:0,fontSize:12.5,fontWeight:700,color:G.blue,fontFamily:G.sans,cursor:"pointer"}}>
+              View all {instituteGlanceRowsPreview.length} institutes
+            </button>
+          )}
+        </div>
+      );
+    };
+
+    const InstituteGlanceModal = () => {
+      if(!instituteGlanceOpen) return null;
+      return (
+        <>
+          <div onClick={closeInstituteGlancePanel} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",backdropFilter:"blur(4px)",zIndex:450}} />
+          <div style={{position:"fixed",inset:0,zIndex:451,display:"flex",alignItems:"center",justifyContent:"center",padding:isMobile ? 14 : 24,pointerEvents:"none"}}>
+            <div style={{width:"min(920px,100%)",maxHeight:"min(88vh,920px)",overflow:"auto",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:isMobile ? 24 : 28,boxShadow:"0 30px 80px rgba(15,23,42,0.22)",padding:isMobile ? 16 : 22,pointerEvents:"auto"}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
+                <div>
+                  <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Profile report</div>
+                  <div style={{fontSize:isMobile ? 24 : 28,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.05}}>All institutes at a glance</div>
+                  <div style={{fontSize:13,color:G.textM,marginTop:8,lineHeight:1.6}}>Teacher entry completion for today, with the names that still need follow-up.</div>
+                </div>
+                <button className="admin-mobile-touch" onClick={closeInstituteGlancePanel} style={{width:38,height:38,borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",fontSize:20,color:G.textL,cursor:"pointer",flexShrink:0}}>
+                  ×
+                </button>
+              </div>
+              <InstituteGlanceSummaryCard />
+            </div>
+          </div>
+        </>
+      );
+    };
+
     const MobileProfileScreen = () => (
       <div style={mobilePageShellStyle}>
         <MobileMotionStyles />
@@ -8511,6 +9014,8 @@ function AdminPanelInner({user}){
             </div>
             {renderAdminProfileStatGrid(true)}
           </div>
+
+          <InstituteGlanceSummaryCard />
 
           <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12}}>
@@ -8913,22 +9418,15 @@ function AdminPanelInner({user}){
                 </div>
               </div>
               <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono}}>
-                Bottom nav switch
+                {tab==="class" ? visibleInstClassCountLabel : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}
               </span>
             </div>
-            <div style={{marginTop:8}}>
-              {renderSearchInput(p2Search,setP2Search,tab==="class"?"Search classes, subjects, teachers":"Search teachers in this institute",true)}
-            </div>
-            <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginTop:8,fontSize:11.5,color:G.textL,fontFamily:G.sans}}>
-              <span>{tab==="class" ? visibleInstClassCountLabel : `${visibleInstTeachers.length} of ${instTeachers.length} teachers`}</span>
-              <span>{tab==="class" ? "Open a class timeline" : "Open a teacher timeline"}</span>
-            </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+            <div style={{display:"flex",justifyContent:"flex-start",gap:8,flexWrap:"wrap",marginTop:10}}>
               <button className="admin-mobile-touch" onClick={()=>openAggregateView(tab)} style={mobileActionButtonStyle("ghost")}>
                 {tab==="class" ? "Open all classes" : "Open all teachers"}
               </button>
             </div>
-            {tab==="class"&&<div style={{marginTop:10}}>{renderProgramFilterBar(true)}</div>}
+            {tab==="class"&&<div style={{marginTop:8}}>{renderProgramFilterBar(true)}</div>}
           </div>
 
           {tab==="class"&&displayedProgramGroups.map(group=>(
@@ -9444,7 +9942,15 @@ function AdminPanelInner({user}){
         <div className="admin-nav-r" style={{display:"flex",alignItems:"center",gap:8}}>
           {/* ── Admin Profile Pill ─────────────────────────────────── */}
           <div style={{position:"relative"}}>
-            <div onClick={()=>setProfileOpen(o=>!o)}
+            <div onClick={()=>{
+              setProfileOpen(open=>{
+                const next = !open;
+                if(next){
+                  refreshAllInstituteGlance().catch(() => {});
+                }
+                return next;
+              });
+            }}
               style={{height:42,display:"flex",alignItems:"center",gap:8,background:profileOpen?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.1)",borderRadius:10,padding:"0 12px",cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"background 0.15s",flexShrink:0}}>
               <div style={{width:26,height:26,borderRadius:"50%",background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",flexShrink:0,fontFamily:G.sans}}>
                 {(user?.email||"A").charAt(0).toUpperCase()}
@@ -9487,6 +9993,41 @@ function AdminPanelInner({user}){
                           <div style={{fontSize:20,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1,marginTop:9}}>{item.value}</div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                  <div style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"12px",marginBottom:8}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:10}}>
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.42)",fontFamily:G.mono}}>All institutes at a glance</div>
+                        <div style={{fontSize:16,fontWeight:800,color:"#fff",fontFamily:G.display,marginTop:6}}>
+                          {allInstituteGlanceSummary.filledToday}/{allInstituteGlanceSummary.totalTeachers} updated today
+                        </div>
+                      </div>
+                      {instituteGlancePendingCount>0&&(
+                        <span style={{background:"rgba(59,130,246,0.14)",border:"1px solid rgba(59,130,246,0.26)",borderRadius:999,padding:"5px 8px",fontSize:10,fontWeight:700,fontFamily:G.mono,color:"#BFDBFE"}}>
+                          syncing {instituteGlancePendingCount}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.54)",lineHeight:1.5,marginBottom:10}}>
+                      Open the full institute summary or export it directly from profile.
+                    </div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      <button
+                        onClick={()=>{setProfileOpen(false);openInstituteGlancePanel();}}
+                        style={{padding:"8px 11px",background:"rgba(59,130,246,0.18)",border:"1px solid rgba(59,130,246,0.24)",borderRadius:10,cursor:"pointer",color:"#fff",fontSize:12,fontWeight:700,fontFamily:G.sans}}>
+                        Open report
+                      </button>
+                      <button
+                        onClick={()=>exportInstituteGlance("pdf")}
+                        style={{padding:"8px 11px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,cursor:"pointer",color:"rgba(255,255,255,0.84)",fontSize:12,fontWeight:700,fontFamily:G.sans}}>
+                        {instituteGlanceExportBusy==="pdf" ? "PDF..." : "PDF"}
+                      </button>
+                      <button
+                        onClick={()=>exportInstituteGlance("png")}
+                        style={{padding:"8px 11px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,cursor:"pointer",color:"rgba(255,255,255,0.84)",fontSize:12,fontWeight:700,fontFamily:G.sans}}>
+                        {instituteGlanceExportBusy==="png" ? "PNG..." : "PNG"}
+                      </button>
                     </div>
                   </div>
                   <button onClick={()=>{setProfileOpen(false);openManageTab("teachers");}}
@@ -9586,6 +10127,7 @@ function AdminPanelInner({user}){
       )}
       {pendingSectionRenameModal}
       <AdminToastBanner message={adminToast} />
+      <InstituteGlanceModal />
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
       {mobileStep>0&&(
         <div className="admin-mobile-back" style={{background:G.navyS,borderBottom:`1px solid rgba(255,255,255,0.08)`,padding:"8px 14px",flexShrink:0,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>

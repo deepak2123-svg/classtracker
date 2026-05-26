@@ -3479,6 +3479,8 @@ function ClassTrackerInner({user}){
   const [saveErr,setSaveErr]   = useState(false);
   const [draftSaving,setDraftSaving] = useState(false);
   const [lastCloudSavedAt,setLastCloudSavedAt] = useState(0);
+  const [lastDraftSavedAt,setLastDraftSavedAt] = useState(0);
+  const [saveBadgeFlash,setSaveBadgeFlash] = useState(null);
   const [view,_setView]         = useState("home");
   const [activeClass,setActiveClass] = useState(null);
   const [selectedDate,setSelectedDate] = useState(todayKey());
@@ -3527,6 +3529,7 @@ function ClassTrackerInner({user}){
   const noteRef  = useRef(null);
   const saveTimer= useRef(null);
   const noteDraftTimer = useRef(null);
+  const saveBadgeHideTimer = useRef(null);
   const lastSyncedFingerprint = useRef("");
   const hydratedDraftKeyRef = useRef("");
   const lastForegroundRefreshAt = useRef(0);
@@ -3793,8 +3796,9 @@ function ClassTrackerInner({user}){
           view,
         }));
       }catch(e){}
+      setLastDraftSavedAt(savedAt);
       setDraftSaving(false);
-    }, 220);
+    }, 180);
     return () => window.clearTimeout(noteDraftTimer.current);
   }, [activeClass?.id, activeEntryDraftForm, activeEntryDraftKey, clearEntryDraft, hasActiveEntryDraft, isEntryComposerView, selectedDate, view]);
 
@@ -3807,11 +3811,48 @@ function ClassTrackerInner({user}){
       window.clearTimeout(noteDraftTimer.current);
       noteDraftTimer.current = null;
     }
+    if(saveBadgeHideTimer.current){
+      window.clearTimeout(saveBadgeHideTimer.current);
+      saveBadgeHideTimer.current = null;
+    }
     if(detailSwipeOffsetRaf.current){
       window.cancelAnimationFrame(detailSwipeOffsetRaf.current);
       detailSwipeOffsetRaf.current = 0;
     }
   }, []);
+
+  useEffect(() => {
+    if(!lastCloudSavedAt){
+      return;
+    }
+    setSaveBadgeFlash({ key:`cloud_${lastCloudSavedAt}`, label:"Saved", tone:"success" });
+    if(saveBadgeHideTimer.current){
+      window.clearTimeout(saveBadgeHideTimer.current);
+    }
+    saveBadgeHideTimer.current = window.setTimeout(() => {
+      setSaveBadgeFlash(current => current?.key === `cloud_${lastCloudSavedAt}` ? null : current);
+      saveBadgeHideTimer.current = null;
+    }, 1400);
+  }, [lastCloudSavedAt]);
+
+  useEffect(() => {
+    if(!lastDraftSavedAt || saving || saveErr){
+      return;
+    }
+    setSaveBadgeFlash(current => {
+      if(current?.tone === "success" && current?.label === "Saved"){
+        return current;
+      }
+      return { key:`draft_${lastDraftSavedAt}`, label:"Draft saved", tone:"draft" };
+    });
+    if(saveBadgeHideTimer.current){
+      window.clearTimeout(saveBadgeHideTimer.current);
+    }
+    saveBadgeHideTimer.current = window.setTimeout(() => {
+      setSaveBadgeFlash(current => current?.key === `draft_${lastDraftSavedAt}` ? null : current);
+      saveBadgeHideTimer.current = null;
+    }, 1100);
+  }, [lastDraftSavedAt, saveErr, saving]);
 
   useEffect(()=>{
     let cancelled = false;
@@ -4026,7 +4067,7 @@ function ClassTrackerInner({user}){
           // Store to localStorage so data survives offline
           storePendingDraft(data,isOffline?"offline":"save-failed");
         });
-    },1000);
+    },650);
     return()=>clearTimeout(saveTimer.current);
   },[data,loading,allowCloudSync,user.uid,pendingSaveKey,cloudRevision,storePendingDraft,isOffline]);
   // Safe navigation — background autosave continues without blocking navigation
@@ -4482,8 +4523,7 @@ function ClassTrackerInner({user}){
     if(saveErr){
       badge = isOfflineSave
         ? {
-            title:"Saved locally",
-            subtitle:"Will sync when you reconnect",
+            title:"Offline",
             icon:IconDeviceFloppy,
             background:"#FFF7ED",
             border:"#FED7AA",
@@ -4491,72 +4531,51 @@ function ClassTrackerInner({user}){
           }
         : {
             title:"Sync issue",
-            subtitle:"Retrying in the background",
             icon:IconAlertTriangle,
             background:"#FEF2F2",
             border:"#FECACA",
             color:G.red,
           };
-    } else if(saving){
+    } else if(saving || draftSaving){
       badge = {
-        title:"Saving",
-        subtitle:"Syncing changes quietly",
-        icon:IconRefresh,
+        title:saving ? "Saving..." : "Saving draft...",
+        icon:saving ? IconRefresh : IconDeviceFloppy,
         background:"#EEF4FF",
         border:"#C7D7F5",
         color:G.blue,
       };
-    } else if(isEntryComposerView && hasActiveEntryDraft){
-      badge = draftSaving
-        ? {
-            title:"Saving draft",
-            subtitle:"Typing is being preserved",
-            icon:IconDeviceFloppy,
-            background:"#F8FAFC",
-            border:G.border,
-            color:G.textS,
-          }
-        : {
-            title:"Draft saved",
-            subtitle:"Kept in the background",
-            icon:IconCheck,
-            background:"#EFFCF4",
-            border:"#BBF7D0",
-            color:G.green,
-          };
-    } else if(lastCloudSavedAt){
+    } else if(saveBadgeFlash){
       badge = {
-        title:"All changes saved",
-        subtitle:"Synced in the background",
-        icon:IconCheck,
-        background:"#EFFCF4",
-        border:"#BBF7D0",
-        color:G.green,
+        title:saveBadgeFlash.label,
+        icon:saveBadgeFlash.tone === "draft" ? IconDeviceFloppy : IconCheck,
+        background:saveBadgeFlash.tone === "draft" ? "#F8FAFC" : "#EFFCF4",
+        border:saveBadgeFlash.tone === "draft" ? G.border : "#BBF7D0",
+        color:saveBadgeFlash.tone === "draft" ? G.textS : G.green,
       };
     }
     if(!badge) return null;
     return(
       <div style={{
         position:"fixed",
-        top:68,
+        top:74,
         right:14,
         zIndex:999,
         display:"flex",
         alignItems:"center",
-        gap:10,
+        gap:8,
         background:badge.background,
         border:`1px solid ${badge.border}`,
         borderRadius:999,
-        padding:"7px 12px",
+        padding:"6px 10px",
         boxShadow:G.shadowMd,
         maxWidth:"calc(100vw - 28px)",
+        pointerEvents:"none",
       }}>
-        <div style={{width:28,height:28,borderRadius:999,background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-          <AppIcon icon={badge.icon} size={15} color={badge.color} />
+        <div style={{width:24,height:24,borderRadius:999,background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <AppIcon icon={badge.icon} size={13.5} color={badge.color} />
         </div>
-        <div style={{minWidth:0}}>
-          <div style={{fontSize:12.5,fontWeight:800,color:badge.color,fontFamily:G.sans,lineHeight:1.1,whiteSpace:"nowrap"}}>{badge.title}</div>
-          <div style={{fontSize:11,color:G.textL,fontFamily:G.sans,lineHeight:1.15,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{badge.subtitle}</div>
+        <div style={{minWidth:0,fontSize:12.5,fontWeight:800,color:badge.color,fontFamily:G.sans,lineHeight:1.1,whiteSpace:"nowrap"}}>
+          {badge.title}
         </div>
       </div>
     );
