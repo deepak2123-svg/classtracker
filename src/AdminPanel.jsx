@@ -1856,51 +1856,144 @@ const EMPTY_INSTITUTE_GLANCE_SUMMARY = {
   filledToday:0,
   missingToday:0,
   loadedTeachers:0,
+  sectionsTaught:0,
+  totalStudyMinutes:0,
+  totalTodayEntries:0,
 };
-function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {} }){
+function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataMap = {}, resolveSectionName = null }){
+  const data = fullDataMap?.[teacher?.uid];
+  const classesHere = data
+    ? (data.classes || []).filter(cls => sameInstituteName(cls?.institute, instituteName))
+    : [];
+  const sectionMap = new Map();
+  let todayEntries = 0;
+  let totalMinutes = 0;
+  let untimedEntries = 0;
+
+  classesHere.forEach(cls => {
+    const notesToday = getEntriesInRange((data.notes || {})[cls.id] || {}, 1);
+    if(!notesToday.length) return;
+
+    const resolvedSection = typeof resolveSectionName === "function"
+      ? resolveSectionName(cls?.section, cls?.institute || instituteName)
+      : cls?.section;
+    const sectionLabel = normaliseName(String(resolvedSection || cls?.section || "Untitled section").trim() || "Untitled section");
+    const currentSection = sectionMap.get(sectionLabel) || {
+      name: sectionLabel,
+      entryCount:0,
+      totalMinutes:0,
+    };
+
+    notesToday.forEach(({ entry }) => {
+      const mins = entryDurationMinutes(entry);
+      todayEntries += 1;
+      totalMinutes += mins;
+      currentSection.entryCount += 1;
+      currentSection.totalMinutes += mins;
+      if(mins <= 0) untimedEntries += 1;
+    });
+
+    sectionMap.set(sectionLabel, currentSection);
+  });
+
+  const lastEntry = data
+    ? classesHere.reduce((latest, cls) => Math.max(latest, lastEntryTs((data.notes || {})[cls.id] || {}) || 0), 0)
+    : Number(teacher?.lastActive || 0) || 0;
+  const sections = Array.from(sectionMap.values()).sort((a, b) => {
+    if((b.totalMinutes || 0) !== (a.totalMinutes || 0)) return (b.totalMinutes || 0) - (a.totalMinutes || 0);
+    if((b.entryCount || 0) !== (a.entryCount || 0)) return (b.entryCount || 0) - (a.entryCount || 0);
+    return exportTextSorter.compare(a.name || "", b.name || "");
+  });
+
+  return {
+    uid: teacher?.uid,
+    name: getTeacherDisplayNameFromMap(teacher, fullDataMap),
+    loaded: !!data,
+    todayEntries,
+    updatedToday: todayEntries > 0,
+    lastEntryTs: lastEntry || null,
+    sectionCount: sections.length,
+    sectionNames: sections.map(section => section.name),
+    sections,
+    totalMinutes,
+    untimedEntries,
+  };
+}
+function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null }){
   return institutes.map(inst => {
-    const instTeachers = teachers
+    const teacherRows = teachers
       .filter(teacher => teacherBelongsToInstituteFromMap(teacher, inst, fullDataMap))
-      .map(teacher => {
-        const data = fullDataMap?.[teacher.uid];
-        const classesHere = data
-          ? (data.classes || []).filter(cls => sameInstituteName(cls?.institute, inst))
-          : [];
-        const todayEntries = data
-          ? classesHere.reduce((sum, cls) => sum + getEntriesInRange((data.notes || {})[cls.id] || {}, 1).length, 0)
-          : 0;
-        const lastEntry = data
-          ? classesHere.reduce((latest, cls) => Math.max(latest, lastEntryTs((data.notes || {})[cls.id] || {}) || 0), 0)
-          : Number(teacher?.lastActive || 0) || 0;
-        return {
-          uid: teacher.uid,
-          name: getTeacherDisplayNameFromMap(teacher, fullDataMap),
-          loaded: !!data,
-          todayEntries,
-          updatedToday: todayEntries > 0,
-          lastEntryTs: lastEntry || null,
-        };
-      })
+      .map(teacher => buildInstituteGlanceTeacherActivity({
+        teacher,
+        instituteName: inst,
+        fullDataMap,
+        resolveSectionName,
+      }));
+    const filledTeachers = teacherRows
+      .filter(item => item.updatedToday)
       .sort((a, b) => {
-        if(!!a.updatedToday !== !!b.updatedToday) return a.updatedToday ? 1 : -1;
+        if((b.totalMinutes || 0) !== (a.totalMinutes || 0)) return (b.totalMinutes || 0) - (a.totalMinutes || 0);
+        if((b.todayEntries || 0) !== (a.todayEntries || 0)) return (b.todayEntries || 0) - (a.todayEntries || 0);
+        if((b.sectionCount || 0) !== (a.sectionCount || 0)) return (b.sectionCount || 0) - (a.sectionCount || 0);
+        return exportTextSorter.compare(a.name || "", b.name || "");
+      });
+    const missingTeachers = teacherRows
+      .filter(item => !item.updatedToday)
+      .sort((a, b) => {
         if((a.lastEntryTs || 0) !== (b.lastEntryTs || 0)) return (a.lastEntryTs || 0) - (b.lastEntryTs || 0);
         return exportTextSorter.compare(a.name || "", b.name || "");
       });
+    const orderedTeachers = [...filledTeachers, ...missingTeachers];
+    const loadedTeachers = orderedTeachers.filter(item => item.loaded).length;
+    const totalTeachers = orderedTeachers.length;
+    const taughtSectionMap = new Map();
 
-    const filledTeachers = instTeachers.filter(item => item.updatedToday);
-    const missingTeachers = instTeachers.filter(item => !item.updatedToday);
-    const loadedTeachers = instTeachers.filter(item => item.loaded).length;
-    const totalTeachers = instTeachers.length;
+    filledTeachers.forEach(teacher => {
+      (teacher.sections || []).forEach(section => {
+        const current = taughtSectionMap.get(section.name) || {
+          name: section.name,
+          entryCount:0,
+          totalMinutes:0,
+          teachers:new Set(),
+        };
+        current.entryCount += section.entryCount || 0;
+        current.totalMinutes += section.totalMinutes || 0;
+        current.teachers.add(teacher.name);
+        taughtSectionMap.set(section.name, current);
+      });
+    });
+
+    const sectionRows = Array.from(taughtSectionMap.values())
+      .map(section => ({
+        ...section,
+        teacherNames:Array.from(section.teachers).sort((a, b) => exportTextSorter.compare(a || "", b || "")),
+      }))
+      .sort((a, b) => {
+        if((b.totalMinutes || 0) !== (a.totalMinutes || 0)) return (b.totalMinutes || 0) - (a.totalMinutes || 0);
+        if((b.entryCount || 0) !== (a.entryCount || 0)) return (b.entryCount || 0) - (a.entryCount || 0);
+        return exportTextSorter.compare(a.name || "", b.name || "");
+      });
+    const totalStudyMinutes = filledTeachers.reduce((sum, item) => sum + (item.totalMinutes || 0), 0);
+    const totalTodayEntries = filledTeachers.reduce((sum, item) => sum + (item.todayEntries || 0), 0);
 
     return {
       institute: inst,
-      teacherUids: instTeachers.map(item => item.uid),
+      teacherUids: orderedTeachers.map(item => item.uid),
+      teacherRows: orderedTeachers,
+      filledTeacherRows: filledTeachers,
+      pendingTeacherRows: missingTeachers,
       totalTeachers,
       filledToday: filledTeachers.length,
       missingToday: missingTeachers.length,
       missingNames: missingTeachers.map(item => item.name),
       filledNames: filledTeachers.map(item => item.name),
       loadedTeachers,
+      sectionsTaught: sectionRows.length,
+      sectionRows,
+      totalStudyMinutes,
+      totalTodayEntries,
+      untimedEntries: filledTeachers.reduce((sum, item) => sum + (item.untimedEntries || 0), 0),
+      noTeachersSignedUp: totalTeachers === 0,
       ready: loadedTeachers >= totalTeachers,
       loadedPct: totalTeachers ? Math.round((loadedTeachers / totalTeachers) * 100) : 100,
       completionPct: totalTeachers ? Math.round((filledTeachers.length / totalTeachers) * 100) : 0,
@@ -1914,8 +2007,20 @@ function summariseInstituteGlanceRows(rows = []){
     acc.filledToday += row.filledToday || 0;
     acc.missingToday += row.missingToday || 0;
     acc.loadedTeachers += row.loadedTeachers || 0;
+    acc.sectionsTaught += row.sectionsTaught || 0;
+    acc.totalStudyMinutes += row.totalStudyMinutes || 0;
+    acc.totalTodayEntries += row.totalTodayEntries || 0;
     return acc;
-  }, { totalInstitutes:0, totalTeachers:0, filledToday:0, missingToday:0, loadedTeachers:0 });
+  }, {
+    totalInstitutes:0,
+    totalTeachers:0,
+    filledToday:0,
+    missingToday:0,
+    loadedTeachers:0,
+    sectionsTaught:0,
+    totalStudyMinutes:0,
+    totalTodayEntries:0,
+  });
 }
 async function downloadTeacherStatusShareImage({ instituteName, rows, summary, generatedOnLabel }){
   await waitForCanvasFonts();
@@ -3825,6 +3930,7 @@ function AdminPanelInner({user}){
   const warmupJobRef = React.useRef(0);
   const instituteGlanceJobRef = React.useRef(0);
   const instituteGlanceDataRef = React.useRef({});
+  const instituteGlanceReportRef = React.useRef(instituteGlanceReport);
   const historyReadyRef = React.useRef(false);
   const historyRestoreRef = React.useRef(false);
   const lastHistoryKeyRef = React.useRef("");
@@ -4200,11 +4306,16 @@ function AdminPanelInner({user}){
     }
   },[instDetailView, warmInstitute]);
 
+  React.useEffect(() => {
+    instituteGlanceReportRef.current = instituteGlanceReport;
+  }, [instituteGlanceReport]);
+
   const buildInstituteGlanceSnapshot = React.useCallback((fullDataMap = {}) => {
     const rows = buildInstituteGlanceRows({
       institutes,
       teachers: teacherOnlyList,
       fullDataMap,
+      resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
     });
     return {
       rows,
@@ -4212,20 +4323,34 @@ function AdminPanelInner({user}){
       loadedInstitutes: rows.filter(row => row.ready).length,
       totalInstitutes: rows.length,
     };
-  }, [institutes, teacherOnlyList]);
+  }, [instSectionsAll, institutes, teacherOnlyList]);
+
+  const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
+    instituteGlanceReportRef.current = nextReport;
+    if(typeof React.startTransition === "function"){
+      React.startTransition(() => setInstituteGlanceReport(nextReport));
+      return;
+    }
+    setInstituteGlanceReport(nextReport);
+  }, []);
 
   const handleInstituteGlanceLoadFailure = React.useCallback((error) => {
     console.error("institute glance load failed", error);
-    setInstituteGlanceReport(prev => ({
-      ...prev,
-      loading: false,
-      error: error?.message || "Could not load the centre summary.",
-    }));
+    setInstituteGlanceReport(prev => {
+      const next = {
+        ...prev,
+        loading: false,
+        error: error?.message || "Could not load the centre summary.",
+      };
+      instituteGlanceReportRef.current = next;
+      return next;
+    });
   }, []);
 
   const loadInstituteGlanceReport = React.useCallback(async ({ force = false } = {}) => {
-    if(!force && instituteGlanceReport.loading) return instituteGlanceReport;
-    if(!force && instituteGlanceReport.ready && !instituteGlanceReport.error) return instituteGlanceReport;
+    const currentReport = instituteGlanceReportRef.current;
+    if(!force && currentReport.loading) return currentReport;
+    if(!force && currentReport.ready && !currentReport.error) return currentReport;
 
     const jobId = ++instituteGlanceJobRef.current;
     const teacherUids = teacherOnlyList.map(t => t.uid).filter(Boolean);
@@ -4243,13 +4368,15 @@ function AdminPanelInner({user}){
       loading: pendingUids.length > 0,
       loaded,
       total,
-      ready: pendingUids.length === 0 && !force && !instituteGlanceReport.error,
+      ready: pendingUids.length === 0 && !force && !currentReport.error,
       error: "",
     };
-    setInstituteGlanceReport(seedReport);
+    scheduleInstituteGlanceReport(seedReport);
     if(!pendingUids.length) return seedReport;
 
     let firstError = null;
+    let loadedSincePublish = 0;
+    const publishBatchSize = (isWeakDevice || mobileLiteMode) ? 6 : 4;
     for(let i=0;i<pendingUids.length;i+=1){
       const uid = pendingUids[i];
       try {
@@ -4264,18 +4391,23 @@ function AdminPanelInner({user}){
         if(!firstError) firstError = error;
       }
       loaded += 1;
-      const snapshot = buildInstituteGlanceSnapshot(hydratedFullData);
-      const nextReport = {
-        ...snapshot,
-        loading: loaded < total,
-        loaded,
-        total,
-        ready: loaded >= total && snapshot.loadedInstitutes >= snapshot.totalInstitutes && !firstError,
-        error: firstError?.message || "",
-      };
-      setInstituteGlanceReport(nextReport);
+      loadedSincePublish += 1;
+      const shouldPublishProgress = loaded >= total || loadedSincePublish >= publishBatchSize || !!firstError;
+      if(shouldPublishProgress){
+        const snapshot = buildInstituteGlanceSnapshot(hydratedFullData);
+        const nextReport = {
+          ...snapshot,
+          loading: loaded < total,
+          loaded,
+          total,
+          ready: loaded >= total && snapshot.loadedInstitutes >= snapshot.totalInstitutes && !firstError,
+          error: firstError?.message || "",
+        };
+        scheduleInstituteGlanceReport(nextReport);
+        loadedSincePublish = 0;
+      }
       if((isWeakDevice || mobileLiteMode) && i < pendingUids.length - 1){
-        await new Promise(resolve => window.setTimeout(resolve, 30));
+        await new Promise(resolve => window.setTimeout(resolve, 45));
       }
     }
 
@@ -4290,9 +4422,9 @@ function AdminPanelInner({user}){
       ready: finalSnapshot.loadedInstitutes >= finalSnapshot.totalInstitutes && !firstError,
       error: firstError?.message || "",
     };
-    setInstituteGlanceReport(finalReport);
+    scheduleInstituteGlanceReport(finalReport);
     return finalReport;
-  }, [buildInstituteGlanceSnapshot, fullData, instituteGlanceReport, isWeakDevice, mobileLiteMode, teacherOnlyList]);
+  }, [buildInstituteGlanceSnapshot, fullData, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport, teacherOnlyList]);
 
   const openMobileCentreSummary = React.useCallback(() => {
     setProfileOpen(false);
@@ -4885,10 +5017,6 @@ function AdminPanelInner({user}){
     setPanelCollapsed(prev=>({...prev,[key]:willCollapse}));
   }, [PANEL_LIMITS, panelCollapsed, panelW, clampPanelWidth]);
 
-  const instituteGlancePendingCount = Math.max(
-    0,
-    (instituteGlanceReport.total || 0) - (instituteGlanceReport.loaded || 0)
-  );
   const instituteGlanceReadyCount = Math.max(0, instituteGlanceReport.loadedInstitutes || 0);
   const instituteGlanceProgressPct = instituteGlanceReport.total
     ? Math.max(0, Math.min(100, Math.round((instituteGlanceReport.loaded / instituteGlanceReport.total) * 100)))
@@ -4896,11 +5024,13 @@ function AdminPanelInner({user}){
   const instituteGlanceExportDisabled = instituteGlanceExportBusy || !instituteGlanceReport.ready || !!instituteGlanceReport.error;
 
   const renderInstituteGlanceStatGrid = (compact = false) => (
-    <div style={{display:"grid",gridTemplateColumns:compact ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
+    <div style={{display:"grid",gridTemplateColumns:compact ? "repeat(2,minmax(0,1fr))" : "repeat(5,minmax(0,1fr))",gap:8,marginTop:12}}>
       {[
         { label:"Institutes", value:instituteGlanceReport.summary.totalInstitutes },
         { label:"Teachers updated", value:`${instituteGlanceReport.summary.filledToday}/${instituteGlanceReport.summary.totalTeachers}` },
         { label:"Pending today", value:instituteGlanceReport.summary.missingToday },
+        { label:"Sections taught", value:instituteGlanceReport.summary.sectionsTaught },
+        { label:"Study hours", value:formatDurationShort(instituteGlanceReport.summary.totalStudyMinutes || 0) },
       ].map(item=>(
         <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
           <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.6,textTransform:"uppercase"}}>{item.label}</div>
@@ -4974,8 +5104,8 @@ function AdminPanelInner({user}){
           </div>
           <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:4}}>
             {instituteGlanceReport.loading
-              ? "Each centre unlocks as soon as its teacher data finishes loading."
-              : "You can open any centre instantly, or share the full report now."}
+              ? "Teacher records sync in the background and each centre updates in calmer batches for smoother mobile scrolling."
+              : "Review uploaded teachers, pending follow-up, sections taught, and study hours for every centre."}
           </div>
         </div>
         <div style={{display:"grid",gap:6,justifyItems:"end"}}>
@@ -4998,6 +5128,89 @@ function AdminPanelInner({user}){
     </div>
   );
 
+  const renderInstituteGlanceTeacherNameList = (names = [], emptyLabel) => {
+    if(!names.length){
+      return (
+        <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
+          {emptyLabel}
+        </div>
+      );
+    }
+    return (
+      <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+        {names.map(name=>(
+          <span
+            key={name}
+            style={{
+              display:"inline-flex",
+              alignItems:"center",
+              background:"#FFFFFF",
+              border:`1px solid ${G.border}`,
+              borderRadius:999,
+              padding:"5px 10px",
+              fontSize:12,
+              fontWeight:700,
+              color:G.text,
+              lineHeight:1.35,
+            }}>
+            {name}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  const renderInstituteGlanceFilledTeacherTable = (row) => {
+    if(!row?.filledTeacherRows?.length){
+      return (
+        <div style={{marginTop:10,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:14,padding:"12px 13px",fontSize:12.5,color:"#9A3412",lineHeight:1.55}}>
+          No teacher has uploaded today&apos;s entry for this centre yet.
+        </div>
+      );
+    }
+    return (
+      <div style={{marginTop:10,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        <div style={{minWidth:520,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",background:"#FFFFFF"}}>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(200px,2.3fr) minmax(72px,0.75fr) minmax(72px,0.75fr) minmax(86px,0.9fr)",gap:0,background:"#F8FAFC",borderBottom:`1px solid ${G.border}`}}>
+            {["Teacher", "Sections", "Logs", "Study hours"].map(label=>(
+              <div key={label} style={{padding:"10px 12px",fontSize:10.5,fontWeight:800,color:G.textL,fontFamily:G.mono,letterSpacing:0.7,textTransform:"uppercase"}}>
+                {label}
+              </div>
+            ))}
+          </div>
+          {(row.filledTeacherRows || []).map((teacher, index) => {
+            const hoursLabel = teacher.totalMinutes > 0
+              ? formatDurationShort(teacher.totalMinutes)
+              : teacher.untimedEntries > 0
+                ? "Untimed"
+                : "0m";
+            const sectionCaption = teacher.sectionNames?.length
+              ? teacher.sectionNames.join(", ")
+              : "Uploaded without a section name";
+            return (
+              <div
+                key={`${row.institute}_${teacher.uid}`}
+                style={{
+                  display:"grid",
+                  gridTemplateColumns:"minmax(200px,2.3fr) minmax(72px,0.75fr) minmax(72px,0.75fr) minmax(86px,0.9fr)",
+                  gap:0,
+                  borderBottom:index < row.filledTeacherRows.length - 1 ? `1px solid ${G.border}` : "none",
+                }}>
+                <div style={{padding:"11px 12px"}}>
+                  <div style={{fontSize:13.5,fontWeight:800,color:G.text,lineHeight:1.35}}>{teacher.name}</div>
+                  <div style={{fontSize:11.5,color:G.textM,lineHeight:1.45,marginTop:4}}>{sectionCaption}</div>
+                </div>
+                <div style={{padding:"11px 12px",fontSize:13,fontWeight:800,color:G.text,lineHeight:1.35,display:"flex",alignItems:"center"}}>{teacher.sectionCount}</div>
+                <div style={{padding:"11px 12px",fontSize:13,fontWeight:800,color:G.text,lineHeight:1.35,display:"flex",alignItems:"center"}}>{teacher.todayEntries}</div>
+                <div style={{padding:"11px 12px",fontSize:13,fontWeight:800,color:teacher.totalMinutes > 0 ? "#166534" : G.textM,lineHeight:1.35,display:"flex",alignItems:"center"}}>{hoursLabel}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderSharedInstituteGlanceList = ({ maxRows = null, interactive = false } = {}) => {
     const rows = maxRows ? instituteGlanceReport.rows.slice(0, maxRows) : instituteGlanceReport.rows;
     if(!rows.length){
@@ -5011,8 +5224,10 @@ function AdminPanelInner({user}){
       <div style={{display:"grid",gap:10}}>
         {rows.map(row => {
           const tone = !row.ready
-            ? { bg:"#F8FAFC", border:"#DDE3ED", pillBg:"#EEF4FF", pillColor:G.blue, meta:G.textM }
-            : row.missingToday === 0
+            ? { bg:"#F8FAFC", border:"#DDE3ED", pillBg:"#EEF4FF", pillColor:G.blue, meta:G.textM, softBg:"#FFFFFF" }
+            : row.noTeachersSignedUp
+              ? { bg:"#F8FAFC", border:"#DDE3ED", pillBg:"#EEF2F7", pillColor:G.textM, meta:G.textM, softBg:"#FFFFFF" }
+              : row.missingToday === 0
               ? { bg:"#ECFDF3", border:"#BBF7D0", pillBg:"#DCFCE7", pillColor:"#166534", meta:"#1B5E20" }
               : row.completionPct >= 50
                 ? { bg:"#EEF4FF", border:"#C7D7F5", pillBg:"#DBEAFE", pillColor:G.blue, meta:"#1E3A8A" }
@@ -5020,21 +5235,23 @@ function AdminPanelInner({user}){
           const canOpen = interactive && row.ready;
           const pendingText = !row.ready
             ? `Loading ${row.loadedTeachers}/${row.totalTeachers}`
-            : row.totalTeachers === 0
-              ? "No teachers"
+            : row.noTeachersSignedUp
+              ? "No sign-ups"
               : row.missingToday === 0
-                ? "All done"
+                ? "All filled"
                 : `${row.missingToday} pending`;
-          const metaText = row.totalTeachers === 0
-            ? "No teachers are linked to this centre yet."
+          const metaText = row.noTeachersSignedUp
+            ? "No teachers have signed up for this centre yet."
             : row.ready
               ? `${row.filledToday} of ${row.totalTeachers} teachers filled today`
               : `${row.loadedTeachers} of ${row.totalTeachers} teacher records are ready`;
           const helperText = !row.ready
-            ? "This centre will open as soon as all of its teachers finish loading."
-            : row.missingNames.length
-              ? `Pending today: ${row.missingNames.join(", ")}`
-              : "Everyone has filled today's entry.";
+            ? "The centre summary appears as soon as the synced teacher data is ready, without reloading the whole mobile screen."
+            : row.noTeachersSignedUp
+              ? "Once teachers sign up, this card will show uploaded names, sections taught, and study hours."
+              : row.filledToday > 0
+                ? `${row.sectionsTaught} sections taught today across ${row.filledToday} uploaded teacher${row.filledToday===1?"":"s"}.`
+                : "No teacher has uploaded today's entry yet.";
           const cardStyle = {
             width:"100%",
             background:tone.bg,
@@ -5042,12 +5259,11 @@ function AdminPanelInner({user}){
             borderRadius:18,
             padding:"13px 14px",
             textAlign:"left",
-            cursor:canOpen ? "pointer" : "default",
-            boxShadow:canOpen && !reduceEffects ? "0 12px 24px rgba(15,23,42,0.06)" : "none",
+            boxShadow:!reduceEffects ? "0 12px 24px rgba(15,23,42,0.06)" : "none",
             WebkitTapHighlightColor:"transparent",
           };
-          const cardBody = (
-            <>
+          return (
+            <div key={row.institute} style={cardStyle}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.35}}>
@@ -5061,42 +5277,82 @@ function AdminPanelInner({user}){
                   {pendingText}
                 </span>
               </div>
+
               <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:8}}>
                 {helperText}
               </div>
+
               {!row.ready&&row.totalTeachers>0&&(
                 <div style={{height:8,background:"#E6EDF6",borderRadius:999,overflow:"hidden",marginTop:10}}>
                   <div style={{height:"100%",width:`${Math.max(row.loadedPct || 0, row.loadedTeachers>0 ? 8 : 0)}%`,borderRadius:999,background:"linear-gradient(90deg,#93C5FD 0%,#3B82F6 100%)",transition:"width 0.2s ease"}} />
                 </div>
               )}
+
+              {row.ready&&(
+                <>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:12}}>
+                    {[
+                      { label:"Updated", value:`${row.filledToday}/${row.totalTeachers}` },
+                      { label:"Pending", value:row.missingToday },
+                      { label:"Sections taught", value:row.sectionsTaught },
+                      { label:"Study hours", value:formatDurationShort(row.totalStudyMinutes || 0) },
+                    ].map(item=>(
+                      <div key={`${row.institute}_${item.label}`} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
+                        <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.6,textTransform:"uppercase"}}>{item.label}</div>
+                        <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:7}}>{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {row.noTeachersSignedUp ? (
+                    <div style={{marginTop:12,background:"#FFFFFF",border:`1px dashed ${G.borderM}`,borderRadius:15,padding:"13px 14px",fontSize:12.5,color:G.textM,lineHeight:1.6}}>
+                      No one has signed up in this centre yet, so this is not an "everyone filled" case. Once teachers are added, this table will appear here.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:"12px 13px"}}>
+                        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8}}>Teachers who filled today</div>
+                        <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
+                          Uploaded teachers are listed below with their sections taught, total logs, and study hours for today.
+                        </div>
+                        {renderInstituteGlanceFilledTeacherTable(row)}
+                      </div>
+
+                      <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:"12px 13px"}}>
+                        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8}}>Teachers pending today</div>
+                        {renderInstituteGlanceTeacherNameList(row.missingNames, "Everyone linked to this centre has filled today.")}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
               {canOpen&&(
-                <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6,marginTop:10,fontSize:12.5,fontWeight:700,color:G.blue,fontFamily:G.sans}}>
-                  <span>Open centre</span>
-                  <AppIcon icon={IconChevronRight} size={14} color={G.blue} />
+                <div style={{display:"flex",justifyContent:"flex-end",marginTop:12}}>
+                  <button
+                    type="button"
+                    className="admin-mobile-touch"
+                    onClick={()=>openInstituteFromGlance(row)}
+                    style={{
+                      minHeight:36,
+                      padding:"0 12px",
+                      borderRadius:12,
+                      border:`1px solid ${G.border}`,
+                      background:"#FFFFFF",
+                      color:G.blue,
+                      fontSize:12.5,
+                      fontWeight:800,
+                      fontFamily:G.sans,
+                      cursor:"pointer",
+                      display:"inline-flex",
+                      alignItems:"center",
+                      gap:6,
+                    }}>
+                    <span>Open centre</span>
+                    <AppIcon icon={IconChevronRight} size={14} color={G.blue} />
+                  </button>
                 </div>
               )}
-            </>
-          );
-          if(interactive){
-            return (
-              <button
-                type="button"
-                key={row.institute}
-                className="admin-mobile-touch admin-mobile-card-press"
-                onClick={()=>canOpen&&openInstituteFromGlance(row)}
-                disabled={!canOpen}
-                style={{
-                  ...cardStyle,
-                  border:"none",
-                  opacity:canOpen ? 1 : 0.96,
-                }}>
-                {cardBody}
-              </button>
-            );
-          }
-          return (
-            <div key={row.institute} style={cardStyle}>
-              {cardBody}
             </div>
           );
         })}
@@ -5118,7 +5374,7 @@ function AdminPanelInner({user}){
               <div>
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
                 <div style={{fontSize:isMobile ? 24 : 28,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.05}}>Centre summary</div>
-                <div style={{fontSize:13,color:G.textM,marginTop:8,lineHeight:1.6}}>Teacher entry completion for today, with the names that still need follow-up.</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:8,lineHeight:1.6}}>Today&apos;s uploaded teachers, pending follow-up, sections taught, and study hours for every centre.</div>
               </div>
               <button
                 className="admin-mobile-touch"
@@ -5133,7 +5389,7 @@ function AdminPanelInner({user}){
                   <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
                   <div style={{fontSize:isMobile ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Centre summary</div>
                   <div style={{fontSize:12.5,color:G.textM,lineHeight:1.6,marginTop:8}}>
-                    Load this report only when you need it. Each centre unlocks as soon as its teacher data is ready.
+                    Open this only when you need it. The mobile view now loads teacher data in calmer batches so the screen stays steadier while the centre tables fill in.
                   </div>
                 </div>
                 {instituteGlanceReport.loading&&(
@@ -9259,7 +9515,7 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
                 <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:7}}>Centre summary</div>
                 <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8}}>
-                  Open a centre as soon as it finishes loading, or wait for the full report and share it as PDF or PNG.
+                  Review uploaded teachers, pending follow-up, sections taught, and study hours without the screen constantly jumping while data loads.
                 </div>
               </div>
               <button
@@ -9337,7 +9593,7 @@ function AdminPanelInner({user}){
           <MobileProfileAction
             icon={IconChartBar}
             title="Centre summary"
-            subtitle="Open it only when you want the all-institutes report."
+            subtitle="See who filled, who is pending, sections taught, and study hours."
             onClick={openMobileCentreSummary}
             badge={instituteGlanceReport.loading
               ? `${instituteGlanceReadyCount}/${Math.max(instituteGlanceReport.totalInstitutes || 0, instituteGlanceReport.summary.totalInstitutes || 0)}`
