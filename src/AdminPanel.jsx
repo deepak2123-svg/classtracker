@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useMemo, Component } from "react";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
-import IconBuilding    from "@tabler/icons-react/dist/esm/icons/IconBuilding.mjs";
-import IconChartBar    from "@tabler/icons-react/dist/esm/icons/IconChartBar.mjs";
-import IconChevronLeft from "@tabler/icons-react/dist/esm/icons/IconChevronLeft.mjs";
-import IconChevronRight from "@tabler/icons-react/dist/esm/icons/IconChevronRight.mjs";
-import IconDownload    from "@tabler/icons-react/dist/esm/icons/IconDownload.mjs";
-import IconLogout      from "@tabler/icons-react/dist/esm/icons/IconLogout.mjs";
-import IconSchool      from "@tabler/icons-react/dist/esm/icons/IconSchool.mjs";
-import IconSettings    from "@tabler/icons-react/dist/esm/icons/IconSettings.mjs";
-import IconTrash       from "@tabler/icons-react/dist/esm/icons/IconTrash.mjs";
-import IconUser        from "@tabler/icons-react/dist/esm/icons/IconUser.mjs";
-import IconUsersGroup  from "@tabler/icons-react/dist/esm/icons/IconUsersGroup.mjs";
+import {
+  IconBuilding,
+  IconChartBar,
+  IconChevronLeft,
+  IconChevronRight,
+  IconDownload,
+  IconLogout,
+  IconSchool,
+  IconSettings,
+  IconTrash,
+  IconUser,
+  IconUsersGroup,
+} from "@tabler/icons-react";
 import {
   logout, getAllTeachers, getTeacherFullData,
   getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
