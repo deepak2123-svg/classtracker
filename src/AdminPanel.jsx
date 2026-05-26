@@ -2199,13 +2199,30 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
 }
 async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
   await waitForCanvasFonts();
-  const width = 1180;
-  const cardX = 36;
-  const cardY = 36;
+  const width = 1280;
+  const cardX = 28;
+  const cardY = 28;
   const cardWidth = width - cardX * 2;
-  const contentX = cardX + 30;
-  const contentWidth = cardWidth - 60;
-  const rowMeta = [];
+  const contentX = cardX + 28;
+  const contentWidth = cardWidth - 56;
+  const innerWidth = contentWidth - 40;
+  const statsGap = 10;
+  const statWidth = (innerWidth - statsGap * 3) / 4;
+  const teacherColWidth = 210;
+  const logColWidth = 82;
+  const hoursColWidth = 108;
+  const sectionsColWidth = innerWidth - teacherColWidth - logColWidth - hoursColWidth - 36;
+  const rowsToRender = rows.length ? rows : [{
+    institute:"No institutes available",
+    totalTeachers:0,
+    filledToday:0,
+    missingToday:0,
+    missingNames:[],
+    filledTeacherRows:[],
+    noTeachersSignedUp:true,
+    sectionsTaught:0,
+    totalStudyMinutes:0,
+  }];
 
   const measureCanvas = document.createElement("canvas");
   measureCanvas.width = width;
@@ -2213,21 +2230,56 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
   const measureCtx = measureCanvas.getContext("2d");
   if(!measureCtx) throw new Error("Canvas is not available.");
 
-  rows.forEach(row => {
-    measureCtx.font = "600 18px 'Inter',sans-serif";
-    const missingText = row.missingNames.length
-      ? `Pending today: ${row.missingNames.join(", ")}`
-      : "Everyone has filled today's entry.";
-    const missingLines = wrapCanvasText(measureCtx, missingText, contentWidth - 40);
-    rowMeta.push({
-      missingLines,
-      height: 118 + Math.max(0, missingLines.length - 1) * 22,
+  const rowMeta = rowsToRender.map(row => {
+    const teacherRows = (row.filledTeacherRows || []).map(teacher => {
+      measureCtx.font = "600 15px 'Inter',sans-serif";
+      const sectionText = teacher.sectionNames?.length
+        ? teacher.sectionNames.join(", ")
+        : "Uploaded without a section name";
+      const sectionLines = wrapCanvasText(measureCtx, sectionText, sectionsColWidth - 8);
+      return {
+        teacher,
+        sectionLines,
+        height: Math.max(46, 18 + sectionLines.length * 18 + 12),
+      };
     });
+
+    measureCtx.font = "600 17px 'Inter',sans-serif";
+    const summaryText = row.noTeachersSignedUp
+      ? "0 teachers linked. No one has signed up in this centre yet."
+      : `${row.totalTeachers} teacher${row.totalTeachers===1?"":"s"} · ${row.filledToday} filled today · ${row.missingToday} pending · ${row.sectionsTaught} sections taught · ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
+    const summaryLines = wrapCanvasText(measureCtx, summaryText, contentWidth - 240);
+
+    const pendingText = row.noTeachersSignedUp
+      ? "No sign-ups yet. Add teachers to this centre and their daily status will appear here."
+      : row.missingNames.length
+        ? `Pending today: ${row.missingNames.join(", ")}`
+        : "Everyone linked to this centre has filled today's entry.";
+    const pendingLines = wrapCanvasText(measureCtx, pendingText, innerWidth);
+
+    const signupNoteLines = row.noTeachersSignedUp
+      ? wrapCanvasText(measureCtx, "No one has signed up in this centre yet, so this is not an \"everyone filled\" case.", innerWidth)
+      : [];
+
+    const statsHeight = 78;
+    const tableHeight = teacherRows.length
+      ? 42 + teacherRows.reduce((sum, item) => sum + item.height, 0) + 12
+      : 58;
+    const bodyHeight = row.noTeachersSignedUp
+      ? 24 + signupNoteLines.length * 20 + 18
+      : 32 + tableHeight + 28 + pendingLines.length * 20 + 18;
+    return {
+      teacherRows,
+      summaryLines,
+      pendingLines,
+      signupNoteLines,
+      height: 90 + summaryLines.length * 20 + statsHeight + bodyHeight,
+    };
   });
 
-  const headerHeight = 246;
-  const rowsHeight = rowMeta.reduce((sum, item) => sum + item.height + 14, 0);
-  const cardHeight = headerHeight + rowsHeight + 26;
+  const headerHeight = 300;
+  const rowsHeight = rowMeta.reduce((sum, item) => sum + item.height + 16, 0);
+  const cardHeight = headerHeight + rowsHeight + 18;
   const height = cardY * 2 + cardHeight;
   const scale = 2;
   const canvas = document.createElement("canvas");
@@ -2247,111 +2299,226 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  let cursorY = cardY + 30;
-  ctx.fillStyle = "#111827";
-  ctx.font = "800 34px 'Poppins',sans-serif";
+  let cursorY = cardY + 28;
   ctx.textBaseline = "top";
+  ctx.fillStyle = "#111827";
+  ctx.font = "800 36px 'Poppins',sans-serif";
   ctx.fillText("All institutes at a glance", contentX, cursorY);
 
-  cursorY += 48;
+  cursorY += 50;
   ctx.fillStyle = "#4B5563";
   ctx.font = "600 18px 'Inter',sans-serif";
-  ctx.fillText(
-    fitCanvasText(ctx, generatedOnLabel, contentWidth),
-    contentX,
-    cursorY
-  );
+  ctx.fillText(fitCanvasText(ctx, generatedOnLabel, contentWidth), contentX, cursorY);
 
   cursorY += 34;
   ctx.fillStyle = "#6B7280";
   ctx.font = "500 20px 'Inter',sans-serif";
   ctx.fillText(
-    fitCanvasText(ctx, "Institute-wise teacher entry completion for today, including who still needs to log.", contentWidth),
+    fitCanvasText(ctx, "Institute-wise teacher tables for today's uploads, pending follow-up, sections taught, and study hours.", contentWidth),
     contentX,
     cursorY
   );
 
-  cursorY += 44;
+  cursorY += 46;
+  const summaryChips = [
+    { label:`${summary.filledToday}/${summary.totalTeachers} teachers updated`, bg:"#DCFCE7", border:"#BBF7D0", color:"#166534" },
+    { label:`${summary.missingToday} pending`, bg:"#FEF3C7", border:"#FCD34D", color:"#B45309" },
+    { label:`${summary.totalInstitutes} institutes`, bg:"#EEF4FF", border:"#C7D7F5", color:"#1D4ED8" },
+    { label:`${summary.sectionsTaught || 0} sections taught`, bg:"#FFF7ED", border:"#FED7AA", color:"#B45309" },
+    { label:`${formatDurationShort(summary.totalStudyMinutes || 0)} study hours`, bg:"#F3E8FF", border:"#D8B4FE", color:"#7C3AED" },
+  ];
   let chipX = contentX;
-  chipX += drawCanvasPill(ctx, {
-    x: chipX,
-    y: cursorY,
-    label: `${summary.filledToday}/${summary.totalTeachers} teachers updated`,
-    bg: "#DCFCE7",
-    border: "#BBF7D0",
-    color: "#166534",
-    font: "700 20px 'Inter',sans-serif",
-    padX: 18,
-    height: 48,
-  }) + 12;
-  chipX += drawCanvasPill(ctx, {
-    x: chipX,
-    y: cursorY,
-    label: `${summary.missingToday} pending`,
-    bg: "#FEF3C7",
-    border: "#FCD34D",
-    color: "#B45309",
-    font: "700 20px 'Inter',sans-serif",
-    padX: 18,
-    height: 48,
-  }) + 12;
-  drawCanvasPill(ctx, {
-    x: chipX,
-    y: cursorY,
-    label: `${summary.totalInstitutes} institutes`,
-    bg: "#EEF4FF",
-    border: "#C7D7F5",
-    color: "#1D4ED8",
-    font: "700 20px 'Inter',sans-serif",
-    padX: 18,
-    height: 48,
+  let chipY = cursorY;
+  ctx.font = "700 19px 'Inter',sans-serif";
+  summaryChips.forEach(chip => {
+    const chipWidth = ctx.measureText(chip.label).width + 36;
+    if(chipX !== contentX && chipX + chipWidth > contentX + contentWidth){
+      chipX = contentX;
+      chipY += 58;
+    }
+    chipX += drawCanvasPill(ctx, {
+      x: chipX,
+      y: chipY,
+      label:chip.label,
+      bg:chip.bg,
+      border:chip.border,
+      color:chip.color,
+      font:"700 19px 'Inter',sans-serif",
+      padX:18,
+      height:46,
+    }) + 12;
   });
 
-  cursorY += 78;
-  rows.forEach((row, index) => {
+  cursorY = chipY + 68;
+
+  rowsToRender.forEach((row, index) => {
     const meta = rowMeta[index];
     const rowTop = cursorY;
+    const tone = row.noTeachersSignedUp
+      ? { bg:"#F8FAFC", border:"#DDE3ED", badgeBg:"#EEF2F7", badgeBorder:"#DDE3ED", badgeColor:"#475569", accent:"#475569" }
+      : row.missingToday === 0
+        ? { bg:"#ECFDF3", border:"#BBF7D0", badgeBg:"#DCFCE7", badgeBorder:"#BBF7D0", badgeColor:"#166534", accent:"#166534" }
+        : { bg:"#EEF4FF", border:"#C7D7F5", badgeBg:"#EEF4FF", badgeBorder:"#C7D7F5", badgeColor:"#1D4ED8", accent:"#1E3A8A" };
+
     drawRoundedRect(ctx, contentX, rowTop, contentWidth, meta.height, 24);
-    ctx.fillStyle = "#F8FAFC";
+    ctx.fillStyle = tone.bg;
     ctx.fill();
-    ctx.strokeStyle = "#DDE3ED";
+    ctx.strokeStyle = tone.border;
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
+    const innerX = contentX + 20;
     ctx.fillStyle = "#111827";
     ctx.font = "800 28px 'Poppins',sans-serif";
-    ctx.fillText(fitCanvasText(ctx, row.institute, contentWidth - 290), contentX + 20, rowTop + 18);
+    ctx.fillText(fitCanvasText(ctx, row.institute, contentWidth - 300), innerX, rowTop + 18);
 
-    const badgeLabel = `${row.filledToday}/${row.totalTeachers} filled`;
+    const badgeLabel = row.noTeachersSignedUp ? "No sign-ups" : `${row.filledToday}/${row.totalTeachers} filled`;
     ctx.font = "700 18px 'Inter',sans-serif";
     const badgeWidth = ctx.measureText(badgeLabel).width + 36;
     drawCanvasPill(ctx, {
       x: contentX + contentWidth - badgeWidth - 18,
       y: rowTop + 16,
-      label: badgeLabel,
-      bg: row.missingToday ? "#EEF4FF" : "#DCFCE7",
-      border: row.missingToday ? "#C7D7F5" : "#BBF7D0",
-      color: row.missingToday ? "#1D4ED8" : "#166534",
-      font: "700 18px 'Inter',sans-serif",
-      padX: 18,
-      height: 40,
+      label:badgeLabel,
+      bg:tone.badgeBg,
+      border:tone.badgeBorder,
+      color:tone.badgeColor,
+      font:"700 18px 'Inter',sans-serif",
+      padX:18,
+      height:40,
     });
 
     ctx.fillStyle = "#4B5563";
-    ctx.font = "600 18px 'Inter',sans-serif";
-    ctx.fillText(
-      `${row.totalTeachers} teacher${row.totalTeachers === 1 ? "" : "s"} · ${row.missingToday} pending today`,
-      contentX + 20,
-      rowTop + 58
-    );
-
-    ctx.fillStyle = row.missingToday ? "#334155" : "#166534";
-    ctx.font = "600 18px 'Inter',sans-serif";
-    meta.missingLines.forEach((line, lineIndex) => {
-      ctx.fillText(line, contentX + 20, rowTop + 86 + lineIndex * 22);
+    ctx.font = "600 17px 'Inter',sans-serif";
+    meta.summaryLines.forEach((line, lineIndex) => {
+      ctx.fillText(line, innerX, rowTop + 56 + lineIndex * 20);
     });
 
-    cursorY += meta.height + 14;
+    const statTop = rowTop + 56 + meta.summaryLines.length * 20 + 18;
+    [
+      { label:"Updated", value:`${row.filledToday}/${row.totalTeachers}` },
+      { label:"Pending", value:String(row.missingToday || 0) },
+      { label:"Sections taught", value:String(row.sectionsTaught || 0) },
+      { label:"Study hours", value:formatDurationShort(row.totalStudyMinutes || 0) },
+    ].forEach((item, statIndex) => {
+      const x = innerX + statIndex * (statWidth + statsGap);
+      drawRoundedRect(ctx, x, statTop, statWidth, 72, 16);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fill();
+      ctx.strokeStyle = "#DDE3ED";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "#6B7280";
+      ctx.font = "700 10px 'Inter',sans-serif";
+      ctx.fillText(item.label.toUpperCase(), x + 12, statTop + 10);
+
+      ctx.fillStyle = "#111827";
+      ctx.font = "800 20px 'Poppins',sans-serif";
+      ctx.fillText(fitCanvasText(ctx, item.value, statWidth - 24), x + 12, statTop + 30);
+    });
+
+    let bodyY = statTop + 92;
+    if(row.noTeachersSignedUp){
+      ctx.fillStyle = "#475569";
+      ctx.font = "600 17px 'Inter',sans-serif";
+      meta.signupNoteLines.forEach((line, lineIndex) => {
+        ctx.fillText(line, innerX, bodyY + lineIndex * 20);
+      });
+    } else {
+      ctx.fillStyle = "#475569";
+      ctx.font = "700 11px 'Inter',sans-serif";
+      ctx.fillText("TEACHERS WHO FILLED TODAY", innerX, bodyY);
+      bodyY += 26;
+
+      if(!meta.teacherRows.length){
+        ctx.fillStyle = "#9A3412";
+        ctx.font = "600 16px 'Inter',sans-serif";
+        ctx.fillText("No teacher has uploaded today's entry for this centre yet.", innerX, bodyY);
+        bodyY += 34;
+      } else {
+        const tableX = innerX;
+        const tableWidth = innerWidth;
+        const tableTop = bodyY;
+        const tableHeight = 42 + meta.teacherRows.reduce((sum, item) => sum + item.height, 0) + 12;
+        drawRoundedRect(ctx, tableX, tableTop, tableWidth, tableHeight, 16);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fill();
+        ctx.strokeStyle = "#DDE3ED";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        drawRoundedRect(ctx, tableX, tableTop, tableWidth, 42, 16);
+        ctx.fillStyle = "#F8FAFC";
+        ctx.fill();
+
+        const colTeacherX = tableX + 12;
+        const colSectionsX = colTeacherX + teacherColWidth + 12;
+        const colLogsX = colSectionsX + sectionsColWidth + 12;
+        const colHoursX = colLogsX + logColWidth + 12;
+
+        ctx.fillStyle = "#6B7280";
+        ctx.font = "800 10px 'Inter',sans-serif";
+        ctx.fillText("TEACHER", colTeacherX, tableTop + 12);
+        ctx.fillText("SECTIONS", colSectionsX, tableTop + 12);
+        ctx.fillText("LOGS", colLogsX, tableTop + 12);
+        ctx.fillText("STUDY HOURS", colHoursX, tableTop + 12);
+
+        let tableRowY = tableTop + 42;
+        meta.teacherRows.forEach((item, rowIndex) => {
+          if(rowIndex > 0){
+            ctx.strokeStyle = "#E5E7EB";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(tableX + 12, tableRowY);
+            ctx.lineTo(tableX + tableWidth - 12, tableRowY);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = "#111827";
+          ctx.font = "800 15px 'Inter',sans-serif";
+          ctx.fillText(fitCanvasText(ctx, item.teacher.name, teacherColWidth - 8), colTeacherX, tableRowY + 10);
+
+          ctx.fillStyle = "#475569";
+          ctx.font = "600 15px 'Inter',sans-serif";
+          item.sectionLines.forEach((line, lineIndex) => {
+            ctx.fillText(line, colSectionsX, tableRowY + 10 + lineIndex * 18);
+          });
+
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "#111827";
+          ctx.font = "700 15px 'Inter',sans-serif";
+          ctx.fillText(String(item.teacher.todayEntries || 0), colLogsX, tableRowY + item.height / 2);
+
+          ctx.fillStyle = item.teacher.totalMinutes > 0 ? "#166534" : "#475569";
+          ctx.fillText(
+            item.teacher.totalMinutes > 0
+              ? formatDurationShort(item.teacher.totalMinutes)
+              : item.teacher.untimedEntries > 0
+                ? "Untimed"
+                : "0m",
+            colHoursX,
+            tableRowY + item.height / 2
+          );
+          ctx.textBaseline = "top";
+          tableRowY += item.height;
+        });
+
+        bodyY += tableHeight + 18;
+      }
+
+      ctx.fillStyle = "#475569";
+      ctx.font = "700 11px 'Inter',sans-serif";
+      ctx.fillText("TEACHERS PENDING TODAY", innerX, bodyY);
+      bodyY += 26;
+
+      ctx.fillStyle = row.missingNames.length ? "#334155" : "#166534";
+      ctx.font = "600 17px 'Inter',sans-serif";
+      meta.pendingLines.forEach((line, lineIndex) => {
+        ctx.fillText(line, innerX, bodyY + lineIndex * 20);
+      });
+    }
+
+    cursorY += meta.height + 16;
   });
 
   return canvas;
@@ -4376,7 +4543,7 @@ function AdminPanelInner({user}){
 
     let firstError = null;
     let loadedSincePublish = 0;
-    const publishBatchSize = (isWeakDevice || mobileLiteMode) ? 6 : 4;
+    const publishBatchSize = isMobile ? 12 : (isWeakDevice || mobileLiteMode) ? 6 : 4;
     for(let i=0;i<pendingUids.length;i+=1){
       const uid = pendingUids[i];
       try {
@@ -4424,7 +4591,7 @@ function AdminPanelInner({user}){
     };
     scheduleInstituteGlanceReport(finalReport);
     return finalReport;
-  }, [buildInstituteGlanceSnapshot, fullData, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport, teacherOnlyList]);
+  }, [buildInstituteGlanceSnapshot, fullData, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport, teacherOnlyList]);
 
   const openMobileCentreSummary = React.useCallback(() => {
     setProfileOpen(false);
@@ -5022,6 +5189,7 @@ function AdminPanelInner({user}){
     ? Math.max(0, Math.min(100, Math.round((instituteGlanceReport.loaded / instituteGlanceReport.total) * 100)))
     : 0;
   const instituteGlanceExportDisabled = instituteGlanceExportBusy || !instituteGlanceReport.ready || !!instituteGlanceReport.error;
+  const instituteGlanceHoldListOnMobile = isMobile && instituteGlanceReport.loading && !instituteGlanceReport.ready;
 
   const renderInstituteGlanceStatGrid = (compact = false) => (
     <div style={{display:"grid",gridTemplateColumns:compact ? "repeat(2,minmax(0,1fr))" : "repeat(5,minmax(0,1fr))",gap:8,marginTop:12}}>
@@ -5210,6 +5378,15 @@ function AdminPanelInner({user}){
       </div>
     );
   };
+
+  const renderInstituteGlanceMobileLoadingNotice = () => (
+    <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
+      <div style={{fontSize:12.5,fontWeight:800,color:G.text,fontFamily:G.sans}}>Preparing the centre tables</div>
+      <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:6}}>
+        The report keeps loading in the background, but on mobile we wait to show the full centre list until it is ready so the screen stays steady instead of constantly reflowing.
+      </div>
+    </div>
+  );
 
   const renderSharedInstituteGlanceList = ({ maxRows = null, interactive = false } = {}) => {
     const rows = maxRows ? instituteGlanceReport.rows.slice(0, maxRows) : instituteGlanceReport.rows;
@@ -9538,9 +9715,13 @@ function AdminPanelInner({user}){
             )}
           </div>
 
-          <div style={{display:"grid",gap:10}}>
-            {renderSharedInstituteGlanceList({ interactive:true })}
-          </div>
+          {instituteGlanceHoldListOnMobile ? (
+            renderInstituteGlanceMobileLoadingNotice()
+          ) : (
+            <div style={{display:"grid",gap:10}}>
+              {renderSharedInstituteGlanceList({ interactive:true })}
+            </div>
+          )}
         </div>
         <MobileBottomNav/>
       </div>
