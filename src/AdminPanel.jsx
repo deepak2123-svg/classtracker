@@ -4742,6 +4742,125 @@ function AdminPanelInner({user}){
     setPanelCollapsed(prev=>({...prev,[key]:willCollapse}));
   }, [PANEL_LIMITS, panelCollapsed, panelW, clampPanelWidth]);
 
+  const instituteGlancePendingCount = Math.max(
+    0,
+    allInstituteGlanceSummary.totalTeachers - allInstituteGlanceSummary.loadedTeachers
+  );
+
+  const renderSharedInstituteGlanceList = (maxRows = null) => {
+    const rows = maxRows ? allInstituteGlanceRows.slice(0, maxRows) : allInstituteGlanceRows;
+    if(!rows.length){
+      return (
+        <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
+          No institutes are available yet.
+        </div>
+      );
+    }
+    return (
+      <div style={{display:"grid",gap:10}}>
+        {rows.map(row => {
+          const tone = row.missingToday === 0
+            ? { bg:"#ECFDF3", border:"#BBF7D0", pillBg:"#DCFCE7", pillColor:"#166534", meta:"#1B5E20" }
+            : row.completionPct >= 50
+              ? { bg:"#EEF4FF", border:"#C7D7F5", pillBg:"#DBEAFE", pillColor:G.blue, meta:"#1E3A8A" }
+              : { bg:"#FFF7ED", border:"#FED7AA", pillBg:"#FFEDD5", pillColor:"#B45309", meta:"#9A3412" };
+          return (
+            <div key={row.institute} style={{background:tone.bg,border:`1px solid ${tone.border}`,borderRadius:18,padding:"13px 14px"}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.35}}>
+                    {row.institute}
+                  </div>
+                  <div style={{fontSize:12,color:tone.meta,marginTop:4,lineHeight:1.5}}>
+                    {row.filledToday} of {row.totalTeachers} teachers filled today
+                  </div>
+                </div>
+                <span style={{background:tone.pillBg,color:tone.pillColor,borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap",flexShrink:0}}>
+                  {row.missingToday === 0 ? "All done" : `${row.missingToday} pending`}
+                </span>
+              </div>
+              <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:8}}>
+                {row.missingNames.length
+                  ? `Pending today: ${row.missingNames.join(", ")}`
+                  : "Everyone has filled today's entry."}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const InstituteGlanceModal = () => {
+    if(!instituteGlanceOpen) return null;
+    return (
+      <>
+        <div
+          onClick={closeInstituteGlancePanel}
+          style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",backdropFilter:"blur(4px)",zIndex:450}}
+        />
+        <div style={{position:"fixed",inset:0,zIndex:451,display:"flex",alignItems:"center",justifyContent:"center",padding:isMobile ? 14 : 24,pointerEvents:"none"}}>
+          <div style={{width:"min(920px,100%)",maxHeight:"min(88vh,920px)",overflow:"auto",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:isMobile ? 24 : 28,boxShadow:"0 30px 80px rgba(15,23,42,0.22)",padding:isMobile ? 16 : 22,pointerEvents:"auto"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
+              <div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Profile report</div>
+                <div style={{fontSize:isMobile ? 24 : 28,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.05}}>All institutes at a glance</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:8,lineHeight:1.6}}>Teacher entry completion for today, with the names that still need follow-up.</div>
+              </div>
+              <button
+                className="admin-mobile-touch"
+                onClick={closeInstituteGlancePanel}
+                style={{width:38,height:38,borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",fontSize:20,color:G.textL,cursor:"pointer",flexShrink:0}}>
+                ×
+              </button>
+            </div>
+            <div style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:18,padding:isMobile ? "14px 14px 15px" : "16px 16px 18px"}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
+                  <div style={{fontSize:isMobile ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Daily teacher entry summary</div>
+                  <div style={{fontSize:12.5,color:G.textM,lineHeight:1.6,marginTop:8}}>
+                    See who has filled today and who still needs follow-up, centre by centre.
+                  </div>
+                </div>
+                {instituteGlancePendingCount>0&&(
+                  <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                    Syncing {instituteGlancePendingCount}
+                  </span>
+                )}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
+                {[
+                  { label:"Institutes", value:allInstituteGlanceSummary.totalInstitutes },
+                  { label:"Teachers updated", value:`${allInstituteGlanceSummary.filledToday}/${allInstituteGlanceSummary.totalTeachers}` },
+                  { label:"Pending today", value:allInstituteGlanceSummary.missingToday },
+                ].map(item=>(
+                  <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
+                    <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.6,textTransform:"uppercase"}}>{item.label}</div>
+                    <div style={{fontSize:isMobile ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+                <button className="admin-mobile-touch" onClick={()=>exportInstituteGlance("pdf")} style={{minWidth:isMobile ? 76 : 82,height:isMobile ? 34 : 36,padding:"0 12px",borderRadius:12,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:12,fontWeight:700,fontFamily:G.sans,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,WebkitTapHighlightColor:"transparent"}}>
+                  <AppIcon icon={IconDownload} size={15} color={G.text} />
+                  {instituteGlanceExportBusy==="pdf" ? "PDF..." : "PDF"}
+                </button>
+                <button className="admin-mobile-touch" onClick={()=>exportInstituteGlance("png")} style={{minWidth:isMobile ? 76 : 82,height:isMobile ? 34 : 36,padding:"0 12px",borderRadius:12,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:12,fontWeight:700,fontFamily:G.sans,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,WebkitTapHighlightColor:"transparent"}}>
+                  <AppIcon icon={IconDownload} size={15} color={G.text} />
+                  {instituteGlanceExportBusy==="png" ? "PNG..." : "PNG"}
+                </button>
+              </div>
+              <div style={{marginTop:12}}>
+                {renderSharedInstituteGlanceList()}
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  };
+
   const totalEntries=useMemo(()=>{
     let t=0;
     Object.values(fullData).forEach(d=>{
