@@ -3,46 +3,44 @@ import { createPortal } from "react-dom";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
-import {
-  IconAlertTriangle,
-  IconArchive,
-  IconArrowLeft,
-  IconArrowRight,
-  IconBell,
-  IconBook2,
-  IconBuilding,
-  IconCalendar,
-  IconChartBar,
-  IconCheck,
-  IconChevronDown,
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronUp,
-  IconClockHour4,
-  IconDeviceFloppy,
-  IconDots,
-  IconDownload,
-  IconEdit,
-  IconFileSpreadsheet,
-  IconFileTypePdf,
-  IconHistory,
-  IconHome2,
-  IconInfoCircle,
-  IconLogout,
-  IconMail,
-  IconMoon,
-  IconPalette,
-  IconPlus,
-  IconRefresh,
-  IconRestore,
-  IconSchool,
-  IconSearch,
-  IconSparkles,
-  IconSun,
-  IconTrash,
-  IconUser,
-  IconX,
-} from "@tabler/icons-react";
+import IconAlertTriangle  from "@tabler/icons-react/dist/esm/icons/IconAlertTriangle.mjs";
+import IconArchive         from "@tabler/icons-react/dist/esm/icons/IconArchive.mjs";
+import IconArrowLeft       from "@tabler/icons-react/dist/esm/icons/IconArrowLeft.mjs";
+import IconArrowRight      from "@tabler/icons-react/dist/esm/icons/IconArrowRight.mjs";
+import IconBell            from "@tabler/icons-react/dist/esm/icons/IconBell.mjs";
+import IconBook2           from "@tabler/icons-react/dist/esm/icons/IconBook2.mjs";
+import IconBuilding        from "@tabler/icons-react/dist/esm/icons/IconBuilding.mjs";
+import IconCalendar        from "@tabler/icons-react/dist/esm/icons/IconCalendar.mjs";
+import IconChartBar        from "@tabler/icons-react/dist/esm/icons/IconChartBar.mjs";
+import IconCheck           from "@tabler/icons-react/dist/esm/icons/IconCheck.mjs";
+import IconChevronDown     from "@tabler/icons-react/dist/esm/icons/IconChevronDown.mjs";
+import IconChevronLeft     from "@tabler/icons-react/dist/esm/icons/IconChevronLeft.mjs";
+import IconChevronRight    from "@tabler/icons-react/dist/esm/icons/IconChevronRight.mjs";
+import IconChevronUp       from "@tabler/icons-react/dist/esm/icons/IconChevronUp.mjs";
+import IconClockHour4      from "@tabler/icons-react/dist/esm/icons/IconClockHour4.mjs";
+import IconDeviceFloppy    from "@tabler/icons-react/dist/esm/icons/IconDeviceFloppy.mjs";
+import IconDots            from "@tabler/icons-react/dist/esm/icons/IconDots.mjs";
+import IconDownload        from "@tabler/icons-react/dist/esm/icons/IconDownload.mjs";
+import IconEdit            from "@tabler/icons-react/dist/esm/icons/IconEdit.mjs";
+import IconFileSpreadsheet from "@tabler/icons-react/dist/esm/icons/IconFileSpreadsheet.mjs";
+import IconFileTypePdf     from "@tabler/icons-react/dist/esm/icons/IconFileTypePdf.mjs";
+import IconHistory         from "@tabler/icons-react/dist/esm/icons/IconHistory.mjs";
+import IconHome2           from "@tabler/icons-react/dist/esm/icons/IconHome2.mjs";
+import IconInfoCircle      from "@tabler/icons-react/dist/esm/icons/IconInfoCircle.mjs";
+import IconLogout          from "@tabler/icons-react/dist/esm/icons/IconLogout.mjs";
+import IconMail            from "@tabler/icons-react/dist/esm/icons/IconMail.mjs";
+import IconMoon            from "@tabler/icons-react/dist/esm/icons/IconMoon.mjs";
+import IconPalette         from "@tabler/icons-react/dist/esm/icons/IconPalette.mjs";
+import IconPlus            from "@tabler/icons-react/dist/esm/icons/IconPlus.mjs";
+import IconRefresh         from "@tabler/icons-react/dist/esm/icons/IconRefresh.mjs";
+import IconRestore         from "@tabler/icons-react/dist/esm/icons/IconRestore.mjs";
+import IconSchool          from "@tabler/icons-react/dist/esm/icons/IconSchool.mjs";
+import IconSearch          from "@tabler/icons-react/dist/esm/icons/IconSearch.mjs";
+import IconSparkles        from "@tabler/icons-react/dist/esm/icons/IconSparkles.mjs";
+import IconSun             from "@tabler/icons-react/dist/esm/icons/IconSun.mjs";
+import IconTrash           from "@tabler/icons-react/dist/esm/icons/IconTrash.mjs";
+import IconUser            from "@tabler/icons-react/dist/esm/icons/IconUser.mjs";
+import IconX               from "@tabler/icons-react/dist/esm/icons/IconX.mjs";
 import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, formatDateLabel, fmt, formatPeriod, getSectionTone } from "./shared.jsx";
 
