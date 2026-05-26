@@ -1850,6 +1850,13 @@ function teacherBelongsToInstituteFromMap(teacher, instituteName, fullDataMap){
 function getTeacherDisplayNameFromMap(teacher, fullDataMap){
   return fullDataMap?.[teacher?.uid]?.profile?.name || teacher?.name || "Teacher";
 }
+const EMPTY_INSTITUTE_GLANCE_SUMMARY = {
+  totalInstitutes:0,
+  totalTeachers:0,
+  filledToday:0,
+  missingToday:0,
+  loadedTeachers:0,
+};
 function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {} }){
   return institutes.map(inst => {
     const instTeachers = teachers
@@ -1887,12 +1894,15 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
 
     return {
       institute: inst,
+      teacherUids: instTeachers.map(item => item.uid),
       totalTeachers,
       filledToday: filledTeachers.length,
       missingToday: missingTeachers.length,
       missingNames: missingTeachers.map(item => item.name),
       filledNames: filledTeachers.map(item => item.name),
       loadedTeachers,
+      ready: loadedTeachers >= totalTeachers,
+      loadedPct: totalTeachers ? Math.round((loadedTeachers / totalTeachers) * 100) : 100,
       completionPct: totalTeachers ? Math.round((filledTeachers.length / totalTeachers) * 100) : 0,
     };
   });
@@ -3745,17 +3755,19 @@ function AdminPanelInner({user}){
     return { start:`${today.slice(0,7)}-01`, end:today };
   });
   const [mobileStep,  setMobileStep]  = useState(0);
-  const [mobileSurface, setMobileSurface] = useState("workspace"); // workspace | profile
+  const [mobileSurface, setMobileSurface] = useState("workspace"); // workspace | profile | centreSummary
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
   const [instituteGlanceExportBusy, setInstituteGlanceExportBusy] = useState("");
   const [instituteGlanceReport, setInstituteGlanceReport] = useState(() => ({
     rows: [],
-    summary: { totalInstitutes:0, totalTeachers:0, filledToday:0, missingToday:0, loadedTeachers:0 },
+    summary: EMPTY_INSTITUTE_GLANCE_SUMMARY,
     loading: false,
     loaded: 0,
     total: 0,
+    loadedInstitutes: 0,
+    totalInstitutes: 0,
     ready: false,
     error: "",
   }));
@@ -3812,6 +3824,7 @@ function AdminPanelInner({user}){
   const fullDataRequestRef = React.useRef({});
   const warmupJobRef = React.useRef(0);
   const instituteGlanceJobRef = React.useRef(0);
+  const instituteGlanceDataRef = React.useRef({});
   const historyReadyRef = React.useRef(false);
   const historyRestoreRef = React.useRef(false);
   const lastHistoryKeyRef = React.useRef("");
@@ -4016,8 +4029,15 @@ function AdminPanelInner({user}){
       lastHistoryKeyRef.current = JSON.stringify(restoredNavState);
       setProfileOpen(false);
       setExportOpen(false);
+      setInstituteGlanceOpen(false);
       setView(restoredNavState.view ?? "main");
-      setMobileSurface(restoredNavState.mobileSurface === "profile" ? "profile" : "workspace");
+      setMobileSurface(
+        restoredNavState.mobileSurface === "profile"
+          ? "profile"
+          : restoredNavState.mobileSurface === "centreSummary"
+            ? "centreSummary"
+            : "workspace"
+      );
       setMobileStep(typeof restoredNavState.mobileStep === "number" ? restoredNavState.mobileStep : 0);
       setInstDetailView(restoredNavState.instDetailView ?? null);
       setSelInst(restoredNavState.selInst ?? null);
@@ -4031,6 +4051,7 @@ function AdminPanelInner({user}){
   }, []);
   const closeAdminOverlay = React.useCallback(() => {
     if(exportOpen){ setExportOpen(false); return true; }
+    if(instituteGlanceOpen){ setInstituteGlanceOpen(false); return true; }
     if(profileOpen){ setProfileOpen(false); return true; }
     if(adminConfirm){ setAdminConfirm(null); return true; }
     if(deleteModal){ setDeleteModal(null); return true; }
@@ -4039,7 +4060,7 @@ function AdminPanelInner({user}){
     if(copyGroupModal){ setCopyGroupModal(null); return true; }
     if(legacySectionRepair){ setLegacySectionRepair(null); return true; }
     return false;
-  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, legacySectionRepair, profileOpen]);
+  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, instituteGlanceOpen, legacySectionRepair, profileOpen]);
   useEffect(() => {
     if(!Capacitor.isNativePlatform()) return undefined;
     const listenerPromise = CapacitorApp.addListener("backButton", () => {
@@ -4136,20 +4157,6 @@ function AdminPanelInner({user}){
     [teachers, roles]
   );
 
-  const allInstituteGlanceRows = useMemo(
-    () => buildInstituteGlanceRows({
-      institutes,
-      teachers: teacherOnlyList,
-      fullDataMap: fullData,
-    }),
-    [institutes, teacherOnlyList, fullData]
-  );
-
-  const allInstituteGlanceSummary = useMemo(
-    () => summariseInstituteGlanceRows(allInstituteGlanceRows),
-    [allInstituteGlanceRows]
-  );
-
   const getInstituteTeacherUids = React.useCallback((inst) => {
     return teachers
       .filter(t => teacherBelongsToInstitute(t, inst))
@@ -4193,6 +4200,29 @@ function AdminPanelInner({user}){
     }
   },[instDetailView, warmInstitute]);
 
+  const buildInstituteGlanceSnapshot = React.useCallback((fullDataMap = {}) => {
+    const rows = buildInstituteGlanceRows({
+      institutes,
+      teachers: teacherOnlyList,
+      fullDataMap,
+    });
+    return {
+      rows,
+      summary: summariseInstituteGlanceRows(rows),
+      loadedInstitutes: rows.filter(row => row.ready).length,
+      totalInstitutes: rows.length,
+    };
+  }, [institutes, teacherOnlyList]);
+
+  const handleInstituteGlanceLoadFailure = React.useCallback((error) => {
+    console.error("institute glance load failed", error);
+    setInstituteGlanceReport(prev => ({
+      ...prev,
+      loading: false,
+      error: error?.message || "Could not load the centre summary.",
+    }));
+  }, []);
+
   const loadInstituteGlanceReport = React.useCallback(async ({ force = false } = {}) => {
     if(!force && instituteGlanceReport.loading) return instituteGlanceReport;
     if(!force && instituteGlanceReport.ready && !instituteGlanceReport.error) return instituteGlanceReport;
@@ -4200,82 +4230,122 @@ function AdminPanelInner({user}){
     const jobId = ++instituteGlanceJobRef.current;
     const teacherUids = teacherOnlyList.map(t => t.uid).filter(Boolean);
     const total = teacherUids.length;
-    const hydratedFullData = { ...fullData };
-    const missingUids = teacherUids.filter(uid => !hydratedFullData[uid]);
-    let loaded = total - missingUids.length;
+    const cachedMap = force ? {} : instituteGlanceDataRef.current;
+    const hydratedFullData = { ...fullData, ...cachedMap };
+    const pendingUids = force
+      ? teacherUids
+      : teacherUids.filter(uid => !hydratedFullData[uid]);
+    let loaded = teacherUids.filter(uid => !!hydratedFullData[uid]).length;
 
-    setInstituteGlanceReport(prev => ({
-      rows: force ? [] : prev.rows,
-      summary: force ? { totalInstitutes:0, totalTeachers:0, filledToday:0, missingToday:0, loadedTeachers:0 } : prev.summary,
-      loading: missingUids.length > 0,
+    const seedSnapshot = buildInstituteGlanceSnapshot(hydratedFullData);
+    const seedReport = {
+      ...seedSnapshot,
+      loading: pendingUids.length > 0,
       loaded,
       total,
-      ready: missingUids.length === 0 && prev.ready && !force,
+      ready: pendingUids.length === 0 && !force && !instituteGlanceReport.error,
       error: "",
-    }));
+    };
+    setInstituteGlanceReport(seedReport);
+    if(!pendingUids.length) return seedReport;
 
-    const fetchedMap = {};
-    for(const uid of missingUids){
-      const data = await getTeacherFullData(uid);
-      if(jobId !== instituteGlanceJobRef.current) return null;
-      if(data){
-        hydratedFullData[uid] = data;
-        fetchedMap[uid] = data;
+    let firstError = null;
+    for(let i=0;i<pendingUids.length;i+=1){
+      const uid = pendingUids[i];
+      try {
+        const data = await getTeacherFullData(uid);
+        if(jobId !== instituteGlanceJobRef.current) return null;
+        if(data){
+          hydratedFullData[uid] = data;
+          instituteGlanceDataRef.current[uid] = data;
+        }
+      } catch (error) {
+        if(jobId !== instituteGlanceJobRef.current) return null;
+        if(!firstError) firstError = error;
       }
       loaded += 1;
-      setInstituteGlanceReport(prev => ({
-        ...prev,
+      const snapshot = buildInstituteGlanceSnapshot(hydratedFullData);
+      const nextReport = {
+        ...snapshot,
         loading: loaded < total,
         loaded,
         total,
-      }));
+        ready: loaded >= total && snapshot.loadedInstitutes >= snapshot.totalInstitutes && !firstError,
+        error: firstError?.message || "",
+      };
+      setInstituteGlanceReport(nextReport);
+      if((isWeakDevice || mobileLiteMode) && i < pendingUids.length - 1){
+        await new Promise(resolve => window.setTimeout(resolve, 30));
+      }
     }
 
     if(jobId !== instituteGlanceJobRef.current) return null;
 
-    if(Object.keys(fetchedMap).length){
-      setFullData(prev => {
-        const next = { ...prev };
-        Object.entries(fetchedMap).forEach(([uid, data]) => {
-          if(data && !next[uid]) next[uid] = data;
-        });
-        return next;
-      });
-    }
-
-    const rows = buildInstituteGlanceRows({
-      institutes,
-      teachers: teacherOnlyList,
-      fullDataMap: hydratedFullData,
-    });
-    const summary = summariseInstituteGlanceRows(rows);
-    const nextReport = {
-      rows,
-      summary,
+    const finalSnapshot = buildInstituteGlanceSnapshot(hydratedFullData);
+    const finalReport = {
+      ...finalSnapshot,
       loading: false,
       loaded: total,
       total,
-      ready: true,
-      error: "",
+      ready: finalSnapshot.loadedInstitutes >= finalSnapshot.totalInstitutes && !firstError,
+      error: firstError?.message || "",
     };
-    setInstituteGlanceReport(nextReport);
-    return nextReport;
-  }, [fullData, institutes, instituteGlanceReport, teacherOnlyList]);
+    setInstituteGlanceReport(finalReport);
+    return finalReport;
+  }, [buildInstituteGlanceSnapshot, fullData, instituteGlanceReport, isWeakDevice, mobileLiteMode, teacherOnlyList]);
+
+  const openMobileCentreSummary = React.useCallback(() => {
+    setProfileOpen(false);
+    setInstituteGlanceOpen(false);
+    setView("main");
+    setMobileSurface("centreSummary");
+    setSelInst(null);
+    setSelP2(null);
+    setSelP3(null);
+    setFullView(null);
+    setP2Search("");
+    setP3Search("");
+    setActiveProgramFilter(null);
+    setMobileStep(0);
+    loadInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure);
+  }, [handleInstituteGlanceLoadFailure, loadInstituteGlanceReport]);
 
   const openInstituteGlancePanel = React.useCallback(() => {
+    if(isMobile){
+      openMobileCentreSummary();
+      return;
+    }
     setInstituteGlanceOpen(true);
-    loadInstituteGlanceReport().catch((error) => {
-      console.error("institute glance load failed", error);
-      setInstituteGlanceReport(prev => ({
-        ...prev,
-        loading: false,
-        error: error?.message || "Could not load the daily teacher report.",
-      }));
-    });
-  }, [loadInstituteGlanceReport]);
+    loadInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure);
+  }, [handleInstituteGlanceLoadFailure, isMobile, loadInstituteGlanceReport, openMobileCentreSummary]);
 
   const closeInstituteGlancePanel = React.useCallback(() => {
     setInstituteGlanceOpen(false);
+  }, []);
+
+  const openInstituteFromGlance = React.useCallback((row) => {
+    if(!row?.institute || !row.ready) return;
+    const nextEntries = {};
+    (row.teacherUids || []).forEach(uid => {
+      const data = instituteGlanceDataRef.current[uid];
+      if(data) nextEntries[uid] = data;
+    });
+    if(Object.keys(nextEntries).length){
+      setFullData(prev => ({ ...prev, ...nextEntries }));
+    }
+    setInstituteGlanceOpen(false);
+    setProfileOpen(false);
+    setView("main");
+    setMobileSurface("workspace");
+    setSelInst(row.institute);
+    setTab("class");
+    setSelP2(null);
+    setSelP3(null);
+    setFullView(null);
+    setP2Search("");
+    setP3Search("");
+    setActiveProgramFilter(null);
+    setMobileStep(1);
   }, []);
 
   const exportInstituteGlance = React.useCallback(async (format) => {
@@ -4285,7 +4355,7 @@ function AdminPanelInner({user}){
       const report = await loadInstituteGlanceReport({ force: !instituteGlanceReport.ready });
       if(!report) return;
       const rows = report.rows || [];
-      const summary = report.summary || { totalInstitutes:0, totalTeachers:0, filledToday:0, missingToday:0, loadedTeachers:0 };
+      const summary = report.summary || EMPTY_INSTITUTE_GLANCE_SUMMARY;
       const generatedOnLabel = `Generated ${new Date().toLocaleString("en-IN",{
         day:"numeric",
         month:"short",
@@ -4819,11 +4889,116 @@ function AdminPanelInner({user}){
     0,
     (instituteGlanceReport.total || 0) - (instituteGlanceReport.loaded || 0)
   );
+  const instituteGlanceReadyCount = Math.max(0, instituteGlanceReport.loadedInstitutes || 0);
   const instituteGlanceProgressPct = instituteGlanceReport.total
     ? Math.max(0, Math.min(100, Math.round((instituteGlanceReport.loaded / instituteGlanceReport.total) * 100)))
     : 0;
+  const instituteGlanceExportDisabled = instituteGlanceExportBusy || !instituteGlanceReport.ready || !!instituteGlanceReport.error;
 
-  const renderSharedInstituteGlanceList = (maxRows = null) => {
+  const renderInstituteGlanceStatGrid = (compact = false) => (
+    <div style={{display:"grid",gridTemplateColumns:compact ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
+      {[
+        { label:"Institutes", value:instituteGlanceReport.summary.totalInstitutes },
+        { label:"Teachers updated", value:`${instituteGlanceReport.summary.filledToday}/${instituteGlanceReport.summary.totalTeachers}` },
+        { label:"Pending today", value:instituteGlanceReport.summary.missingToday },
+      ].map(item=>(
+        <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
+          <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.6,textTransform:"uppercase"}}>{item.label}</div>
+          <div style={{fontSize:compact ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>{item.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderInstituteGlanceActions = (compact = false) => {
+    const baseButtonStyle = {
+      minWidth:compact ? 74 : 82,
+      height:compact ? 36 : 38,
+      padding:"0 12px",
+      borderRadius:12,
+      border:`1px solid ${G.border}`,
+      background:"#FFFFFF",
+      color:G.text,
+      fontSize:12,
+      fontWeight:700,
+      fontFamily:G.sans,
+      cursor:"pointer",
+      display:"inline-flex",
+      alignItems:"center",
+      justifyContent:"center",
+      gap:6,
+      WebkitTapHighlightColor:"transparent",
+    };
+    return (
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+        <button
+          className="admin-mobile-touch"
+          onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)}
+          style={baseButtonStyle}>
+          Refresh
+        </button>
+        <button
+          className="admin-mobile-touch"
+          onClick={()=>exportInstituteGlance("pdf")}
+          disabled={!!instituteGlanceExportDisabled}
+          style={{
+            ...baseButtonStyle,
+            opacity:instituteGlanceExportDisabled ? 0.5 : 1,
+            cursor:instituteGlanceExportDisabled ? "not-allowed" : "pointer",
+          }}>
+          <AppIcon icon={IconDownload} size={15} color={G.text} />
+          {instituteGlanceExportBusy==="pdf" ? "PDF..." : "PDF"}
+        </button>
+        <button
+          className="admin-mobile-touch"
+          onClick={()=>exportInstituteGlance("png")}
+          disabled={!!instituteGlanceExportDisabled}
+          style={{
+            ...baseButtonStyle,
+            opacity:instituteGlanceExportDisabled ? 0.5 : 1,
+            cursor:instituteGlanceExportDisabled ? "not-allowed" : "pointer",
+          }}>
+          <AppIcon icon={IconDownload} size={15} color={G.text} />
+          {instituteGlanceExportBusy==="png" ? "PNG..." : "PNG"}
+        </button>
+      </div>
+    );
+  };
+
+  const renderInstituteGlanceProgressBlock = (compact = false) => (
+    <div style={{marginTop:14,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:compact ? "12px 12px 13px" : "15px 16px 16px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:G.text,fontFamily:G.sans}}>
+            {instituteGlanceReport.loading ? "Loading centres one by one" : "All centres are ready"}
+          </div>
+          <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:4}}>
+            {instituteGlanceReport.loading
+              ? "Each centre unlocks as soon as its teacher data finishes loading."
+              : "You can open any centre instantly, or share the full report now."}
+          </div>
+        </div>
+        <div style={{display:"grid",gap:6,justifyItems:"end"}}>
+          <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+            {instituteGlanceReadyCount}/{Math.max(instituteGlanceReport.totalInstitutes || 0, instituteGlanceReport.summary.totalInstitutes || 0)} centres ready
+          </span>
+          <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,color:G.textL,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
+            {Math.min(instituteGlanceReport.loaded, instituteGlanceReport.total)}/{instituteGlanceReport.total} teachers synced
+          </span>
+        </div>
+      </div>
+      <div style={{height:10,background:"#E5ECF6",borderRadius:999,overflow:"hidden",marginTop:12}}>
+        <div style={{height:"100%",width:`${Math.max(instituteGlanceProgressPct, instituteGlanceReport.loaded>0 ? 5 : 0)}%`,borderRadius:999,background:"linear-gradient(90deg,#3B82F6 0%,#1D4ED8 100%)",transition:"width 0.2s ease"}} />
+      </div>
+      {!instituteGlanceReport.ready&&(
+        <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:10}}>
+          Export unlocks automatically when every centre has finished loading.
+        </div>
+      )}
+    </div>
+  );
+
+  const renderSharedInstituteGlanceList = ({ maxRows = null, interactive = false } = {}) => {
     const rows = maxRows ? instituteGlanceReport.rows.slice(0, maxRows) : instituteGlanceReport.rows;
     if(!rows.length){
       return (
@@ -4835,31 +5010,93 @@ function AdminPanelInner({user}){
     return (
       <div style={{display:"grid",gap:10}}>
         {rows.map(row => {
-          const tone = row.missingToday === 0
-            ? { bg:"#ECFDF3", border:"#BBF7D0", pillBg:"#DCFCE7", pillColor:"#166534", meta:"#1B5E20" }
-            : row.completionPct >= 50
-              ? { bg:"#EEF4FF", border:"#C7D7F5", pillBg:"#DBEAFE", pillColor:G.blue, meta:"#1E3A8A" }
-              : { bg:"#FFF7ED", border:"#FED7AA", pillBg:"#FFEDD5", pillColor:"#B45309", meta:"#9A3412" };
-          return (
-            <div key={row.institute} style={{background:tone.bg,border:`1px solid ${tone.border}`,borderRadius:18,padding:"13px 14px"}}>
+          const tone = !row.ready
+            ? { bg:"#F8FAFC", border:"#DDE3ED", pillBg:"#EEF4FF", pillColor:G.blue, meta:G.textM }
+            : row.missingToday === 0
+              ? { bg:"#ECFDF3", border:"#BBF7D0", pillBg:"#DCFCE7", pillColor:"#166534", meta:"#1B5E20" }
+              : row.completionPct >= 50
+                ? { bg:"#EEF4FF", border:"#C7D7F5", pillBg:"#DBEAFE", pillColor:G.blue, meta:"#1E3A8A" }
+                : { bg:"#FFF7ED", border:"#FED7AA", pillBg:"#FFEDD5", pillColor:"#B45309", meta:"#9A3412" };
+          const canOpen = interactive && row.ready;
+          const pendingText = !row.ready
+            ? `Loading ${row.loadedTeachers}/${row.totalTeachers}`
+            : row.totalTeachers === 0
+              ? "No teachers"
+              : row.missingToday === 0
+                ? "All done"
+                : `${row.missingToday} pending`;
+          const metaText = row.totalTeachers === 0
+            ? "No teachers are linked to this centre yet."
+            : row.ready
+              ? `${row.filledToday} of ${row.totalTeachers} teachers filled today`
+              : `${row.loadedTeachers} of ${row.totalTeachers} teacher records are ready`;
+          const helperText = !row.ready
+            ? "This centre will open as soon as all of its teachers finish loading."
+            : row.missingNames.length
+              ? `Pending today: ${row.missingNames.join(", ")}`
+              : "Everyone has filled today's entry.";
+          const cardStyle = {
+            width:"100%",
+            background:tone.bg,
+            border:`1px solid ${tone.border}`,
+            borderRadius:18,
+            padding:"13px 14px",
+            textAlign:"left",
+            cursor:canOpen ? "pointer" : "default",
+            boxShadow:canOpen && !reduceEffects ? "0 12px 24px rgba(15,23,42,0.06)" : "none",
+            WebkitTapHighlightColor:"transparent",
+          };
+          const cardBody = (
+            <>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.35}}>
                     {row.institute}
                   </div>
                   <div style={{fontSize:12,color:tone.meta,marginTop:4,lineHeight:1.5}}>
-                    {row.filledToday} of {row.totalTeachers} teachers filled today
+                    {metaText}
                   </div>
                 </div>
                 <span style={{background:tone.pillBg,color:tone.pillColor,borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap",flexShrink:0}}>
-                  {row.missingToday === 0 ? "All done" : `${row.missingToday} pending`}
+                  {pendingText}
                 </span>
               </div>
               <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:8}}>
-                {row.missingNames.length
-                  ? `Pending today: ${row.missingNames.join(", ")}`
-                  : "Everyone has filled today's entry."}
+                {helperText}
               </div>
+              {!row.ready&&row.totalTeachers>0&&(
+                <div style={{height:8,background:"#E6EDF6",borderRadius:999,overflow:"hidden",marginTop:10}}>
+                  <div style={{height:"100%",width:`${Math.max(row.loadedPct || 0, row.loadedTeachers>0 ? 8 : 0)}%`,borderRadius:999,background:"linear-gradient(90deg,#93C5FD 0%,#3B82F6 100%)",transition:"width 0.2s ease"}} />
+                </div>
+              )}
+              {canOpen&&(
+                <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6,marginTop:10,fontSize:12.5,fontWeight:700,color:G.blue,fontFamily:G.sans}}>
+                  <span>Open centre</span>
+                  <AppIcon icon={IconChevronRight} size={14} color={G.blue} />
+                </div>
+              )}
+            </>
+          );
+          if(interactive){
+            return (
+              <button
+                type="button"
+                key={row.institute}
+                className="admin-mobile-touch admin-mobile-card-press"
+                onClick={()=>canOpen&&openInstituteFromGlance(row)}
+                disabled={!canOpen}
+                style={{
+                  ...cardStyle,
+                  border:"none",
+                  opacity:canOpen ? 1 : 0.96,
+                }}>
+                {cardBody}
+              </button>
+            );
+          }
+          return (
+            <div key={row.institute} style={cardStyle}>
+              {cardBody}
             </div>
           );
         })}
@@ -4879,8 +5116,8 @@ function AdminPanelInner({user}){
           <div style={{width:"min(920px,100%)",maxHeight:"min(88vh,920px)",overflow:"auto",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:isMobile ? 24 : 28,boxShadow:"0 30px 80px rgba(15,23,42,0.22)",padding:isMobile ? 16 : 22,pointerEvents:"auto"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
               <div>
-                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Profile report</div>
-                <div style={{fontSize:isMobile ? 24 : 28,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.05}}>All institutes at a glance</div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
+                <div style={{fontSize:isMobile ? 24 : 28,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.05}}>Centre summary</div>
                 <div style={{fontSize:13,color:G.textM,marginTop:8,lineHeight:1.6}}>Teacher entry completion for today, with the names that still need follow-up.</div>
               </div>
               <button
@@ -4894,75 +5131,34 @@ function AdminPanelInner({user}){
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
-                  <div style={{fontSize:isMobile ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Daily teacher entry summary</div>
+                  <div style={{fontSize:isMobile ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Centre summary</div>
                   <div style={{fontSize:12.5,color:G.textM,lineHeight:1.6,marginTop:8}}>
-                    Load this report only when you need it. We fetch the teacher data after you open it, not while the profile screen is idle.
+                    Load this report only when you need it. Each centre unlocks as soon as its teacher data is ready.
                   </div>
                 </div>
                 {instituteGlanceReport.loading&&(
                   <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
-                    Loading {Math.min(instituteGlanceReport.loaded, instituteGlanceReport.total)}/{instituteGlanceReport.total}
+                    {instituteGlanceReadyCount}/{Math.max(instituteGlanceReport.totalInstitutes || 0, instituteGlanceReport.summary.totalInstitutes || 0)} ready
                   </span>
                 )}
               </div>
-              {instituteGlanceReport.loading&&(
-                <div style={{marginTop:14,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:isMobile ? "14px 14px 15px" : "15px 16px 16px"}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:G.text,fontFamily:G.sans}}>
-                      Preparing today&apos;s report without disturbing the rest of the screen.
-                    </div>
-                    <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:12,color:G.blue,fontFamily:G.mono,fontWeight:700}}>
-                      {Math.min(instituteGlanceReport.loaded, instituteGlanceReport.total)}/{instituteGlanceReport.total}
-                    </span>
-                  </div>
-                  <div style={{height:10,background:"#E5ECF6",borderRadius:999,overflow:"hidden",marginTop:12}}>
-                    <div style={{height:"100%",width:`${Math.max(instituteGlanceProgressPct, instituteGlanceReport.loaded>0 ? 6 : 0)}%`,borderRadius:999,background:"linear-gradient(90deg,#3B82F6 0%,#1D4ED8 100%)",transition:"width 0.2s ease"}} />
-                  </div>
-                  <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:10}}>
-                    This report is on-demand. It only loads after you open it, and the profile screen stays still while we prepare it.
-                  </div>
-                </div>
-              )}
+              {renderInstituteGlanceProgressBlock(isMobile)}
               {!!instituteGlanceReport.error&&(
                 <div style={{marginTop:14,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:16,padding:"14px 15px"}}>
                   <div style={{fontSize:13,fontWeight:700,color:"#9A3412",fontFamily:G.sans}}>Could not load the report</div>
                   <div style={{fontSize:12.5,color:"#9A3412",lineHeight:1.55,marginTop:6}}>
                     {instituteGlanceReport.error}
                   </div>
-                  <button className="admin-mobile-touch" onClick={()=>loadInstituteGlanceReport({ force:true }).catch(()=>{})} style={{marginTop:12,padding:"9px 12px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFFFFF",color:"#9A3412",fontSize:12.5,fontWeight:700,fontFamily:G.sans,cursor:"pointer"}}>
+                  <button className="admin-mobile-touch" onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)} style={{marginTop:12,padding:"9px 12px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFFFFF",color:"#9A3412",fontSize:12.5,fontWeight:700,fontFamily:G.sans,cursor:"pointer"}}>
                     Retry
                   </button>
                 </div>
               )}
-              {!instituteGlanceReport.loading&&instituteGlanceReport.ready&&(
-                <>
-                  <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
-                    {[
-                      { label:"Institutes", value:instituteGlanceReport.summary.totalInstitutes },
-                      { label:"Teachers updated", value:`${instituteGlanceReport.summary.filledToday}/${instituteGlanceReport.summary.totalTeachers}` },
-                      { label:"Pending today", value:instituteGlanceReport.summary.missingToday },
-                    ].map(item=>(
-                      <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
-                        <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.6,textTransform:"uppercase"}}>{item.label}</div>
-                        <div style={{fontSize:isMobile ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>{item.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
-                    <button className="admin-mobile-touch" onClick={()=>exportInstituteGlance("pdf")} style={{minWidth:isMobile ? 76 : 82,height:isMobile ? 34 : 36,padding:"0 12px",borderRadius:12,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:12,fontWeight:700,fontFamily:G.sans,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,WebkitTapHighlightColor:"transparent"}}>
-                      <AppIcon icon={IconDownload} size={15} color={G.text} />
-                      {instituteGlanceExportBusy==="pdf" ? "PDF..." : "PDF"}
-                    </button>
-                    <button className="admin-mobile-touch" onClick={()=>exportInstituteGlance("png")} style={{minWidth:isMobile ? 76 : 82,height:isMobile ? 34 : 36,padding:"0 12px",borderRadius:12,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:12,fontWeight:700,fontFamily:G.sans,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,WebkitTapHighlightColor:"transparent"}}>
-                      <AppIcon icon={IconDownload} size={15} color={G.text} />
-                      {instituteGlanceExportBusy==="png" ? "PNG..." : "PNG"}
-                    </button>
-                  </div>
-                  <div style={{marginTop:12}}>
-                    {renderSharedInstituteGlanceList()}
-                  </div>
-                </>
-              )}
+              {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(isMobile)}
+              {renderInstituteGlanceActions(isMobile)}
+              <div style={{marginTop:12}}>
+                {renderSharedInstituteGlanceList({ interactive:true })}
+              </div>
             </div>
           </div>
         </div>
@@ -9051,152 +9247,48 @@ function AdminPanelInner({user}){
       </button>
     );
 
-    const instituteGlanceRowsPreview = allInstituteGlanceRows;
-    const instituteGlancePendingCount = Math.max(0, allInstituteGlanceSummary.totalTeachers - allInstituteGlanceSummary.loadedTeachers);
-    const renderInstituteGlanceList = (compact = false, maxRows = null) => {
-      const rows = maxRows ? instituteGlanceRowsPreview.slice(0, maxRows) : instituteGlanceRowsPreview;
-      if(!rows.length){
-        return (
-          <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
-            No institutes are available yet.
-          </div>
-        );
-      }
-      return (
-        <div style={{display:"grid",gap:compact ? 8 : 10}}>
-          {rows.map(row => {
-            const tone = row.missingToday === 0
-              ? { bg:"#ECFDF3", border:"#BBF7D0", pillBg:"#DCFCE7", pillColor:"#166534", meta:"#1B5E20" }
-              : row.completionPct >= 50
-                ? { bg:"#EEF4FF", border:"#C7D7F5", pillBg:"#DBEAFE", pillColor:G.blue, meta:"#1E3A8A" }
-                : { bg:"#FFF7ED", border:"#FED7AA", pillBg:"#FFEDD5", pillColor:"#B45309", meta:"#9A3412" };
-            return (
-              <div key={row.institute} style={{background:compact ? "#FFFFFF" : tone.bg,border:`1px solid ${compact ? G.border : tone.border}`,borderRadius:compact ? 16 : 18,padding:compact ? "11px 12px" : "12px 13px"}}>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-                  <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:compact ? 13.5 : 14.5,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.35}}>
-                      {row.institute}
-                    </div>
-                    <div style={{fontSize:compact ? 11.5 : 12,color:compact ? G.textM : tone.meta,marginTop:4,lineHeight:1.5}}>
-                      {row.filledToday} of {row.totalTeachers} teachers filled today
-                    </div>
-                  </div>
-                  <span style={{background:compact ? G.blueL : tone.pillBg,color:compact ? G.blue : tone.pillColor,borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap",flexShrink:0}}>
-                    {row.missingToday === 0 ? "All done" : `${row.missingToday} pending`}
-                  </span>
-                </div>
-                <div style={{fontSize:11.5,color:G.textM,lineHeight:1.55,marginTop:8}}>
-                  {row.missingNames.length
-                    ? `Pending today: ${row.missingNames.join(", ")}`
-                    : "Everyone has filled today's entry."}
+    const MobileCentreSummaryScreen = () => (
+      <div style={mobilePageShellStyle}>
+        <MobileMotionStyles />
+        <AdminToastBanner message={adminToast} />
+        <MobileNav/>
+        <div style={mobilePageInnerStyle}>
+          <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
+                <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:7}}>Centre summary</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8}}>
+                  Open a centre as soon as it finishes loading, or wait for the full report and share it as PDF or PNG.
                 </div>
               </div>
-            );
-          })}
-        </div>
-      );
-    };
-
-    const InstituteGlanceSummaryCard = ({ compact = false, showOpenButton = false }) => {
-      const exportButtonStyle = {
-        minWidth:compact ? 76 : 82,
-        height:compact ? 34 : 36,
-        padding:"0 12px",
-        borderRadius:12,
-        border:`1px solid ${G.border}`,
-        background:"#FFFFFF",
-        color:G.text,
-        fontSize:12,
-        fontWeight:700,
-        fontFamily:G.sans,
-        cursor:"pointer",
-        display:"inline-flex",
-        alignItems:"center",
-        justifyContent:"center",
-        gap:6,
-        WebkitTapHighlightColor:"transparent",
-      };
-      return (
-        <div style={{...mobileWorkspaceCardStyle,marginBottom:12,padding:compact ? "14px 14px 15px" : mobileWorkspaceCardStyle.padding}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-            <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
-              <div style={{fontSize:compact ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Daily teacher entry summary</div>
-              <div style={{fontSize:12.5,color:G.textM,lineHeight:1.6,marginTop:8}}>
-                See who has filled today and who still needs follow-up, centre by centre.
-              </div>
-            </div>
-            {instituteGlancePendingCount>0&&(
-              <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
-                Syncing {instituteGlancePendingCount}
-              </span>
-            )}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:compact ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
-            {[
-              { label:"Institutes", value:allInstituteGlanceSummary.totalInstitutes },
-              { label:"Teachers updated", value:`${allInstituteGlanceSummary.filledToday}/${allInstituteGlanceSummary.totalTeachers}` },
-              { label:"Pending today", value:allInstituteGlanceSummary.missingToday },
-            ].map(item=>(
-              <div key={item.label} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
-                <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.6,textTransform:"uppercase"}}>{item.label}</div>
-                <div style={{fontSize:compact ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>{item.value}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
-            <button className="admin-mobile-touch" onClick={()=>exportInstituteGlance("pdf")} style={exportButtonStyle}>
-              <AppIcon icon={IconDownload} size={15} color={G.text} />
-              {instituteGlanceExportBusy==="pdf" ? "PDF..." : "PDF"}
-            </button>
-            <button className="admin-mobile-touch" onClick={()=>exportInstituteGlance("png")} style={exportButtonStyle}>
-              <AppIcon icon={IconDownload} size={15} color={G.text} />
-              {instituteGlanceExportBusy==="png" ? "PNG..." : "PNG"}
-            </button>
-            {showOpenButton&&(
-              <button className="admin-mobile-touch" onClick={openInstituteGlancePanel} style={{...exportButtonStyle,background:G.navy,color:"#FFFFFF",border:"1px solid transparent"}}>
-                Open full
+              <button
+                className="admin-mobile-touch"
+                onClick={openMobileProfile}
+                style={{height:36,padding:"0 12px",borderRadius:12,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:12,fontWeight:700,fontFamily:G.sans,cursor:"pointer",flexShrink:0}}>
+                Profile
               </button>
+            </div>
+            {renderInstituteGlanceProgressBlock(true)}
+            {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
+            {renderInstituteGlanceActions(true)}
+            {!!instituteGlanceReport.error&&(
+              <div style={{marginTop:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:15,padding:"13px 14px"}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:"#9A3412",fontFamily:G.sans}}>Some data could not be loaded</div>
+                <div style={{fontSize:12,color:"#9A3412",lineHeight:1.55,marginTop:6}}>
+                  {instituteGlanceReport.error}
+                </div>
+              </div>
             )}
           </div>
-          <div style={{marginTop:12}}>
-            {renderInstituteGlanceList(compact, compact ? 3 : null)}
-          </div>
-          {showOpenButton && instituteGlanceRowsPreview.length > 3 && (
-            <button
-              className="admin-mobile-touch"
-              onClick={openInstituteGlancePanel}
-              style={{marginTop:10,background:"transparent",border:"none",padding:0,fontSize:12.5,fontWeight:700,color:G.blue,fontFamily:G.sans,cursor:"pointer"}}>
-              View all {instituteGlanceRowsPreview.length} institutes
-            </button>
-          )}
-        </div>
-      );
-    };
 
-    const InstituteGlanceModal = () => {
-      if(!instituteGlanceOpen) return null;
-      return (
-        <>
-          <div onClick={closeInstituteGlancePanel} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",backdropFilter:"blur(4px)",zIndex:450}} />
-          <div style={{position:"fixed",inset:0,zIndex:451,display:"flex",alignItems:"center",justifyContent:"center",padding:isMobile ? 14 : 24,pointerEvents:"none"}}>
-            <div style={{width:"min(920px,100%)",maxHeight:"min(88vh,920px)",overflow:"auto",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:isMobile ? 24 : 28,boxShadow:"0 30px 80px rgba(15,23,42,0.22)",padding:isMobile ? 16 : 22,pointerEvents:"auto"}}>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
-                <div>
-                  <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Profile report</div>
-                  <div style={{fontSize:isMobile ? 24 : 28,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.05}}>All institutes at a glance</div>
-                  <div style={{fontSize:13,color:G.textM,marginTop:8,lineHeight:1.6}}>Teacher entry completion for today, with the names that still need follow-up.</div>
-                </div>
-                <button className="admin-mobile-touch" onClick={closeInstituteGlancePanel} style={{width:38,height:38,borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",fontSize:20,color:G.textL,cursor:"pointer",flexShrink:0}}>
-                  ×
-                </button>
-              </div>
-              <InstituteGlanceSummaryCard />
-            </div>
+          <div style={{display:"grid",gap:10}}>
+            {renderSharedInstituteGlanceList({ interactive:true })}
           </div>
-        </>
-      );
-    };
+        </div>
+        <MobileBottomNav/>
+      </div>
+    );
 
     const MobileProfileScreen = () => (
       <div style={mobilePageShellStyle}>
@@ -9244,10 +9336,14 @@ function AdminPanelInner({user}){
 
           <MobileProfileAction
             icon={IconChartBar}
-            title="Daily teacher entry summary"
-            subtitle="Load the all-institutes report only when you open it."
-            onClick={openInstituteGlancePanel}
-            badge={instituteGlanceReport.ready ? "Ready" : null}
+            title="Centre summary"
+            subtitle="Open it only when you want the all-institutes report."
+            onClick={openMobileCentreSummary}
+            badge={instituteGlanceReport.loading
+              ? `${instituteGlanceReadyCount}/${Math.max(instituteGlanceReport.totalInstitutes || 0, instituteGlanceReport.summary.totalInstitutes || 0)}`
+              : instituteGlanceReport.ready
+                ? "Ready"
+                : null}
           />
 
           <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
@@ -9504,6 +9600,7 @@ function AdminPanelInner({user}){
     });
 
     if(mobileSurface==="profile") return <MobileProfileScreen/>;
+    if(mobileSurface==="centreSummary") return <MobileCentreSummaryScreen/>;
 
     // ── STEP 0: Institute list ────────────────────────────────────────────────
     if(mobileStep===0) return(
