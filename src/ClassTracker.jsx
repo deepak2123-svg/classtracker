@@ -3703,7 +3703,6 @@ function ClassTrackerInner({user}){
   const [editNote,setEditNote] = useState(null);
   const [newClass,setNewClass] = useState({institute:"",section:"",subject:""});
   const [selectedGroup,setSelectedGroup] = useState(null); // null | gradeGroup object | "other"
-  const [showNoteDetails,setShowNoteDetails] = useState(false);
   const [search,setSearch]     = useState("");
   // Name editing removed — name set from Google/signup only
   const [editingClass,setEditingClass] = useState(null);
@@ -4034,7 +4033,6 @@ function ClassTrackerInner({user}){
       }else{
         setNewNote(prev => ({ ...prev, ...parsed.form }));
       }
-      if(hasLiveEntryDraft(parsed.form)) setShowNoteDetails(true);
     }catch(e){}
   }, [activeEntryDraftKey, isEntryComposerView, view]);
 
@@ -4760,11 +4758,6 @@ function ClassTrackerInner({user}){
     });
   },[view,preferredInstitute]);
 
-  useEffect(()=>{
-    if(view==="editNote"){ setShowNoteDetails(true); return; }
-    if(view==="addNote") setShowNoteDetails(false);
-  },[view,activeClass?.id,selectedDate]);
-
   if(loading)return<TeacherLoadingScreen themeShell={teacherThemeShell} text={restoringBackup?"Restoring class list…":"Loading teacher panel…"} />;
   if(loadIssue){
     return(
@@ -4949,9 +4942,19 @@ function ClassTrackerInner({user}){
   const getClassNotes=(cid)=>data.notes[cid]||{};
   const getDateNotes=(cid,dk)=>{ const arr=(data.notes[cid]||{})[dk]; return Array.isArray(arr)?arr:[]; };
   const getAllNoteDates=(cid)=>new Set(Object.keys(data.notes[cid]||{}).filter(dk=>(data.notes[cid][dk]||[]).length>0));
+  const getEntryDetailsValidationMessage=(entry)=>{
+    const missingTitle=!String(entry?.title||"").trim();
+    const missingBody=!String(entry?.body||"").trim();
+    if(missingTitle&&missingBody) return "Please add the topic and notes before saving.";
+    if(missingTitle) return "Please add the topic before saving.";
+    if(missingBody) return "Please add the class notes before saving.";
+    return "";
+  };
 
   const addNote=()=>{
     if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
+    const detailValidationMessage=getEntryDetailsValidationMessage(newNote);
+    if(detailValidationMessage){showInlineToast(detailValidationMessage);return;}
 
     // Duplicate check — same class, same date, overlapping or identical time
     const existing=(data.notes?.[activeClass.id]||{})[selectedDate]||[];
@@ -4981,15 +4984,15 @@ function ClassTrackerInner({user}){
     void triggerAppHaptic("entry");
     clearEntryDraft();
     setDraftSaving(false);
-    setShowNoteDetails(false);
     setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});setView("classDetail");
   };
   const saveEdit=()=>{
     if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
+    const detailValidationMessage=getEntryDetailsValidationMessage(editNote);
+    if(detailValidationMessage){showInlineToast(detailValidationMessage);return;}
     setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};});
     clearEntryDraft();
     setDraftSaving(false);
-    setShowNoteDetails(false);
     setEditNote(null);setView("classDetail");
   };
   const deleteNote=(noteId)=>setData(d=>{
@@ -7053,8 +7056,13 @@ function ClassTrackerInner({user}){
     const setForm=isEdit?setEditNote:setNewNote;
     const save=isEdit?saveEdit:addNote;
     const color=activeClass?getSectionTone(activeClass.section):getSectionTone("");
-    const hasExtraDetails=Boolean((form.title||"").trim()||(form.body||"").trim());
-    const saveLabel=isEdit?"Save Changes":hasExtraDetails?"Save Entry":"Quick Save";
+    const detailTitle=String(form.title||"").trim();
+    const detailBody=String(form.body||"").trim();
+    const detailsStarted=Boolean(detailTitle||detailBody);
+    const detailsComplete=Boolean(detailTitle&&detailBody);
+    const completedDetailCount=(detailTitle?1:0)+(detailBody?1:0);
+    const canSave=Boolean(form.timeStart&&detailsComplete);
+    const saveLabel=isEdit?"Save Changes":"Save Entry";
     const lastTopicSuggestion=form.status==="inprogress" ? (getClassUrgencyMeta(activeClass).lastTopic||"").trim() : "";
     const topicSuggestionApplied=form.status==="inprogress"&&!!lastTopicSuggestion&&String(form.title||"").trim()===lastTopicSuggestion;
 
@@ -7130,7 +7138,6 @@ function ClassTrackerInner({user}){
                   <button key={key} onClick={()=>{
                     const nextStatus=form.status===key?"":key;
                     setForm({...form,status:nextStatus});
-                    if(nextStatus==="inprogress") setShowNoteDetails(true);
                   }}
                     style={{background:form.status===key?val.bg:G.surface,color:form.status===key?val.text:G.textM,
                       border:`1.5px solid ${form.status===key?val.dot:G.border}`,
@@ -7151,12 +7158,94 @@ function ClassTrackerInner({user}){
                 </div>
                 {topicSuggestionApplied
                   ? <span style={{background:"#E8F8EF",border:`1px solid ${G.green}22`,borderRadius:999,padding:"7px 10px",fontSize:12,color:G.green,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>Added below</span>
-                  : <button type="button" onClick={()=>{setForm({...form,title:lastTopicSuggestion});setShowNoteDetails(true);}}
+                  : <button type="button" onClick={()=>setForm({...form,title:lastTopicSuggestion})}
                       style={{background:"#FFFFFF",border:"1px solid #F59E0B",borderRadius:10,padding:"9px 14px",fontSize:13,cursor:"pointer",color:"#B45309",fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}}>
                       Use this
                     </button>}
               </div>
             )}
+            <div style={{
+              marginBottom:18,
+              borderRadius:22,
+              border:`1px solid ${detailsComplete ? `${G.green}33` : color.border}`,
+              background:detailsComplete
+                ? (isDarkTeacherTheme
+                    ? `linear-gradient(180deg, ${G.surface} 0%, ${G.surfaceAlt} 100%)`
+                    : `linear-gradient(180deg, ${G.surface} 0%, ${G.greenL} 100%)`)
+                : (isDarkTeacherTheme
+                    ? `linear-gradient(180deg, ${G.surface} 0%, ${G.surfaceSoft} 100%)`
+                    : `linear-gradient(180deg, ${G.surface} 0%, ${color.light} 100%)`),
+              boxShadow:detailsStarted
+                ? "0 16px 34px rgba(15, 23, 42, 0.08)"
+                : "0 12px 28px rgba(15, 23, 42, 0.05)",
+              overflow:"hidden",
+            }}>
+              <div style={{padding:"18px 18px 16px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:16}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:11,fontWeight:800,color:color.ink,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8,marginBottom:6}}>Lesson record</div>
+                    <div style={{fontSize:isMobile?24:26,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,lineHeight:1.05}}>Add details</div>
+                    <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:430}}>
+                      Topic and notes stay attached to this entry for timelines, history, and exports.
+                    </div>
+                  </div>
+                  <div style={{
+                    flexShrink:0,
+                    alignSelf:"center",
+                    background:detailsComplete?G.green:(isDarkTeacherTheme ? G.surfaceAlt : "#FFFFFFCC"),
+                    color:detailsComplete?"#FFFFFF":color.ink,
+                    border:`1px solid ${detailsComplete?`${G.green}22`:color.border}`,
+                    borderRadius:999,
+                    padding:"7px 12px",
+                    fontSize:12,
+                    fontWeight:800,
+                    fontFamily:G.mono,
+                    letterSpacing:0.2,
+                    boxShadow:"0 8px 18px rgba(15, 23, 42, 0.08)",
+                    whiteSpace:"nowrap",
+                  }}>
+                    {detailsComplete ? "Ready" : `${completedDetailCount}/2 filled`}
+                  </div>
+                </div>
+                <div style={{display:"grid",gap:14}}>
+                  <div>
+                    <label style={lbl}>Title <span style={{color:G.red,marginLeft:3}}>*</span></label>
+                    <input
+                      value={form.title}
+                      onChange={e=>setForm({...form,title:e.target.value})}
+                      placeholder={form.status==="inprogress"&&lastTopicSuggestion?"Continue the topic heading here":"What was covered?"}
+                      style={{
+                        ...inp,
+                        fontSize:16,
+                        fontWeight:600,
+                        marginBottom:0,
+                        borderColor:detailTitle?color.border:detailsStarted?color.bg:G.border,
+                        background:isDarkTeacherTheme ? G.surface : "#FFFFFFF7",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={lbl}>Notes <span style={{color:G.red,marginLeft:3}}>*</span></label>
+                    <textarea
+                      ref={noteRef}
+                      value={form.body}
+                      onChange={e=>setForm({...form,body:e.target.value})}
+                      placeholder="Write your notes, tasks, or resources here…"
+                      rows={6}
+                      style={{
+                        ...inp,
+                        resize:"vertical",
+                        lineHeight:1.7,
+                        marginBottom:0,
+                        minHeight:156,
+                        borderColor:detailBody?color.border:detailsStarted?color.bg:G.border,
+                        background:isDarkTeacherTheme ? G.surface : "#FFFFFFF7",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
             <div style={{marginBottom:16}}>
 
               {/* ══════════════════════════════════════════════════════
@@ -7383,33 +7472,7 @@ function ClassTrackerInner({user}){
                 );
               })()}
             </div>
-            <div style={{marginBottom:18,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden",background:G.surface}}>
-              <button type="button" onClick={()=>setShowNoteDetails(o=>!o)}
-                style={{width:"100%",background:"transparent",border:"none",padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,textAlign:"left",WebkitTapHighlightColor:"transparent"}}>
-                <div>
-                  <div style={{fontSize:14,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:3}}>Add details</div>
-                  <div style={{fontSize:12,color:G.textM,lineHeight:1.5}}>
-                    {hasExtraDetails
-                      ? "Topic or notes added for this entry."
-                      : "Type the topic and notes yourself for richer history."}
-                  </div>
-                </div>
-                <span style={{fontSize:18,color:G.textL,fontWeight:700}}>{showNoteDetails?"−":"+"}</span>
-              </button>
-              {showNoteDetails&&(
-                <div style={{padding:"0 16px 16px"}}>
-                  <div style={{marginBottom:14}}>
-                    <label style={lbl}>Title</label>
-                    <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder={form.status==="inprogress"&&lastTopicSuggestion?"Continue the topic heading here":"What was covered?"} style={{...inp,fontSize:16,fontWeight:500,marginBottom:0}}/>
-                  </div>
-                  <div>
-                    <label style={lbl}>Notes</label>
-                    <textarea ref={noteRef} value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Write your notes, tasks, or resources here…" rows={6} style={{...inp,resize:"vertical",lineHeight:1.7,marginBottom:0}}/>
-                  </div>
-                </div>
-              )}
-            </div>
-            <PrimaryBtn onClick={save} disabled={!form.timeStart} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:16,opacity:form.timeStart?1:0.45,cursor:form.timeStart?"pointer":"not-allowed",width:"100%"}}>
+            <PrimaryBtn onClick={save} disabled={!canSave} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:16,opacity:canSave?1:0.45,cursor:canSave?"pointer":"not-allowed",width:"100%"}}>
               {saveLabel}
             </PrimaryBtn>
           </div>
