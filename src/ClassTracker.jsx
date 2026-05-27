@@ -3696,6 +3696,8 @@ function ClassTrackerInner({user}){
   const [lastCloudSavedAt,setLastCloudSavedAt] = useState(0);
   const [lastDraftSavedAt,setLastDraftSavedAt] = useState(0);
   const [saveBadgeFlash,setSaveBadgeFlash] = useState(null);
+  const [showSavingBadge,setShowSavingBadge] = useState(false);
+  const [showDraftSavingBadge,setShowDraftSavingBadge] = useState(false);
   const [view,_setView]         = useState("home");
   const [activeClass,setActiveClass] = useState(null);
   const [selectedDate,setSelectedDate] = useState(todayKey());
@@ -3751,6 +3753,8 @@ function ClassTrackerInner({user}){
   const saveTimer= useRef(null);
   const noteDraftTimer = useRef(null);
   const saveBadgeHideTimer = useRef(null);
+  const saveBadgeShowTimer = useRef(null);
+  const draftSaveBadgeShowTimer = useRef(null);
   const lastSyncedFingerprint = useRef("");
   const hydratedDraftKeyRef = useRef("");
   const lastForegroundRefreshAt = useRef(0);
@@ -4062,6 +4066,54 @@ function ClassTrackerInner({user}){
     return () => window.clearTimeout(noteDraftTimer.current);
   }, [activeClass?.id, activeEntryDraftForm, activeEntryDraftKey, clearEntryDraft, hasActiveEntryDraft, isEntryComposerView, selectedDate, view]);
 
+  useEffect(() => {
+    if(!saving){
+      if(saveBadgeShowTimer.current){
+        window.clearTimeout(saveBadgeShowTimer.current);
+        saveBadgeShowTimer.current = null;
+      }
+      setShowSavingBadge(false);
+      return;
+    }
+    if(saveBadgeShowTimer.current){
+      window.clearTimeout(saveBadgeShowTimer.current);
+    }
+    saveBadgeShowTimer.current = window.setTimeout(() => {
+      setShowSavingBadge(true);
+      saveBadgeShowTimer.current = null;
+    }, 260);
+    return () => {
+      if(saveBadgeShowTimer.current){
+        window.clearTimeout(saveBadgeShowTimer.current);
+        saveBadgeShowTimer.current = null;
+      }
+    };
+  }, [saving]);
+
+  useEffect(() => {
+    if(!draftSaving || saving || saveErr){
+      if(draftSaveBadgeShowTimer.current){
+        window.clearTimeout(draftSaveBadgeShowTimer.current);
+        draftSaveBadgeShowTimer.current = null;
+      }
+      setShowDraftSavingBadge(false);
+      return;
+    }
+    if(draftSaveBadgeShowTimer.current){
+      window.clearTimeout(draftSaveBadgeShowTimer.current);
+    }
+    draftSaveBadgeShowTimer.current = window.setTimeout(() => {
+      setShowDraftSavingBadge(true);
+      draftSaveBadgeShowTimer.current = null;
+    }, 240);
+    return () => {
+      if(draftSaveBadgeShowTimer.current){
+        window.clearTimeout(draftSaveBadgeShowTimer.current);
+        draftSaveBadgeShowTimer.current = null;
+      }
+    };
+  }, [draftSaving, saveErr, saving]);
+
   useEffect(() => () => {
     if(detailSwipeResetTimer.current){
       window.clearTimeout(detailSwipeResetTimer.current);
@@ -4074,6 +4126,14 @@ function ClassTrackerInner({user}){
     if(saveBadgeHideTimer.current){
       window.clearTimeout(saveBadgeHideTimer.current);
       saveBadgeHideTimer.current = null;
+    }
+    if(saveBadgeShowTimer.current){
+      window.clearTimeout(saveBadgeShowTimer.current);
+      saveBadgeShowTimer.current = null;
+    }
+    if(draftSaveBadgeShowTimer.current){
+      window.clearTimeout(draftSaveBadgeShowTimer.current);
+      draftSaveBadgeShowTimer.current = null;
     }
     if(detailSwipeOffsetRaf.current){
       window.cancelAnimationFrame(detailSwipeOffsetRaf.current);
@@ -4116,7 +4176,7 @@ function ClassTrackerInner({user}){
 
   useEffect(() => {
     if(!saveBadgeFlash) return;
-    if(view !== "stats" && view !== "classTimeline") return;
+    if(["home","classDetail","addNote","editNote"].includes(view)) return;
     if(saveBadgeHideTimer.current){
       window.clearTimeout(saveBadgeHideTimer.current);
       saveBadgeHideTimer.current = null;
@@ -4308,9 +4368,10 @@ function ClassTrackerInner({user}){
     if(loading||!allowCloudSync)return;
     const nextFingerprint = dataFingerprint(data);
     if(nextFingerprint===lastSyncedFingerprint.current) return;
-    setSaving(true);setSaveErr(false);
+    setSaveErr(false);
     clearTimeout(saveTimer.current);
     saveTimer.current=setTimeout(()=>{
+      setSaving(true);
       saveUserData(user.uid,data,{ expectedRevision: cloudRevision, source:"autosave" })
         .then(result=>{
           setCloudRevision(result?.revision || cloudRevision);
@@ -4798,6 +4859,7 @@ function ClassTrackerInner({user}){
 
   const SaveBadge=()=>{
     const isOfflineSave=saveErr&&isOffline;
+    const allowAmbientSaveBadge=["home","classDetail","addNote","editNote"].includes(view);
     let badge = null;
     if(saveErr){
       badge = isOfflineSave
@@ -4815,15 +4877,15 @@ function ClassTrackerInner({user}){
             border:"#FECACA",
             color:G.red,
           };
-    } else if(saving || draftSaving){
+    } else if(allowAmbientSaveBadge && (showSavingBadge || showDraftSavingBadge)){
       badge = {
-        title:saving ? "Saving..." : "Saving draft...",
-        icon:saving ? IconRefresh : IconDeviceFloppy,
+        title:showSavingBadge ? "Saving..." : "Saving draft...",
+        icon:showSavingBadge ? IconRefresh : IconDeviceFloppy,
         background:"#EEF4FF",
         border:"#C7D7F5",
         color:G.blue,
       };
-    } else if(saveBadgeFlash){
+    } else if(allowAmbientSaveBadge && saveBadgeFlash){
       badge = {
         title:saveBadgeFlash.label,
         icon:saveBadgeFlash.tone === "draft" ? IconDeviceFloppy : IconCheck,
@@ -7065,6 +7127,90 @@ function ClassTrackerInner({user}){
     const saveLabel=isEdit?"Save Changes":"Save Entry";
     const lastTopicSuggestion=form.status==="inprogress" ? (getClassUrgencyMeta(activeClass).lastTopic||"").trim() : "";
     const topicSuggestionApplied=form.status==="inprogress"&&!!lastTopicSuggestion&&String(form.title||"").trim()===lastTopicSuggestion;
+    const detailsPanel=(
+      <div style={{
+        marginBottom:20,
+        borderRadius:22,
+        border:`1px solid ${detailsComplete ? `${G.green}33` : color.border}`,
+        background:detailsComplete
+          ? (isDarkTeacherTheme
+              ? `linear-gradient(180deg, ${G.surface} 0%, ${G.surfaceAlt} 100%)`
+              : `linear-gradient(180deg, ${G.surface} 0%, ${G.greenL} 100%)`)
+          : (isDarkTeacherTheme
+              ? `linear-gradient(180deg, ${G.surface} 0%, ${G.surfaceSoft} 100%)`
+              : `linear-gradient(180deg, ${G.surface} 0%, ${color.light} 100%)`),
+        boxShadow:detailsStarted
+          ? "0 16px 34px rgba(15, 23, 42, 0.08)"
+          : "0 12px 28px rgba(15, 23, 42, 0.05)",
+        overflow:"hidden",
+      }}>
+        <div style={{padding:"18px 18px 16px"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:16}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:11,fontWeight:800,color:color.ink,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8,marginBottom:6}}>Lesson record</div>
+              <div style={{fontSize:isMobile?24:26,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,lineHeight:1.05}}>Add details</div>
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:430}}>
+                Topic and notes stay attached to this entry for timelines, history, and exports.
+              </div>
+            </div>
+            <div style={{
+              flexShrink:0,
+              alignSelf:"center",
+              background:detailsComplete?G.green:(isDarkTeacherTheme ? G.surfaceAlt : "#FFFFFFCC"),
+              color:detailsComplete?"#FFFFFF":color.ink,
+              border:`1px solid ${detailsComplete?`${G.green}22`:color.border}`,
+              borderRadius:999,
+              padding:"7px 12px",
+              fontSize:12,
+              fontWeight:800,
+              fontFamily:G.mono,
+              letterSpacing:0.2,
+              boxShadow:"0 8px 18px rgba(15, 23, 42, 0.08)",
+              whiteSpace:"nowrap",
+            }}>
+              {detailsComplete ? "Ready" : `${completedDetailCount}/2 filled`}
+            </div>
+          </div>
+          <div style={{display:"grid",gap:14}}>
+            <div>
+              <label style={lbl}>Title <span style={{color:G.red,marginLeft:3}}>*</span></label>
+              <input
+                value={form.title}
+                onChange={e=>setForm({...form,title:e.target.value})}
+                placeholder={form.status==="inprogress"&&lastTopicSuggestion?"Continue the topic heading here":"What was covered?"}
+                style={{
+                  ...inp,
+                  fontSize:16,
+                  fontWeight:600,
+                  marginBottom:0,
+                  borderColor:detailTitle?color.border:detailsStarted?color.bg:G.border,
+                  background:isDarkTeacherTheme ? G.surface : "#FFFFFFF7",
+                }}
+              />
+            </div>
+            <div>
+              <label style={lbl}>Notes <span style={{color:G.red,marginLeft:3}}>*</span></label>
+              <textarea
+                ref={noteRef}
+                value={form.body}
+                onChange={e=>setForm({...form,body:e.target.value})}
+                placeholder="Write your notes, tasks, or resources here…"
+                rows={6}
+                style={{
+                  ...inp,
+                  resize:"vertical",
+                  lineHeight:1.7,
+                  marginBottom:0,
+                  minHeight:156,
+                  borderColor:detailBody?color.border:detailsStarted?color.bg:G.border,
+                  background:isDarkTeacherTheme ? G.surface : "#FFFFFFF7",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
 
     return(
       <div style={{...teacherThemeShell,height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans}}>
@@ -7131,6 +7277,7 @@ function ClassTrackerInner({user}){
               </>
             )}
           <div className="form-card" style={{...card,padding:"24px"}}>
+            {detailsPanel}
             <div style={{marginBottom:18}}>
               <label style={lbl}>Topic Status</label>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
@@ -7164,88 +7311,6 @@ function ClassTrackerInner({user}){
                     </button>}
               </div>
             )}
-            <div style={{
-              marginBottom:18,
-              borderRadius:22,
-              border:`1px solid ${detailsComplete ? `${G.green}33` : color.border}`,
-              background:detailsComplete
-                ? (isDarkTeacherTheme
-                    ? `linear-gradient(180deg, ${G.surface} 0%, ${G.surfaceAlt} 100%)`
-                    : `linear-gradient(180deg, ${G.surface} 0%, ${G.greenL} 100%)`)
-                : (isDarkTeacherTheme
-                    ? `linear-gradient(180deg, ${G.surface} 0%, ${G.surfaceSoft} 100%)`
-                    : `linear-gradient(180deg, ${G.surface} 0%, ${color.light} 100%)`),
-              boxShadow:detailsStarted
-                ? "0 16px 34px rgba(15, 23, 42, 0.08)"
-                : "0 12px 28px rgba(15, 23, 42, 0.05)",
-              overflow:"hidden",
-            }}>
-              <div style={{padding:"18px 18px 16px"}}>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:16}}>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:11,fontWeight:800,color:color.ink,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8,marginBottom:6}}>Lesson record</div>
-                    <div style={{fontSize:isMobile?24:26,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,lineHeight:1.05}}>Add details</div>
-                    <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:430}}>
-                      Topic and notes stay attached to this entry for timelines, history, and exports.
-                    </div>
-                  </div>
-                  <div style={{
-                    flexShrink:0,
-                    alignSelf:"center",
-                    background:detailsComplete?G.green:(isDarkTeacherTheme ? G.surfaceAlt : "#FFFFFFCC"),
-                    color:detailsComplete?"#FFFFFF":color.ink,
-                    border:`1px solid ${detailsComplete?`${G.green}22`:color.border}`,
-                    borderRadius:999,
-                    padding:"7px 12px",
-                    fontSize:12,
-                    fontWeight:800,
-                    fontFamily:G.mono,
-                    letterSpacing:0.2,
-                    boxShadow:"0 8px 18px rgba(15, 23, 42, 0.08)",
-                    whiteSpace:"nowrap",
-                  }}>
-                    {detailsComplete ? "Ready" : `${completedDetailCount}/2 filled`}
-                  </div>
-                </div>
-                <div style={{display:"grid",gap:14}}>
-                  <div>
-                    <label style={lbl}>Title <span style={{color:G.red,marginLeft:3}}>*</span></label>
-                    <input
-                      value={form.title}
-                      onChange={e=>setForm({...form,title:e.target.value})}
-                      placeholder={form.status==="inprogress"&&lastTopicSuggestion?"Continue the topic heading here":"What was covered?"}
-                      style={{
-                        ...inp,
-                        fontSize:16,
-                        fontWeight:600,
-                        marginBottom:0,
-                        borderColor:detailTitle?color.border:detailsStarted?color.bg:G.border,
-                        background:isDarkTeacherTheme ? G.surface : "#FFFFFFF7",
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={lbl}>Notes <span style={{color:G.red,marginLeft:3}}>*</span></label>
-                    <textarea
-                      ref={noteRef}
-                      value={form.body}
-                      onChange={e=>setForm({...form,body:e.target.value})}
-                      placeholder="Write your notes, tasks, or resources here…"
-                      rows={6}
-                      style={{
-                        ...inp,
-                        resize:"vertical",
-                        lineHeight:1.7,
-                        marginBottom:0,
-                        minHeight:156,
-                        borderColor:detailBody?color.border:detailsStarted?color.bg:G.border,
-                        background:isDarkTeacherTheme ? G.surface : "#FFFFFFF7",
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
             <div style={{marginBottom:16}}>
 
               {/* ══════════════════════════════════════════════════════
