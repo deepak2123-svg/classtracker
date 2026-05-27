@@ -2618,17 +2618,17 @@ async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLab
 function instituteGlancePdfFilename(instituteName){
   return `${slugifyDownloadPart(instituteName)}_centre_summary_${todayKey()}.pdf`;
 }
-function drawInstituteGlancePdfStatCard(doc, { x, y, width, height, label, value }){
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(221, 227, 237);
+function drawInstituteGlancePdfStatCard(doc, { x, y, width, height, label, value, fillColor = [255, 255, 255], borderColor = [221, 227, 237], labelColor = [107, 114, 128], valueColor = [17, 24, 39] }){
+  doc.setFillColor(...fillColor);
+  doc.setDrawColor(...borderColor);
   doc.roundedRect(x, y, width, height, 12, 12, "FD");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
-  doc.setTextColor(107, 114, 128);
+  doc.setTextColor(...labelColor);
   doc.text(String(label || "").toUpperCase(), x + 12, y + 16);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
-  doc.setTextColor(17, 24, 39);
+  doc.setTextColor(...valueColor);
   doc.text(String(value || "0"), x + 12, y + 41);
 }
 function buildInstituteGlanceFilledTeacherPdfBody(row){
@@ -2644,7 +2644,6 @@ function buildInstituteGlancePendingTeacherPdfBody(row){
     teacher.name || "Teacher",
     teacher.todayStatusLabel || instituteGlanceTodayStatusLabel(teacher),
     instituteGlanceTeacherSectionCaption(teacher),
-    String(teacher.todayEntries || 0),
     String(teacher.monthEntries || 0),
     teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher),
     instituteGlanceTeacherHoursLabel(teacher),
@@ -2657,9 +2656,11 @@ function ensureInstituteGlancePdfSectionSpace(doc, cursorY, minHeight, margin){
   return margin;
 }
 function drawInstituteGlancePdfEmptyNotice(doc, { x, y, width, title, body, fillColor = [248, 250, 252], borderColor = [221, 227, 237], titleColor = [31, 41, 55], bodyColor = [75, 85, 99] }){
+  const bodyLines = doc.splitTextToSize(body, width - 28);
+  const height = 36 + bodyLines.length * 12 + 12;
   doc.setFillColor(...fillColor);
   doc.setDrawColor(...borderColor);
-  doc.roundedRect(x, y, width, 58, 14, 14, "FD");
+  doc.roundedRect(x, y, width, height, 14, 14, "FD");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11.5);
   doc.setTextColor(...titleColor);
@@ -2667,8 +2668,8 @@ function drawInstituteGlancePdfEmptyNotice(doc, { x, y, width, title, body, fill
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10.5);
   doc.setTextColor(...bodyColor);
-  doc.text(doc.splitTextToSize(body, width - 28), x + 14, y + 36);
-  return y + 76;
+  doc.text(bodyLines, x + 14, y + 36);
+  return y + height + 18;
 }
 function renderInstituteGlancePdfTeacherSection(doc, {
   title,
@@ -2713,9 +2714,9 @@ function renderInstituteGlancePdfTeacherSection(doc, {
     margin:{ left:margin, right:margin, bottom:24 },
     styles:{
       font:"helvetica",
-      fontSize:9,
-      cellPadding:7,
-      lineColor:[221, 227, 237],
+      fontSize:8.7,
+      cellPadding:6.2,
+      lineColor:[226, 232, 240],
       lineWidth:0.5,
       textColor:[31, 41, 55],
       valign:"top",
@@ -2723,14 +2724,34 @@ function renderInstituteGlancePdfTeacherSection(doc, {
     },
     headStyles:{
       fillColor:[248, 250, 252],
-      textColor:[107, 114, 128],
+      textColor:[100, 116, 139],
       fontStyle:"bold",
       fontSize:8.4,
+    },
+    alternateRowStyles:{
+      fillColor:[250, 252, 255],
     },
     ...tableOptions.config,
   });
   return (doc.lastAutoTable?.finalY || cursorY) + 20;
 }
+
+function finalizeInstituteGlancePdf(doc){
+  const pageCount = doc.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  for(let page = 1; page <= pageCount; page += 1){
+    doc.setPage(page);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(30, pageHeight - 24, pageWidth - 30, pageHeight - 24);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Ledgr centre summary", 30, pageHeight - 10);
+    doc.text(`Page ${page} of ${pageCount}`, pageWidth - 30, pageHeight - 10, { align:"right" });
+  }
+}
+
 function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, margin = 30 }){
   const pageWidth = doc.internal.pageSize.getWidth();
   const contentWidth = pageWidth - margin * 2;
@@ -2741,23 +2762,32 @@ function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, mar
   }
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(28);
+  doc.setFillColor(238, 244, 255);
+  doc.setDrawColor(199, 215, 245);
+  doc.roundedRect(margin, cursorY, contentWidth, row.noTeachersSignedUp ? 126 : 144, 18, 18, "FD");
+  doc.setFontSize(27);
   doc.setTextColor(17, 24, 39);
-  doc.text(row.institute || "Institute summary", margin, cursorY);
-  cursorY += 24;
+  doc.text(row.institute || "Institute summary", margin + 18, cursorY + 28);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(75, 85, 99);
-  doc.text(generatedOnLabel, margin, cursorY);
-  cursorY += 18;
+  doc.text(generatedOnLabel, margin + 18, cursorY + 48);
 
   const overviewLine = row.noTeachersSignedUp
     ? "No teachers have signed up in this centre yet."
     : `${row.totalTeachers || 0} teachers • ${row.filledToday || 0} filled today • ${row.missingToday || 0} pending • ${row.sectionsTaught || 0} sections taught • ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
-  doc.setFontSize(14);
-  doc.text(doc.splitTextToSize(overviewLine, contentWidth), margin, cursorY);
-  cursorY += row.noTeachersSignedUp ? 34 : 30;
+  doc.setFontSize(13.5);
+  doc.text(doc.splitTextToSize(overviewLine, contentWidth - 170), margin + 18, cursorY + 69);
+  const badgeLabel = row.noTeachersSignedUp ? "No sign-ups" : `${row.filledToday || 0}/${row.totalTeachers || 0} updated`;
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(pageWidth - margin - 146, cursorY + 16, 128, 28, 14, 14, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(29, 78, 216);
+  doc.text(badgeLabel, pageWidth - margin - 82, cursorY + 34, { align:"center" });
+  cursorY += row.noTeachersSignedUp ? 144 : 162;
 
   if(row.noTeachersSignedUp){
     drawInstituteGlancePdfEmptyNotice(doc, {
@@ -2782,24 +2812,29 @@ function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, mar
   ].forEach((item, index) => {
     drawInstituteGlancePdfStatCard(doc, {
       x: margin + index * (statWidth + statGap),
-      y: cursorY,
+      y: cursorY - 58,
       width: statWidth,
       height: 56,
       label:item.label,
       value:item.value,
+      fillColor:[255, 255, 255],
+      borderColor:[206, 219, 240],
     });
   });
-  cursorY += 76;
+  cursorY += 10;
+
+  const filledBody = buildInstituteGlanceFilledTeacherPdfBody(row);
+  const pendingBody = buildInstituteGlancePendingTeacherPdfBody(row);
 
   cursorY = renderInstituteGlancePdfTeacherSection(doc, {
-    title:"Teachers who filled today",
+    title:`Teachers who filled today${filledBody.length ? ` (${filledBody.length})` : ""}`,
     subtitle: row.filledTeacherRows?.length
       ? "Teachers with at least one entry today are grouped first so you can review the active names before the pending follow-up list."
       : "No teacher has uploaded today's entry for this centre yet.",
     margin,
     cursorY,
-    body: buildInstituteGlanceFilledTeacherPdfBody(row),
-    head:["Teacher", "Sections", "Logs", "Study hours"],
+    body: filledBody,
+    head:["Teacher", "Sections taught", "Logs today", "Study hours"],
     minHeight: 160,
     emptyState:{
       title:"No filled entries today",
@@ -2820,9 +2855,9 @@ function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, mar
         },
         columnStyles:{
           0:{ cellWidth:165 },
-          1:{ cellWidth:365 },
-          2:{ cellWidth:54, halign:"center" },
-          3:{ cellWidth:88, halign:"center" },
+          1:{ cellWidth:350 },
+          2:{ cellWidth:70, halign:"center" },
+          3:{ cellWidth:87, halign:"center" },
         },
         didParseCell: data => {
           if(data.section !== "body") return;
@@ -2843,15 +2878,20 @@ function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, mar
     },
   });
 
+  if(pendingBody.length > 8){
+    doc.addPage();
+    cursorY = margin;
+  }
+
   cursorY = renderInstituteGlancePdfTeacherSection(doc, {
-    title:"Teachers pending today",
+    title:`Teachers pending today${pendingBody.length ? ` (${pendingBody.length})` : ""}`,
     subtitle: row.pendingTeacherRows?.length
       ? "Teachers below have not filled today's entry yet. Their last activity stays visible so the follow-up list is still useful."
       : "Everyone linked to this centre has filled today.",
     margin,
     cursorY,
-    body: buildInstituteGlancePendingTeacherPdfBody(row),
-    head:["Teacher", "Status", "Sections", "Today", "This month", "Last entry", "Study hours"],
+    body: pendingBody,
+    head:["Teacher", "Status", "Sections", "This month", "Last entry", "Study hours"],
     minHeight: 190,
     emptyState:{
       title:"Everyone filled today",
@@ -2865,13 +2905,12 @@ function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, mar
       autoTable,
       config:{
         columnStyles:{
-          0:{ cellWidth:138 },
-          1:{ cellWidth:80, halign:"center" },
-          2:{ cellWidth:215 },
-          3:{ cellWidth:42, halign:"center" },
-          4:{ cellWidth:58, halign:"center" },
-          5:{ cellWidth:120 },
-          6:{ cellWidth:68, halign:"center" },
+          0:{ cellWidth:148 },
+          1:{ cellWidth:86, halign:"center" },
+          2:{ cellWidth:248 },
+          3:{ cellWidth:62, halign:"center" },
+          4:{ cellWidth:140 },
+          5:{ cellWidth:68, halign:"center" },
         },
         didParseCell: data => {
           if(data.section !== "body") return;
@@ -2885,10 +2924,10 @@ function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, mar
             data.cell.styles.fontStyle = "bold";
             data.cell.styles.halign = "center";
           }
-          if(data.column.index === 3 || data.column.index === 4 || data.column.index === 6){
+          if(data.column.index === 3 || data.column.index === 5){
             data.cell.styles.halign = "center";
           }
-          if(data.column.index === 6){
+          if(data.column.index === 5){
             data.cell.styles.textColor = [107, 114, 128];
           }
         },
@@ -2907,24 +2946,28 @@ async function buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLab
   const contentWidth = pageWidth - margin * 2;
   let cursorY = 36;
 
+  doc.setFillColor(239, 246, 255);
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(margin, cursorY - 6, contentWidth, 118, 20, 20, "FD");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(28);
-  doc.text("All institutes at a glance", margin, cursorY);
+  doc.setTextColor(15, 23, 42);
+  doc.text("All institutes at a glance", margin + 18, cursorY + 20);
   cursorY += 24;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(75, 85, 99);
-  doc.text(generatedOnLabel, margin, cursorY);
+  doc.text(generatedOnLabel, margin + 18, cursorY + 16);
   cursorY += 22;
 
   doc.setFontSize(14);
   doc.text(
     doc.splitTextToSize("Each centre starts on a fresh page. Teachers who filled today appear first, followed by the pending follow-up list.", contentWidth),
-    margin,
-    cursorY
+    margin + 18,
+    cursorY + 12
   );
-  cursorY += 30;
+  cursorY += 46;
 
   const statGap = 10;
   const statWidth = (contentWidth - statGap * 4) / 5;
@@ -2942,6 +2985,8 @@ async function buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLab
       height: 58,
       label: item.label,
       value: item.value,
+      fillColor:[255, 255, 255],
+      borderColor:[206, 219, 240],
     });
   });
   cursorY += 80;
@@ -2958,10 +3003,12 @@ async function buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel }){
   const doc = new jsPDF({ unit:"pt", format:"a4", orientation:"landscape" });
   doc.__instituteGlancePdfRuntime = { autoTable };
   renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, margin:30 });
+  finalizeInstituteGlancePdf(doc);
   return doc;
 }
 async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
   const pdf = await buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLabel });
+  finalizeInstituteGlancePdf(pdf);
   pdf.save(`all_institutes_at_a_glance_${todayKey()}.pdf`);
 }
 async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel }){

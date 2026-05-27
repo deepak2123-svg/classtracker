@@ -44,7 +44,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
-import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, formatDateLabel, fmt, formatPeriod, getSectionTone } from "./shared.jsx";
+import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, toDateKey, formatDateLabel, fmt, formatPeriod, getSectionTone } from "./shared.jsx";
 
 const TEACHER_THEME_STORAGE_KEY = "classlog_teacher_theme";
 const TEACHER_LOCAL_NOTICE_DISMISS_KEY = "classlog_teacher_local_notice_dismissed";
@@ -58,6 +58,7 @@ const TEACHER_THEMES = {
     green:"#0F6B78",
     greenV:"#155E75",
     greenL:"#E7F4F6",
+    blue:"#2563EB",
     bg:"#F5F7FA",
     surface:"#FFFFFF",
     surfaceAlt:"#EFF3F7",
@@ -91,6 +92,7 @@ const TEACHER_THEMES = {
     green:"#4DB7C8",
     greenV:"#74D0DE",
     greenL:"rgba(77,183,200,0.16)",
+    blue:"#60A5FA",
     bg:"#08111B",
     surface:"#101926",
     surfaceAlt:"#162231",
@@ -151,6 +153,7 @@ function getTeacherThemeVars(themeName){
     "--ledgr-green":theme.green,
     "--ledgr-green-v":theme.greenV,
     "--ledgr-green-l":theme.greenL,
+    "--ledgr-blue":theme.blue,
     "--ledgr-bg":theme.bg,
     "--ledgr-surface":theme.surface,
     "--ledgr-surface-alt":theme.surfaceAlt,
@@ -184,6 +187,7 @@ function getTeacherThemeVars(themeName){
 const G = {
   forest:"var(--ledgr-forest)",  forestS:"var(--ledgr-forest-s)",
   green:"var(--ledgr-green)",    greenV:"var(--ledgr-green-v)",  greenL:"var(--ledgr-green-l)",
+  blue:"var(--ledgr-blue)",
   bg:"var(--ledgr-bg)",          surface:"var(--ledgr-surface)",
   surfaceAlt:"var(--ledgr-surface-alt)",
   surfaceSoft:"var(--ledgr-surface-soft)",
@@ -285,21 +289,79 @@ function getTeacherSectionSurfaceStyles(tone, isDarkTheme = false){
   }
   const accent = tone?.bg || "#4DB7C8";
   return {
-    headerBg:`linear-gradient(180deg, ${hexToRgba(accent, 0.26)} 0%, ${hexToRgba(accent, 0.14)} 100%)`,
-    headerBorder:hexToRgba(accent, 0.34),
+    headerBg:`linear-gradient(180deg, rgba(7,14,24,0.98) 0%, ${hexToRgba(accent, 0.24)} 100%)`,
+    headerBorder:hexToRgba(accent, 0.28),
     titleColor:"#F8FAFC",
     eyebrowColor:"rgba(226,232,240,0.72)",
-    chipBg:"rgba(7,13,22,0.56)",
-    chipBorder:"rgba(148,163,184,0.18)",
-    chipText:"#E2E8F0",
-    statBg:"rgba(7,13,22,0.58)",
-    statBorder:"rgba(148,163,184,0.14)",
+    chipBg:"rgba(8,15,25,0.76)",
+    chipBorder:hexToRgba(accent, 0.24),
+    chipText:"#E8F1FA",
+    statBg:"rgba(8,15,25,0.78)",
+    statBorder:"rgba(71,85,105,0.56)",
     primaryAccent:accent,
-    primaryButtonBg:accent,
+    primaryButtonBg:`linear-gradient(135deg, ${accent} 0%, ${hexToRgba(accent, 0.82)} 100%)`,
     primaryButtonText:"#FFFFFF",
-    emptyBg:"linear-gradient(180deg, rgba(16,25,38,0.98) 0%, rgba(12,18,31,0.98) 100%)",
-    noteBg:"linear-gradient(180deg, rgba(16,25,38,0.98) 0%, rgba(13,20,33,0.98) 100%)",
-    noteBorder:"rgba(51,65,85,0.78)",
+    emptyBg:`linear-gradient(180deg, rgba(12,20,31,0.98) 0%, ${hexToRgba(accent, 0.12)} 100%)`,
+    noteBg:"linear-gradient(180deg, rgba(12,20,31,0.98) 0%, rgba(10,16,26,0.98) 100%)",
+    noteBorder:"rgba(71,85,105,0.68)",
+  };
+}
+
+function getTeacherAnalyticsSurfaceStyles(accent = "#0F6B78", isDarkTheme = false){
+  const baseAccent = accent || "#0F6B78";
+  if(!isDarkTheme){
+    return {
+      heroBg:`linear-gradient(135deg, ${hexToRgba(baseAccent, 0.14)} 0%, #FFFFFF 58%, #F8FAFC 100%)`,
+      heroBorder:hexToRgba(baseAccent, 0.18),
+      heroText:"#0F172A",
+      heroMuted:"#475569",
+      heroEyebrow:"#64748B",
+      heroChipBg:"#FFFFFF",
+      heroChipBorder:hexToRgba(baseAccent, 0.16),
+      heroChipText:"#0F172A",
+      metricBg:"#FFFFFF",
+      metricBorder:"#DCE3EA",
+      metricSoftBg:"#F8FAFC",
+      metricSoftBorder:"#E2E8F0",
+      metricMuted:"#64748B",
+      sectionBg:"#FFFFFF",
+      sectionBorder:"#DCE3EA",
+      sectionSoftBg:"#F8FAFC",
+      sectionSoftBorder:"#E2E8F0",
+      progressTrack:"#E2E8F0",
+      progressFill:baseAccent,
+      graphBase:"#E2E8F0",
+      buttonBg:"#FFFFFF",
+      buttonBorder:"#DCE3EA",
+      buttonText:"#0F172A",
+      accent:baseAccent,
+    };
+  }
+  return {
+    heroBg:`linear-gradient(145deg, rgba(7,17,27,0.98) 0%, ${hexToRgba(baseAccent, 0.22)} 100%)`,
+    heroBorder:hexToRgba(baseAccent, 0.28),
+    heroText:"#F8FAFC",
+    heroMuted:"#C7D2E0",
+    heroEyebrow:"#94A3B8",
+    heroChipBg:"rgba(8,15,25,0.78)",
+    heroChipBorder:hexToRgba(baseAccent, 0.22),
+    heroChipText:"#E8F1FA",
+    metricBg:"rgba(16,25,38,0.96)",
+    metricBorder:"rgba(51,65,85,0.78)",
+    metricSoftBg:"rgba(10,16,26,0.9)",
+    metricSoftBorder:"rgba(51,65,85,0.62)",
+    metricMuted:"#94A3B8",
+    sectionBg:"rgba(16,25,38,0.98)",
+    sectionBorder:"rgba(51,65,85,0.78)",
+    sectionSoftBg:"rgba(10,16,26,0.92)",
+    sectionSoftBorder:"rgba(51,65,85,0.68)",
+    progressTrack:"rgba(51,65,85,0.92)",
+    progressFill:baseAccent,
+    graphBase:"rgba(51,65,85,0.92)",
+    buttonBg:"rgba(15,23,42,0.76)",
+    buttonBorder:"rgba(51,65,85,0.82)",
+    buttonText:"#E2E8F0",
+    accent:baseAccent,
   };
 }
 
@@ -825,6 +887,87 @@ function collectClassTimelineEntries(classNotes = {}, { startKey = "", endKey = 
     .sort(compareTimelineEntriesAsc);
 }
 
+const TIMELINE_WEEKDAY_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+function buildTimelineMetrics(entriesAsc = []){
+  const orderedAsc = Array.isArray(entriesAsc) ? entriesAsc : [];
+  let totalTimelineMinutes = 0;
+  let timedSessionCount = 0;
+  const activeDays = new Set();
+  orderedAsc.forEach(entry => {
+    const duration = Number(entry?.durationMins || 0);
+    totalTimelineMinutes += duration;
+    if(duration > 0) timedSessionCount += 1;
+    if(entry?.dateKey) activeDays.add(entry.dateKey);
+  });
+  return {
+    entryCount:orderedAsc.length,
+    totalTimelineMinutes,
+    timedSessionCount,
+    untimedEntryCount:Math.max(0, orderedAsc.length - timedSessionCount),
+    activeDayCount:activeDays.size,
+    firstEntry:orderedAsc[0] || null,
+    latestEntry:orderedAsc[orderedAsc.length - 1] || null,
+  };
+}
+
+function filterTimelineEntriesByDate(entriesAsc = [], { startKey = "", endKey = "" } = {}){
+  return (entriesAsc || []).filter(entry => {
+    if(startKey && entry.dateKey < startKey) return false;
+    if(endKey && entry.dateKey > endKey) return false;
+    return true;
+  });
+}
+
+function buildTimelineRangeKeys(referenceDate = new Date()){
+  const todayDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+  const todayDateKey = toDateKey(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
+  const weekStart = new Date(todayDate);
+  weekStart.setDate(todayDate.getDate() - todayDate.getDay());
+  const monthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+  const weekDays = Array.from({ length:7 }, (_, index) => {
+    const dayDate = new Date(weekStart);
+    dayDate.setDate(weekStart.getDate() + index);
+    const key = toDateKey(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate());
+    return {
+      key,
+      label:TIMELINE_WEEKDAY_SHORT[index],
+      fullLabel:dayDate.toLocaleDateString("en-IN", { weekday:"short", day:"numeric", month:"short" }),
+      isToday:key === todayDateKey,
+    };
+  });
+  return {
+    todayKey:todayDateKey,
+    weekStartKey:weekDays[0]?.key || todayDateKey,
+    monthStartKey:toDateKey(monthStart.getFullYear(), monthStart.getMonth(), monthStart.getDate()),
+    weekDays,
+  };
+}
+
+function buildTimelineWeekBars(entriesAsc = [], rangeKeys = buildTimelineRangeKeys()){
+  const minsByDay = new Map((rangeKeys.weekDays || []).map(day => [day.key, 0]));
+  (entriesAsc || []).forEach(entry => {
+    if(entry.dateKey < rangeKeys.weekStartKey || entry.dateKey > rangeKeys.todayKey) return;
+    minsByDay.set(entry.dateKey, (minsByDay.get(entry.dateKey) || 0) + Number(entry.durationMins || 0));
+  });
+  return (rangeKeys.weekDays || []).map(day => ({
+    ...day,
+    minutes:minsByDay.get(day.key) || 0,
+  }));
+}
+
+function buildTimelineSnapshotFromEntries(entriesAsc = [], rangeKeys = buildTimelineRangeKeys()){
+  const orderedAsc = [...(entriesAsc || [])].sort(compareTimelineEntriesAsc);
+  return {
+    entriesAsc:orderedAsc,
+    total:buildClassTimelineSummary(null, { preloadedEntries:orderedAsc }),
+    today:buildTimelineMetrics(filterTimelineEntriesByDate(orderedAsc, { startKey:rangeKeys.todayKey, endKey:rangeKeys.todayKey })),
+    week:buildTimelineMetrics(filterTimelineEntriesByDate(orderedAsc, { startKey:rangeKeys.weekStartKey, endKey:rangeKeys.todayKey })),
+    month:buildTimelineMetrics(filterTimelineEntriesByDate(orderedAsc, { startKey:rangeKeys.monthStartKey, endKey:rangeKeys.todayKey })),
+    weekBars:buildTimelineWeekBars(orderedAsc, rangeKeys),
+  };
+}
+
 function buildTopicJourney(entries = []){
   const topicMap = new Map();
 
@@ -889,37 +1032,30 @@ function buildTopicJourney(entries = []){
 }
 
 function buildClassTimelineSummary(classNotes = {}, options = {}){
-  const entriesAsc = collectClassTimelineEntries(classNotes, options);
+  const entriesAsc = Array.isArray(options?.preloadedEntries)
+    ? [...options.preloadedEntries].sort(compareTimelineEntriesAsc)
+    : collectClassTimelineEntries(classNotes, options);
+  const metrics = buildTimelineMetrics(entriesAsc);
   const entries = [...entriesAsc].sort(compareTimelineEntriesForDisplay);
-  const timelineByDate = entries.reduce((acc, entry) => {
+  const timelineByDate = entriesAsc.reduce((acc, entry) => {
     if(!acc[entry.dateKey]) acc[entry.dateKey] = [];
     acc[entry.dateKey].push(entry);
     return acc;
   }, {});
-  const groupedTimeline = Object.entries(timelineByDate).map(([dateKey, groupEntries]) => ({
+  const groupedTimeline = Object.entries(timelineByDate).sort((a, b) => b[0].localeCompare(a[0])).map(([dateKey, groupEntries]) => ({
     dateKey,
     entries:groupEntries,
     timedMinutes:groupEntries.reduce((sum, entry) => sum + (entry.durationMins || 0), 0),
   }));
   const topicSummaries = buildTopicJourney(entriesAsc);
-  const totalTimelineMinutes = entriesAsc.reduce((sum, entry) => sum + (entry.durationMins || 0), 0);
-  const timedSessionCount = entriesAsc.filter(entry => entry.durationMins > 0).length;
-  const untimedEntryCount = entriesAsc.length - timedSessionCount;
-  const firstEntry = entriesAsc[0] || null;
-  const latestEntry = entriesAsc[entriesAsc.length - 1] || null;
   const latestTitledEntry = [...entriesAsc].reverse().find(entry => normaliseTopicTitle(entry?.title));
   const ongoingTopic = topicSummaries.find(topic => topic.isOngoing) || null;
   return {
+    ...metrics,
     entriesAsc,
     entries,
     groupedTimeline,
-    totalTimelineMinutes,
-    timedSessionCount,
-    untimedEntryCount,
-    activeDayCount:groupedTimeline.length,
     maxDayMinutes:Math.max(1, ...groupedTimeline.map(group => group.timedMinutes || 0)),
-    firstEntry,
-    latestEntry,
     latestTitledEntry,
     topicSummaries,
     topicCount:topicSummaries.length,
@@ -3573,6 +3709,7 @@ function ClassTrackerInner({user}){
   const [editingClass,setEditingClass] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [instFilter,      setInstFilter]      = useState("all"); // institute filter on home
+  const [statsInstituteName,setStatsInstituteName] = useState("");
 
   // Auto-reset the institute filter if the selected institute no longer has any active classes
   React.useEffect(() => {
@@ -3580,6 +3717,11 @@ function ClassTrackerInner({user}){
     const activeInsts = new Set((data.classes || []).filter(c => !c.left && !c.archived).map(c => c.institute || ""));
     if (!activeInsts.has(instFilter)) setInstFilter("all");
   }, [data.classes, instFilter]);
+  React.useEffect(() => {
+    if (statsInstituteName === "") return;
+    const activeInsts = new Set((data.classes || []).filter(c => !c.left && !c.archived).map(c => c.institute || ""));
+    if (!activeInsts.has(statsInstituteName)) setStatsInstituteName("");
+  }, [data.classes, statsInstituteName]);
   const [leaveModal,setLeaveModal]     = useState(null);
   const [historyClassId,setHistoryClassId] = useState(null);
   const [statsClassId,setStatsClassId] = useState(null);
@@ -3587,7 +3729,6 @@ function ClassTrackerInner({user}){
   const [signOutPrompt,setSignOutPrompt] = useState(false);
   const [exportOpen,setExportOpen]       = useState(false);
   const [teacherBackView,setTeacherBackView] = useState("home");
-  const [statPeriod,setStatPeriod]       = useState("month");
   const [isOffline,setIsOffline]         = useState(!navigator.onLine);
   const [inlineToast,setInlineToast]     = useState(null);
   const inlineToastTimer                 = useRef(null);
@@ -3975,6 +4116,16 @@ function ClassTrackerInner({user}){
     }, 1100);
   }, [lastDraftSavedAt, saveErr, saving]);
 
+  useEffect(() => {
+    if(!saveBadgeFlash) return;
+    if(view !== "stats" && view !== "classTimeline") return;
+    if(saveBadgeHideTimer.current){
+      window.clearTimeout(saveBadgeHideTimer.current);
+      saveBadgeHideTimer.current = null;
+    }
+    setSaveBadgeFlash(null);
+  }, [saveBadgeFlash, view]);
+
   useEffect(()=>{
     let cancelled = false;
     setLoading(true);
@@ -4236,6 +4387,7 @@ function ClassTrackerInner({user}){
     safeNav("stats", () => {
       setTeacherBackView(backTarget);
       setStatsClassId(null);
+      setStatsInstituteName("");
       setView("stats");
     });
   }
@@ -6176,12 +6328,13 @@ function ClassTrackerInner({user}){
 
     const timelineColor = getSectionTone(timelineClass.section);
     const timelineNotes = data.notes?.[timelineClass.id] || {};
-    const timelineSummary = buildClassTimelineSummary(timelineNotes);
+    const timelineTheme = getTeacherAnalyticsSurfaceStyles(timelineColor.bg, isDarkTeacherTheme);
+    const timelineRangeKeys = buildTimelineRangeKeys();
+    const timelineSnapshot = buildTimelineSnapshotFromEntries(collectClassTimelineEntries(timelineNotes), timelineRangeKeys);
+    const timelineSummary = timelineSnapshot.total;
     const timelineEntries = timelineSummary.entries;
     const groupedTimeline = timelineSummary.groupedTimeline;
     const totalTimelineMinutes = timelineSummary.totalTimelineMinutes;
-    const timedSessionCount = timelineSummary.timedSessionCount;
-    const activeDayCount = timelineSummary.activeDayCount;
     const maxDayMinutes = timelineSummary.maxDayMinutes;
     const untimedEntryCount = timelineSummary.untimedEntryCount;
     const topicSummaries = timelineSummary.topicSummaries;
@@ -6189,13 +6342,21 @@ function ClassTrackerInner({user}){
     const ongoingTopic = timelineSummary.ongoingTopic;
     const firstEntry = timelineSummary.firstEntry;
     const latestEntry = timelineSummary.latestEntry;
+    const timelineWeekBars = timelineSnapshot.weekBars;
+    const timelineWeekMaxMinutes = Math.max(1, ...timelineWeekBars.map(day => day.minutes || 0));
+    const timelineSummaryCards = [
+      { label:"Today", value:fmtMins(timelineSnapshot.today.totalTimelineMinutes), note:`${timelineSnapshot.today.entryCount} entr${timelineSnapshot.today.entryCount === 1 ? "y" : "ies"}` },
+      { label:"This week", value:fmtMins(timelineSnapshot.week.totalTimelineMinutes), note:`${timelineSnapshot.week.entryCount} entr${timelineSnapshot.week.entryCount === 1 ? "y" : "ies"}` },
+      { label:"This month", value:fmtMins(timelineSnapshot.month.totalTimelineMinutes), note:`${timelineSnapshot.month.entryCount} entr${timelineSnapshot.month.entryCount === 1 ? "y" : "ies"}` },
+      { label:"Active days", value:String(timelineSummary.activeDayCount), note:`${timelineSummary.timedSessionCount} timed session${timelineSummary.timedSessionCount === 1 ? "" : "s"}` },
+    ];
     const timelineBackButtonStyle = {
-      background:"rgba(255,255,255,0.10)",
-      border:"1px solid rgba(255,255,255,0.18)",
+      background:timelineTheme.buttonBg,
+      border:`1px solid ${timelineTheme.buttonBorder}`,
       borderRadius:10,
       padding:"8px 12px",
       cursor:"pointer",
-      color:"rgba(255,255,255,0.88)",
+      color:timelineTheme.buttonText,
       fontSize:13,
       fontWeight:700,
       display:"flex",
@@ -6221,56 +6382,83 @@ function ClassTrackerInner({user}){
           right={<button onClick={()=>safeNav("stats")} style={timelineBackButtonStyle}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Stats</button>}
         />
         <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:`16px 14px ${isMobile ? mobileBottomNavPad : "48px"}`,maxWidth:760,margin:"0 auto",width:"100%"}}>
-          <div style={{background:timelineColor.bg,border:`1.5px solid rgba(15,23,42,0.92)`,borderRadius:22,padding:"18px 18px 16px",boxShadow:G.shadowMd,marginBottom:14}}>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.66)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.62,marginBottom:8}}>Class timeline</div>
-            <div style={{fontSize:28,fontWeight:800,color:"#FFFFFF",fontFamily:G.display,letterSpacing:-0.55,lineHeight:1.02}}>{timelineClass.section}</div>
+          <div style={{background:timelineTheme.heroBg,border:`1px solid ${timelineTheme.heroBorder}`,borderRadius:24,padding:"18px 18px 16px",boxShadow:G.shadowMd,marginBottom:14}}>
+            <div style={{fontSize:11,color:timelineTheme.heroEyebrow,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.62,marginBottom:8}}>Class timeline</div>
+            <div style={{fontSize:28,fontWeight:800,color:timelineTheme.heroText,fontFamily:G.display,letterSpacing:-0.55,lineHeight:1.02}}>{timelineClass.section}</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
-              <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",color:G.text,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:700,border:"1px solid rgba(15,23,42,0.18)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:7,background:timelineTheme.heroChipBg,color:timelineTheme.heroChipText,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:700,border:`1px solid ${timelineTheme.heroChipBorder}`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                 <span style={{width:8,height:8,borderRadius:999,background:timelineColor.bg,flexShrink:0}}/>
                 {timelineClass.institute || "No institute"}
               </span>
-              {timelineClass.subject && <span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",color:G.text,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:700,border:"1px solid rgba(15,23,42,0.18)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{timelineClass.subject}</span>}
+              {timelineClass.subject && <span style={{display:"inline-flex",alignItems:"center",background:timelineTheme.heroChipBg,color:timelineTheme.heroChipText,borderRadius:999,padding:"6px 11px",fontSize:12,fontWeight:700,border:`1px solid ${timelineTheme.heroChipBorder}`,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{timelineClass.subject}</span>}
             </div>
-            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1.2fr 0.8fr",gap:10,marginTop:14}}>
-              <div style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.14)",borderRadius:16,padding:"12px 13px"}}>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.62)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6}}>
-                  {ongoingTopic ? "Current topic" : "Latest topic"}
+            <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:16,marginTop:16,flexWrap:"wrap"}}>
+              <div style={{flex:"1 1 260px",minWidth:0}}>
+                <div style={{fontSize:12,color:timelineTheme.heroEyebrow,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6}}>All-time teaching</div>
+                <div style={{fontSize:42,fontWeight:800,color:timelineTheme.heroText,fontFamily:G.display,lineHeight:0.98,letterSpacing:-1.2}}>{fmtMins(totalTimelineMinutes)}</div>
+                <div style={{fontSize:13.5,color:timelineTheme.heroMuted,lineHeight:1.6,marginTop:8}}>
+                  {timelineEntries.length} entr{timelineEntries.length === 1 ? "y" : "ies"} • {timelineSummary.timedSessionCount} timed session{timelineSummary.timedSessionCount === 1 ? "" : "s"} • {topicSummaries.length} tracked topic{topicSummaries.length === 1 ? "" : "s"}
                 </div>
-                <div style={{fontSize:17,fontWeight:800,color:"#FFFFFF",fontFamily:G.display,letterSpacing:-0.22,lineHeight:1.15}}>
-                  {ongoingTopic?.title || latestTopic?.title || "Topic details will appear as entries are added"}
-                </div>
-                {(ongoingTopic || latestTopic) && (
-                  <div style={{fontSize:12.5,color:"rgba(255,255,255,0.76)",lineHeight:1.55,marginTop:6}}>
-                    Started {formatTimelineMoment((ongoingTopic || latestTopic).startedAtKey, (ongoingTopic || latestTopic).startedAtTime)}
-                  </div>
-                )}
               </div>
-              <div style={{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.14)",borderRadius:16,padding:"12px 13px"}}>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.62)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6}}>Latest log</div>
-                <div style={{fontSize:18,fontWeight:800,color:"#FFFFFF",fontFamily:G.display,letterSpacing:-0.22,lineHeight:1.15}}>
-                  {latestEntry ? formatTimelineMoment(latestEntry.dateKey, latestEntry.timeStart) : "No entries yet"}
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:10,flex:"1 1 320px",minWidth:0}}>
+                <div style={{background:timelineTheme.metricSoftBg,border:`1px solid ${timelineTheme.metricSoftBorder}`,borderRadius:16,padding:"12px 13px"}}>
+                  <div style={{fontSize:11,color:timelineTheme.heroEyebrow,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6}}>
+                    {ongoingTopic ? "Current topic" : "Latest topic"}
+                  </div>
+                  <div style={{fontSize:17,fontWeight:800,color:timelineTheme.heroText,fontFamily:G.display,letterSpacing:-0.22,lineHeight:1.15}}>
+                    {ongoingTopic?.title || latestTopic?.title || "Topic details will appear as entries are added"}
+                  </div>
+                  {(ongoingTopic || latestTopic) && (
+                    <div style={{fontSize:12.5,color:timelineTheme.heroMuted,lineHeight:1.55,marginTop:6}}>
+                      Started {formatTimelineMoment((ongoingTopic || latestTopic).startedAtKey, (ongoingTopic || latestTopic).startedAtTime)}
+                    </div>
+                  )}
                 </div>
-                <div style={{fontSize:12.5,color:"rgba(255,255,255,0.76)",lineHeight:1.55,marginTop:6}}>
-                  {latestEntry?.title ? `Topic: ${latestEntry.title}` : "Every class log for this section will stack here in order."}
+                <div style={{background:timelineTheme.metricSoftBg,border:`1px solid ${timelineTheme.metricSoftBorder}`,borderRadius:16,padding:"12px 13px"}}>
+                  <div style={{fontSize:11,color:timelineTheme.heroEyebrow,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6}}>Latest log</div>
+                  <div style={{fontSize:18,fontWeight:800,color:timelineTheme.heroText,fontFamily:G.display,letterSpacing:-0.22,lineHeight:1.15}}>
+                    {latestEntry ? formatTimelineMoment(latestEntry.dateKey, latestEntry.timeStart) : "No entries yet"}
+                  </div>
+                  <div style={{fontSize:12.5,color:timelineTheme.heroMuted,lineHeight:1.55,marginTop:6}}>
+                    {latestEntry?.title ? `Topic: ${latestEntry.title}` : "Every class log for this section will stack here in order."}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(3,minmax(0,1fr))",gap:10,marginBottom:16}}>
-            {[
-              { label:"Timed total", value:fmtMins(totalTimelineMinutes) },
-              { label:"Entries", value:String(timelineEntries.length) },
-              { label:"Timed sessions", value:String(timedSessionCount) },
-              { label:"Active days", value:String(activeDayCount) },
-              { label:"Topics tracked", value:String(timelineSummary.topicCount) },
-              { label:"Completed topics", value:String(timelineSummary.completedTopicCount) },
-            ].map(item=>(
-              <div key={item.label} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 14px 13px",boxShadow:G.shadowSm}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:10,marginBottom:16}}>
+            {timelineSummaryCards.map(item=>(
+              <div key={item.label} style={{background:timelineTheme.metricBg,border:`1px solid ${timelineTheme.metricBorder}`,borderRadius:16,padding:"14px 14px 13px",boxShadow:G.shadowSm}}>
                 <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,letterSpacing:-0.45}}>{item.value}</div>
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginTop:7}}>{item.label}</div>
+                <div style={{fontSize:12,color:G.textM,lineHeight:1.45,marginTop:6}}>{item.note}</div>
               </div>
             ))}
+          </div>
+
+          <div style={{background:timelineTheme.sectionBg,border:`1px solid ${timelineTheme.sectionBorder}`,borderRadius:18,padding:"14px 14px 12px",boxShadow:G.shadowSm,marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5}}>Current week</div>
+                <div style={{fontSize:13.5,color:G.textL,marginTop:3}}>Teaching time by day for this section.</div>
+              </div>
+              <div style={{fontSize:12.5,color:G.textM,fontWeight:700}}>{fmtMins(timelineSnapshot.week.totalTimelineMinutes)} this week</div>
+            </div>
+            <div style={{display:"flex",alignItems:"flex-end",gap:8,height:88,marginBottom:10}}>
+              {timelineWeekBars.map(day => (
+                <div key={day.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
+                  <div title={`${day.fullLabel} • ${fmtMins(day.minutes)}`} style={{width:"100%",height:day.minutes > 0 ? `${Math.max(8, Math.round((day.minutes / timelineWeekMaxMinutes) * 78))}px` : "5px",borderRadius:"8px 8px 3px 3px",background:day.minutes > 0 ? timelineTheme.progressFill : timelineTheme.graphBase,transition:"height 0.22s ease-out"}} />
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              {timelineWeekBars.map(day => (
+                <div key={day.key} style={{flex:1,textAlign:"center",fontSize:10.5,fontWeight:800,color:day.isToday ? timelineTheme.accent : G.textL,textTransform:"uppercase",letterSpacing:0.2}}>
+                  {day.label}
+                </div>
+              ))}
+            </div>
           </div>
 
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(0,1fr))",gap:10,marginBottom:14}}>
@@ -6291,7 +6479,7 @@ function ClassTrackerInner({user}){
                 note:untimedEntryCount > 0 ? "These stay in the history even without duration." : "Every current entry here has a teaching time.",
               },
             ].map(item => (
-              <div key={item.label} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
+              <div key={item.label} style={{background:timelineTheme.metricBg,border:`1px solid ${timelineTheme.metricBorder}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,marginBottom:7}}>{item.label}</div>
                 <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.18,lineHeight:1.2}}>{item.value}</div>
                 <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:7}}>{item.note}</div>
@@ -6308,7 +6496,7 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:12.5,color:G.textM,fontWeight:700}}>{topicSummaries.length} tracked topic{topicSummaries.length!==1?"s":""}</div>
             </div>
             {topicSummaries.length === 0 ? (
-              <div style={{background:G.surface,borderRadius:18,border:`2px dashed ${G.border}`,padding:"28px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+              <div style={{background:timelineTheme.sectionBg,borderRadius:18,border:`2px dashed ${timelineTheme.sectionBorder}`,padding:"28px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
                 <div style={{width:56,height:56,borderRadius:16,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}><AppIcon icon={IconBook2} size={26} color={G.textM} /></div>
                 <div style={{fontSize:16,color:G.textM,fontWeight:700}}>Topic history will appear here</div>
                 <div style={{fontSize:14,color:G.textL,marginTop:6}}>Once titled entries are added, this section will show when each topic started and how it progressed.</div>
@@ -6319,7 +6507,7 @@ function ClassTrackerInner({user}){
                   const latestStatusTone = topic.latestStatus && STATUS_STYLES[topic.latestStatus] ? STATUS_STYLES[topic.latestStatus] : null;
                   const latestTagTone = topic.latestTag && TAG_STYLES[topic.latestTag] ? TAG_STYLES[topic.latestTag] : null;
                   return(
-                    <div key={topic.key} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
+                    <div key={topic.key} style={{background:timelineTheme.sectionBg,border:`1px solid ${timelineTheme.sectionBorder}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
                       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.22,lineHeight:1.2}}>{topic.title}</div>
@@ -6345,18 +6533,18 @@ function ClassTrackerInner({user}){
                       </div>
 
                       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:10,marginTop:12}}>
-                        <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 12px"}}>
+                        <div style={{background:timelineTheme.sectionSoftBg,border:`1px solid ${timelineTheme.sectionSoftBorder}`,borderRadius:14,padding:"11px 12px"}}>
                           <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5,marginBottom:5}}>Started</div>
                           <div style={{fontSize:14,fontWeight:700,color:G.text,lineHeight:1.45}}>{formatTimelineMoment(topic.startedAtKey, topic.startedAtTime)}</div>
                         </div>
-                        <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 12px"}}>
+                        <div style={{background:timelineTheme.sectionSoftBg,border:`1px solid ${timelineTheme.sectionSoftBorder}`,borderRadius:14,padding:"11px 12px"}}>
                           <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5,marginBottom:5}}>{topic.isCompleted ? "Ended" : "Last seen"}</div>
                           <div style={{fontSize:14,fontWeight:700,color:G.text,lineHeight:1.45}}>{formatTimelineMoment(topic.endedAtKey, topic.endedAtTime)}</div>
                         </div>
                       </div>
 
                       {(latestStatusTone || latestTagTone || topic.latestBody) && (
-                        <div style={{marginTop:12,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 12px"}}>
+                        <div style={{marginTop:12,background:timelineTheme.sectionSoftBg,border:`1px solid ${timelineTheme.sectionSoftBorder}`,borderRadius:14,padding:"11px 12px"}}>
                           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:topic.latestBody ? 7 : 0}}>
                             {latestTagTone && <span style={{background:latestTagTone.bg,color:latestTagTone.text,fontSize:11,borderRadius:999,padding:"4px 8px",fontFamily:G.mono,fontWeight:700}}>{latestTagTone.label}</span>}
                             {latestStatusTone && <span style={{background:latestStatusTone.bg,color:latestStatusTone.text,fontSize:11,borderRadius:999,padding:"4px 8px",fontFamily:G.sans,fontWeight:700}}>{latestStatusTone.label}</span>}
@@ -6372,7 +6560,7 @@ function ClassTrackerInner({user}){
           </div>
 
           {groupedTimeline.length===0 ? (
-            <div style={{background:G.surface,borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+            <div style={{background:timelineTheme.sectionBg,borderRadius:18,border:`2px dashed ${timelineTheme.sectionBorder}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
               <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconClockHour4} size={28} color={G.textM} /></div>
               <div style={{fontSize:16,color:G.textM,fontWeight:600}}>No entries for this class yet</div>
               <div style={{fontSize:14,color:G.textL,marginTop:6}}>Once entries are added, this timeline will show every date and time block here.</div>
@@ -6387,14 +6575,14 @@ function ClassTrackerInner({user}){
                 <div style={{fontSize:12.5,color:G.textM,fontWeight:700}}>{timelineEntries.length} entry{timelineEntries.length!==1?"ies":"y"}</div>
               </div>
               {groupedTimeline.map(group=>(
-                <div key={group.dateKey} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
+                <div key={group.dateKey} style={{background:timelineTheme.sectionBg,border:`1px solid ${timelineTheme.sectionBorder}`,borderRadius:18,padding:"15px 15px 14px",boxShadow:G.shadowSm}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12,flexWrap:"wrap"}}>
                     <div>
                       <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>{formatDateLabel(group.dateKey)}</div>
                       <div style={{fontSize:12,color:G.textM,marginTop:3}}>{group.entries.length} entry{group.entries.length!==1?"ies":"y"} · {fmtMins(group.timedMinutes)}</div>
                     </div>
                     <div style={{minWidth:isMobile?96:132,flex:isMobile?1:"0 0 132px",maxWidth:isMobile?"100%":"132px"}}>
-                      <div style={{height:8,background:G.border,borderRadius:999,overflow:"hidden"}}>
+                      <div style={{height:8,background:timelineTheme.progressTrack,borderRadius:999,overflow:"hidden"}}>
                         <div style={{height:"100%",width:`${group.timedMinutes > 0 ? Math.max(8, Math.round((group.timedMinutes / maxDayMinutes) * 100)) : 0}%`,background:timelineColor.bg,borderRadius:999,transition:"width 180ms ease-out"}}/>
                       </div>
                     </div>
@@ -6414,9 +6602,9 @@ function ClassTrackerInner({user}){
                           </div>
                           <div style={{width:18,position:"relative",display:"flex",justifyContent:"center",flexShrink:0}}>
                             {!isLast && <div style={{position:"absolute",top:12,bottom:-14,width:2,borderRadius:999,background:hexToRgba(timelineColor.bg, 0.24)}}/>}
-                            <div style={{width:12,height:12,borderRadius:999,background:timelineColor.bg,border:"2px solid #FFFFFF",boxShadow:`0 0 0 1px ${hexToRgba(timelineColor.bg, 0.22)}`,marginTop:6}}/>
+                            <div style={{width:12,height:12,borderRadius:999,background:timelineColor.bg,border:`2px solid ${timelineTheme.sectionBg}`,boxShadow:`0 0 0 1px ${hexToRgba(timelineColor.bg, 0.22)}`,marginTop:6}}/>
                           </div>
-                          <div style={{flex:1,minWidth:0,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:16,padding:"12px 13px 11px"}}>
+                          <div style={{flex:1,minWidth:0,background:timelineTheme.sectionSoftBg,border:`1px solid ${timelineTheme.sectionSoftBorder}`,borderRadius:16,padding:"12px 13px 11px"}}>
                             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:(entry.title || entry.body) ? 8 : 0}}>
                               <span style={{background:tag.bg,color:tag.text,fontSize:11.5,borderRadius:999,padding:"4px 9px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
                               {statusTone && <span style={{background:statusTone.bg,color:statusTone.text,fontSize:11.5,borderRadius:999,padding:"4px 9px",fontFamily:G.sans,fontWeight:700}}>{statusTone.label}</span>}
@@ -6442,112 +6630,75 @@ function ClassTrackerInner({user}){
   // STATS VIEW — teaching hours breakdown
   // ══════════════════════════════════════════════════════════════════════
   if(view==="stats"){
-    function pad2(n){return String(n).padStart(2,"0");}
-    function toKey(d){return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;}
     function fmtMins(m){
       if(!m||m<=0)return"0m";
       const h=Math.floor(m/60),min=m%60;
       return min?`${h}h ${min}m`:`${h}h`;
     }
 
-    // Date range for period
-    const now=new Date();
-    let rangeStart;
-    if(statPeriod==="week"){
-      rangeStart=new Date(now);
-      rangeStart.setDate(now.getDate()-now.getDay()); // Sunday of current week
-    } else if(statPeriod==="month"){
-      rangeStart=new Date(now.getFullYear(),now.getMonth(),1);
-    } else {
-    // session: April 1 of current academic year
-      const sesYear=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;
-      rangeStart=new Date(sesYear,3,1);
-    }
-    const rangeStartKey=toKey(rangeStart);
-    const todayK=todayKey();
-
-    const DAYS_SHORT=["Su","Mo","Tu","We","Th","Fr","Sa"];
-    const dayMins=[0,0,0,0,0,0,0];
-    let longestSession=0;
-    const activeDaySet = new Set();
-    const instituteBuckets = new Map();
-
-    const classStats=data.classes.filter(c=>!c.left).map(cls=>{
-      const ic=getSectionTone(cls.section);
-      const classNotes = data.notes?.[cls.id] || {};
-      const periodSummary = buildClassTimelineSummary(classNotes, { startKey:rangeStartKey, endKey:todayK });
-      const allTimeSummary = buildClassTimelineSummary(classNotes);
-
-      periodSummary.entriesAsc.forEach(entry => {
-        activeDaySet.add(entry.dateKey);
-        if(entry.durationMins > 0){
-          dayMins[new Date(entry.dateKey).getDay()] += entry.durationMins;
-          if(entry.durationMins > longestSession) longestSession = entry.durationMins;
-        }
-      });
-
-      const latestEntry = periodSummary.latestEntry || allTimeSummary.latestEntry || null;
-      const latestTopic = periodSummary.latestTopic || allTimeSummary.latestTopic || null;
-      const ongoingTopic = periodSummary.ongoingTopic || allTimeSummary.ongoingTopic || null;
-      const topicCount = periodSummary.topicCount || allTimeSummary.topicCount;
-      const completedTopicCount = periodSummary.completedTopicCount || allTimeSummary.completedTopicCount;
-      const bucketKey = String(cls.institute || "No institute").trim() || "No institute";
-      const currentBucket = instituteBuckets.get(bucketKey) || {
-        name:bucketKey,
-        color:ic,
-        mins:0,
-        sessions:0,
-        entries:0,
-        classCount:0,
-        topics:0,
-      };
-      currentBucket.mins += periodSummary.totalTimelineMinutes;
-      currentBucket.sessions += periodSummary.timedSessionCount;
-      currentBucket.entries += periodSummary.entries.length;
-      currentBucket.classCount += 1;
-      currentBucket.topics += topicCount;
-      instituteBuckets.set(bucketKey, currentBucket);
-
-      return{
+    const statsRangeKeys = buildTimelineRangeKeys();
+    const activeClasses = data.classes.filter(c=>!c.left);
+    const classStats = activeClasses.map(cls => {
+      const tone = getSectionTone(cls.section);
+      const snapshot = buildTimelineSnapshotFromEntries(collectClassTimelineEntries(data.notes?.[cls.id] || {}), statsRangeKeys);
+      const featuredTopic = snapshot.total.ongoingTopic || snapshot.total.latestTopic || null;
+      return {
         cls,
-        ic,
-        mins:periodSummary.totalTimelineMinutes,
-        sessions:periodSummary.timedSessionCount,
-        entryCount:periodSummary.entries.length,
-        untimedEntryCount:periodSummary.untimedEntryCount,
-        activeDays:periodSummary.activeDayCount,
-        topicCount,
-        completedTopicCount,
-        latestEntry,
-        latestTopic,
-        ongoingTopic,
-        firstEntry:periodSummary.firstEntry || allTimeSummary.firstEntry || null,
+        tone,
+        snapshot,
+        featuredTopic,
+        latestEntry:snapshot.total.latestEntry,
+        firstEntry:snapshot.total.firstEntry,
       };
-    }).sort((a,b)=>(b.mins-a.mins) || (b.entryCount-a.entryCount) || a.cls.section.localeCompare(b.cls.section));
+    }).sort((a,b)=>(b.snapshot.total.totalTimelineMinutes-a.snapshot.total.totalTimelineMinutes) || (b.snapshot.total.entryCount-a.snapshot.total.entryCount) || a.cls.section.localeCompare(b.cls.section));
 
-    const grandTotal=classStats.reduce((sum,item)=>sum+item.mins,0);
-    const grandSessions=classStats.reduce((sum,item)=>sum+item.sessions,0);
-    const grandEntries=classStats.reduce((sum,item)=>sum+item.entryCount,0);
-    const untimedEntries=classStats.reduce((sum,item)=>sum+item.untimedEntryCount,0);
-    const trackedTopics=classStats.reduce((sum,item)=>sum+item.topicCount,0);
-    const completedTopics=classStats.reduce((sum,item)=>sum+item.completedTopicCount,0);
-    const avgSession=grandSessions>0?Math.round(grandTotal/grandSessions):0;
-    const maxClassMins=Math.max(1, ...classStats.map(item=>item.mins || 0));
-    const maxDayMins=Math.max(...dayMins,1);
+    const teacherSnapshot = buildTimelineSnapshotFromEntries(
+      classStats.flatMap(item => item.snapshot.entriesAsc).sort(compareTimelineEntriesAsc),
+      statsRangeKeys
+    );
+    const statsWeekMaxMinutes = Math.max(1, ...teacherSnapshot.weekBars.map(day => day.minutes || 0));
+    const instituteCards = [...classStats.reduce((map, item) => {
+      const bucketKey = String(item.cls.institute || "No institute").trim() || "No institute";
+      const current = map.get(bucketKey) || {
+        name:bucketKey,
+        tone:instColor(bucketKey),
+        classes:[],
+        entriesAsc:[],
+      };
+      current.classes.push(item);
+      current.entriesAsc.push(...item.snapshot.entriesAsc);
+      map.set(bucketKey, current);
+      return map;
+    }, new Map()).values()].map(bucket => {
+      const orderedEntries = [...bucket.entriesAsc].sort(compareTimelineEntriesAsc);
+      const snapshot = buildTimelineSnapshotFromEntries(orderedEntries, statsRangeKeys);
+      return {
+        ...bucket,
+        snapshot,
+        latestEntry:snapshot.total.latestEntry,
+      };
+    }).sort((a,b)=>(b.snapshot.total.totalTimelineMinutes-a.snapshot.total.totalTimelineMinutes) || (b.snapshot.total.entryCount-a.snapshot.total.entryCount) || a.name.localeCompare(b.name));
+
     const statsBackTarget = teacherBackView === "profile" ? "profile" : "home";
-    const statsContextLabel = statsBackTarget === "profile" ? "Profile insight" : "Teaching insight";
+    const statsContextLabel = statsBackTarget === "profile" ? "Profile insight" : "Teaching overview";
     const hasClasses = classStats.length > 0;
-    const hasTimedData = grandTotal > 0 || grandEntries > 0;
-    const instituteBreakdown = [...instituteBuckets.values()].sort((a,b)=>(b.mins-a.mins) || (b.entries-a.entries) || a.name.localeCompare(b.name));
-    const topClassStat = classStats[0] || null;
-    const latestLoggedEntry = classStats
-      .map(item => item.latestEntry)
-      .filter(Boolean)
-      .sort(compareTimelineEntriesAsc)
-      .pop() || null;
-    const strongestDayIndex = dayMins.findIndex(value => value === maxDayMins && value > 0);
-
-    const navBtnStyle={background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"7px 12px",cursor:"pointer",color:"rgba(255,255,255,0.85)",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",fontFamily:G.sans};
+    const hasMultipleInstitutes = instituteCards.length > 1;
+    const selectedInstituteCard = hasMultipleInstitutes
+      ? instituteCards.find(item => item.name === statsInstituteName) || null
+      : (instituteCards[0] || null);
+    const statsAccent = selectedInstituteCard?.tone?.bg || (hasMultipleInstitutes ? (isDarkTeacherTheme ? "#4DB7C8" : "#0F6B78") : (classStats[0]?.tone?.bg || (isDarkTeacherTheme ? "#4DB7C8" : "#0F6B78")));
+    const statsTheme = getTeacherAnalyticsSurfaceStyles(statsAccent, isDarkTeacherTheme);
+    const visibleClassStats = hasMultipleInstitutes
+      ? (selectedInstituteCard ? classStats.filter(item => (String(item.cls.institute || "No institute").trim() || "No institute") === selectedInstituteCard.name) : [])
+      : classStats;
+    const statsHeroCards = [
+      { label:"Today", value:fmtMins(teacherSnapshot.today.totalTimelineMinutes), note:`${teacherSnapshot.today.entryCount} entr${teacherSnapshot.today.entryCount === 1 ? "y" : "ies"}` },
+      { label:"This week", value:fmtMins(teacherSnapshot.week.totalTimelineMinutes), note:`${teacherSnapshot.week.entryCount} entr${teacherSnapshot.week.entryCount === 1 ? "y" : "ies"}` },
+      { label:"This month", value:fmtMins(teacherSnapshot.month.totalTimelineMinutes), note:`${teacherSnapshot.month.entryCount} entr${teacherSnapshot.month.entryCount === 1 ? "y" : "ies"}` },
+      { label:"Entries", value:String(teacherSnapshot.total.entryCount), note:`${teacherSnapshot.total.activeDayCount} active day${teacherSnapshot.total.activeDayCount === 1 ? "" : "s"}` },
+    ];
+    const latestLoggedEntry = teacherSnapshot.total.latestEntry;
+    const navBtnStyle={background:statsTheme.buttonBg,border:`1px solid ${statsTheme.buttonBorder}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",color:statsTheme.buttonText,fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent",fontFamily:G.sans};
 
     return(
       <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
@@ -6555,22 +6706,11 @@ function ClassTrackerInner({user}){
         <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav(statsBackTarget)} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<button onClick={()=>safeNav(statsBackTarget)} style={navBtnStyle}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Back</button>}/>
 
-        <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:`16px 14px ${isMobile ? mobileBottomNavPad : "48px"}`,maxWidth:680,margin:"0 auto",width:"100%"}}>
-          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"16px 16px 15px",boxShadow:G.shadowSm,marginBottom:14}}>
+        <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:`16px 14px ${isMobile ? mobileBottomNavPad : "48px"}`,maxWidth:760,margin:"0 auto",width:"100%"}}>
+          <div style={{background:statsTheme.metricBg,border:`1px solid ${statsTheme.metricBorder}`,borderRadius:18,padding:"16px 16px 15px",boxShadow:G.shadowSm,marginBottom:14}}>
             <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.65,marginBottom:6}}>{statsContextLabel}</div>
-            <div style={{fontSize:23,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.45,lineHeight:1.15,marginBottom:6}}>View Stats</div>
-            <div style={{fontSize:14,color:G.textM,lineHeight:1.6}}>This stays connected to your profile workspace so you can review teaching time and head right back.</div>
-          </div>
-
-          {/* Period tabs */}
-          <div style={{display:"flex",background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:3,marginBottom:18,gap:2}}>
-            {[["week","This Week"],["month","This Month"],["session","Session"]].map(([k,l])=>(
-              <button key={k} onClick={()=>setStatPeriod(k)}
-                style={{flex:1,padding:"8px 0",borderRadius:9,border:"none",cursor:"pointer",fontFamily:G.display,fontSize:13,fontWeight:600,transition:"all 0.15s",WebkitTapHighlightColor:"transparent",
-                  background:statPeriod===k?G.forest:"transparent",color:statPeriod===k?"#fff":G.textM}}>
-                {l}
-              </button>
-            ))}
+            <div style={{fontSize:23,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.45,lineHeight:1.15,marginBottom:6}}>View stats</div>
+            <div style={{fontSize:14,color:G.textM,lineHeight:1.6}}>Teaching time, current progress, and weekly rhythm stay together here so drilling into classes feels much cleaner.</div>
           </div>
 
           {!hasClasses?(
@@ -6581,37 +6721,29 @@ function ClassTrackerInner({user}){
             </div>
           ):(
             <>
-              <div style={{background:G.forest,borderRadius:20,padding:"20px",marginBottom:14,display:"flex",alignItems:"center",gap:16}}>
-                <div style={{width:52,height:52,borderRadius:14,background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><AppIcon icon={IconClockHour4} size={26} color="#fff" /></div>
+              <div style={{background:statsTheme.heroBg,border:`1px solid ${statsTheme.heroBorder}`,borderRadius:24,padding:"20px",marginBottom:14,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+                <div style={{width:52,height:52,borderRadius:14,background:statsTheme.heroChipBg,border:`1px solid ${statsTheme.heroChipBorder}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><AppIcon icon={IconClockHour4} size={26} color={statsTheme.accent} /></div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Total Teaching Time</div>
-                  <div style={{fontSize:36,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1,letterSpacing:-1}}>{fmtMins(grandTotal)}</div>
-                  <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginTop:4}}>{classStats.length} {classStats.length===1?"section":"sections"} · {grandEntries} entries · {grandSessions} timed sessions</div>
+                  <div style={{fontSize:12,color:statsTheme.heroEyebrow,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Total teaching time</div>
+                  <div style={{fontSize:38,fontWeight:800,color:statsTheme.heroText,fontFamily:G.display,lineHeight:1,letterSpacing:-1.1}}>{fmtMins(teacherSnapshot.total.totalTimelineMinutes)}</div>
+                  <div style={{fontSize:13.5,color:statsTheme.heroMuted,marginTop:5,lineHeight:1.5}}>{classStats.length} {classStats.length===1?"section":"sections"} • {teacherSnapshot.total.entryCount} entries • {teacherSnapshot.total.timedSessionCount} timed sessions</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:12}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.12)",color:"#FFFFFF",borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,border:"1px solid rgba(255,255,255,0.14)"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:statsTheme.heroChipBg,color:statsTheme.heroChipText,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${statsTheme.heroChipBorder}`}}>
                       <AppIcon icon={IconCalendar} size={13} color="currentColor" />
-                      {activeDaySet.size} active day{activeDaySet.size!==1?"s":""}
+                      {teacherSnapshot.total.activeDayCount} active day{teacherSnapshot.total.activeDayCount!==1?"s":""}
                     </span>
-                    {topClassStat && (
-                      <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.12)",color:"#FFFFFF",borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,border:"1px solid rgba(255,255,255,0.14)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        <AppIcon icon={IconBook2} size={13} color="currentColor" />
-                        Top section: {topClassStat.cls.section}
-                      </span>
-                    )}
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:statsTheme.heroChipBg,color:statsTheme.heroChipText,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${statsTheme.heroChipBorder}`}}>
+                      <AppIcon icon={IconBuilding} size={13} color="currentColor" />
+                      {instituteCards.length} institute{instituteCards.length===1?"":"s"}
+                    </span>
+                    {latestLoggedEntry && <span style={{display:"inline-flex",alignItems:"center",gap:6,background:statsTheme.heroChipBg,color:statsTheme.heroChipText,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:700,border:`1px solid ${statsTheme.heroChipBorder}`}}>Latest log {formatTimelineMoment(latestLoggedEntry.dateKey, latestLoggedEntry.timeStart)}</span>}
                   </div>
                 </div>
               </div>
 
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(3,minmax(0,1fr))",gap:10,marginBottom:14}}>
-                {[
-                  { label:"Entries", value:String(grandEntries), note:`Saved in ${statPeriod==="week"?"this week":statPeriod==="month"?"this month":"this session"}` },
-                  { label:"Avg / Session", value:fmtMins(avgSession), note:`Longest ${fmtMins(longestSession)}` },
-                  { label:"Active days", value:String(activeDaySet.size), note:strongestDayIndex >= 0 ? `Peak on ${DAYS_SHORT[strongestDayIndex]}` : "Waiting for timed data" },
-                  { label:"Tracked topics", value:String(trackedTopics), note:`${completedTopics} completed` },
-                  { label:"Untimed notes", value:String(untimedEntries), note:untimedEntries > 0 ? "Still shown in every class timeline" : "All current entries have time blocks" },
-                  { label:"Institutes", value:String(instituteBreakdown.length), note:"Unique color-coded teaching groups" },
-                ].map(item => (
-                  <div key={item.label} style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:"14px 14px 13px",boxShadow:G.shadowSm}}>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:10,marginBottom:14}}>
+                {statsHeroCards.map(item => (
+                  <div key={item.label} style={{background:statsTheme.metricBg,borderRadius:14,border:`1px solid ${statsTheme.metricBorder}`,padding:"14px 14px 13px",boxShadow:G.shadowSm}}>
                     <div style={{fontSize:11,fontWeight:700,color:G.textL,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{item.label}</div>
                     <div style={{fontSize:26,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
                     <div style={{fontSize:12,color:G.textM,marginTop:6,lineHeight:1.45}}>{item.note}</div>
@@ -6619,138 +6751,199 @@ function ClassTrackerInner({user}){
                 ))}
               </div>
 
-              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,padding:"13px 14px",boxShadow:G.shadowSm,marginBottom:14}}>
-                <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
-                  {hasTimedData
-                    ? "Every section below opens its own full timeline with teaching hours, topic start/end markers, and each saved note in order."
-                    : "Even if time totals are still empty, every section below is clickable so you can inspect its full entry timeline."}
-                </div>
-              </div>
-
-              <div style={{background:G.surface,borderRadius:14,border:`1px solid ${G.border}`,padding:14,marginBottom:14}}>
-                <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Hours by Day</div>
-                <div style={{display:"flex",alignItems:"flex-end",gap:6,height:72,marginBottom:8}}>
-                  {dayMins.map((m,i)=>(
-                    <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
-                      <div title={fmtMins(m)} style={{width:"100%",borderRadius:"5px 5px 0 0",background:m>0?G.green:G.border,
-                        height:m>0?Math.max((m/maxDayMins)*68,4)+"px":"3px",transition:"height 0.5s cubic-bezier(0.22,1,0.36,1)",minHeight:3}}/>
-                    </div>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:6}}>
-                  {DAYS_SHORT.map((d,i)=>(
-                    <div key={i} style={{flex:1,textAlign:"center",fontSize:10,fontWeight:600,color:i===0?G.red:G.textL,textTransform:"uppercase"}}>{d}</div>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,padding:"14px 14px 12px",boxShadow:G.shadowSm,marginBottom:14}}>
+              <div style={{background:statsTheme.sectionBg,borderRadius:18,border:`1px solid ${statsTheme.sectionBorder}`,padding:14,marginBottom:14}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12,flexWrap:"wrap"}}>
                   <div>
-                    <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5}}>By institute</div>
-                    <div style={{fontSize:13.5,color:G.textL,marginTop:3}}>Same institute colors carry through here so the teaching mix stays easy to scan.</div>
+                    <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5}}>Current week</div>
+                    <div style={{fontSize:13.5,color:G.textL,marginTop:3}}>The bars below always show this week’s teaching rhythm.</div>
                   </div>
-                  {latestLoggedEntry && <div style={{fontSize:12.5,color:G.textM,fontWeight:700}}>Latest log {formatTimelineMoment(latestLoggedEntry.dateKey, latestLoggedEntry.timeStart)}</div>}
+                  <div style={{fontSize:12.5,color:G.textM,fontWeight:700}}>{fmtMins(teacherSnapshot.week.totalTimelineMinutes)} this week</div>
                 </div>
-                <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {instituteBreakdown.map(item => (
-                    <div key={item.name} style={{display:"flex",alignItems:"center",gap:10,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 12px 11px"}}>
-                      <span style={{width:12,height:12,borderRadius:999,background:item.color.bg,flexShrink:0,boxShadow:`0 0 0 3px ${hexToRgba(item.color.bg, 0.12)}`}} />
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</div>
-                        <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>{item.classCount} section{item.classCount!==1?"s":""} · {item.entries} entries · {item.topics} topic{item.topics!==1?"s":""}</div>
-                      </div>
-                      <div style={{textAlign:"right",flexShrink:0}}>
-                        <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(item.mins)}</div>
-                        <div style={{fontSize:11,color:G.textL,marginTop:3}}>{item.sessions} timed session{item.sessions!==1?"s":""}</div>
-                      </div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:8,height:88,marginBottom:10}}>
+                  {teacherSnapshot.weekBars.map(day=>(
+                    <div key={day.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
+                      <div title={`${day.fullLabel} • ${fmtMins(day.minutes)}`} style={{width:"100%",borderRadius:"8px 8px 3px 3px",background:day.minutes>0?statsTheme.progressFill:statsTheme.graphBase,
+                        height:day.minutes>0?Math.max((day.minutes/statsWeekMaxMinutes)*78,8)+"px":"5px",transition:"height 0.5s cubic-bezier(0.22,1,0.36,1)",minHeight:5}}/>
                     </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  {teacherSnapshot.weekBars.map(day=>(
+                    <div key={day.key} style={{flex:1,textAlign:"center",fontSize:10.5,fontWeight:800,color:day.isToday?statsTheme.accent:G.textL,textTransform:"uppercase"}}>{day.label}</div>
                   ))}
                 </div>
               </div>
 
-              <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>By Class</div>
-              {classStats.map(({cls,ic,mins,sessions,entryCount,untimedEntryCount,activeDays,topicCount,completedTopicCount,latestEntry,latestTopic,ongoingTopic,firstEntry})=>{
-                const pct=mins>0?Math.round(mins/maxClassMins*100):0;
-                const featuredTopic = ongoingTopic || latestTopic;
-                const topicJourneyLabel = featuredTopic
-                  ? `${featuredTopic.isCompleted ? "Completed" : "Started"} ${formatTimelineMoment(featuredTopic.startedAtKey, featuredTopic.startedAtTime)}`
-                  : firstEntry
-                    ? `First log ${formatTimelineMoment(firstEntry.dateKey, firstEntry.timeStart)}`
-                    : "Open this timeline to start building the section story.";
-                return(
-                  <button key={cls.id} type="button" onClick={()=>openStatsClassTimeline(cls.id)} style={{width:"100%",background:G.surface,borderRadius:18,border:`1.5px solid rgba(15,23,42,0.18)`,marginBottom:10,padding:"15px 15px 14px",cursor:"pointer",textAlign:"left",boxShadow:G.shadowSm,WebkitTapHighlightColor:"transparent"}}>
-                    <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
-                      <div style={{width:11,height:11,alignSelf:"center",borderRadius:999,background:ic.bg,flexShrink:0,boxShadow:`0 0 0 3px ${hexToRgba(ic.bg, 0.14)}`}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
-                          <span style={{display:"inline-flex",alignItems:"center",gap:6,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,color:G.textM,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                            <span style={{width:8,height:8,borderRadius:999,background:ic.bg,flexShrink:0}} />
-                            {cls.institute || "No institute"}
+              {selectedInstituteCard && hasMultipleInstitutes && (
+                <div style={{background:statsTheme.sectionBg,borderRadius:18,border:`1px solid ${statsTheme.sectionBorder}`,padding:"14px 14px 12px",boxShadow:G.shadowSm,marginBottom:14}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:12}}>
+                    <div>
+                      <button type="button" onClick={()=>setStatsInstituteName("")} style={{background:"transparent",border:"none",padding:0,fontSize:12,fontWeight:700,color:statsTheme.accent,cursor:"pointer",fontFamily:G.sans,display:"inline-flex",alignItems:"center",gap:5,marginBottom:7}}>
+                        <AppIcon icon={IconChevronLeft} size={14} color="currentColor" />
+                        All institutes
+                      </button>
+                      <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35}}>{selectedInstituteCard.name}</div>
+                      <div style={{fontSize:13.5,color:G.textL,marginTop:4}}>Choose a class below to open its full teaching timeline.</div>
+                    </div>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:statsTheme.heroChipBg,border:`1px solid ${statsTheme.heroChipBorder}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:800,color:statsTheme.heroChipText}}>
+                      <span style={{width:8,height:8,borderRadius:999,background:selectedInstituteCard.tone.bg}} />
+                      {selectedInstituteCard.classes.length} class{selectedInstituteCard.classes.length===1?"":"es"}
+                    </span>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:8}}>
+                    {[
+                      { label:"Total", value:fmtMins(selectedInstituteCard.snapshot.total.totalTimelineMinutes) },
+                      { label:"Today", value:fmtMins(selectedInstituteCard.snapshot.today.totalTimelineMinutes) },
+                      { label:"This week", value:fmtMins(selectedInstituteCard.snapshot.week.totalTimelineMinutes) },
+                      { label:"This month", value:fmtMins(selectedInstituteCard.snapshot.month.totalTimelineMinutes) },
+                    ].map(item => (
+                      <div key={item.label} style={{background:statsTheme.sectionSoftBg,border:`1px solid ${statsTheme.sectionSoftBorder}`,borderRadius:14,padding:"11px 11px 10px"}}>
+                        <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
+                        <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.45,marginTop:5}}>{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!selectedInstituteCard && hasMultipleInstitutes ? (
+                <>
+                  <div style={{background:statsTheme.sectionBg,border:`1px solid ${statsTheme.sectionBorder}`,borderRadius:14,padding:"13px 14px",boxShadow:G.shadowSm,marginBottom:14}}>
+                    <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
+                      Start with an institute so the next screen stays focused. After that, open any class to see its section timeline, topic journey, and weekly rhythm.
+                    </div>
+                  </div>
+                  <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Institutes</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {instituteCards.map(item => {
+                      const cardTheme = getTeacherAnalyticsSurfaceStyles(item.tone.bg, isDarkTeacherTheme);
+                      return (
+                        <button key={item.name} type="button" onClick={()=>setStatsInstituteName(item.name)} style={{width:"100%",background:cardTheme.sectionBg,borderRadius:18,border:`1px solid ${cardTheme.sectionBorder}`,padding:"15px 15px 14px",cursor:"pointer",textAlign:"left",boxShadow:G.shadowSm,WebkitTapHighlightColor:"transparent"}}>
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:12}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                                <span style={{width:12,height:12,borderRadius:999,background:item.tone.bg,flexShrink:0,boxShadow:`0 0 0 3px ${hexToRgba(item.tone.bg, 0.14)}`}} />
+                                <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.18,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</div>
+                              </div>
+                              <div style={{fontSize:13.5,color:G.textM,marginTop:6}}>{item.classes.length} class{item.classes.length===1?"":"es"} • {item.snapshot.total.entryCount} entries</div>
+                            </div>
+                            <div style={{textAlign:"right",flexShrink:0}}>
+                              <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(item.snapshot.total.totalTimelineMinutes)}</div>
+                              <div style={{fontSize:11.5,color:G.textL,marginTop:4}}>all time</div>
+                            </div>
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(3,minmax(0,1fr))":"repeat(3,minmax(0,1fr))",gap:8,marginBottom:12}}>
+                            {[
+                              { label:"Today", value:fmtMins(item.snapshot.today.totalTimelineMinutes) },
+                              { label:"Week", value:fmtMins(item.snapshot.week.totalTimelineMinutes) },
+                              { label:"Month", value:fmtMins(item.snapshot.month.totalTimelineMinutes) },
+                            ].map(metric => (
+                              <div key={metric.label} style={{background:cardTheme.sectionSoftBg,border:`1px solid ${cardTheme.sectionSoftBorder}`,borderRadius:12,padding:"10px 10px 9px"}}>
+                                <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{metric.value}</div>
+                                <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.48,marginTop:5}}>{metric.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                            <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5}}>
+                              {item.latestEntry ? `Latest log ${formatTimelineMoment(item.latestEntry.dateKey, item.latestEntry.timeStart)}` : "No logged activity yet"}
+                            </div>
+                            <span style={{display:"inline-flex",alignItems:"center",gap:6,background:hexToRgba(item.tone.bg, 0.12),color:item.tone.bg,borderRadius:999,padding:"6px 10px",fontSize:12,fontWeight:800,border:`1px solid ${hexToRgba(item.tone.bg, 0.18)}`}}>
+                              View classes
+                              <AppIcon icon={IconChevronRight} size={15} color="currentColor" />
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{background:statsTheme.sectionBg,border:`1px solid ${statsTheme.sectionBorder}`,borderRadius:14,padding:"13px 14px",boxShadow:G.shadowSm,marginBottom:14}}>
+                    <div style={{fontSize:13,color:G.textM,lineHeight:1.6}}>
+                      Every class below opens its own full timeline with section-wise teaching hours, today/week/month totals, topic start-end markers, and every saved log in order.
+                    </div>
+                  </div>
+                  <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>
+                    {selectedInstituteCard ? "Classes" : "All classes"}
+                  </div>
+                  {visibleClassStats.map(item=>{
+                    const { cls, tone, snapshot, featuredTopic, latestEntry, firstEntry } = item;
+                    const cardTheme = getTeacherAnalyticsSurfaceStyles(tone.bg, isDarkTeacherTheme);
+                    const topicJourneyLabel = featuredTopic
+                      ? `${featuredTopic.isCompleted ? "Completed" : "Started"} ${formatTimelineMoment(featuredTopic.startedAtKey, featuredTopic.startedAtTime)}`
+                      : firstEntry
+                        ? `First log ${formatTimelineMoment(firstEntry.dateKey, firstEntry.timeStart)}`
+                        : "Open this timeline to start building the section story.";
+                    return(
+                      <button key={cls.id} type="button" onClick={()=>openStatsClassTimeline(cls.id)} style={{width:"100%",background:cardTheme.sectionBg,borderRadius:18,border:`1px solid ${cardTheme.sectionBorder}`,marginBottom:10,padding:"15px 15px 14px",cursor:"pointer",textAlign:"left",boxShadow:G.shadowSm,WebkitTapHighlightColor:"transparent"}}>
+                        <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
+                          <div style={{width:11,height:11,alignSelf:"center",borderRadius:999,background:tone.bg,flexShrink:0,boxShadow:`0 0 0 3px ${hexToRgba(tone.bg, 0.14)}`}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.section}</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
+                              <span style={{display:"inline-flex",alignItems:"center",gap:6,background:cardTheme.sectionSoftBg,border:`1px solid ${cardTheme.sectionSoftBorder}`,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,color:G.textM,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                <span style={{width:8,height:8,borderRadius:999,background:tone.bg,flexShrink:0}} />
+                                {cls.institute || "No institute"}
+                              </span>
+                              {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:cardTheme.sectionSoftBg,border:`1px solid ${cardTheme.sectionSoftBorder}`,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,color:G.textM,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
+                            </div>
+                          </div>
+                          <div style={{textAlign:"right",flexShrink:0}}>
+                            <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(snapshot.total.totalTimelineMinutes)}</div>
+                            <div style={{fontSize:11.5,color:G.textL,marginTop:4}}>all time</div>
+                          </div>
+                        </div>
+
+                        <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(3,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:8,marginBottom:12}}>
+                          {[
+                            { label:"Today", value:fmtMins(snapshot.today.totalTimelineMinutes) },
+                            { label:"Week", value:fmtMins(snapshot.week.totalTimelineMinutes) },
+                            { label:"Month", value:fmtMins(snapshot.month.totalTimelineMinutes) },
+                            { label:"Entries", value:String(snapshot.total.entryCount) },
+                          ].map(metric => (
+                            <div key={metric.label} style={{background:cardTheme.sectionSoftBg,border:`1px solid ${cardTheme.sectionSoftBorder}`,borderRadius:12,padding:"10px 10px 9px"}}>
+                              <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{metric.value}</div>
+                              <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.48,marginTop:5}}>{metric.label}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{background:cardTheme.sectionSoftBg,border:`1px solid ${cardTheme.sectionSoftBorder}`,borderRadius:14,padding:"12px 12px 11px",marginBottom:12}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                            <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>
+                              {featuredTopic ? (featuredTopic.isCompleted ? "Latest completed topic" : "Current topic") : "Topic journey"}
+                            </div>
+                            <div style={{fontSize:11.5,fontWeight:700,color:G.textM}}>{snapshot.total.completedTopicCount} completed</div>
+                          </div>
+                          <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.15,lineHeight:1.2,marginTop:7}}>
+                            {featuredTopic?.title || latestEntry?.title || "Open full timeline to inspect topic-by-topic teaching history"}
+                          </div>
+                          <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:7}}>{topicJourneyLabel}</div>
+                          {featuredTopic && (
+                            <div style={{fontSize:12.5,color:G.textL,lineHeight:1.55,marginTop:5}}>
+                              {featuredTopic.isCompleted
+                                ? `Ended ${formatTimelineMoment(featuredTopic.endedAtKey, featuredTopic.endedAtTime)}`
+                                : `Last seen ${formatTimelineMoment(featuredTopic.endedAtKey, featuredTopic.endedAtTime)}`}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                          <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5}}>
+                            {latestEntry ? `Latest log ${formatTimelineMoment(latestEntry.dateKey, latestEntry.timeStart)}` : "No logged activity yet"}
+                          </div>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:6,background:hexToRgba(tone.bg, 0.12),color:tone.bg,borderRadius:999,padding:"6px 10px",fontSize:12,fontWeight:800,border:`1px solid ${hexToRgba(tone.bg, 0.18)}`}}>
+                            Open full timeline
+                            <AppIcon icon={IconChevronRight} size={15} color="currentColor" />
                           </span>
-                          {cls.subject && <span style={{display:"inline-flex",alignItems:"center",background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,color:G.textM,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cls.subject}</span>}
                         </div>
-                      </div>
-                      <div style={{textAlign:"right",flexShrink:0}}>
-                        <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{fmtMins(mins)}</div>
-                        <div style={{fontSize:11.5,color:G.textL,marginTop:4}}>{sessions>0 ? `${sessions} timed session${sessions!==1?"s":""}` : "No timed session yet"}</div>
-                      </div>
-                    </div>
-
-                    <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:8,marginBottom:12}}>
-                      {[
-                        { label:"Entries", value:String(entryCount) },
-                        { label:"Days", value:String(activeDays) },
-                        { label:"Topics", value:String(topicCount) },
-                        { label:"Untimed", value:String(untimedEntryCount) },
-                      ].map(item => (
-                        <div key={item.label} style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 10px 9px"}}>
-                          <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
-                          <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.48,marginTop:5}}>{item.label}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={{background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"12px 12px 11px",marginBottom:12}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-                        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>
-                          {featuredTopic ? (featuredTopic.isCompleted ? "Latest completed topic" : "Current topic") : "Topic journey"}
-                        </div>
-                        <div style={{fontSize:11.5,fontWeight:700,color:G.textM}}>{completedTopicCount} completed</div>
-                      </div>
-                      <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.15,lineHeight:1.2,marginTop:7}}>
-                        {featuredTopic?.title || latestEntry?.title || "Open full timeline to inspect topic-by-topic teaching history"}
-                      </div>
-                      <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:7}}>{topicJourneyLabel}</div>
-                      {featuredTopic && (
-                        <div style={{fontSize:12.5,color:G.textL,lineHeight:1.55,marginTop:5}}>
-                          {featuredTopic.isCompleted
-                            ? `Ended ${formatTimelineMoment(featuredTopic.endedAtKey, featuredTopic.endedAtTime)}`
-                            : `Last seen ${formatTimelineMoment(featuredTopic.endedAtKey, featuredTopic.endedAtTime)}`}
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{flex:1,height:6,background:G.border,borderRadius:20,overflow:"hidden"}}>
-                        <div style={{height:"100%",borderRadius:20,background:ic.bg,width:`${Math.max(pct, mins>0 ? 8 : 0)}%`,transition:"width 0.24s ease-out"}}/>
-                      </div>
-                      <span style={{fontSize:11,fontWeight:700,color:ic.bg,fontFamily:G.mono,width:32,textAlign:"right"}}>{mins>0 ? `${pct}%` : "0%"}</span>
-                    </div>
-
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,flexWrap:"wrap"}}>
-                      <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5}}>
-                        {latestEntry ? `Latest log ${formatTimelineMoment(latestEntry.dateKey, latestEntry.timeStart)}` : "No logged activity yet"}
-                      </div>
-                      <span style={{display:"inline-flex",alignItems:"center",gap:6,background:hexToRgba(ic.bg, 0.12),color:ic.bg,borderRadius:999,padding:"6px 10px",fontSize:12,fontWeight:800,border:`1px solid ${hexToRgba(ic.bg, 0.18)}`}}>
-                        Open full timeline
-                        <AppIcon icon={IconChevronRight} size={15} color="currentColor" />
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </>
           )}
         </div>
