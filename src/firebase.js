@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, collection,
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, collection,
   getDocs, query, where, deleteDoc, runTransaction,
   collectionGroup, documentId,
 } from "firebase/firestore";
@@ -22,7 +22,17 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db   = getFirestore(app);
+export const db   = (() => {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+  } catch {
+    return getFirestore(app);
+  }
+})();
 export const auth = getAuth(app);
 const gProvider   = new GoogleAuthProvider();
 const MAIN_SCHEMA_VERSION = 3;
@@ -390,16 +400,31 @@ function buildBackupPayload(meta, savedAt, source, backupId) {
   };
 }
 
-async function listBackupSnapshots(uid) {
+async function scanAppdataDocs(uid) {
   try {
     const snap = await getDocs(collection(db, "users", uid, "appdata"));
-    return snap.docs
-      .filter(d => d.id === "main_backup_latest" || (d.id.startsWith("main_backup_") && d.id !== "main"))
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(item => item?.data);
+    const noteDocIds = [];
+    const backups = [];
+    snap.docs.forEach(docSnap => {
+      const id = docSnap.id;
+      if (id.startsWith("notes_")) {
+        noteDocIds.push(id.slice(6));
+        return;
+      }
+      if (id === "main_backup_latest" || (id.startsWith("main_backup_") && id !== "main")) {
+        const item = { id, ...docSnap.data() };
+        if (item?.data) backups.push(item);
+      }
+    });
+    return { noteDocIds, backups };
   } catch {
-    return [];
+    return { noteDocIds: [], backups: [] };
   }
+}
+
+async function listBackupSnapshots(uid) {
+  const summary = await scanAppdataDocs(uid);
+  return summary.backups || [];
 }
 
 function latestBackupSnapshot(backups) {
@@ -434,18 +459,6 @@ async function hydrateUserDataFromMain(uid, main) {
   return { ...main, notes: Object.keys(notes).length ? notes : (main?.notes || {}) };
 }
 
-async function listAppdataNoteDocIds(uid) {
-  try {
-    const snap = await getDocs(collection(db, "users", uid, "appdata"));
-    return snap.docs
-      .map(d => d.id)
-      .filter(id => id.startsWith("notes_"))
-      .map(id => id.slice(6));
-  } catch {
-    return [];
-  }
-}
-
 export async function loadUserData(uid) {
   try {
     const snap = await getDoc(userDocRef(uid));
@@ -455,16 +468,20 @@ export async function loadUserData(uid) {
 }
 
 export async function loadUserDataState(uid) {
-  const noteDocIds = await listAppdataNoteDocIds(uid);
+  const [appdataResult, mainResult] = await Promise.allSettled([
+    scanAppdataDocs(uid),
+    getDoc(userDocRef(uid)),
+  ]);
+  const appdataSummary = appdataResult.status === "fulfilled"
+    ? appdataResult.value
+    : { noteDocIds: [], backups: [] };
+  const noteDocIds = appdataSummary.noteDocIds || [];
+  const backupMeta = latestBackupSnapshot(appdataSummary.backups || []);
 
-  let mainSnap;
-  try {
-    mainSnap = await getDoc(userDocRef(uid));
-  } catch (error) {
-    return { status: "error", data: null, noteDocIds, orphanedNoteDocIds: [], error };
+  if (mainResult.status !== "fulfilled") {
+    return { status: "error", data: null, noteDocIds, orphanedNoteDocIds: [], error: mainResult.reason };
   }
-
-  const backupMeta = latestBackupSnapshot(await listBackupSnapshots(uid));
+  const mainSnap = mainResult.value;
 
   if (!mainSnap.exists()) {
     if (backupMeta?.data) {
@@ -562,8 +579,8 @@ export async function saveUserData(uid, data, options = {}) {
     return { data: { ...safeMeta, notes }, revision: nextRevision, updatedAt };
   });
 
-  await pruneBackupHistory(uid);
-  await syncTeacherIndex(uid, result.data);
+  pruneBackupHistory(uid).catch(() => {});
+  syncTeacherIndex(uid, result.data).catch(() => {});
   return result;
 }
 

@@ -3768,6 +3768,7 @@ function ClassTrackerInner({user}){
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups,extraSections}}
   const [teacherNoticePrompt, setTeacherNoticePrompt] = useState(null);
   const pendingSaveKey = `classlog_pending_${user.uid}`;
+  const bootCacheKey = `classlog_boot_${user.uid}`;
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
   const mobileBottomNavPad = "calc(88px + env(safe-area-inset-bottom, 0px))";
@@ -3976,6 +3977,19 @@ function ClassTrackerInner({user}){
       }));
     }catch(e){}
   }, [pendingSaveKey, cloudRevision]);
+
+  const storeBootCache = React.useCallback((payload) => {
+    try{
+      localStorage.setItem(bootCacheKey, JSON.stringify({
+        data: payload,
+        savedAt: Date.now(),
+      }));
+    }catch(e){}
+  }, [bootCacheKey]);
+
+  const clearBootCache = React.useCallback(() => {
+    try{ localStorage.removeItem(bootCacheKey); }catch(e){}
+  }, [bootCacheKey]);
 
   const clearEntryDraft = React.useCallback((draftKey = activeEntryDraftKey) => {
     if(!draftKey) return;
@@ -4186,12 +4200,29 @@ function ClassTrackerInner({user}){
 
   useEffect(()=>{
     let cancelled = false;
-    setLoading(true);
+    let bootHydrated = false;
     setSaveErr(false);
     setLoadIssue(null);
     setDataWarning(null);
     setAllowCloudSync(false);
     setCloudRevision(0);
+    try{
+      const raw = localStorage.getItem(bootCacheKey);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(parsed?.data){
+          const cached = normaliseLoadedData(parsed.data);
+          lastSyncedFingerprint.current = dataFingerprint(cached);
+          setCloudRevision(Number(cached?._meta?.revision || 0));
+          setData(cached);
+          setLoading(false);
+          bootHydrated = true;
+        }
+      }
+    }catch(e){}
+    if(!bootHydrated){
+      setLoading(true);
+    }
 
     loadUserDataState(user.uid).then(result=>{
       if(cancelled) return;
@@ -4225,6 +4256,7 @@ function ClassTrackerInner({user}){
                 lastSyncedFingerprint.current = dataFingerprint(purged);
                 setCloudRevision(liveRevision);
                 setData(merged);
+                storeBootCache(merged);
                 setAllowCloudSync(true);
                 if(merged.profile?.name) syncTeacherIndex(user.uid,merged).catch(()=>{});
                 if(nextWarning) setDataWarning(nextWarning);
@@ -4245,6 +4277,7 @@ function ClassTrackerInner({user}){
         lastSyncedFingerprint.current = dataFingerprint(purged);
         setCloudRevision(liveRevision);
         setData(purged);
+        storeBootCache(purged);
         setAllowCloudSync(true);
         if(purged.profile?.name) syncTeacherIndex(user.uid,purged).catch(()=>{});
         if(nextWarning) setDataWarning(nextWarning);
@@ -4257,14 +4290,17 @@ function ClassTrackerInner({user}){
         lastSyncedFingerprint.current = dataFingerprint(blank);
         setCloudRevision(0);
         setData(blank);
+        clearBootCache();
         setAllowCloudSync(true);
         setLoading(false);
         return;
       }
 
       if(status==="backup"){
+        const backupData = normaliseLoadedData(result.data);
         setCloudRevision(Number(result.data?._meta?.revision || 0));
-        setData(normaliseLoadedData(result.data));
+        setData(backupData);
+        storeBootCache(backupData);
         setLoadIssue({
           kind:"backup",
           backupSavedAt:result.backupSavedAt||0,
@@ -4279,6 +4315,7 @@ function ClassTrackerInner({user}){
         const blank = normaliseLoadedData(null);
         lastSyncedFingerprint.current = dataFingerprint(blank);
         setData(blank);
+        clearBootCache();
         setLoadIssue({kind:"orphaned",orphanedCount:result.noteDocIds?.length||0});
         setSaveErr(true);
         setLoading(false);
@@ -4293,25 +4330,29 @@ function ClassTrackerInner({user}){
           hasLocalDraft=!!localData;
         }
       }catch(e){}
-      const blank = normaliseLoadedData(null);
-      lastSyncedFingerprint.current = dataFingerprint(blank);
-      setData(blank);
+      if(!bootHydrated){
+        const blank = normaliseLoadedData(null);
+        lastSyncedFingerprint.current = dataFingerprint(blank);
+        setData(blank);
+      }
       setLoadIssue({kind:"error",hasLocalDraft});
       setSaveErr(true);
       setLoading(false);
     }).catch(err=>{
       if(cancelled) return;
       console.error("Failed to load data:",err);
-      const blank = normaliseLoadedData(null);
-      lastSyncedFingerprint.current = dataFingerprint(blank);
-      setData(blank);
+      if(!bootHydrated){
+        const blank = normaliseLoadedData(null);
+        lastSyncedFingerprint.current = dataFingerprint(blank);
+        setData(blank);
+      }
       setLoadIssue({kind:"error",hasLocalDraft:false});
       setSaveErr(true);
       setLoading(false);
     });
 
     return ()=>{ cancelled = true; };
-  },[user.uid,loadAttempt,normaliseLoadedData,pendingSaveKey]);
+  },[bootCacheKey, clearBootCache, loadAttempt, normaliseLoadedData, pendingSaveKey, storeBootCache, user.uid]);
   const refreshCloudState = React.useCallback(async () => {
     try {
       const [latestInstitutes, latestSections] = await Promise.all([
@@ -7139,31 +7180,8 @@ function ClassTrackerInner({user}){
         overflow:"hidden",
       }}>
         <div style={{padding:"18px 18px 16px"}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:16}}>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:11,fontWeight:800,color:color.ink,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8,marginBottom:6}}>Lesson record</div>
-              <div style={{fontSize:isMobile?24:26,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,lineHeight:1.05}}>Add details</div>
-              <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:430}}>
-                Topic and notes stay attached to this entry for timelines, history, and exports.
-              </div>
-            </div>
-            <div style={{
-              flexShrink:0,
-              alignSelf:"center",
-              background:detailsComplete?G.green:(isDarkTeacherTheme ? G.surfaceAlt : "#FFFFFFCC"),
-              color:detailsComplete?"#FFFFFF":color.ink,
-              border:`1px solid ${detailsComplete?`${G.green}22`:color.border}`,
-              borderRadius:999,
-              padding:"7px 12px",
-              fontSize:12,
-              fontWeight:800,
-              fontFamily:G.mono,
-              letterSpacing:0.2,
-              boxShadow:"0 8px 18px rgba(15, 23, 42, 0.08)",
-              whiteSpace:"nowrap",
-            }}>
-              {detailsComplete ? "Ready" : "Title needed"}
-            </div>
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:isMobile?24:26,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.5,lineHeight:1.05}}>Add details</div>
           </div>
           <div style={{display:"grid",gap:14}}>
             <div>
