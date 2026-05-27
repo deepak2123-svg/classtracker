@@ -5004,14 +5004,9 @@ function ClassTrackerInner({user}){
   const getClassNotes=(cid)=>data.notes[cid]||{};
   const getDateNotes=(cid,dk)=>{ const arr=(data.notes[cid]||{})[dk]; return Array.isArray(arr)?arr:[]; };
   const getAllNoteDates=(cid)=>new Set(Object.keys(data.notes[cid]||{}).filter(dk=>(data.notes[cid][dk]||[]).length>0));
-  const getEntryDetailsValidationMessage=(entry)=>{
-    const missingTitle=!String(entry?.title||"").trim();
-    const missingBody=!String(entry?.body||"").trim();
-    if(missingTitle&&missingBody) return "Please add the topic and notes before saving.";
-    if(missingTitle) return "Please add the topic before saving.";
-    if(missingBody) return "Please add the class notes before saving.";
-    return "";
-  };
+  const getEntryDetailsValidationMessage=(entry)=>!String(entry?.title||"").trim()
+    ? "Please add the topic before saving."
+    : "";
 
   const addNote=()=>{
     if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
@@ -7121,8 +7116,7 @@ function ClassTrackerInner({user}){
     const detailTitle=String(form.title||"").trim();
     const detailBody=String(form.body||"").trim();
     const detailsStarted=Boolean(detailTitle||detailBody);
-    const detailsComplete=Boolean(detailTitle&&detailBody);
-    const completedDetailCount=(detailTitle?1:0)+(detailBody?1:0);
+    const detailsComplete=Boolean(detailTitle);
     const canSave=Boolean(form.timeStart&&detailsComplete);
     const saveLabel=isEdit?"Save Changes":"Save Entry";
     const lastTopicSuggestion=form.status==="inprogress" ? (getClassUrgencyMeta(activeClass).lastTopic||"").trim() : "";
@@ -7168,7 +7162,7 @@ function ClassTrackerInner({user}){
               boxShadow:"0 8px 18px rgba(15, 23, 42, 0.08)",
               whiteSpace:"nowrap",
             }}>
-              {detailsComplete ? "Ready" : `${completedDetailCount}/2 filled`}
+              {detailsComplete ? "Ready" : "Title needed"}
             </div>
           </div>
           <div style={{display:"grid",gap:14}}>
@@ -7189,7 +7183,7 @@ function ClassTrackerInner({user}){
               />
             </div>
             <div>
-              <label style={lbl}>Notes <span style={{color:G.red,marginLeft:3}}>*</span></label>
+              <label style={lbl}>Notes</label>
               <textarea
                 ref={noteRef}
                 value={form.body}
@@ -7235,12 +7229,19 @@ function ClassTrackerInner({user}){
             <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"12px 16px"}}>
               <div style={{maxWidth:660,margin:"0 auto"}}>
                 {isMobile
-                  ? <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <AppIcon icon={IconCalendar} size={22} color={G.textM} />
+                  ? <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                      <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+                        <div style={{width:42,height:42,borderRadius:14,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          <AppIcon icon={IconCalendar} size={20} color={G.textM} />
+                        </div>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:700,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:2}}>Entry date</div>
+                          <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.05}}>{formatDateLabel(selectedDate)}</div>
+                        </div>
+                      </div>
                       <div>
-                        <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{formatDateLabel(selectedDate)}</div>
                         <button onClick={()=>setView("classDetail")}
-                          style={{background:"none",border:"none",padding:0,fontSize:12,color:G.green,fontFamily:G.sans,fontWeight:600,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:2}}>
+                          style={{background:"none",border:"none",padding:0,fontSize:13,color:G.green,fontFamily:G.sans,fontWeight:700,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:2,whiteSpace:"nowrap"}}>
                           Change date
                         </button>
                       </div>
@@ -7263,21 +7264,9 @@ function ClassTrackerInner({user}){
                   <p style={{fontSize:12,color:G.textM,fontFamily:G.sans,marginBottom:2,textTransform:"uppercase",fontWeight:600,letterSpacing:0.4}}>Editing Entry</p>
                   <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{formatDateLabel(selectedDate)}</div>
                 </div>
-                <div style={{background:G.greenL,borderRadius:8,padding:"6px 10px",fontSize:13,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:5}}>
-                  <AppIcon icon={IconUser} size={14} color={G.green} /><span style={{fontWeight:600}}>{teacherName}</span>
-                </div>
               </div>
-            ):(
-              <>
-                <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:5,textTransform:"uppercase",fontWeight:600}}>New Entry For</p>
-                <h2 style={{marginBottom:22,fontSize:28,letterSpacing:-0.5,fontFamily:G.display}}>{formatDateLabel(selectedDate)}</h2>
-                <div style={{background:G.greenL,borderRadius:10,padding:"9px 14px",marginBottom:20,fontSize:15,color:G.green,fontFamily:G.sans,display:"flex",alignItems:"center",gap:8}}>
-                  <AppIcon icon={IconUser} size={16} color={G.green} /><span>Logged as: <strong>{teacherName}</strong></span>
-                </div>
-              </>
-            )}
+            ):null}
           <div className="form-card" style={{...card,padding:"24px"}}>
-            {detailsPanel}
             <div style={{marginBottom:18}}>
               <label style={lbl}>Topic Status</label>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
@@ -7537,6 +7526,7 @@ function ClassTrackerInner({user}){
                 );
               })()}
             </div>
+            {detailsPanel}
             <PrimaryBtn onClick={save} disabled={!canSave} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:16,opacity:canSave?1:0.45,cursor:canSave?"pointer":"not-allowed",width:"100%"}}>
               {saveLabel}
             </PrimaryBtn>
