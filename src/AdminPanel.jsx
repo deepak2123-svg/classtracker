@@ -2631,8 +2631,16 @@ function drawInstituteGlancePdfStatCard(doc, { x, y, width, height, label, value
   doc.setTextColor(17, 24, 39);
   doc.text(String(value || "0"), x + 12, y + 41);
 }
-function buildInstituteGlanceAllTeacherPdfBody(row){
-  return (row?.teacherRows || []).map(teacher => [
+function buildInstituteGlanceFilledTeacherPdfBody(row){
+  return (row?.filledTeacherRows || []).map(teacher => [
+    teacher.name || "Teacher",
+    instituteGlanceTeacherSectionCaption(teacher),
+    String(teacher.todayEntries || 0),
+    instituteGlanceTeacherHoursLabel(teacher),
+  ]);
+}
+function buildInstituteGlancePendingTeacherPdfBody(row){
+  return (row?.pendingTeacherRows || []).map(teacher => [
     teacher.name || "Teacher",
     teacher.todayStatusLabel || instituteGlanceTodayStatusLabel(teacher),
     instituteGlanceTeacherSectionCaption(teacher),
@@ -2642,19 +2650,260 @@ function buildInstituteGlanceAllTeacherPdfBody(row){
     instituteGlanceTeacherHoursLabel(teacher),
   ]);
 }
-function buildInstituteGlancePendingTeacherPdfBody(row){
-  return (row?.pendingTeacherRows || []).map(teacher => [
-    teacher.name || "Teacher",
-    String(teacher.monthEntries || 0),
-    teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher),
-  ]);
+function ensureInstituteGlancePdfSectionSpace(doc, cursorY, minHeight, margin){
+  const pageHeight = doc.internal.pageSize.getHeight();
+  if(cursorY <= pageHeight - minHeight) return cursorY;
+  doc.addPage();
+  return margin;
+}
+function drawInstituteGlancePdfEmptyNotice(doc, { x, y, width, title, body, fillColor = [248, 250, 252], borderColor = [221, 227, 237], titleColor = [31, 41, 55], bodyColor = [75, 85, 99] }){
+  doc.setFillColor(...fillColor);
+  doc.setDrawColor(...borderColor);
+  doc.roundedRect(x, y, width, 58, 14, 14, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  doc.setTextColor(...titleColor);
+  doc.text(title, x + 14, y + 20);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10.5);
+  doc.setTextColor(...bodyColor);
+  doc.text(doc.splitTextToSize(body, width - 28), x + 14, y + 36);
+  return y + 76;
+}
+function renderInstituteGlancePdfTeacherSection(doc, {
+  title,
+  subtitle,
+  margin,
+  cursorY,
+  body,
+  head,
+  minHeight = 150,
+  tableOptions = {},
+  emptyState = null,
+}){
+  cursorY = ensureInstituteGlancePdfSectionSpace(doc, cursorY, minHeight, margin);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(title, margin, cursorY);
+  cursorY += 16;
+  if(subtitle){
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(doc.splitTextToSize(subtitle, doc.internal.pageSize.getWidth() - margin * 2), margin, cursorY);
+    cursorY += 20;
+  }
+  if(!body.length){
+    return drawInstituteGlancePdfEmptyNotice(doc, {
+      x:margin,
+      y:cursorY,
+      width:doc.internal.pageSize.getWidth() - margin * 2,
+      ...(emptyState || {
+        title:"Nothing to show here",
+        body:"No matching teachers were found for this section.",
+      }),
+    });
+  }
+  const { autoTable } = tableOptions;
+  autoTable(doc, {
+    startY: cursorY,
+    head: [head],
+    body,
+    margin:{ left:margin, right:margin, bottom:24 },
+    styles:{
+      font:"helvetica",
+      fontSize:9,
+      cellPadding:7,
+      lineColor:[221, 227, 237],
+      lineWidth:0.5,
+      textColor:[31, 41, 55],
+      valign:"top",
+      overflow:"linebreak",
+    },
+    headStyles:{
+      fillColor:[248, 250, 252],
+      textColor:[107, 114, 128],
+      fontStyle:"bold",
+      fontSize:8.4,
+    },
+    ...tableOptions.config,
+  });
+  return (doc.lastAutoTable?.finalY || cursorY) + 20;
+}
+function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, margin = 30 }){
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const contentWidth = pageWidth - margin * 2;
+  let cursorY = 36;
+  const { autoTable } = doc.__instituteGlancePdfRuntime || {};
+  if(typeof autoTable !== "function"){
+    throw new Error("Institute glance PDF runtime is not ready.");
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(28);
+  doc.setTextColor(17, 24, 39);
+  doc.text(row.institute || "Institute summary", margin, cursorY);
+  cursorY += 24;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(75, 85, 99);
+  doc.text(generatedOnLabel, margin, cursorY);
+  cursorY += 18;
+
+  const overviewLine = row.noTeachersSignedUp
+    ? "No teachers have signed up in this centre yet."
+    : `${row.totalTeachers || 0} teachers • ${row.filledToday || 0} filled today • ${row.missingToday || 0} pending • ${row.sectionsTaught || 0} sections taught • ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
+  doc.setFontSize(14);
+  doc.text(doc.splitTextToSize(overviewLine, contentWidth), margin, cursorY);
+  cursorY += row.noTeachersSignedUp ? 34 : 30;
+
+  if(row.noTeachersSignedUp){
+    drawInstituteGlancePdfEmptyNotice(doc, {
+      x:margin,
+      y:cursorY,
+      width:contentWidth,
+      title:"No sign-ups yet",
+      body:"This centre currently has 0 linked teachers, so there is no filled-versus-pending summary yet.",
+      fillColor:[248, 250, 252],
+      borderColor:[221, 227, 237],
+    });
+    return doc;
+  }
+
+  const statGap = 10;
+  const statWidth = (contentWidth - statGap * 3) / 4;
+  [
+    { label:"Updated", value:`${row.filledToday || 0}/${row.totalTeachers || 0}` },
+    { label:"Pending", value:String(row.missingToday || 0) },
+    { label:"Sections taught", value:String(row.sectionsTaught || 0) },
+    { label:"Study hours", value:formatDurationShort(row.totalStudyMinutes || 0) },
+  ].forEach((item, index) => {
+    drawInstituteGlancePdfStatCard(doc, {
+      x: margin + index * (statWidth + statGap),
+      y: cursorY,
+      width: statWidth,
+      height: 56,
+      label:item.label,
+      value:item.value,
+    });
+  });
+  cursorY += 76;
+
+  cursorY = renderInstituteGlancePdfTeacherSection(doc, {
+    title:"Teachers who filled today",
+    subtitle: row.filledTeacherRows?.length
+      ? "Teachers with at least one entry today are grouped first so you can review the active names before the pending follow-up list."
+      : "No teacher has uploaded today's entry for this centre yet.",
+    margin,
+    cursorY,
+    body: buildInstituteGlanceFilledTeacherPdfBody(row),
+    head:["Teacher", "Sections", "Logs", "Study hours"],
+    minHeight: 160,
+    emptyState:{
+      title:"No filled entries today",
+      body:"No teacher has uploaded today's entry for this centre yet.",
+      fillColor:[239, 246, 255],
+      borderColor:[191, 219, 254],
+      titleColor:[29, 78, 216],
+      bodyColor:[75, 85, 99],
+    },
+    tableOptions:{
+      autoTable,
+      config:{
+        headStyles:{
+          fillColor:[236, 253, 243],
+          textColor:[22, 101, 52],
+          fontStyle:"bold",
+          fontSize:8.6,
+        },
+        columnStyles:{
+          0:{ cellWidth:165 },
+          1:{ cellWidth:365 },
+          2:{ cellWidth:54, halign:"center" },
+          3:{ cellWidth:88, halign:"center" },
+        },
+        didParseCell: data => {
+          if(data.section !== "body") return;
+          if(data.column.index === 0){
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.textColor = [17, 24, 39];
+          }
+          if(data.column.index === 2){
+            data.cell.styles.halign = "center";
+          }
+          if(data.column.index === 3){
+            data.cell.styles.halign = "center";
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.textColor = [22, 101, 52];
+          }
+        },
+      },
+    },
+  });
+
+  cursorY = renderInstituteGlancePdfTeacherSection(doc, {
+    title:"Teachers pending today",
+    subtitle: row.pendingTeacherRows?.length
+      ? "Teachers below have not filled today's entry yet. Their last activity stays visible so the follow-up list is still useful."
+      : "Everyone linked to this centre has filled today.",
+    margin,
+    cursorY,
+    body: buildInstituteGlancePendingTeacherPdfBody(row),
+    head:["Teacher", "Status", "Sections", "Today", "This month", "Last entry", "Study hours"],
+    minHeight: 190,
+    emptyState:{
+      title:"Everyone filled today",
+      body:"All linked teachers in this centre have already uploaded their entries today.",
+      fillColor:[236, 253, 243],
+      borderColor:[187, 247, 208],
+      titleColor:[22, 101, 52],
+      bodyColor:[75, 85, 99],
+    },
+    tableOptions:{
+      autoTable,
+      config:{
+        columnStyles:{
+          0:{ cellWidth:138 },
+          1:{ cellWidth:80, halign:"center" },
+          2:{ cellWidth:215 },
+          3:{ cellWidth:42, halign:"center" },
+          4:{ cellWidth:58, halign:"center" },
+          5:{ cellWidth:120 },
+          6:{ cellWidth:68, halign:"center" },
+        },
+        didParseCell: data => {
+          if(data.section !== "body") return;
+          if(data.column.index === 0){
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.textColor = [17, 24, 39];
+          }
+          if(data.column.index === 1){
+            data.cell.styles.fillColor = [255, 247, 237];
+            data.cell.styles.textColor = [180, 83, 9];
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.halign = "center";
+          }
+          if(data.column.index === 3 || data.column.index === 4 || data.column.index === 6){
+            data.cell.styles.halign = "center";
+          }
+          if(data.column.index === 6){
+            data.cell.styles.textColor = [107, 114, 128];
+          }
+        },
+      },
+    },
+  });
+
+  return doc;
 }
 async function buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLabel }){
   const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
   const doc = new jsPDF({ unit:"pt", format:"a4", orientation:"landscape" });
+  doc.__instituteGlancePdfRuntime = { autoTable };
   const margin = 30;
   const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = pageWidth - margin * 2;
   let cursorY = 36;
 
@@ -2671,7 +2920,7 @@ async function buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLab
 
   doc.setFontSize(14);
   doc.text(
-    doc.splitTextToSize("Centre-wise teacher tables with today’s status, month entries, sections taught, last activity, and study hours.", contentWidth),
+    doc.splitTextToSize("Each centre starts on a fresh page. Teachers who filled today appear first, followed by the pending follow-up list.", contentWidth),
     margin,
     cursorY
   );
@@ -2698,161 +2947,8 @@ async function buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLab
   cursorY += 80;
 
   for(const row of (rows || [])){
-    if(cursorY > pageHeight - 210){
-      doc.addPage();
-      cursorY = margin;
-    }
-
-    const headerHeight = row.noTeachersSignedUp ? 118 : 146;
-    doc.setFillColor(238, 244, 255);
-    doc.setDrawColor(199, 215, 245);
-    doc.roundedRect(margin, cursorY, contentWidth, headerHeight, 16, 16, "FD");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.setTextColor(17, 24, 39);
-    doc.text(row.institute || "Institute summary", margin + 16, cursorY + 22);
-
-    const badgeLabel = row.noTeachersSignedUp ? "No sign-ups" : `${row.filledToday || 0}/${row.totalTeachers || 0} filled`;
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(191, 219, 254);
-    doc.roundedRect(pageWidth - margin - 118, cursorY + 14, 102, 28, 14, 14, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12.5);
-    doc.setTextColor(29, 78, 216);
-    doc.text(badgeLabel, pageWidth - margin - 106, cursorY + 33);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(12);
-    doc.setTextColor(75, 85, 99);
-    const overviewLine = row.noTeachersSignedUp
-      ? "No teachers have signed up in this centre yet."
-      : `${row.totalTeachers || 0} teachers • ${row.filledToday || 0} filled today • ${row.missingToday || 0} pending • ${row.sectionsTaught || 0} sections taught • ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
-    doc.text(doc.splitTextToSize(overviewLine, contentWidth - 150), margin + 16, cursorY + 50);
-
-    const rowStatY = cursorY + headerHeight - 56;
-    const rowStatWidth = (contentWidth - 16 * 2 - 10 * 3) / 4;
-    [
-      { label:"Updated", value:`${row.filledToday || 0}/${row.totalTeachers || 0}` },
-      { label:"Pending", value:String(row.missingToday || 0) },
-      { label:"Sections taught", value:String(row.sectionsTaught || 0) },
-      { label:"Study hours", value:formatDurationShort(row.totalStudyMinutes || 0) },
-    ].forEach((item, index) => {
-      drawInstituteGlancePdfStatCard(doc, {
-        x: margin + 16 + index * (rowStatWidth + 10),
-        y: rowStatY,
-        width: rowStatWidth,
-        height: 44,
-        label:item.label,
-        value:item.value,
-      });
-    });
-
-    cursorY += headerHeight + 16;
-
-    if(row.noTeachersSignedUp){
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(11.5);
-      doc.setTextColor(75, 85, 99);
-      doc.text(
-        doc.splitTextToSize("This centre currently has 0 linked teachers, so this is not an \"everyone filled\" case.", contentWidth),
-        margin,
-        cursorY
-      );
-      cursorY += 30;
-      continue;
-    }
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text("All teachers today", margin, cursorY);
-    cursorY += 10;
-
-    autoTable(doc, {
-      startY: cursorY,
-      head: [["Teacher", "Status", "Sections", "Today", "This month", "Last entry", "Study hours"]],
-      body: buildInstituteGlanceAllTeacherPdfBody(row),
-      margin:{ left:margin, right:margin },
-      styles:{
-        font:"helvetica",
-        fontSize:8.8,
-        cellPadding:6,
-        lineColor:[221, 227, 237],
-        lineWidth:0.5,
-        textColor:[31, 41, 55],
-        valign:"top",
-        overflow:"linebreak",
-      },
-      headStyles:{
-        fillColor:[248, 250, 252],
-        textColor:[107, 114, 128],
-        fontStyle:"bold",
-        fontSize:8.2,
-      },
-      columnStyles:{
-        0:{ cellWidth:120 },
-        1:{ cellWidth:74, halign:"center" },
-        2:{ cellWidth:225 },
-        3:{ cellWidth:42, halign:"center" },
-        4:{ cellWidth:58, halign:"center" },
-        5:{ cellWidth:105 },
-        6:{ cellWidth:68, halign:"center" },
-      },
-      didParseCell: (data) => {
-        if(data.section === "body" && data.column.index === 1){
-          const teacher = row.teacherRows?.[data.row.index];
-          if(teacher?.updatedToday){
-            data.cell.styles.fillColor = [236, 253, 243];
-            data.cell.styles.textColor = [22, 101, 52];
-            data.cell.styles.fontStyle = "bold";
-          } else {
-            data.cell.styles.fillColor = [255, 247, 237];
-            data.cell.styles.textColor = [180, 83, 9];
-            data.cell.styles.fontStyle = "bold";
-          }
-        }
-      },
-    });
-
-    cursorY = (doc.lastAutoTable?.finalY || cursorY) + 16;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text("Teachers pending today", margin, cursorY);
-    cursorY += 10;
-
-    autoTable(doc, {
-      startY: cursorY,
-      head: [["Teacher", "This month", "Last entry"]],
-      body: buildInstituteGlancePendingTeacherPdfBody(row).length
-        ? buildInstituteGlancePendingTeacherPdfBody(row)
-        : [["Everyone linked to this centre has filled today.", "", ""]],
-      margin:{ left:margin, right:margin, bottom:24 },
-      styles:{
-        font:"helvetica",
-        fontSize:9,
-        cellPadding:6,
-        lineColor:[221, 227, 237],
-        lineWidth:0.5,
-        textColor:[31, 41, 55],
-        valign:"top",
-        overflow:"linebreak",
-      },
-      headStyles:{
-        fillColor:[248, 250, 252],
-        textColor:[107, 114, 128],
-        fontStyle:"bold",
-        fontSize:8.4,
-      },
-      columnStyles:{
-        0:{ cellWidth:210 },
-        1:{ cellWidth:70, halign:"center" },
-        2:{ cellWidth:150 },
-      },
-    });
-
-    cursorY = (doc.lastAutoTable?.finalY || cursorY) + 22;
+    doc.addPage();
+    renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, margin });
   }
 
   return doc;
@@ -2860,152 +2956,8 @@ async function buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLab
 async function buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel }){
   const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
   const doc = new jsPDF({ unit:"pt", format:"a4", orientation:"landscape" });
-  const margin = 30;
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const contentWidth = pageWidth - margin * 2;
-  let cursorY = 36;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(28);
-  doc.text(row.institute || "Institute summary", margin, cursorY);
-  cursorY += 24;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.setTextColor(75, 85, 99);
-  doc.text(generatedOnLabel, margin, cursorY);
-  cursorY += 18;
-
-  const overviewLine = row.noTeachersSignedUp
-    ? "No teachers have signed up in this centre yet."
-    : `${row.totalTeachers || 0} teachers • ${row.filledToday || 0} filled today • ${row.missingToday || 0} pending • ${row.sectionsTaught || 0} sections taught • ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
-  doc.setFontSize(14);
-  doc.text(doc.splitTextToSize(overviewLine, contentWidth), margin, cursorY);
-  cursorY += row.noTeachersSignedUp ? 34 : 30;
-
-  if(row.noTeachersSignedUp){
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(17, 24, 39);
-    doc.text("No sign-ups yet", margin, cursorY);
-    cursorY += 18;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11.5);
-    doc.setTextColor(75, 85, 99);
-    doc.text(
-      doc.splitTextToSize("This centre currently has 0 linked teachers, so this is not an \"everyone filled\" case.", contentWidth),
-      margin,
-      cursorY
-    );
-    return doc;
-  }
-
-  const statGap = 10;
-  const statWidth = (contentWidth - statGap * 3) / 4;
-  [
-    { label:"Updated", value:`${row.filledToday || 0}/${row.totalTeachers || 0}` },
-    { label:"Pending", value:String(row.missingToday || 0) },
-    { label:"Sections taught", value:String(row.sectionsTaught || 0) },
-    { label:"Study hours", value:formatDurationShort(row.totalStudyMinutes || 0) },
-  ].forEach((item, index) => {
-    drawInstituteGlancePdfStatCard(doc, {
-      x: margin + index * (statWidth + statGap),
-      y: cursorY,
-      width: statWidth,
-      height: 56,
-      label:item.label,
-      value:item.value,
-    });
-  });
-  cursorY += 74;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text("All teachers today", margin, cursorY);
-  cursorY += 10;
-
-  autoTable(doc, {
-    startY: cursorY,
-    head: [["Teacher", "Status", "Sections taught", "Today", "This month", "Last entry", "Study hours"]],
-    body: buildInstituteGlanceAllTeacherPdfBody(row),
-    margin:{ left:margin, right:margin },
-    styles:{
-      font:"helvetica",
-      fontSize:8.8,
-      cellPadding:6,
-      lineColor:[221, 227, 237],
-      lineWidth:0.5,
-      textColor:[31, 41, 55],
-      valign:"top",
-      overflow:"linebreak",
-    },
-    headStyles:{
-      fillColor:[248, 250, 252],
-      textColor:[107, 114, 128],
-      fontStyle:"bold",
-      fontSize:8.2,
-    },
-    columnStyles:{
-      0:{ cellWidth:120 },
-      1:{ cellWidth:74, halign:"center" },
-      2:{ cellWidth:225 },
-      3:{ cellWidth:42, halign:"center" },
-      4:{ cellWidth:58, halign:"center" },
-      5:{ cellWidth:105 },
-      6:{ cellWidth:68, halign:"center" },
-    },
-    didParseCell: (data) => {
-      if(data.section === "body" && data.column.index === 1){
-        const teacher = row.teacherRows?.[data.row.index];
-        if(teacher?.updatedToday){
-          data.cell.styles.fillColor = [236, 253, 243];
-          data.cell.styles.textColor = [22, 101, 52];
-          data.cell.styles.fontStyle = "bold";
-        } else {
-          data.cell.styles.fillColor = [255, 247, 237];
-          data.cell.styles.textColor = [180, 83, 9];
-          data.cell.styles.fontStyle = "bold";
-        }
-      }
-    },
-  });
-
-  cursorY = (doc.lastAutoTable?.finalY || cursorY) + 20;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(17, 24, 39);
-  doc.text("Teachers pending today", margin, cursorY);
-  cursorY += 10;
-  autoTable(doc, {
-    startY: cursorY,
-    head: [["Teacher", "This month", "Last entry"]],
-    body: buildInstituteGlancePendingTeacherPdfBody(row).length
-      ? buildInstituteGlancePendingTeacherPdfBody(row)
-      : [["Everyone linked to this centre has filled today.", "", ""]],
-    margin:{ left:margin, right:margin, bottom:24 },
-    styles:{
-      font:"helvetica",
-      fontSize:9,
-      cellPadding:6,
-      lineColor:[221, 227, 237],
-      lineWidth:0.5,
-      textColor:[31, 41, 55],
-      valign:"top",
-      overflow:"linebreak",
-    },
-    headStyles:{
-      fillColor:[248, 250, 252],
-      textColor:[107, 114, 128],
-      fontStyle:"bold",
-      fontSize:8.4,
-    },
-    columnStyles:{
-      0:{ cellWidth:210 },
-      1:{ cellWidth:70, halign:"center" },
-      2:{ cellWidth:150 },
-    },
-  });
+  doc.__instituteGlancePdfRuntime = { autoTable };
+  renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, margin:30 });
   return doc;
 }
 async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
@@ -5171,7 +5123,7 @@ function AdminPanelInner({user}){
     if(instituteGlanceExportBusy) return;
     setInstituteGlanceExportBusy(format);
     try {
-      const report = await loadInstituteGlanceReport({ force:true });
+      const report = await loadInstituteGlanceReport();
       if(!report) return;
       const rows = report.rows || [];
       const summary = report.summary || EMPTY_INSTITUTE_GLANCE_SUMMARY;
@@ -5196,7 +5148,7 @@ function AdminPanelInner({user}){
     const busyKey = row.institute;
     setInstituteGlanceRowExportBusy(busyKey);
     try {
-      const report = await loadInstituteGlanceReport({ force:true });
+      const report = await loadInstituteGlanceReport();
       const freshRow = (report?.rows || []).find(item => sameInstituteName(item?.institute, row.institute));
       if(!freshRow){
         throw new Error("Could not rebuild the latest centre summary for this institute.");

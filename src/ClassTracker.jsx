@@ -47,6 +47,7 @@ import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassN
 import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, formatDateLabel, fmt, formatPeriod, getSectionTone } from "./shared.jsx";
 
 const TEACHER_THEME_STORAGE_KEY = "classlog_teacher_theme";
+const TEACHER_LOCAL_NOTICE_DISMISS_KEY = "classlog_teacher_local_notice_dismissed";
 const LOCAL_SANS_FONT = "'Inter',sans-serif";
 const LOCAL_DISPLAY_FONT = "'Poppins',sans-serif";
 const LOCAL_MONO_FONT = "'Inter',sans-serif";
@@ -85,37 +86,37 @@ const TEACHER_THEMES = {
     navActiveBg:"rgba(15,107,120,0.10)",
   },
   dark: {
-    forest:"#111C2D",
-    forestS:"#18314A",
-    green:"#7ED2DC",
-    greenV:"#98DEE6",
-    greenL:"rgba(126,210,220,0.14)",
-    bg:"#0F1720",
-    surface:"#121B26",
-    surfaceAlt:"#182432",
-    surfaceSoft:"#101923",
-    pageBg:"#0F1720",
-    border:"#263445",
-    borderM:"#314255",
+    forest:"#07111B",
+    forestS:"#0C1825",
+    green:"#4DB7C8",
+    greenV:"#74D0DE",
+    greenL:"rgba(77,183,200,0.16)",
+    bg:"#08111B",
+    surface:"#101926",
+    surfaceAlt:"#162231",
+    surfaceSoft:"#0D1622",
+    pageBg:"#08111B",
+    border:"#243244",
+    borderM:"#334155",
     text:"#F8FAFC",
-    textS:"#E2E8F0",
-    textM:"#A7B4C3",
-    textL:"#7D8A99",
-    red:"#F97066",
-    redL:"rgba(249,112,102,0.16)",
-    navy:"#7ED2DC",
-    shadowSm:"0 2px 8px rgba(0,0,0,0.24)",
-    shadowMd:"0 10px 24px rgba(0,0,0,0.28)",
-    shadowLg:"0 18px 40px rgba(0,0,0,0.34)",
-    topbarBg:"rgba(15,23,32,0.96)",
-    topbarBorder:"rgba(38,52,69,0.96)",
-    topbarButtonBg:"rgba(255,255,255,0.04)",
-    topbarButtonBorder:"rgba(255,255,255,0.08)",
-    heroBg:"linear-gradient(180deg, #121B26 0%, #182432 100%)",
-    classCardBg:"#121B26",
-    navBg:"rgba(18,27,38,0.98)",
-    navBorder:"rgba(38,52,69,0.98)",
-    navActiveBg:"rgba(126,210,220,0.12)",
+    textS:"#D7E2EE",
+    textM:"#94A3B8",
+    textL:"#64748B",
+    red:"#F87171",
+    redL:"rgba(248,113,113,0.18)",
+    navy:"#7DD4E4",
+    shadowSm:"0 2px 10px rgba(2,6,23,0.32)",
+    shadowMd:"0 14px 30px rgba(2,6,23,0.42)",
+    shadowLg:"0 28px 56px rgba(2,6,23,0.54)",
+    topbarBg:"rgba(7,17,27,0.94)",
+    topbarBorder:"rgba(51,65,85,0.78)",
+    topbarButtonBg:"rgba(15,23,42,0.72)",
+    topbarButtonBorder:"rgba(51,65,85,0.8)",
+    heroBg:"linear-gradient(180deg, #101926 0%, #0C1724 100%)",
+    classCardBg:"#101926",
+    navBg:"rgba(10,17,26,0.98)",
+    navBorder:"rgba(36,50,68,0.92)",
+    navActiveBg:"rgba(77,183,200,0.16)",
   },
 };
 
@@ -126,6 +127,20 @@ function readStoredTeacherTheme(){
     if(stored==="light" || stored==="dark") return stored;
   }catch(e){}
   return "light";
+}
+
+function readStoredTeacherLocalNoticeSignature(storageKey){
+  if(typeof window==="undefined" || !storageKey) return "";
+  try{
+    return localStorage.getItem(storageKey) || "";
+  }catch(e){}
+  return "";
+}
+
+function getTeacherLocalNoticeSignature(warning){
+  if(warning?.kind !== "orphaned") return "";
+  const count = Number(warning?.count || 0);
+  return count > 0 ? `orphaned_${count}` : "";
 }
 
 function getTeacherThemeVars(themeName){
@@ -246,6 +261,46 @@ function hexToRgba(hex, alpha = 1){
   const b = Number.parseInt(value.slice(4, 6), 16);
   if([r, g, b].some(Number.isNaN)) return `rgba(15,23,42,${alpha})`;
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function getTeacherSectionSurfaceStyles(tone, isDarkTheme = false){
+  if(!isDarkTheme){
+    return {
+      headerBg:tone?.bg || "#1D4ED8",
+      headerBorder:"rgba(15,23,42,0.92)",
+      titleColor:tone?.text || "#FFFFFF",
+      eyebrowColor:"rgba(255,255,255,0.72)",
+      chipBg:"#FFFFFF",
+      chipBorder:"rgba(15,23,42,0.18)",
+      chipText:"#101828",
+      statBg:"#FFFFFF",
+      statBorder:"#DCE3EA",
+      primaryAccent:tone?.bg || "#1D4ED8",
+      primaryButtonBg:tone?.bg || "#1D4ED8",
+      primaryButtonText:"#FFFFFF",
+      emptyBg:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",
+      noteBg:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",
+      noteBorder:"#DCE3EA",
+    };
+  }
+  const accent = tone?.bg || "#4DB7C8";
+  return {
+    headerBg:`linear-gradient(180deg, ${hexToRgba(accent, 0.26)} 0%, ${hexToRgba(accent, 0.14)} 100%)`,
+    headerBorder:hexToRgba(accent, 0.34),
+    titleColor:"#F8FAFC",
+    eyebrowColor:"rgba(226,232,240,0.72)",
+    chipBg:"rgba(7,13,22,0.56)",
+    chipBorder:"rgba(148,163,184,0.18)",
+    chipText:"#E2E8F0",
+    statBg:"rgba(7,13,22,0.58)",
+    statBorder:"rgba(148,163,184,0.14)",
+    primaryAccent:accent,
+    primaryButtonBg:accent,
+    primaryButtonText:"#FFFFFF",
+    emptyBg:"linear-gradient(180deg, rgba(16,25,38,0.98) 0%, rgba(12,18,31,0.98) 100%)",
+    noteBg:"linear-gradient(180deg, rgba(16,25,38,0.98) 0%, rgba(13,20,33,0.98) 100%)",
+    noteBorder:"rgba(51,65,85,0.78)",
+  };
 }
 
 function hslToHex(h, s, l){
@@ -1295,10 +1350,10 @@ function TeacherThemeCard({themeMode,onThemeChange}){
       label:"Dark",
       desc:"Low-glare evening workspace",
       preview:{
-        bg:"#081114",
-        surface:"#101B1F",
-        accent:"#67CDD8",
-        text:"#F1FBFC",
+        bg:"#0A1420",
+        surface:"#101926",
+        accent:"#4DB7C8",
+        text:"#F8FAFC",
       },
     },
   ];
@@ -1314,17 +1369,25 @@ function TeacherThemeCard({themeMode,onThemeChange}){
         boxShadow:G.shadowSm,
       }}>
       <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
-        <div style={{width:48,height:48,borderRadius:16,background:"rgba(90,115,119,0.12)",border:"1px solid rgba(90,115,119,0.16)",display:"flex",alignItems:"center",justifyContent:"center",color:"#5A7377",flexShrink:0}}>
-          <AppIcon icon={IconPalette} size={21} color="#5A7377" />
+        <div style={{width:48,height:48,borderRadius:16,background:themeMode==="dark" ? "rgba(77,183,200,0.12)" : "rgba(90,115,119,0.12)",border:`1px solid ${themeMode==="dark" ? "rgba(77,183,200,0.16)" : "rgba(90,115,119,0.16)"}`,display:"flex",alignItems:"center",justifyContent:"center",color:themeMode==="dark" ? "#74D0DE" : "#5A7377",flexShrink:0}}>
+          <AppIcon icon={IconPalette} size={21} color={themeMode==="dark" ? "#74D0DE" : "#5A7377"} />
         </div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.25,lineHeight:1.15}}>Choose your theme</div>
-          <div style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginTop:4,lineHeight:1.5}}>Switch between light and dark without changing the rest of your workspace.</div>
+          <div style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginTop:4,lineHeight:1.5}}>Pick a bright daytime layout or a softer, layered dark mode with lower glare at night.</div>
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
         {options.map(option=>{
           const selected = themeMode===option.id;
+          const previewShell = option.id==="dark"
+            ? "linear-gradient(180deg, #0A1420 0%, #101926 100%)"
+            : option.preview.bg;
+          const previewCardBg = option.id==="dark" ? "rgba(255,255,255,0.06)" : option.preview.surface;
+          const previewCardBorder = option.id==="dark" ? "rgba(148,163,184,0.18)" : "rgba(0,0,0,0.06)";
+          const selectedBg = selected
+            ? (option.id==="dark" ? "rgba(77,183,200,0.12)" : G.greenL)
+            : G.surfaceSoft;
           return(
             <button
               key={option.id}
@@ -1334,14 +1397,14 @@ function TeacherThemeCard({themeMode,onThemeChange}){
               style={{
                 border:`1px solid ${selected ? G.green : G.border}`,
                 borderRadius:18,
-                background:selected ? G.greenL : G.surfaceSoft,
+                background:selectedBg,
                 padding:"11px 11px 12px",
                 textAlign:"left",
                 cursor:"pointer",
-                boxShadow:selected ? `0 8px 18px ${G.greenL}` : "none",
+                boxShadow:selected ? `0 10px 24px ${option.id==="dark" ? "rgba(77,183,200,0.14)" : G.greenL}` : "none",
                 WebkitTapHighlightColor:"transparent",
               }}>
-              <div style={{height:78,borderRadius:14,background:option.preview.bg,border:`1px solid ${selected ? option.preview.accent : "rgba(0,0,0,0.08)"}`,padding:8,display:"flex",flexDirection:"column",justifyContent:"space-between",marginBottom:10}}>
+              <div style={{height:84,borderRadius:14,background:previewShell,border:`1px solid ${selected ? option.preview.accent : option.id==="dark" ? "rgba(148,163,184,0.18)" : "rgba(0,0,0,0.08)"}`,padding:8,display:"flex",flexDirection:"column",justifyContent:"space-between",marginBottom:10,overflow:"hidden"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div style={{width:24,height:24,borderRadius:8,background:option.preview.accent,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff"}}>
                     <AppIcon icon={option.id==="light" ? IconSun : IconMoon} size={14} color="#fff" stroke={2.2} />
@@ -1350,10 +1413,13 @@ function TeacherThemeCard({themeMode,onThemeChange}){
                     {selected && <AppIcon icon={IconCheck} size={12} color={option.preview.accent} stroke={2.5} />}
                   </div>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:6}}>
-                  {[0,1].map(i=>(
-                    <div key={i} style={{height:22,borderRadius:8,background:option.preview.surface,border:"1px solid rgba(0,0,0,0.06)"}}/>
-                  ))}
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  <div style={{height:11,borderRadius:999,background:option.id==="dark" ? "rgba(255,255,255,0.08)" : "#FFFFFF",border:`1px solid ${previewCardBorder}`}} />
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:6}}>
+                    {[0,1].map(i=>(
+                      <div key={i} style={{height:24,borderRadius:8,background:previewCardBg,border:`1px solid ${previewCardBorder}`}}/>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:4}}>
@@ -1402,7 +1468,7 @@ function TeacherProfileView({user,teacherName,quickHomeSummary,notificationCount
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,margin:"2px 4px -2px"}}>Workspace</div>
         <TeacherProfileActionCard icon={IconChartBar} title="View Stats" subtitle="See teaching hours and class breakdowns." onClick={onOpenStats} accent="blue"/>
-        <TeacherProfileActionCard icon={IconBell} title="Notifications" subtitle={notificationCount>0 ? `${notificationCount} unread update${notificationCount===1?"":"s"} from admin changes.` : "No unread updates right now."} onClick={onOpenNotifications} badge={notificationCount>0 ? notificationCount : null} accent="amber"/>
+        <TeacherProfileActionCard icon={IconBell} title="Notifications" subtitle={notificationCount>0 ? `${notificationCount} unread update${notificationCount===1?"":"s"} waiting in your notification panel.` : "No unread updates right now."} onClick={onOpenNotifications} badge={notificationCount>0 ? notificationCount : null} accent="amber"/>
         <TeacherProfileActionCard icon={IconTrash} title="Recycle Bin" subtitle={trashCount>0 ? `${trashCount} item${trashCount===1?"":"s"} waiting before permanent deletion.` : "Nothing in the recycle bin right now."} onClick={onOpenTrash} badge={trashCount>0 ? trashCount : null} accent="slate"/>
         <TeacherProfileActionCard icon={IconDownload} title="Export Data" subtitle="Download your teacher entries from this shared panel." onClick={onOpenExport} accent="green"/>
         <TeacherThemeCard themeMode={themeMode} onThemeChange={onThemeChange}/>
@@ -3140,6 +3206,19 @@ function getTeacherNoticeCopy(item) {
   const kind = String(item?.kind || "");
   const entityLabel = capitalizeWord(item?.entitySingular || "class");
 
+  if (kind === "orphaned_notes") {
+    const count = Number(item?.count || 0);
+    return {
+      icon:IconAlertTriangle,
+      badge:"Needs review",
+      badgeBg:"rgba(245,158,11,0.14)",
+      badgeColor:"#B45309",
+      title:"Unattached note files found",
+      summary:`We found ${count} unattached class note file${count===1?"":"s"} in your teacher account.`,
+      detail:"If anything looks missing, do not create duplicate classes. Please contact admin first.",
+    };
+  }
+
   if (kind === "institute_renamed") {
     const oldInstitute = item.oldInstitute || "your old institute";
     const newInstitute = item.newInstitute || item.institute || "your updated institute";
@@ -3522,6 +3601,8 @@ function ClassTrackerInner({user}){
   const [detailSwipeTransitionMs,setDetailSwipeTransitionMs] = useState(0);
   const [loadIssue,setLoadIssue]         = useState(null);
   const [dataWarning,setDataWarning]     = useState(null);
+  const localTeacherNoticeDismissKey     = `${TEACHER_LOCAL_NOTICE_DISMISS_KEY}_${user.uid}`;
+  const [dismissedTeacherLocalNoticeSignature, setDismissedTeacherLocalNoticeSignature] = useState(() => readStoredTeacherLocalNoticeSignature(`${TEACHER_LOCAL_NOTICE_DISMISS_KEY}_${user.uid}`));
   const [allowCloudSync,setAllowCloudSync] = useState(false);
   const [loadAttempt,setLoadAttempt]     = useState(0);
   const [restoringBackup,setRestoringBackup] = useState(false);
@@ -3574,7 +3655,25 @@ function ClassTrackerInner({user}){
       ? data._meta.pendingAdminClassNotices.filter(Boolean)
       : []
   ), [data?._meta?.pendingAdminClassNotices]);
-  const notificationCount = pendingAdminClassNotices.length;
+  const currentTeacherLocalNoticeSignature = useMemo(
+    () => getTeacherLocalNoticeSignature(dataWarning),
+    [dataWarning]
+  );
+  const localTeacherNotice = useMemo(() => {
+    if(dataWarning?.kind !== "orphaned") return null;
+    if(!currentTeacherLocalNoticeSignature || currentTeacherLocalNoticeSignature === dismissedTeacherLocalNoticeSignature) return null;
+    return {
+      id:`local_notice_${currentTeacherLocalNoticeSignature}`,
+      kind:"orphaned_notes",
+      institute:"Teacher workspace",
+      subject:"",
+      count:Number(dataWarning?.count || 0),
+      eventAt:Number(dataWarning?.eventAt || Date.now()),
+      adminName:"System",
+      status:"info",
+    };
+  }, [currentTeacherLocalNoticeSignature, dataWarning, dismissedTeacherLocalNoticeSignature]);
+  const notificationCount = pendingAdminClassNotices.length + (localTeacherNotice ? 1 : 0);
   const teacherHomeModel = useMemo(() => {
     const activeClasses = [...(data.classes || []).filter(c => !c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
     const institutes = [...new Set(activeClasses.map(c => c?.institute || ""))].filter(Boolean);
@@ -3652,6 +3751,9 @@ function ClassTrackerInner({user}){
       })
       .sort((a,b)=>(b.eventAt||0)-(a.eventAt||0))
   ), [pendingAdminClassNotices, data.classes, data.trash, data.notes]);
+  const teacherNotificationItems = useMemo(() => (
+    localTeacherNotice ? [localTeacherNotice, ...adminNoticeItems] : adminNoticeItems
+  ), [adminNoticeItems, localTeacherNotice]);
   const adminPromptNoticeItems = useMemo(() => (
     adminNoticeItems.filter(item => !item.promptedAt)
   ), [adminNoticeItems]);
@@ -3767,6 +3869,10 @@ function ClassTrackerInner({user}){
   useEffect(()=>{
     try{ localStorage.setItem(TEACHER_THEME_STORAGE_KEY, teacherTheme); }catch(e){}
   },[teacherTheme]);
+
+  useEffect(() => {
+    setDismissedTeacherLocalNoticeSignature(readStoredTeacherLocalNoticeSignature(localTeacherNoticeDismissKey));
+  }, [localTeacherNoticeDismissKey]);
 
   useEffect(() => {
     if(isEntryComposerView) return;
@@ -3886,7 +3992,7 @@ function ClassTrackerInner({user}){
         const purged = normaliseLoadedData(result.data);
         const liveRevision = Number(purged?._meta?.revision || 0);
         let nextWarning = result.orphanedNoteDocIds?.length
-          ? {kind:"orphaned",count:result.orphanedNoteDocIds.length}
+          ? {kind:"orphaned",count:result.orphanedNoteDocIds.length,eventAt:Date.now()}
           : null;
         try{
           const pending=localStorage.getItem(pendingSaveKey);
@@ -3920,6 +4026,7 @@ function ClassTrackerInner({user}){
                 kind:"staleDraft",
                 savedAt:savedAt||0,
                 cloudUpdatedAt:purged?._meta?.updatedAt||0,
+                eventAt:Date.now(),
               };
             }
             if(ageHrs>=24) localStorage.removeItem(pendingSaveKey);
@@ -4205,6 +4312,15 @@ function ClassTrackerInner({user}){
     inlineToastTimer.current=setTimeout(()=>setInlineToast(null),3000);
   }
 
+  function dismissLocalTeacherNotice(signature = currentTeacherLocalNoticeSignature){
+    const nextSignature = String(signature || "");
+    if(!nextSignature) return;
+    setDismissedTeacherLocalNoticeSignature(nextSignature);
+    try{
+      localStorage.setItem(localTeacherNoticeDismissKey, nextSignature);
+    }catch(e){}
+  }
+
   function dismissAdminNotices(ids){
     const idSet = new Set((Array.isArray(ids) ? ids : [ids]).map(id => String(id || "")).filter(Boolean));
     if(!idSet.size) return;
@@ -4219,6 +4335,9 @@ function ClassTrackerInner({user}){
   }
 
   function dismissAllAdminNotices(){
+    if(localTeacherNotice){
+      dismissLocalTeacherNotice(currentTeacherLocalNoticeSignature);
+    }
     setData(d=>({
       ...d,
       _meta: {
@@ -4792,7 +4911,7 @@ function ClassTrackerInner({user}){
           <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Offline now. Changes stay local until you reconnect.</span>
         </div>
       )}
-      {dataWarning&&(
+      {dataWarning?.kind==="staleDraft"&&(
         <div style={{position:"fixed",top:isOffline?118:58,left:0,right:0,zIndex:9997,background:dataWarning.kind==="staleDraft"?"#7C2D12":"#92400E",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:600,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
           {dataWarning.kind==="staleDraft"
             ? <><span>🗂</span> We found an older unsynced browser draft from {fmtRecoveryStamp(dataWarning.savedAt)}. The latest cloud classes are showing so nothing newer gets overwritten.</>
@@ -4850,7 +4969,7 @@ function ClassTrackerInner({user}){
             <div>
               <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8}}>Teacher notifications</div>
               <h2 style={{fontSize:30,fontFamily:G.display,letterSpacing:-0.6,color:G.text,marginBottom:6}}>Notification Panel</h2>
-              <p style={{fontSize:15,color:G.textM,lineHeight:1.65,maxWidth:640}}>Admin changes to your classes and institutes land here. Review what changed, open the related class or recycle bin if needed, then clear the notice when you are done.</p>
+              <p style={{fontSize:15,color:G.textM,lineHeight:1.65,maxWidth:640}}>Admin changes and important workspace warnings land here. Review what changed, open the related class or recycle bin if needed, then clear the notice when you are done.</p>
             </div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               {hasTrashLinkedNotice && <GhostBtn onClick={()=>safeNav("trash")}>Open recycle bin</GhostBtn>}
@@ -4873,26 +4992,27 @@ function ClassTrackerInner({user}){
             </div>
           </div>
 
-          {adminNoticeItems.length===0 ? (
+          {teacherNotificationItems.length===0 ? (
             <div style={{...card,padding:"68px 24px",textAlign:"center"}}>
               <div style={{width:62,height:62,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconBell} size={30} color={G.textM} /></div>
               <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginBottom:8}}>No new notifications</div>
-              <div style={{fontSize:15,color:G.textM,lineHeight:1.65}}>When an admin restores, removes, or renames one of your classes or institutes, the notice will show here with the related details and actions.</div>
+              <div style={{fontSize:15,color:G.textM,lineHeight:1.65}}>When an admin restores, removes, or renames one of your classes or institutes, or when the app needs your attention, the notice will show here with the related details and actions.</div>
             </div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              {adminNoticeItems.map(item=>{
+              {teacherNotificationItems.map(item=>{
                 const copy = getTeacherNoticeCopy(item);
+                const isLocalWarning = item.kind==="orphaned_notes";
                 const isInstituteRename = item.kind==="institute_renamed";
                 const isInstituteDeleted = item.kind==="institute_deleted";
                 const isInstituteDeletedMigrated = item.kind==="institute_deleted_migrated";
                 const isInstituteAction = isInstituteRename || isInstituteDeleted || isInstituteDeletedMigrated;
                 const isTrash=item.status==="trash";
                 const isActive=item.status==="active";
-                const statusLabel=isInstituteDeletedMigrated?"Classes moved":isInstituteDeleted?"Institute removed":isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
-                const statusBg=isInstituteDeletedMigrated?"rgba(124,58,237,0.10)":isInstituteDeleted?"rgba(220,38,38,0.10)":isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
-                const statusColor=isInstituteDeletedMigrated?"#6D28D9":isInstituteDeleted?"#B91C1C":isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
-                const dismissLabel=isInstituteAction||isActive||isTrash?"Mark as read":"Remove notice";
+                const statusLabel=isLocalWarning?"Needs review":isInstituteDeletedMigrated?"Classes moved":isInstituteDeleted?"Institute removed":isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
+                const statusBg=isLocalWarning?"rgba(245,158,11,0.14)":isInstituteDeletedMigrated?"rgba(124,58,237,0.10)":isInstituteDeleted?"rgba(220,38,38,0.10)":isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
+                const statusColor=isLocalWarning?"#B45309":isInstituteDeletedMigrated?"#6D28D9":isInstituteDeleted?"#B91C1C":isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
+                const dismissLabel=isLocalWarning||isInstituteAction||isActive||isTrash?"Mark as read":"Remove notice";
                 return(
                   <div key={item.id} style={{...card,padding:isMobile?"16px 16px 14px":"18px 18px 16px"}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap",marginBottom:12}}>
@@ -4905,9 +5025,10 @@ function ClassTrackerInner({user}){
                         </div>
                         <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:8}}>
                           <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textS}}>{item.institute||"No institute"}</span>
-                          {!isInstituteAction && item.subject&&<span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>{item.subject}</span>}
-                          {!isInstituteAction && <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.entryCount} {item.entryCount===1?"entry":"entries"}</span>}
-                          {!isInstituteAction && item.activeDays>0&&<span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.activeDays} {item.activeDays===1?"day":"days"}</span>}
+                          {!isLocalWarning && !isInstituteAction && item.subject&&<span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>{item.subject}</span>}
+                          {isLocalWarning && Number(item.count || 0) > 0 && <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309",fontFamily:G.mono}}>{item.count} file{item.count===1?"":"s"} found</span>}
+                          {!isLocalWarning && !isInstituteAction && <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.entryCount} {item.entryCount===1?"entry":"entries"}</span>}
+                          {!isLocalWarning && !isInstituteAction && item.activeDays>0&&<span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.activeDays} {item.activeDays===1?"day":"days"}</span>}
                           {isInstituteRename && Number(item.impactedClassCount || 0) > 0 && (
                             <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309",fontFamily:G.mono}}>
                               {item.impactedClassCount} {item.impactedClassCount===1?"class":"classes"} updated
@@ -4934,7 +5055,7 @@ function ClassTrackerInner({user}){
                             <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309"}}>Now {item.newInstitute}</span>
                           </div>
                         )}
-                        {!isInstituteAction && (
+                        {!isLocalWarning && !isInstituteAction && (
                           <div style={{fontSize:13,color:G.textM,lineHeight:1.7,marginTop:10}}>
                             {item.lastDateKey ? `Last log ${formatDateLabel(item.lastDateKey)}.` : "No saved entries were found for this class."} {item.latestEntryText ? `Latest note: ${item.latestEntryText}` : ""}
                           </div>
@@ -4957,11 +5078,11 @@ function ClassTrackerInner({user}){
                     </div>
 
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      {!isInstituteRename && isActive && <PrimaryBtn onClick={()=>openAdminNoticeClass(item)} style={{padding:"10px 16px"}}>Open class</PrimaryBtn>}
-                      {!isInstituteRename && isActive && item.entryCount>0 && <GhostBtn onClick={()=>openAdminNoticeClass(item,{history:true})} style={{padding:"10px 16px"}}>View history</GhostBtn>}
-                      {!isInstituteRename && isTrash && <GhostBtn onClick={()=>safeNav("trash")} style={{padding:"10px 16px"}}>Open recycle bin</GhostBtn>}
+                      {!isLocalWarning && !isInstituteRename && isActive && <PrimaryBtn onClick={()=>openAdminNoticeClass(item)} style={{padding:"10px 16px"}}>Open class</PrimaryBtn>}
+                      {!isLocalWarning && !isInstituteRename && isActive && item.entryCount>0 && <GhostBtn onClick={()=>openAdminNoticeClass(item,{history:true})} style={{padding:"10px 16px"}}>View history</GhostBtn>}
+                      {!isLocalWarning && !isInstituteRename && isTrash && <GhostBtn onClick={()=>safeNav("trash")} style={{padding:"10px 16px"}}>Open recycle bin</GhostBtn>}
 
-                      <GhostBtn onClick={()=>dismissAdminNotices(item.id)} style={{padding:"10px 16px"}}>{dismissLabel}</GhostBtn>
+                      <GhostBtn onClick={()=>isLocalWarning ? dismissLocalTeacherNotice(currentTeacherLocalNoticeSignature) : dismissAdminNotices(item.id)} style={{padding:"10px 16px"}}>{dismissLabel}</GhostBtn>
                     </div>
                   </div>
                 );
@@ -5030,6 +5151,7 @@ function ClassTrackerInner({user}){
     // For tablet/desktop split view
     const selCls=activeClasses.find(c=>c.id===activeClass?.id)||activeClasses[0]||null;
     const selColor=selCls?getSectionTone(selCls.section):getSectionTone("");
+    const selSurfaceTheme = getTeacherSectionSurfaceStyles(selColor, isDarkTeacherTheme);
     const selNotes=selCls?getClassNotes(selCls.id):{};
     const selDateNotes=selCls?getDateNotes(selCls.id,selectedDate):[];
     const selMetrics=selCls?(teacherClassMetricsMap[selCls.id] || buildClassEntryMetrics(selNotes)):null;
@@ -5063,7 +5185,7 @@ function ClassTrackerInner({user}){
       const instFull=cls.institute||"";
       const instShort=instFull.length>28?instFull.slice(0,26)+"…":instFull;
       const cardBorder = isDarkTeacherTheme ? G.borderM : "rgba(15,23,42,0.92)";
-      const sectionSurface = isDarkTeacherTheme ? hexToRgba(ic.bg, 0.18) : (ic.surface || ic.light || "#EEF3F8");
+      const sectionSurface = isDarkTeacherTheme ? hexToRgba(ic.bg, 0.16) : (ic.surface || ic.light || "#EEF3F8");
       const sectionTitleColor = isDarkTeacherTheme ? G.text : (ic.ink || G.text);
       const institutePillFill = isDarkTeacherTheme ? "rgba(255,255,255,0.08)" : (ic.pill || "#FFFFFF");
       const institutePillBorder = isDarkTeacherTheme ? "rgba(255,255,255,0.14)" : (ic.border || G.border);
@@ -5365,7 +5487,7 @@ function ClassTrackerInner({user}){
               const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(data.notes?.[cls.id]||{});
               const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
               const instFull=cls.institute||"";
-              const sectionSurface=isDarkTeacherTheme ? hexToRgba(ic.bg, 0.18) : (ic.surface || ic.light || "#EEF3F8");
+              const sectionSurface=isDarkTeacherTheme ? hexToRgba(ic.bg, 0.16) : (ic.surface || ic.light || "#EEF3F8");
               const institutePillFill = isDarkTeacherTheme ? "rgba(255,255,255,0.08)" : (ic.pill || "#FFFFFF");
               const institutePillBorder = isDarkTeacherTheme ? "rgba(255,255,255,0.14)" : (ic.border || G.border);
               const subjectPillFill = isDarkTeacherTheme ? "rgba(255,255,255,0.08)" : "#FFFFFF";
@@ -5376,7 +5498,7 @@ function ClassTrackerInner({user}){
                   <div style={{background:sectionSurface,padding:"13px 13px 12px",borderBottom:`1px solid ${G.border}`}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:16,fontWeight:800,color:ic.ink || G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
+                        <div style={{fontSize:16,fontWeight:800,color:isDarkTeacherTheme ? G.text : (ic.ink || G.text),fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:-0.25}}>{cls.section}</div>
                         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
                           <span title={instFull} style={{display:"inline-flex",alignItems:"center",gap:6,background:institutePillFill,border:`1px solid ${institutePillBorder}`,borderRadius:999,padding:"4px 9px",fontSize:11,fontWeight:700,color:isDarkTeacherTheme ? G.textS : G.text,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                             <span style={{width:7,height:7,borderRadius:999,background:ic.bg,flexShrink:0}}/>
@@ -5396,7 +5518,7 @@ function ClassTrackerInner({user}){
                 </div>
               );
             })}
-            <div onClick={()=>setView("addClass")} style={{borderRadius:16,padding:"12px 12px",marginTop:6,cursor:"pointer",border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",gap:10,transition:"all 0.15s",background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",boxShadow:G.shadowSm}} onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.background=G.greenL;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background='linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)';}}>
+            <div onClick={()=>setView("addClass")} style={{borderRadius:16,padding:"12px 12px",marginTop:6,cursor:"pointer",border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",gap:10,transition:"all 0.15s",background:isDarkTeacherTheme ? G.classCardBg : "linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",boxShadow:G.shadowSm}} onMouseEnter={e=>{e.currentTarget.style.borderColor=G.green;e.currentTarget.style.background=G.greenL;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=isDarkTeacherTheme ? G.classCardBg : 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)';}}>
               <span style={{width:28,height:28,borderRadius:10,background:G.greenL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:G.green,flexShrink:0}}>+</span><span style={{fontSize:13,color:G.textM,fontWeight:700}}>Add New Class</span>
             </div>
           </div>
@@ -5434,15 +5556,15 @@ function ClassTrackerInner({user}){
         ):(
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
             <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${G.border}`,background:G.pageBg,flexShrink:0}}>
-              <div style={{background:G.surface,border:`1px solid rgba(15,23,42,0.92)`,borderRadius:22,overflow:"hidden",boxShadow:G.shadowMd}}>
-                <div style={{background:selColor.bg,padding:"16px 16px 14px",borderBottom:`1px solid rgba(15,23,42,0.92)`}}>
+              <div style={{background:G.surface,border:`1px solid ${isDarkTeacherTheme ? G.borderM : "rgba(15,23,42,0.92)"}`,borderRadius:22,overflow:"hidden",boxShadow:G.shadowMd}}>
+                <div style={{background:selSurfaceTheme.headerBg,padding:"16px 16px 14px",borderBottom:`1px solid ${selSurfaceTheme.headerBorder}`}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.72)",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Class entry</div>
-                      <div style={{fontSize:22,fontWeight:800,color:selColor.text,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.08}}>{selCls.section}</div>
+                      <div style={{fontSize:11,color:selSurfaceTheme.eyebrowColor,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Class entry</div>
+                      <div style={{fontSize:22,fontWeight:800,color:selSurfaceTheme.titleColor,fontFamily:G.display,letterSpacing:-0.4,lineHeight:1.08}}>{selCls.section}</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                        <span style={{background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.text,fontFamily:G.sans,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCls.institute}</span>
-                        {selCls.subject&&<span style={{background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.text,fontFamily:G.sans}}>{selCls.subject}</span>}
+                        <span style={{background:selSurfaceTheme.chipBg,border:`1px solid ${selSurfaceTheme.chipBorder}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:selSurfaceTheme.chipText,fontFamily:G.sans,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCls.institute}</span>
+                        {selCls.subject&&<span style={{background:selSurfaceTheme.chipBg,border:`1px solid ${selSurfaceTheme.chipBorder}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:selSurfaceTheme.chipText,fontFamily:G.sans}}>{selCls.subject}</span>}
                         <span style={{background:selStatusTone.background,border:`1px solid ${selStatusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:800,color:selStatusTone.color,fontFamily:G.sans}}>{selStatusTone.label}</span>
                       </div>
                     </div>
@@ -5453,12 +5575,12 @@ function ClassTrackerInner({user}){
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8}}>
                     {[
-                      { label:"Today", value:selMetrics?.todayEntries ?? 0, color:selColor.bg },
+                      { label:"Today", value:selMetrics?.todayEntries ?? 0, color:selSurfaceTheme.primaryAccent },
                       { label:selMetrics?.monthLabel || "This month", value:selMetrics?.monthEntries ?? 0, color:G.textS },
                       { label:"Total", value:selMetrics?.totalCount ?? 0, color:G.text },
                       { label:"Logged days", value:selMetrics?.activeDays ?? 0, color:G.textS },
                     ].map(item=>(
-                      <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 10px 10px",textAlign:"center"}}>
+                      <div key={item.label} style={{background:selSurfaceTheme.statBg,border:`1px solid ${selSurfaceTheme.statBorder}`,borderRadius:14,padding:"11px 10px 10px",textAlign:"center"}}>
                         <div style={{fontSize:22,fontWeight:800,color:item.color,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
                         <div style={{fontSize:10.5,color:G.textL,marginTop:5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
                       </div>
@@ -5513,11 +5635,11 @@ function ClassTrackerInner({user}){
       ?{title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
       :{title:"",body:"",tag:"note",status:"",...(_ks?{}:(getSuggestedTime(data.notes,selCls.id,selectedDate)||{_dur:selCls?.duration||60}))});
     safeNav("addNote");
-  }} onPointerDown={e=>rpl(e,true)} style={{background:selColor.bg,color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>+ Add Entry</button>}
+  }} onPointerDown={e=>rpl(e,true)} style={{background:selSurfaceTheme.primaryButtonBg,color:selSurfaceTheme.primaryButtonText,border:"none",borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:5,minHeight:40,WebkitTapHighlightColor:"transparent"}}>+ Add Entry</button>}
                 </div>
               </div>
               {selDateNotes.length===0?(
-                <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"44px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+                <div style={{background:selSurfaceTheme.emptyBg,borderRadius:18,border:`2px dashed ${G.border}`,padding:"44px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
                   <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}><AppIcon icon={IconEdit} size={28} color={G.textM} /></div>
                   <div style={{fontSize:16,color:G.textM,fontWeight:600}}>{canAdd?"No entries yet — click + Add Entry":"No entries for this date"}</div>
                 </div>
@@ -5529,7 +5651,7 @@ function ClassTrackerInner({user}){
                     </div>
                   )}
                   {selDateNotes.map(note=>{const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;return(
-                    <div key={note.id} style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
+                    <div key={note.id} style={{background:selSurfaceTheme.noteBg,borderRadius:16,border:`1px solid ${selSurfaceTheme.noteBorder}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
                       <div style={{height:4,background:tag.bg}}/>
                       <div style={{padding:"13px 15px"}}>
                         <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
@@ -5699,23 +5821,24 @@ function ClassTrackerInner({user}){
     });
     const renderDetailSurface = (surfaceCls, panelKey) => {
       const surfaceColor = getSectionTone(surfaceCls.section);
+      const surfaceTheme = getTeacherSectionSurfaceStyles(surfaceColor, isDarkTeacherTheme);
       const surfaceClassNotes = getClassNotes(surfaceCls.id);
       const surfaceDateNotes = getDateNotes(surfaceCls.id, selectedDate);
       const surfaceMetrics = teacherClassMetricsMap[surfaceCls.id] || buildClassEntryMetrics(surfaceClassNotes);
       const surfaceStatusTone = getTodayEntryStatusStyles(surfaceMetrics.todayEntries);
       return(
         <div key={`${panelKey}-${surfaceCls.id || "class"}`} style={{flex:"0 0 100%",width:"100%",height:"100%",overflowY:"auto",padding:`12px 14px ${mobileBottomNavPad}`,boxSizing:"border-box",WebkitOverflowScrolling:"touch",overscrollBehaviorY:"contain"}}>
-          <div className="ledgr-card" style={{background:G.surface,border:`1px solid rgba(15,23,42,0.92)`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd,marginBottom:14}}>
-            <div style={{background:surfaceColor.bg,padding:"14px 14px 12px",borderBottom:`1px solid rgba(15,23,42,0.92)`}}>
+          <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${isDarkTeacherTheme ? G.borderM : "rgba(15,23,42,0.92)"}`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd,marginBottom:14}}>
+            <div style={{background:surfaceTheme.headerBg,padding:"14px 14px 12px",borderBottom:`1px solid ${surfaceTheme.headerBorder}`}}>
               <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:28,fontWeight:800,color:surfaceColor.text,fontFamily:G.display,letterSpacing:-0.6,lineHeight:1.02}}>{surfaceCls.section}</div>
+                  <div style={{fontSize:28,fontWeight:800,color:surfaceTheme.titleColor,fontFamily:G.display,letterSpacing:-0.6,lineHeight:1.02}}>{surfaceCls.section}</div>
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:G.text,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:7,background:surfaceTheme.chipBg,border:`1px solid ${surfaceTheme.chipBorder}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:surfaceTheme.chipText,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       <span style={{width:8,height:8,borderRadius:999,background:surfaceColor.bg,flexShrink:0}}/>
                       {surfaceCls.institute || "No institute"}
                     </span>
-                    {surfaceCls.subject&&<span style={{display:"inline-flex",alignItems:"center",background:"#FFFFFF",border:`1px solid rgba(15,23,42,0.18)`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:G.text,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{surfaceCls.subject}</span>}
+                    {surfaceCls.subject&&<span style={{display:"inline-flex",alignItems:"center",background:surfaceTheme.chipBg,border:`1px solid ${surfaceTheme.chipBorder}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:700,color:surfaceTheme.chipText,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{surfaceCls.subject}</span>}
                     <span style={{display:"inline-flex",alignItems:"center",gap:6,background:surfaceStatusTone.background,border:`1px solid ${surfaceStatusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:surfaceStatusTone.color,whiteSpace:"nowrap"}}>
                       <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
                       {surfaceStatusTone.label}
@@ -5729,12 +5852,12 @@ function ClassTrackerInner({user}){
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:12}}>
                 {[
-                  { label:"Today", value:surfaceMetrics.todayEntries, color:surfaceColor.bg },
+                  { label:"Today", value:surfaceMetrics.todayEntries, color:surfaceTheme.primaryAccent },
                   { label:surfaceMetrics.monthLabel, value:surfaceMetrics.monthEntries, color:G.textS },
                   { label:"Total", value:surfaceMetrics.totalCount, color:G.text },
                   { label:"Logged days", value:surfaceMetrics.activeDays, color:G.textS },
                 ].map(item=>(
-                  <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 10px 10px",textAlign:"center"}}>
+                  <div key={item.label} style={{background:surfaceTheme.statBg,border:`1px solid ${surfaceTheme.statBorder}`,borderRadius:14,padding:"11px 10px 10px",textAlign:"center"}}>
                     <div style={{fontSize:22,fontWeight:800,color:item.color,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
                     <div style={{fontSize:10.5,color:G.textL,marginTop:5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
                   </div>
@@ -5780,14 +5903,14 @@ function ClassTrackerInner({user}){
                 <AppIcon icon={IconHistory} size={16} color={surfaceMetrics.totalCount===0?G.textL:G.textS} /> History
               </button>
               {canAdd&&<button onClick={()=>openAddEntryForClass(surfaceCls)} onPointerDown={e=>rpl(e,true)}
-                style={{background:surfaceColor.bg,color:"#fff",border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+                style={{background:surfaceTheme.primaryButtonBg,color:surfaceTheme.primaryButtonText,border:"none",borderRadius:12,padding:"11px 22px",fontSize:15,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"flex",alignItems:"center",gap:6,minHeight:48,WebkitTapHighlightColor:"transparent",flexShrink:0}}>
                 + Add Entry
               </button>}
             </div>
           </div>
 
           {surfaceDateNotes.length===0?(
-            <div style={{background:"linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)",borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
+            <div style={{background:surfaceTheme.emptyBg,borderRadius:18,border:`2px dashed ${G.border}`,padding:"48px 20px",textAlign:"center",boxShadow:G.shadowSm}}>
               <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconEdit} size={28} color={G.textM} /></div>
               <div style={{fontSize:16,color:G.textM,fontWeight:600}}>{canAdd?"No entries yet":"No entries for this date"}</div>
               {canAdd&&<div style={{fontSize:14,color:G.textL,marginTop:6}}>Tap + Add Entry to log this class</div>}
@@ -5802,7 +5925,7 @@ function ClassTrackerInner({user}){
               {surfaceDateNotes.map(note=>{
                 const tag=(note?.tag&&TAG_STYLES[note.tag])||TAG_STYLES.note;
                 return(
-                  <div key={note.id} className="ledgr-card" style={{background:"linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%)",borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
+                  <div key={note.id} className="ledgr-card" style={{background:surfaceTheme.noteBg,borderRadius:16,border:`1px solid ${surfaceTheme.noteBorder}`,overflow:"hidden",boxShadow:reduceEffects?"none":G.shadowMd}}>
                     <div style={{height:4,background:tag.bg}}/>
                     <div style={{padding:"14px 15px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
