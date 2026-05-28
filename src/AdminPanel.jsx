@@ -1930,6 +1930,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     : [];
   const monthKey = currentMonthKey();
   const sectionMap = new Map();
+  const todayDetails = [];
   let todayEntries = 0;
   let monthEntries = 0;
   let totalMinutes = 0;
@@ -1958,6 +1959,20 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       currentSection.entryCount += 1;
       currentSection.totalMinutes += mins;
       if(mins <= 0) untimedEntries += 1;
+      todayDetails.push({
+        teacherName:getTeacherDisplayNameFromMap(teacher, fullDataMap),
+        section:sectionLabel,
+        subject:cls?.subject || "",
+        timeStart:entry?.timeStart || "",
+        timeEnd:entry?.timeEnd || "",
+        type:entry?.tag || "note",
+        typeLabel:TAG_STYLES[entry?.tag]?.label || entry?.tag || "note",
+        status:entry?.status || "",
+        statusLabel:STATUS_STYLES[entry?.status]?.label || entry?.status || "",
+        title:entry?.title || "",
+        notes:entry?.body || "",
+        minutes:mins,
+      });
     });
 
     sectionMap.set(sectionLabel, currentSection);
@@ -1992,6 +2007,12 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     sectionCount: sections.length,
     sectionNames: sections.map(section => section.name),
     sections,
+    todayDetails: todayDetails.sort((a, b) => {
+      if((a.timeStart || "") !== (b.timeStart || "")) return (a.timeStart || "").localeCompare(b.timeStart || "");
+      const sectionCmp = exportTextSorter.compare(a.section || "", b.section || "");
+      if(sectionCmp !== 0) return sectionCmp;
+      return exportTextSorter.compare(a.title || "", b.title || "");
+    }),
     totalMinutes,
     untimedEntries,
   };
@@ -2632,12 +2653,29 @@ function drawInstituteGlancePdfStatCard(doc, { x, y, width, height, label, value
   doc.text(String(value || "0"), x + 12, y + 41);
 }
 function buildInstituteGlanceFilledTeacherPdfBody(row){
-  return (row?.filledTeacherRows || []).map(teacher => [
-    teacher.name || "Teacher",
-    instituteGlanceTeacherSectionCaption(teacher),
-    String(teacher.todayEntries || 0),
-    instituteGlanceTeacherHoursLabel(teacher),
-  ]);
+  return (row?.filledTeacherRows || []).flatMap(teacher => {
+    const details = Array.isArray(teacher?.todayDetails) ? teacher.todayDetails : [];
+    if(!details.length){
+      return [[
+        teacher.name || "Teacher",
+        instituteGlanceTeacherSectionCaption(teacher),
+        "—",
+        "—",
+        "note",
+        `${teacher.todayEntries || 0} entr${teacher.todayEntries===1?"y":"ies"} uploaded`,
+        instituteGlanceTeacherHoursLabel(teacher),
+      ]];
+    }
+    return details.map(detail => [
+      teacher.name || "Teacher",
+      detail.section || "Untitled section",
+      formatExportPdfTime(detail.timeStart, detail.timeEnd) || "—",
+      detail.subject || "—",
+      detail.type || detail.typeLabel || "note",
+      detail.title || "—",
+      detail.notes || "—",
+    ]);
+  });
 }
 function buildInstituteGlancePendingTeacherPdfBody(row){
   return (row?.pendingTeacherRows || []).map(teacher => [
@@ -2827,15 +2865,15 @@ function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, mar
   const pendingBody = buildInstituteGlancePendingTeacherPdfBody(row);
 
   cursorY = renderInstituteGlancePdfTeacherSection(doc, {
-    title:`Teachers who filled today${filledBody.length ? ` (${filledBody.length})` : ""}`,
+    title:`Teachers who filled today${row.filledTeacherRows?.length ? ` (${row.filledTeacherRows.length})` : ""}`,
     subtitle: row.filledTeacherRows?.length
-      ? "Teachers with at least one entry today are grouped first so you can review the active names before the pending follow-up list."
+      ? "Teachers with at least one entry today are shown with the class, time, subject, title, and notes they uploaded."
       : "No teacher has uploaded today's entry for this centre yet.",
     margin,
     cursorY,
     body: filledBody,
-    head:["Teacher", "Sections taught", "Logs today", "Study hours"],
-    minHeight: 160,
+    head:["Teacher", "Section", "Time", "Subject", "Type", "Title", "Notes"],
+    minHeight: 210,
     emptyState:{
       title:"No filled entries today",
       body:"No teacher has uploaded today's entry for this centre yet.",
@@ -2854,10 +2892,13 @@ function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, mar
           fontSize:8.6,
         },
         columnStyles:{
-          0:{ cellWidth:165 },
-          1:{ cellWidth:350 },
-          2:{ cellWidth:70, halign:"center" },
-          3:{ cellWidth:87, halign:"center" },
+          0:{ cellWidth:112 },
+          1:{ cellWidth:104 },
+          2:{ cellWidth:92 },
+          3:{ cellWidth:82 },
+          4:{ cellWidth:46, halign:"center" },
+          5:{ cellWidth:142 },
+          6:{ cellWidth:204 },
         },
         didParseCell: data => {
           if(data.section !== "body") return;
@@ -2865,13 +2906,17 @@ function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, mar
             data.cell.styles.fontStyle = "bold";
             data.cell.styles.textColor = [17, 24, 39];
           }
-          if(data.column.index === 2){
-            data.cell.styles.halign = "center";
-          }
-          if(data.column.index === 3){
+          if(data.column.index === 4){
             data.cell.styles.halign = "center";
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [22, 101, 52];
+            data.cell.styles.textColor = [29, 78, 216];
+          }
+          if(data.column.index === 5){
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.textColor = [17, 24, 39];
+          }
+          if(data.column.index === 6){
+            data.cell.styles.textColor = [55, 65, 81];
           }
         },
       },

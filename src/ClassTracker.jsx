@@ -5108,6 +5108,25 @@ function ClassTrackerInner({user}){
   const dates=buildDateWindow();
   const selDateObj=dates.find(d=>d.key===selectedDate)||dates[7];
   const getClassUrgencyMeta = (cls) => classInsights[cls?.id] || { lastTopic:"", lastEntryAt:0 };
+  const startEntryForClass = (targetClass, targetDate = selectedDate) => {
+    if(!targetClass) return;
+    const nextDate = targetDate || todayKey();
+    setSelectedDate(nextDate);
+    setActiveClass(targetClass);
+    if(!isDateAllowed(nextDate)){
+      safeNav(isMobile ? "classDetail" : "home");
+      return;
+    }
+    const slots = getSlotsForSection(targetClass, instituteSections);
+    const usedStarts = new Set((((data.notes?.[targetClass.id] || {})[nextDate]) || []).map(entry => entry.timeStart).filter(Boolean));
+    const defaultSlot = slots ? getDefaultKisSlot(data.notes, targetClass.id, slots, usedStarts) : null;
+    setNewNote(
+      defaultSlot && !usedStarts.has(defaultSlot.start)
+        ? {title:"",body:"",tag:"note",status:"",timeStart:defaultSlot.start,timeEnd:defaultSlot.end,_dur:defaultSlot.durMins,_kisSlot:true,_suggestedEnd:defaultSlot.end}
+        : {title:"",body:"",tag:"note",status:"",...(slots ? {} : (getSuggestedTime(data.notes, targetClass.id, nextDate) || {_dur:targetClass?.duration || 60}))}
+    );
+    safeNav("addNote");
+  };
 
   // Build a noteDates map across ALL classes for the date strip dots
   // ── SINGLE SCROLLABLE HOME ───────────────────────────────────────────────
@@ -5644,7 +5663,7 @@ function ClassTrackerInner({user}){
           ):(
             <div style={{display:"flex",flexDirection:"column",gap:mobileLiteMode?8:10}}>
               {visibleMobileClasses.map(cls=>(
-                <ClassCard key={cls.id} cls={cls} compact dense={mobileLiteMode} onClick={()=>{setActiveClass(cls);setSelectedDate(todayKey());setView("classDetail");}} onDelete={()=>setLeaveModal(cls.id)} onHold={()=>setMobileClassSheetId(cls.id)}/>
+                <ClassCard key={cls.id} cls={cls} compact dense={mobileLiteMode} onClick={()=>startEntryForClass(cls, todayKey())} onDelete={()=>setLeaveModal(cls.id)} onHold={()=>setMobileClassSheetId(cls.id)}/>
               ))}
               {hasMoreMobileClasses&&(
                 <button onClick={()=>setMobileClassLimit(limit=>Math.min(filtered.length, limit + mobileBatchSize))}
