@@ -2639,436 +2639,365 @@ async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLab
 function instituteGlancePdfFilename(instituteName){
   return `${slugifyDownloadPart(instituteName)}_centre_summary_${todayKey()}.pdf`;
 }
-function drawInstituteGlancePdfStatCard(doc, { x, y, width, height, label, value, fillColor = [255, 255, 255], borderColor = [221, 227, 237], labelColor = [107, 114, 128], valueColor = [17, 24, 39] }){
-  doc.setFillColor(...fillColor);
-  doc.setDrawColor(...borderColor);
-  doc.roundedRect(x, y, width, height, 12, 12, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
-  doc.setTextColor(...labelColor);
-  doc.text(String(label || "").toUpperCase(), x + 12, y + 16);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.setTextColor(...valueColor);
-  doc.text(String(value || "0"), x + 12, y + 41);
-}
-function buildInstituteGlanceFilledTeacherPdfBody(row){
-  return (row?.filledTeacherRows || []).flatMap(teacher => {
-    const details = Array.isArray(teacher?.todayDetails) ? teacher.todayDetails : [];
-    if(!details.length){
-      return [[
-        teacher.name || "Teacher",
-        instituteGlanceTeacherSectionCaption(teacher),
-        "—",
-        "—",
-        "note",
-        `${teacher.todayEntries || 0} entr${teacher.todayEntries===1?"y":"ies"} uploaded`,
-        instituteGlanceTeacherHoursLabel(teacher),
-      ]];
-    }
-    return details.map(detail => [
-      teacher.name || "Teacher",
-      detail.section || "Untitled section",
-      formatExportPdfTime(detail.timeStart, detail.timeEnd) || "—",
-      detail.subject || "—",
-      detail.type || detail.typeLabel || "note",
-      detail.title || "—",
-      detail.notes || "—",
-    ]);
-  });
-}
-function buildInstituteGlancePendingTeacherPdfBody(row){
-  return (row?.pendingTeacherRows || []).map(teacher => [
-    teacher.name || "Teacher",
-    teacher.todayStatusLabel || instituteGlanceTodayStatusLabel(teacher),
-    instituteGlanceTeacherSectionCaption(teacher),
-    String(teacher.monthEntries || 0),
-    teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher),
-    instituteGlanceTeacherHoursLabel(teacher),
-  ]);
-}
-function ensureInstituteGlancePdfSectionSpace(doc, cursorY, minHeight, margin){
-  const pageHeight = doc.internal.pageSize.getHeight();
-  if(cursorY <= pageHeight - minHeight) return cursorY;
-  doc.addPage();
-  return margin;
-}
-function drawInstituteGlancePdfEmptyNotice(doc, { x, y, width, title, body, fillColor = [248, 250, 252], borderColor = [221, 227, 237], titleColor = [31, 41, 55], bodyColor = [75, 85, 99] }){
-  const bodyLines = doc.splitTextToSize(body, width - 28);
-  const height = 36 + bodyLines.length * 12 + 12;
-  doc.setFillColor(...fillColor);
-  doc.setDrawColor(...borderColor);
-  doc.roundedRect(x, y, width, height, 14, 14, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11.5);
-  doc.setTextColor(...titleColor);
-  doc.text(title, x + 14, y + 20);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10.5);
-  doc.setTextColor(...bodyColor);
-  doc.text(bodyLines, x + 14, y + 36);
-  return y + height + 18;
-}
-function renderInstituteGlancePdfTeacherSection(doc, {
-  title,
-  subtitle,
-  margin,
-  cursorY,
-  body,
-  head,
-  minHeight = 150,
-  tableOptions = {},
-  emptyState = null,
-}){
-  cursorY = ensureInstituteGlancePdfSectionSpace(doc, cursorY, minHeight, margin);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text(title, margin, cursorY);
-  cursorY += 16;
-  if(subtitle){
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10.5);
-    doc.setTextColor(100, 116, 139);
-    doc.text(doc.splitTextToSize(subtitle, doc.internal.pageSize.getWidth() - margin * 2), margin, cursorY);
-    cursorY += 20;
+
+// ── HTML-based centre summary export ─────────────────────────────────────────
+// Replaces the old jsPDF canvas-drawing approach with a rich HTML template
+// that matches the improved summary style (DM Sans, scorecards, teacher blocks,
+// pending table with priority badges). The browser's native print dialog is
+// used to save as PDF, which gives pixel-perfect rendering and proper pagination.
+
+const CENTRE_SUMMARY_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink: #0f1115; --ink-2: #3d4048; --ink-3: #6b7080; --ink-4: #9da3af;
+    --rule: #e4e6ea; --rule-strong: #c8ccd4;
+    --surface: #ffffff; --surface-2: #f6f7f9; --surface-3: #edf0f4;
+    --green: #16a34a; --green-bg: #f0fdf4; --green-border: #bbf7d0;
+    --amber: #b45309; --amber-bg: #fffbeb; --amber-border: #fde68a;
+    --red: #dc2626; --red-bg: #fef2f2; --red-border: #fecaca;
+    --blue: #1d4ed8; --blue-bg: #eff6ff; --blue-border: #bfdbfe;
+    --purple: #7c3aed; --purple-bg: #f5f3ff; --purple-border: #ddd6fe;
+    --teal: #0d9488; --teal-bg: #f0fdfa; --teal-border: #99f6e4;
   }
-  if(!body.length){
-    return drawInstituteGlancePdfEmptyNotice(doc, {
-      x:margin,
-      y:cursorY,
-      width:doc.internal.pageSize.getWidth() - margin * 2,
-      ...(emptyState || {
-        title:"Nothing to show here",
-        body:"No matching teachers were found for this section.",
-      }),
+  body {
+    font-family: 'DM Sans', sans-serif; background: var(--surface-2);
+    color: var(--ink); font-size: 13.5px; line-height: 1.5;
+    padding: 28px 20px 56px; max-width: 900px; margin: 0 auto;
+  }
+  .page-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1.5px solid var(--ink);
+  }
+  .page-header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  .page-header .meta { font-size: 11.5px; color: var(--ink-3); text-align: right; line-height: 1.7; }
+  .scorecard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+  .card { background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px; padding: 12px 14px; }
+  .card .label { font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-3); margin-bottom: 4px; }
+  .card .value { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; color: var(--ink); line-height: 1.1; }
+  .card .sub { font-size: 11px; color: var(--ink-4); margin-top: 2px; }
+  .card.alert .value { color: var(--red); }
+  .card.ok .value { color: var(--green); }
+  .pending-breakdown {
+    background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px;
+    padding: 11px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .pb-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-3); margin-right: 6px; white-space: nowrap; }
+  .pb-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
+  .pb-chip.red { background: var(--red-bg); color: var(--red); border: 0.5px solid var(--red-border); }
+  .pb-chip.amber { background: var(--amber-bg); color: var(--amber); border: 0.5px solid var(--amber-border); }
+  .pb-chip.green { background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); }
+  .pb-sep { color: var(--rule-strong); font-size: 14px; }
+  .progress-wrap {
+    background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px;
+    padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 14px;
+  }
+  .progress-label { font-size: 12px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+  .progress-bar { flex: 1; height: 6px; background: var(--surface-3); border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 99px; background: var(--green); }
+  .progress-pct { font-size: 12px; font-weight: 600; color: var(--green); white-space: nowrap; }
+  .section-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--ink-3); margin-bottom: 8px; margin-top: 24px;
+    padding-bottom: 5px; border-bottom: 0.5px solid var(--rule);
+  }
+  .teacher-block { background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .teacher-name-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--surface-3); border-bottom: 0.5px solid var(--rule); }
+  .avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--blue-bg); border: 0.5px solid var(--blue-border); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: var(--blue); flex-shrink: 0; }
+  .tname { font-weight: 600; font-size: 12.5px; color: var(--ink); }
+  .subject-tag { margin-left: auto; font-size: 10.5px; padding: 2px 8px; border-radius: 99px; background: var(--blue-bg); color: var(--blue); border: 0.5px solid var(--blue-border); font-weight: 500; }
+  .col-head { display: grid; grid-template-columns: 90px 130px 1fr 1fr; gap: 0; padding: 5px 14px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-4); border-bottom: 0.5px solid var(--rule); background: var(--surface); }
+  .session-row { display: grid; grid-template-columns: 90px 130px 1fr 1fr; gap: 0; padding: 7px 14px; border-bottom: 0.5px solid var(--rule); align-items: center; font-size: 12px; }
+  .session-row:last-child { border-bottom: none; }
+  .section-name { font-weight: 500; color: var(--ink); }
+  .time-str { color: var(--ink-3); font-size: 11.5px; }
+  .topic { color: var(--ink-2); }
+  .notes-str { color: var(--ink-4); font-size: 11px; text-align: right; }
+  .empty-notice { background: var(--blue-bg); border: 0.5px solid var(--blue-border); border-radius: 8px; padding: 16px 18px; color: var(--blue); font-size: 12.5px; margin-bottom: 8px; }
+  .empty-notice.green { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
+  .pending-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px; overflow: hidden; font-size: 12px; }
+  .pending-table thead tr { background: var(--surface-3); }
+  .pending-table th { padding: 7px 12px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-4); border-bottom: 0.5px solid var(--rule-strong); white-space: nowrap; }
+  .pending-table td { padding: 7px 12px; border-bottom: 0.5px solid var(--rule); color: var(--ink-2); vertical-align: middle; }
+  .pending-table tr:last-child td { border-bottom: none; }
+  .pending-table .num { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-4); }
+  .pending-table .name { font-weight: 500; color: var(--ink); }
+  .pending-table .days-col { font-family: 'DM Mono', monospace; font-size: 11.5px; font-weight: 600; }
+  .days-urgent { color: var(--red); }
+  .days-warn   { color: var(--amber); }
+  .days-ok     { color: var(--ink-3); }
+  .td-right { text-align: right; }
+  .badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; letter-spacing: 0.2px; }
+  .badge-red   { background: var(--red-bg);   color: var(--red);   border: 0.5px solid var(--red-border); }
+  .badge-amber { background: var(--amber-bg); color: var(--amber); border: 0.5px solid var(--amber-border); }
+  .badge-green { background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); }
+  .page-footer { margin-top: 36px; padding-top: 12px; border-top: 0.5px solid var(--rule); display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-4); }
+  .all-summary-cover { background: var(--blue-bg); border: 0.5px solid var(--blue-border); border-radius: 12px; padding: 24px 28px; margin-bottom: 24px; }
+  .all-summary-cover h1 { font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -0.4px; margin-bottom: 4px; }
+  .all-summary-cover .sub { font-size: 12px; color: var(--ink-3); margin-bottom: 16px; }
+  .all-summary-cover .scorecard { margin-bottom: 0; }
+  .institute-divider { border: none; border-top: 2px solid var(--rule-strong); margin: 32px 0 28px; }
+  .institute-heading { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -0.3px; margin-bottom: 4px; }
+  .institute-sub { font-size: 11.5px; color: var(--ink-3); margin-bottom: 16px; }
+  @media print {
+    body { background: white; padding: 16px 18px 32px; }
+    .institute-divider { page-break-before: always; margin-top: 0; border-top: none; }
+    .teacher-block, .pending-table { page-break-inside: avoid; }
+    @page { margin: 1.2cm; }
+  }
+`;
+
+function _avatarInitials(name){
+  const parts = String(name || "").trim().split(/\s+/);
+  if(parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return String(name || "?").slice(0, 2).toUpperCase();
+}
+
+function _pendingDaysLabel(teacher){
+  const last = teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher);
+  // Try to parse a days-ago number from strings like "28 May 2026" or "Signed up 28 May 2026"
+  const dateMatch = last.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
+  if(!dateMatch) return { label: "—", cls: "days-urgent" };
+  const d = new Date(`${dateMatch[2]} ${dateMatch[1]}, ${dateMatch[3]}`);
+  if(isNaN(d)) return { label: "—", cls: "days-urgent" };
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if(days <= 1) return { label: days === 1 ? "1 day" : "today", cls: "days-ok" };
+  if(days <= 8) return { label: `${days} days`, cls: "days-warn" };
+  return { label: `${days} days`, cls: "days-urgent" };
+}
+
+function _pendingBadge(teacher){
+  const last = teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher);
+  const isNeverLogged = /no logs yet/i.test(last);
+  const isSignedUpOnly = /signed up/i.test(last) && teacher.monthEntries === 0;
+  const { cls } = _pendingDaysLabel(teacher);
+  if(isNeverLogged) return { label: "Never logged", cls: "badge-red" };
+  if(isSignedUpOnly) return { label: "New · no logs", cls: "badge-amber" };
+  if(cls === "days-urgent") return { label: "Inactive", cls: "badge-red" };
+  if(cls === "days-warn") return { label: "Missed today", cls: "badge-amber" };
+  return { label: "Active · missed today", cls: "badge-green" };
+}
+
+function buildInstituteGlanceHtmlPage(row, generatedOnLabel){
+  const e = escapeExportHtml;
+  const filled = row.filledTeacherRows || [];
+  const pending = row.pendingTeacherRows || [];
+  const total = row.totalTeachers || 0;
+  const filledCount = row.filledToday || 0;
+  const pendingCount = row.missingToday || 0;
+  const sections = row.sectionsTaught || 0;
+  const hours = formatDurationShort(row.totalStudyMinutes || 0);
+  const pct = total > 0 ? Math.round((filledCount / total) * 100) : 0;
+
+  // Pending breakdown counts
+  let nInactive = 0, nMissed = 0, nActive = 0;
+  pending.forEach(t => {
+    const { cls } = _pendingBadge(t);
+    if(cls === "badge-red") nInactive++;
+    else if(cls === "badge-amber") nMissed++;
+    else nActive++;
+  });
+
+  // Filled teachers HTML
+  let filledHtml = "";
+  if(!filled.length){
+    filledHtml = `<div class="empty-notice">No teacher has uploaded today's entry for this centre yet.</div>`;
+  } else {
+    filledHtml = `<div class="col-head"><span>Section</span><span>Time</span><span>Topic / Title</span><span style="text-align:right">Notes</span></div>`;
+    filled.forEach(teacher => {
+      const details = Array.isArray(teacher.todayDetails) ? teacher.todayDetails : [];
+      const initials = _avatarInitials(teacher.name);
+      const subjectSet = [...new Set(details.map(d => d.subject).filter(Boolean))];
+      const subjectLabel = subjectSet.join(", ") || "—";
+      let rows = "";
+      if(!details.length){
+        rows = `<div class="session-row"><span class="section-name">${e(instituteGlanceTeacherSectionCaption(teacher))}</span><span class="time-str">—</span><span class="topic">${e(teacher.todayEntries || 0)} entr${teacher.todayEntries===1?"y":"ies"} uploaded</span><span class="notes-str">${e(instituteGlanceTeacherHoursLabel(teacher))}</span></div>`;
+      } else {
+        rows = details.map(d =>
+          `<div class="session-row">
+            <span class="section-name">${e(d.section || "—")}</span>
+            <span class="time-str">${e(formatExportPdfTime(d.timeStart, d.timeEnd) || "—")}</span>
+            <span class="topic">${e(d.title || d.subject || "—")}</span>
+            <span class="notes-str">${e(d.notes || "—")}</span>
+          </div>`
+        ).join("");
+      }
+      filledHtml += `
+        <div class="teacher-block">
+          <div class="teacher-name-row">
+            <div class="avatar">${e(initials)}</div>
+            <span class="tname">${e(teacher.name || "Teacher")}</span>
+            <span class="subject-tag">${e(subjectLabel)}</span>
+          </div>
+          ${rows}
+        </div>`;
     });
   }
-  const { autoTable } = tableOptions;
-  autoTable(doc, {
-    startY: cursorY,
-    head: [head],
-    body,
-    margin:{ left:margin, right:margin, bottom:24 },
-    styles:{
-      font:"helvetica",
-      fontSize:8.7,
-      cellPadding:6.2,
-      lineColor:[226, 232, 240],
-      lineWidth:0.5,
-      textColor:[31, 41, 55],
-      valign:"top",
-      overflow:"linebreak",
-    },
-    headStyles:{
-      fillColor:[248, 250, 252],
-      textColor:[100, 116, 139],
-      fontStyle:"bold",
-      fontSize:8.4,
-    },
-    alternateRowStyles:{
-      fillColor:[250, 252, 255],
-    },
-    ...tableOptions.config,
-  });
-  return (doc.lastAutoTable?.finalY || cursorY) + 20;
-}
 
-function finalizeInstituteGlancePdf(doc){
-  const pageCount = doc.getNumberOfPages();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  for(let page = 1; page <= pageCount; page += 1){
-    doc.setPage(page);
-    doc.setDrawColor(226, 232, 240);
-    doc.line(30, pageHeight - 24, pageWidth - 30, pageHeight - 24);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    doc.setTextColor(148, 163, 184);
-    doc.text("Ledgr centre summary", 30, pageHeight - 10);
-    doc.text(`Page ${page} of ${pageCount}`, pageWidth - 30, pageHeight - 10, { align:"right" });
-  }
-}
-
-function renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, margin = 30 }){
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const contentWidth = pageWidth - margin * 2;
-  let cursorY = 36;
-  const { autoTable } = doc.__instituteGlancePdfRuntime || {};
-  if(typeof autoTable !== "function"){
-    throw new Error("Institute glance PDF runtime is not ready.");
+  // Pending teachers HTML
+  let pendingHtml = "";
+  if(!pending.length){
+    pendingHtml = `<div class="empty-notice green">All linked teachers in this centre have already uploaded their entries today.</div>`;
+  } else {
+    const rows = pending.map((teacher, i) => {
+      const last = teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher);
+      const { label: daysLabel, cls: daysCls } = _pendingDaysLabel(teacher);
+      const badge = _pendingBadge(teacher);
+      return `<tr>
+        <td class="num">${i + 1}</td>
+        <td class="name">${e(teacher.name || "Teacher")}</td>
+        <td>${e(last)}</td>
+        <td class="td-right days-col ${daysCls}">${e(daysLabel)}</td>
+        <td class="td-right num">${teacher.monthEntries || 0}</td>
+        <td class="td-right"><span class="badge ${badge.cls}">${e(badge.label)}</span></td>
+      </tr>`;
+    }).join("");
+    pendingHtml = `
+      <table class="pending-table">
+        <thead><tr>
+          <th>#</th><th>Teacher</th><th>Last entry</th>
+          <th class="td-right">Days inactive</th>
+          <th class="td-right">Sections this month</th>
+          <th class="td-right">Priority</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
   }
 
-  doc.setFont("helvetica", "bold");
-  doc.setFillColor(238, 244, 255);
-  doc.setDrawColor(199, 215, 245);
-  doc.roundedRect(margin, cursorY, contentWidth, row.noTeachersSignedUp ? 126 : 144, 18, 18, "FD");
-  doc.setFontSize(27);
-  doc.setTextColor(17, 24, 39);
-  doc.text(row.institute || "Institute summary", margin + 18, cursorY + 28);
+  return `
+    <div class="page-header">
+      <div>
+        <h1>${e(row.institute || "Centre Summary")}</h1>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:3px;">Daily teacher activity report</div>
+      </div>
+      <div class="meta">${e(generatedOnLabel)}<br>Ledgr centre summary</div>
+    </div>
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.setTextColor(75, 85, 99);
-  doc.text(generatedOnLabel, margin + 18, cursorY + 48);
+    <div class="scorecard">
+      <div class="card ok">
+        <div class="label">Updated today</div>
+        <div class="value">${filledCount}</div>
+        <div class="sub">of ${total} teacher${total !== 1 ? "s" : ""}</div>
+      </div>
+      <div class="card alert">
+        <div class="label">Pending today</div>
+        <div class="value">${pendingCount}</div>
+        <div class="sub">not filled yet</div>
+      </div>
+      <div class="card">
+        <div class="label">Sections taught</div>
+        <div class="value">${sections}</div>
+        <div class="sub">today</div>
+      </div>
+      <div class="card">
+        <div class="label">Study hours</div>
+        <div class="value">${e(hours)}</div>
+        <div class="sub">logged today</div>
+      </div>
+    </div>
 
-  const overviewLine = row.noTeachersSignedUp
-    ? "No teachers have signed up in this centre yet."
-    : `${row.totalTeachers || 0} teachers • ${row.filledToday || 0} filled today • ${row.missingToday || 0} pending • ${row.sectionsTaught || 0} sections taught • ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
-  doc.setFontSize(13.5);
-  doc.text(doc.splitTextToSize(overviewLine, contentWidth - 170), margin + 18, cursorY + 69);
-  const badgeLabel = row.noTeachersSignedUp ? "No sign-ups" : `${row.filledToday || 0}/${row.totalTeachers || 0} updated`;
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(191, 219, 254);
-  doc.roundedRect(pageWidth - margin - 146, cursorY + 16, 128, 28, 14, 14, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(29, 78, 216);
-  doc.text(badgeLabel, pageWidth - margin - 82, cursorY + 34, { align:"center" });
-  cursorY += row.noTeachersSignedUp ? 144 : 162;
+    ${pending.length ? `
+    <div class="pending-breakdown">
+      <span class="pb-label">Pending breakdown</span>
+      ${nInactive > 0 ? `<span class="pb-chip red"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nInactive} inactive / never logged</span><span class="pb-sep">·</span>` : ""}
+      ${nMissed > 0 ? `<span class="pb-chip amber"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nMissed} missed several days</span><span class="pb-sep">·</span>` : ""}
+      ${nActive > 0 ? `<span class="pb-chip green"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nActive} active · missed today</span>` : ""}
+    </div>
+    <div class="progress-wrap">
+      <span class="progress-label">Submission rate today</span>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <span class="progress-pct">${filledCount} / ${total} · ${pct}%</span>
+    </div>` : ""}
 
-  if(row.noTeachersSignedUp){
-    drawInstituteGlancePdfEmptyNotice(doc, {
-      x:margin,
-      y:cursorY,
-      width:contentWidth,
-      title:"No sign-ups yet",
-      body:"This centre currently has 0 linked teachers, so there is no filled-versus-pending summary yet.",
-      fillColor:[248, 250, 252],
-      borderColor:[221, 227, 237],
-    });
-    return doc;
-  }
+    <div class="section-title">Teachers active today (${filled.length})</div>
+    ${filledHtml}
 
-  const statGap = 10;
-  const statWidth = (contentWidth - statGap * 3) / 4;
-  [
-    { label:"Updated", value:`${row.filledToday || 0}/${row.totalTeachers || 0}` },
-    { label:"Pending", value:String(row.missingToday || 0) },
-    { label:"Sections taught", value:String(row.sectionsTaught || 0) },
-    { label:"Study hours", value:formatDurationShort(row.totalStudyMinutes || 0) },
-  ].forEach((item, index) => {
-    drawInstituteGlancePdfStatCard(doc, {
-      x: margin + index * (statWidth + statGap),
-      y: cursorY - 58,
-      width: statWidth,
-      height: 56,
-      label:item.label,
-      value:item.value,
-      fillColor:[255, 255, 255],
-      borderColor:[206, 219, 240],
-    });
-  });
-  cursorY += 10;
+    <div class="section-title">Pending follow-up (${pending.length})${pending.length ? " — sorted by urgency" : ""}</div>
+    ${pendingHtml}
 
-  const filledBody = buildInstituteGlanceFilledTeacherPdfBody(row);
-  const pendingBody = buildInstituteGlancePendingTeacherPdfBody(row);
-
-  cursorY = renderInstituteGlancePdfTeacherSection(doc, {
-    title:`Teachers who filled today${row.filledTeacherRows?.length ? ` (${row.filledTeacherRows.length})` : ""}`,
-    subtitle: row.filledTeacherRows?.length
-      ? "Teachers with at least one entry today are shown with the class, time, subject, title, and notes they uploaded."
-      : "No teacher has uploaded today's entry for this centre yet.",
-    margin,
-    cursorY,
-    body: filledBody,
-    head:["Teacher", "Section", "Time", "Subject", "Type", "Title", "Notes"],
-    minHeight: 210,
-    emptyState:{
-      title:"No filled entries today",
-      body:"No teacher has uploaded today's entry for this centre yet.",
-      fillColor:[239, 246, 255],
-      borderColor:[191, 219, 254],
-      titleColor:[29, 78, 216],
-      bodyColor:[75, 85, 99],
-    },
-    tableOptions:{
-      autoTable,
-      config:{
-        headStyles:{
-          fillColor:[236, 253, 243],
-          textColor:[22, 101, 52],
-          fontStyle:"bold",
-          fontSize:8.6,
-        },
-        columnStyles:{
-          0:{ cellWidth:112 },
-          1:{ cellWidth:104 },
-          2:{ cellWidth:92 },
-          3:{ cellWidth:82 },
-          4:{ cellWidth:46, halign:"center" },
-          5:{ cellWidth:142 },
-          6:{ cellWidth:204 },
-        },
-        didParseCell: data => {
-          if(data.section !== "body") return;
-          if(data.column.index === 0){
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [17, 24, 39];
-          }
-          if(data.column.index === 4){
-            data.cell.styles.halign = "center";
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [29, 78, 216];
-          }
-          if(data.column.index === 5){
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [17, 24, 39];
-          }
-          if(data.column.index === 6){
-            data.cell.styles.textColor = [55, 65, 81];
-          }
-        },
-      },
-    },
-  });
-
-  if(pendingBody.length > 8){
-    doc.addPage();
-    cursorY = margin;
-  }
-
-  cursorY = renderInstituteGlancePdfTeacherSection(doc, {
-    title:`Teachers pending today${pendingBody.length ? ` (${pendingBody.length})` : ""}`,
-    subtitle: row.pendingTeacherRows?.length
-      ? "Teachers below have not filled today's entry yet. Their last activity stays visible so the follow-up list is still useful."
-      : "Everyone linked to this centre has filled today.",
-    margin,
-    cursorY,
-    body: pendingBody,
-    head:["Teacher", "Status", "Sections", "This month", "Last entry", "Study hours"],
-    minHeight: 190,
-    emptyState:{
-      title:"Everyone filled today",
-      body:"All linked teachers in this centre have already uploaded their entries today.",
-      fillColor:[236, 253, 243],
-      borderColor:[187, 247, 208],
-      titleColor:[22, 101, 52],
-      bodyColor:[75, 85, 99],
-    },
-    tableOptions:{
-      autoTable,
-      config:{
-        columnStyles:{
-          0:{ cellWidth:148 },
-          1:{ cellWidth:86, halign:"center" },
-          2:{ cellWidth:248 },
-          3:{ cellWidth:62, halign:"center" },
-          4:{ cellWidth:140 },
-          5:{ cellWidth:68, halign:"center" },
-        },
-        didParseCell: data => {
-          if(data.section !== "body") return;
-          if(data.column.index === 0){
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [17, 24, 39];
-          }
-          if(data.column.index === 1){
-            data.cell.styles.fillColor = [255, 247, 237];
-            data.cell.styles.textColor = [180, 83, 9];
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.halign = "center";
-          }
-          if(data.column.index === 3 || data.column.index === 5){
-            data.cell.styles.halign = "center";
-          }
-          if(data.column.index === 5){
-            data.cell.styles.textColor = [107, 114, 128];
-          }
-        },
-      },
-    },
-  });
-
-  return doc;
+    <div class="page-footer">
+      <span>${e(row.institute || "Centre")} · Ledgr</span>
+      <span>${e(generatedOnLabel)}</span>
+    </div>`;
 }
-async function buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLabel }){
-  const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
-  const doc = new jsPDF({ unit:"pt", format:"a4", orientation:"landscape" });
-  doc.__instituteGlancePdfRuntime = { autoTable };
-  const margin = 30;
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const contentWidth = pageWidth - margin * 2;
-  let cursorY = 36;
 
-  doc.setFillColor(239, 246, 255);
-  doc.setDrawColor(191, 219, 254);
-  doc.roundedRect(margin, cursorY - 6, contentWidth, 118, 20, 20, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(28);
-  doc.setTextColor(15, 23, 42);
-  doc.text("All institutes at a glance", margin + 18, cursorY + 20);
-  cursorY += 24;
+function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
+  const e = escapeExportHtml;
+  const coverScorecard = `
+    <div class="scorecard" style="grid-template-columns:repeat(5,1fr);">
+      <div class="card"><div class="label">Institutes</div><div class="value">${summary.totalInstitutes || 0}</div></div>
+      <div class="card ok"><div class="label">Teachers updated</div><div class="value">${summary.filledToday || 0}/${summary.totalTeachers || 0}</div></div>
+      <div class="card alert"><div class="label">Pending today</div><div class="value">${summary.missingToday || 0}</div></div>
+      <div class="card"><div class="label">Sections taught</div><div class="value">${summary.sectionsTaught || 0}</div></div>
+      <div class="card"><div class="label">Study hours</div><div class="value">${e(formatDurationShort(summary.totalStudyMinutes || 0))}</div></div>
+    </div>`;
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.setTextColor(75, 85, 99);
-  doc.text(generatedOnLabel, margin + 18, cursorY + 16);
-  cursorY += 22;
+  const institutePages = (rows || []).map((row, i) =>
+    `${i > 0 ? '<hr class="institute-divider">' : ""}
+     <div class="institute-heading">${e(row.institute || "Institute")}</div>
+     <div class="institute-sub">${e(generatedOnLabel)}</div>
+     ${buildInstituteGlanceHtmlPage(row, generatedOnLabel).replace(/<div class="page-header">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/, "").replace(/<div class="page-footer">[\s\S]*?<\/div>/, "")}`
+  ).join("");
 
-  doc.setFontSize(14);
-  doc.text(
-    doc.splitTextToSize("Each centre starts on a fresh page. Teachers who filled today appear first, followed by the pending follow-up list.", contentWidth),
-    margin + 18,
-    cursorY + 12
-  );
-  cursorY += 46;
-
-  const statGap = 10;
-  const statWidth = (contentWidth - statGap * 4) / 5;
-  [
-    { label:"Institutes", value:String(summary.totalInstitutes || 0) },
-    { label:"Teachers updated", value:`${summary.filledToday || 0}/${summary.totalTeachers || 0}` },
-    { label:"Pending today", value:String(summary.missingToday || 0) },
-    { label:"Sections taught", value:String(summary.sectionsTaught || 0) },
-    { label:"Study hours", value:formatDurationShort(summary.totalStudyMinutes || 0) },
-  ].forEach((item, index) => {
-    drawInstituteGlancePdfStatCard(doc, {
-      x: margin + index * (statWidth + statGap),
-      y: cursorY,
-      width: statWidth,
-      height: 58,
-      label: item.label,
-      value: item.value,
-      fillColor:[255, 255, 255],
-      borderColor:[206, 219, 240],
-    });
-  });
-  cursorY += 80;
-
-  for(const row of (rows || [])){
-    doc.addPage();
-    renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, margin });
-  }
-
-  return doc;
+  return `<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>All institutes at a glance · ${e(generatedOnLabel)}</title>
+    <style>${CENTRE_SUMMARY_CSS}</style>
+  </head><body>
+    <div class="all-summary-cover">
+      <h1>All institutes at a glance</h1>
+      <div class="sub">${e(generatedOnLabel)} · Each centre starts a fresh section. Teachers who filled today appear first, followed by the pending follow-up list.</div>
+      ${coverScorecard}
+    </div>
+    ${institutePages}
+    <div class="page-footer">
+      <span>Ledgr · All institutes summary</span>
+      <span>${e(generatedOnLabel)}</span>
+    </div>
+  </body></html>`;
 }
-async function buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel }){
-  const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
-  const doc = new jsPDF({ unit:"pt", format:"a4", orientation:"landscape" });
-  doc.__instituteGlancePdfRuntime = { autoTable };
-  renderInstituteGlanceInstitutePdfPage(doc, { row, generatedOnLabel, margin:30 });
-  finalizeInstituteGlancePdf(doc);
-  return doc;
+
+function buildInstituteGlanceInstituteHtml(row, generatedOnLabel){
+  const e = escapeExportHtml;
+  return `<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>${e(row.institute || "Centre")} — Daily Summary · ${e(generatedOnLabel)}</title>
+    <style>${CENTRE_SUMMARY_CSS}</style>
+  </head><body>
+    ${buildInstituteGlanceHtmlPage(row, generatedOnLabel)}
+  </body></html>`;
 }
+
+function _openHtmlAndPrint(html){
+  const win = window.open("", "_blank");
+  if(!win){ window.alert("Pop-up was blocked. Please allow pop-ups for this site and try again."); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  // Small delay lets fonts + styles render before the print dialog opens
+  win.addEventListener("load", () => setTimeout(() => win.print(), 400));
+}
+
 async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
-  const pdf = await buildInstituteGlanceSummaryPdfDoc({ rows, summary, generatedOnLabel });
-  finalizeInstituteGlancePdf(pdf);
-  pdf.save(`all_institutes_at_a_glance_${todayKey()}.pdf`);
+  const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel });
+  _openHtmlAndPrint(html);
 }
 async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel }){
-  const pdf = await buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel });
-  pdf.save(instituteGlancePdfFilename(row?.institute || "institute"));
+  const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel);
+  _openHtmlAndPrint(html);
 }
 async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel }){
   const { JSZip } = await loadInstituteGlanceExportRuntime();
   const zip = new JSZip();
   for(const row of (rows || [])){
-    const pdf = await buildInstituteGlanceInstitutePdfDoc({ row, generatedOnLabel });
-    zip.file(instituteGlancePdfFilename(row?.institute || "institute"), pdf.output("arraybuffer"));
+    const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel);
+    const filename = `${slugifyDownloadPart(row?.institute || "institute")}_centre_summary_${todayKey()}.html`;
+    zip.file(filename, html);
   }
   const blob = await zip.generateAsync({ type:"blob" });
-  triggerBlobDownload(blob, `all_institute_pdfs_${todayKey()}.zip`);
+  triggerBlobDownload(blob, `all_institute_summaries_${todayKey()}.zip`);
 }
 function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
   // returns flat array of {dateKey, entry} sorted by date desc, time asc
