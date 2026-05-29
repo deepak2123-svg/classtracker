@@ -2641,10 +2641,11 @@ function instituteGlancePdfFilename(instituteName){
 }
 
 // ── HTML-based centre summary export ─────────────────────────────────────────
-// Replaces the old jsPDF canvas-drawing approach with a rich HTML template
-// that matches the improved summary style (DM Sans, scorecards, teacher blocks,
-// pending table with priority badges). The browser's native print dialog is
-// used to save as PDF, which gives pixel-perfect rendering and proper pagination.
+// Builds a rich HTML template (DM Sans, scorecards, teacher blocks, pending
+// table with priority badges) then renders it via html2canvas + jsPDF.
+// A hidden iframe is mounted at A4 width so layout is stable, then each A4
+// page-height slice is rasterised and packed into the PDF. No browser print
+// dialog, no OS margins, no "about:blank" footer — clean pixel-perfect output.
 
 const CENTRE_SUMMARY_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
@@ -2970,34 +2971,127 @@ function buildInstituteGlanceInstituteHtml(row, generatedOnLabel){
   </body></html>`;
 }
 
-function _openHtmlAndPrint(html){
-  const win = window.open("", "_blank");
-  if(!win){ window.alert("Pop-up was blocked. Please allow pop-ups for this site and try again."); return; }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  // Small delay lets fonts + styles render before the print dialog opens
-  win.addEventListener("load", () => setTimeout(() => win.print(), 400));
+// A4 dimensions in points (72 dpi) — used by jsPDF
+const A4_W_PT = 595.28;
+const A4_H_PT = 841.89;
+// Render width in px for the hidden iframe (matches A4 at 96 dpi → 794 px)
+const A4_PX_WIDTH = 794;
+// html2canvas scale factor: 2× = 150 dpi equivalent — crisp on screen + print
+const H2C_SCALE = 2;
+
+async function _loadHtml2Canvas(){
+  // Lazy-load html2canvas from CDN so it's not in the main bundle
+  if(window.__ledgrH2C) return window.__ledgrH2C;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  window.__ledgrH2C = window.html2canvas;
+  return window.__ledgrH2C;
+}
+
+// Renders an HTML string → jsPDF Blob
+// Strategy:
+//  1. Mount a hidden off-screen iframe at exactly A4_PX_WIDTH
+//  2. Wait for fonts + layout to settle
+//  3. Slice the full rendered height into A4-sized chunks
+//  4. html2canvas each chunk → canvas → jsPDF image
+async function _htmlToPdfBlob(html, { jsPDF, toastMsg } = {}){
+  const html2canvas = await _loadHtml2Canvas();
+
+  // 1. Create hidden iframe
+  const iframe = document.createElement("iframe");
+  Object.assign(iframe.style, {
+    position: "fixed",
+    top: "-9999px",
+    left: "-9999px",
+    width: `${A4_PX_WIDTH}px`,
+    height: "1200px",
+    border: "none",
+    visibility: "hidden",
+    pointerEvents: "none",
+  });
+  document.body.appendChild(iframe);
+
+  try {
+    // 2. Write HTML and wait for fonts/images
+    iframe.contentDocument.open();
+    iframe.contentDocument.write(html);
+    iframe.contentDocument.close();
+
+    // Wait for fonts + a layout tick
+    await new Promise(r => setTimeout(r, 120));
+    if(iframe.contentDocument.fonts?.ready) await iframe.contentDocument.fonts.ready;
+    await new Promise(r => setTimeout(r, 200));
+
+    const iBody = iframe.contentDocument.body;
+    const totalHeight = iBody.scrollHeight;
+
+    // A4 page height in px (same scale as A4_PX_WIDTH)
+    const pageHeightPx = Math.round(A4_PX_WIDTH * (A4_H_PT / A4_W_PT)); // ≈ 1123 px
+
+    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+    const pageCount = Math.ceil(totalHeight / pageHeightPx);
+
+    for(let page = 0; page < pageCount; page++){
+      const offsetY = page * pageHeightPx;
+      // Clip this slice
+      const sliceHeight = Math.min(pageHeightPx, totalHeight - offsetY);
+
+      const canvas = await html2canvas(iBody, {
+        scale: H2C_SCALE,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: "#f6f7f9",
+        x: 0,
+        y: offsetY,
+        width: A4_PX_WIDTH,
+        height: sliceHeight,
+        windowWidth: A4_PX_WIDTH,
+        logging: false,
+        // Disable shadow/scrollbar artefacts
+        removeContainer: false,
+      });
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      // Scale image to fill A4 width; height proportional
+      const imgHeightPt = (sliceHeight / A4_PX_WIDTH) * A4_W_PT;
+
+      if(page > 0) doc.addPage();
+      doc.addImage(imgData, "JPEG", 0, 0, A4_W_PT, imgHeightPt, undefined, "FAST");
+    }
+
+    return doc.output("blob");
+  } finally {
+    document.body.removeChild(iframe);
+  }
 }
 
 async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
+  const { jsPDF } = await loadInstituteGlanceExportRuntime();
   const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel });
-  _openHtmlAndPrint(html);
+  const blob = await _htmlToPdfBlob(html, { jsPDF });
+  triggerBlobDownload(blob, `all_institutes_at_a_glance_${todayKey()}.pdf`);
 }
 async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel }){
+  const { jsPDF } = await loadInstituteGlanceExportRuntime();
   const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel);
-  _openHtmlAndPrint(html);
+  const blob = await _htmlToPdfBlob(html, { jsPDF });
+  triggerBlobDownload(blob, instituteGlancePdfFilename(row?.institute || "institute"));
 }
 async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel }){
-  const { JSZip } = await loadInstituteGlanceExportRuntime();
+  const { jsPDF, JSZip } = await loadInstituteGlanceExportRuntime();
   const zip = new JSZip();
   for(const row of (rows || [])){
     const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel);
-    const filename = `${slugifyDownloadPart(row?.institute || "institute")}_centre_summary_${todayKey()}.html`;
-    zip.file(filename, html);
+    const blob = await _htmlToPdfBlob(html, { jsPDF });
+    zip.file(instituteGlancePdfFilename(row?.institute || "institute"), blob);
   }
-  const blob = await zip.generateAsync({ type:"blob" });
-  triggerBlobDownload(blob, `all_institute_summaries_${todayKey()}.zip`);
+  const zipBlob = await zip.generateAsync({ type:"blob" });
+  triggerBlobDownload(zipBlob, `all_institute_pdfs_${todayKey()}.zip`);
 }
 function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
   // returns flat array of {dateKey, entry} sorted by date desc, time asc
