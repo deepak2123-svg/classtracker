@@ -2995,72 +2995,113 @@ async function _loadHtml2Canvas(){
 
 // Renders an HTML string → jsPDF Blob
 // Strategy:
-//  1. Mount a hidden off-screen iframe at exactly A4_PX_WIDTH
-//  2. Wait for fonts + layout to settle
-//  3. Slice the full rendered height into A4-sized chunks
-//  4. html2canvas each chunk → canvas → jsPDF image
-async function _htmlToPdfBlob(html, { jsPDF, toastMsg } = {}){
+//  1. Mount a hidden iframe at A4_PX_WIDTH, expand to full content height
+//  2. html2canvas the ENTIRE document as ONE tall canvas (no repeated calls)
+//  3. Walk canvas pixel rows to find smart page-break points:
+//     scan UP from each nominal A4 boundary, find first row where every pixel
+//     is near-background — i.e. a gap between elements, never mid-row
+//  4. Crop each slice into a fresh canvas and add it as a jsPDF page
+async function _htmlToPdfBlob(html, { jsPDF } = {}){
   const html2canvas = await _loadHtml2Canvas();
 
-  // 1. Create hidden iframe
+  // Scan up to this many source px above the nominal boundary for a clean gap
+  const BREAK_SCAN_PX = 80;
+  // A pixel row is "blank" if every sampled R,G,B channel is >= this value
+  const BG_THRESHOLD = 240;
+
+  // 1. Hidden iframe
   const iframe = document.createElement("iframe");
   Object.assign(iframe.style, {
-    position: "fixed",
-    top: "-9999px",
-    left: "-9999px",
-    width: `${A4_PX_WIDTH}px`,
-    height: "1200px",
-    border: "none",
-    visibility: "hidden",
-    pointerEvents: "none",
+    position: "fixed", top: "-19999px", left: "-9999px",
+    width: `${A4_PX_WIDTH}px`, height: "2px",
+    border: "none", visibility: "hidden", pointerEvents: "none",
   });
   document.body.appendChild(iframe);
 
   try {
-    // 2. Write HTML and wait for fonts/images
     iframe.contentDocument.open();
     iframe.contentDocument.write(html);
     iframe.contentDocument.close();
 
-    // Wait for fonts + a layout tick
-    await new Promise(r => setTimeout(r, 120));
+    await new Promise(r => setTimeout(r, 150));
     if(iframe.contentDocument.fonts?.ready) await iframe.contentDocument.fonts.ready;
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 250));
 
     const iBody = iframe.contentDocument.body;
     const totalHeight = iBody.scrollHeight;
+    // Expand iframe so html2canvas sees the full layout
+    iframe.style.height = `${totalHeight + 20}px`;
+    await new Promise(r => setTimeout(r, 60));
 
-    // A4 page height in px (same scale as A4_PX_WIDTH)
-    const pageHeightPx = Math.round(A4_PX_WIDTH * (A4_H_PT / A4_W_PT)); // ≈ 1123 px
+    // 2. Capture the entire document in one pass
+    const fullCanvas = await html2canvas(iBody, {
+      scale: H2C_SCALE,
+      useCORS: true,
+      allowTaint: false,
+      backgroundColor: "#f6f7f9",
+      x: 0, y: 0,
+      width: A4_PX_WIDTH,
+      height: totalHeight,
+      windowWidth: A4_PX_WIDTH,
+      windowHeight: totalHeight,
+      scrollX: 0, scrollY: 0,
+      logging: false,
+    });
 
+    const ctx = fullCanvas.getContext("2d");
+    const canvasWidth  = fullCanvas.width;   // A4_PX_WIDTH * H2C_SCALE
+    const canvasHeight = fullCanvas.height;  // totalHeight * H2C_SCALE
+
+    // A4 page height in scaled canvas pixels
+    const pageHeightScaled = Math.round(A4_PX_WIDTH * (A4_H_PT / A4_W_PT) * H2C_SCALE);
+
+    // 3. Smart page-break detection
+    // Scan upward from nominalY; return first fully-blank row, else nominalY
+    function findBreakY(nominalY){
+      const scanTop = Math.max(0, nominalY - BREAK_SCAN_PX * H2C_SCALE);
+      for(let y = nominalY; y >= scanTop; y--){
+        const row = ctx.getImageData(0, y, canvasWidth, 1).data;
+        let blank = true;
+        for(let x = 0; x < row.length; x += 4){
+          if(row[x] < BG_THRESHOLD || row[x+1] < BG_THRESHOLD || row[x+2] < BG_THRESHOLD){
+            blank = false; break;
+          }
+        }
+        if(blank) return y;
+      }
+      return nominalY;
+    }
+
+    const breakPoints = [0];
+    let cursor = 0;
+    while(cursor < canvasHeight){
+      const nominal = cursor + pageHeightScaled;
+      if(nominal >= canvasHeight){ breakPoints.push(canvasHeight); break; }
+      const breakY = findBreakY(nominal);
+      breakPoints.push(breakY);
+      cursor = breakY;
+    }
+
+    // 4. Crop each slice into its own canvas, add to jsPDF
     const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
-    const pageCount = Math.ceil(totalHeight / pageHeightPx);
 
-    for(let page = 0; page < pageCount; page++){
-      const offsetY = page * pageHeightPx;
-      // Clip this slice
-      const sliceHeight = Math.min(pageHeightPx, totalHeight - offsetY);
+    for(let i = 0; i < breakPoints.length - 1; i++){
+      const sliceTop = breakPoints[i];
+      const sliceBot = breakPoints[i + 1];
+      const sliceH   = sliceBot - sliceTop;
+      if(sliceH <= 0) continue;
 
-      const canvas = await html2canvas(iBody, {
-        scale: H2C_SCALE,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: "#f6f7f9",
-        x: 0,
-        y: offsetY,
-        width: A4_PX_WIDTH,
-        height: sliceHeight,
-        windowWidth: A4_PX_WIDTH,
-        logging: false,
-        // Disable shadow/scrollbar artefacts
-        removeContainer: false,
-      });
+      const pageCanvas = document.createElement("canvas");
+      pageCanvas.width  = canvasWidth;
+      pageCanvas.height = sliceH;
+      pageCanvas.getContext("2d").drawImage(
+        fullCanvas, 0, sliceTop, canvasWidth, sliceH, 0, 0, canvasWidth, sliceH
+      );
 
-      const imgData = canvas.toDataURL("image/jpeg", 0.92);
-      // Scale image to fill A4 width; height proportional
-      const imgHeightPt = (sliceHeight / A4_PX_WIDTH) * A4_W_PT;
+      const imgData     = pageCanvas.toDataURL("image/jpeg", 0.93);
+      const imgHeightPt = (sliceH / canvasWidth) * A4_W_PT;
 
-      if(page > 0) doc.addPage();
+      if(i > 0) doc.addPage();
       doc.addImage(imgData, "JPEG", 0, 0, A4_W_PT, imgHeightPt, undefined, "FAST");
     }
 
