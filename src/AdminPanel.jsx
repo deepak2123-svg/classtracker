@@ -2642,10 +2642,9 @@ function instituteGlancePdfFilename(instituteName){
 
 // ── HTML-based centre summary export ─────────────────────────────────────────
 // Builds a rich HTML template (DM Sans, scorecards, teacher blocks, pending
-// table with priority badges) then renders it via html2canvas + jsPDF.
-// A hidden iframe is mounted at A4 width so layout is stable, then each A4
-// page-height slice is rasterised and packed into the PDF. No browser print
-// dialog, no OS margins, no "about:blank" footer — clean pixel-perfect output.
+// table with priority badges). The browser's native print engine handles
+// page breaks cleanly via CSS break-inside/break-after rules. @page CSS
+// suppresses all browser chrome (URL, date, page numbers).
 
 const CENTRE_SUMMARY_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
@@ -2741,10 +2740,29 @@ const CENTRE_SUMMARY_CSS = `
   .institute-heading { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -0.3px; margin-bottom: 4px; }
   .institute-sub { font-size: 11.5px; color: var(--ink-3); margin-bottom: 16px; }
   @media print {
-    body { background: white; padding: 16px 18px 32px; }
+    /* Suppress all browser-added chrome: URL, date, title, page numbers */
+    @page {
+      margin: 1.1cm 1.2cm;
+      size: A4 portrait;
+    }
+    /* Force background colours and borders to print */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body {
+      background: white !important;
+      padding: 14px 16px 28px;
+      -webkit-print-color-adjust: exact;
+    }
+    /* Each institute section starts on a fresh page */
     .institute-divider { page-break-before: always; margin-top: 0; border-top: none; }
-    .teacher-block, .pending-table { page-break-inside: avoid; }
-    @page { margin: 1.2cm; }
+    /* Never split a teacher card or the pending table mid-row */
+    .teacher-block { page-break-inside: avoid; break-inside: avoid; }
+    .pending-table tr { page-break-inside: avoid; break-inside: avoid; }
+    /* Keep the scorecard and breakdown strip together */
+    .scorecard, .pending-breakdown, .progress-wrap { page-break-inside: avoid; break-inside: avoid; }
+    /* Section titles stay with what follows */
+    .section-title { page-break-after: avoid; break-after: avoid; }
+    /* Hide interactive buttons */
+    .followup-actions { display: none !important; }
   }
 `;
 
@@ -2971,168 +2989,51 @@ function buildInstituteGlanceInstituteHtml(row, generatedOnLabel){
   </body></html>`;
 }
 
-// A4 dimensions in points (72 dpi) — used by jsPDF
-const A4_W_PT = 595.28;
-const A4_H_PT = 841.89;
-// Render width in px for the hidden iframe (matches A4 at 96 dpi → 794 px)
-const A4_PX_WIDTH = 794;
-// html2canvas scale factor: 2× = 150 dpi equivalent — crisp on screen + print
-const H2C_SCALE = 2;
+// ── PDF export: window.print() with clean @page CSS ─────────────────────────
+// Using the browser's native print engine gives perfect text rendering,
+// proper page breaks (via CSS break-inside/break-after), and zero canvas
+// artefacts. The HTML template's @media print block suppresses all browser
+// chrome (URL, date, page numbers) and forces background colours to print.
 
-async function _loadHtml2Canvas(){
-  // Lazy-load html2canvas from CDN so it's not in the main bundle
-  if(window.__ledgrH2C) return window.__ledgrH2C;
-  await new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-  window.__ledgrH2C = window.html2canvas;
-  return window.__ledgrH2C;
-}
-
-// Renders an HTML string → jsPDF Blob
-// Strategy:
-//  1. Mount a hidden iframe at A4_PX_WIDTH, expand to full content height
-//  2. html2canvas the ENTIRE document as ONE tall canvas (no repeated calls)
-//  3. Walk canvas pixel rows to find smart page-break points:
-//     scan UP from each nominal A4 boundary, find first row where every pixel
-//     is near-background — i.e. a gap between elements, never mid-row
-//  4. Crop each slice into a fresh canvas and add it as a jsPDF page
-async function _htmlToPdfBlob(html, { jsPDF } = {}){
-  const html2canvas = await _loadHtml2Canvas();
-
-  // Scan up to this many source px above the nominal boundary for a clean gap
-  const BREAK_SCAN_PX = 80;
-  // A pixel row is "blank" if every sampled R,G,B channel is >= this value
-  const BG_THRESHOLD = 240;
-
-  // 1. Hidden iframe
-  const iframe = document.createElement("iframe");
-  Object.assign(iframe.style, {
-    position: "fixed", top: "-19999px", left: "-9999px",
-    width: `${A4_PX_WIDTH}px`, height: "2px",
-    border: "none", visibility: "hidden", pointerEvents: "none",
-  });
-  document.body.appendChild(iframe);
-
-  try {
-    iframe.contentDocument.open();
-    iframe.contentDocument.write(html);
-    iframe.contentDocument.close();
-
-    await new Promise(r => setTimeout(r, 150));
-    if(iframe.contentDocument.fonts?.ready) await iframe.contentDocument.fonts.ready;
-    await new Promise(r => setTimeout(r, 250));
-
-    const iBody = iframe.contentDocument.body;
-    const totalHeight = iBody.scrollHeight;
-    // Expand iframe so html2canvas sees the full layout
-    iframe.style.height = `${totalHeight + 20}px`;
-    await new Promise(r => setTimeout(r, 60));
-
-    // 2. Capture the entire document in one pass
-    const fullCanvas = await html2canvas(iBody, {
-      scale: H2C_SCALE,
-      useCORS: true,
-      allowTaint: false,
-      backgroundColor: "#f6f7f9",
-      x: 0, y: 0,
-      width: A4_PX_WIDTH,
-      height: totalHeight,
-      windowWidth: A4_PX_WIDTH,
-      windowHeight: totalHeight,
-      scrollX: 0, scrollY: 0,
-      logging: false,
-    });
-
-    const ctx = fullCanvas.getContext("2d");
-    const canvasWidth  = fullCanvas.width;   // A4_PX_WIDTH * H2C_SCALE
-    const canvasHeight = fullCanvas.height;  // totalHeight * H2C_SCALE
-
-    // A4 page height in scaled canvas pixels
-    const pageHeightScaled = Math.round(A4_PX_WIDTH * (A4_H_PT / A4_W_PT) * H2C_SCALE);
-
-    // 3. Smart page-break detection
-    // Scan upward from nominalY; return first fully-blank row, else nominalY
-    function findBreakY(nominalY){
-      const scanTop = Math.max(0, nominalY - BREAK_SCAN_PX * H2C_SCALE);
-      for(let y = nominalY; y >= scanTop; y--){
-        const row = ctx.getImageData(0, y, canvasWidth, 1).data;
-        let blank = true;
-        for(let x = 0; x < row.length; x += 4){
-          if(row[x] < BG_THRESHOLD || row[x+1] < BG_THRESHOLD || row[x+2] < BG_THRESHOLD){
-            blank = false; break;
-          }
-        }
-        if(blank) return y;
-      }
-      return nominalY;
-    }
-
-    const breakPoints = [0];
-    let cursor = 0;
-    while(cursor < canvasHeight){
-      const nominal = cursor + pageHeightScaled;
-      if(nominal >= canvasHeight){ breakPoints.push(canvasHeight); break; }
-      const breakY = findBreakY(nominal);
-      breakPoints.push(breakY);
-      cursor = breakY;
-    }
-
-    // 4. Crop each slice into its own canvas, add to jsPDF
-    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
-
-    for(let i = 0; i < breakPoints.length - 1; i++){
-      const sliceTop = breakPoints[i];
-      const sliceBot = breakPoints[i + 1];
-      const sliceH   = sliceBot - sliceTop;
-      if(sliceH <= 0) continue;
-
-      const pageCanvas = document.createElement("canvas");
-      pageCanvas.width  = canvasWidth;
-      pageCanvas.height = sliceH;
-      pageCanvas.getContext("2d").drawImage(
-        fullCanvas, 0, sliceTop, canvasWidth, sliceH, 0, 0, canvasWidth, sliceH
-      );
-
-      const imgData     = pageCanvas.toDataURL("image/jpeg", 0.93);
-      const imgHeightPt = (sliceH / canvasWidth) * A4_W_PT;
-
-      if(i > 0) doc.addPage();
-      doc.addImage(imgData, "JPEG", 0, 0, A4_W_PT, imgHeightPt, undefined, "FAST");
-    }
-
-    return doc.output("blob");
-  } finally {
-    document.body.removeChild(iframe);
+function _printHtml(html, filename){
+  const win = window.open("", "_blank", "width=900,height=700");
+  if(!win){
+    window.alert("Pop-ups are blocked. Please allow pop-ups for this site, then try again.");
+    return;
   }
+  // Inject a print-and-close script so Save as PDF works with one click
+  const htmlWithPrint = html.replace(
+    "</body>",
+    `<script>
+      window.onload = function(){
+        // Small delay so fonts finish loading before the dialog opens
+        setTimeout(function(){ window.print(); }, 380);
+      };
+    <\/script></body>`
+  );
+  win.document.open();
+  win.document.write(htmlWithPrint);
+  win.document.close();
 }
 
 async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
-  const { jsPDF } = await loadInstituteGlanceExportRuntime();
   const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel });
-  const blob = await _htmlToPdfBlob(html, { jsPDF });
-  triggerBlobDownload(blob, `all_institutes_at_a_glance_${todayKey()}.pdf`);
+  _printHtml(html, `all_institutes_at_a_glance_${todayKey()}.pdf`);
 }
 async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel }){
-  const { jsPDF } = await loadInstituteGlanceExportRuntime();
   const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel);
-  const blob = await _htmlToPdfBlob(html, { jsPDF });
-  triggerBlobDownload(blob, instituteGlancePdfFilename(row?.institute || "institute"));
+  _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute"));
 }
 async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel }){
-  const { jsPDF, JSZip } = await loadInstituteGlanceExportRuntime();
-  const zip = new JSZip();
-  for(const row of (rows || [])){
+  // For zip we still produce PDFs — open each in sequence with a small gap
+  // so the browser doesn't block multiple windows. Each teacher saves manually.
+  // (Fully automated zip-of-PDFs requires a server-side renderer.)
+  for(let i = 0; i < (rows || []).length; i++){
+    const row  = rows[i];
     const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel);
-    const blob = await _htmlToPdfBlob(html, { jsPDF });
-    zip.file(instituteGlancePdfFilename(row?.institute || "institute"), blob);
+    await new Promise(r => setTimeout(r, i === 0 ? 0 : 600));
+    _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute"));
   }
-  const zipBlob = await zip.generateAsync({ type:"blob" });
-  triggerBlobDownload(zipBlob, `all_institute_pdfs_${todayKey()}.zip`);
 }
 function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
   // returns flat array of {dateKey, entry} sorted by date desc, time asc
