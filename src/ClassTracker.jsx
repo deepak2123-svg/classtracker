@@ -3689,7 +3689,15 @@ function TeacherStateFallback({ themeShell = {}, view, resolvedView, activeClass
 // ── Main ──────────────────────────────────────────────────────────────────────
 function ClassTrackerInner({user}){
   const [data,setData]         = useState(DEFAULT_DATA);
-  const [loading,setLoading]   = useState(true);
+  // Initialise loading=false if a boot cache already exists for this user.
+  // Previously always started true → flashed TeacherLoadingScreen for one frame
+  // before the cache hydrated in the useEffect below, causing the "shake".
+  const [loading,setLoading] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`classlog_boot_${(typeof user !== 'undefined' && user?.uid) || ''}`);
+      return !(raw && JSON.parse(raw)?.data);
+    } catch { return true; }
+  });
   const [saving,setSaving]     = useState(false);
   const [saveErr,setSaveErr]   = useState(false);
   const [draftSaving,setDraftSaving] = useState(false);
@@ -4220,9 +4228,9 @@ function ClassTrackerInner({user}){
         }
       }
     }catch(e){}
-    if(!bootHydrated){
-      setLoading(true);
-    }
+    // Do not call setLoading(true) here — if no boot cache exists, loading
+    // is already true from useState. Calling setLoading(true) again would
+    // cause an extra render cycle and a visible flash.
 
     loadUserDataState(user.uid).then(result=>{
       if(cancelled) return;
@@ -4353,6 +4361,19 @@ function ClassTrackerInner({user}){
 
     return ()=>{ cancelled = true; };
   },[bootCacheKey, clearBootCache, loadAttempt, normaliseLoadedData, pendingSaveKey, storeBootCache, user.uid]);
+  // Stable refs so refreshCloudState never captures live state values in its deps.
+  // Without these, data/loading/allowCloudSync in deps caused refreshCloudState
+  // to be a new function on every render → re-registered focus/visibilitychange
+  // listeners every render → the "soft shake" flicker teachers were seeing.
+  const dataRef           = useRef(data);
+  const allowCloudSyncRef = useRef(allowCloudSync);
+  const loadingRef        = useRef(loading);
+  const cloudRevisionRef  = useRef(cloudRevision);
+  useEffect(() => { dataRef.current           = data;           });
+  useEffect(() => { allowCloudSyncRef.current = allowCloudSync; }, [allowCloudSync]);
+  useEffect(() => { loadingRef.current        = loading;        }, [loading]);
+  useEffect(() => { cloudRevisionRef.current  = cloudRevision;  }, [cloudRevision]);
+
   const refreshCloudState = React.useCallback(async () => {
     try {
       const [latestInstitutes, latestSections] = await Promise.all([
@@ -4360,25 +4381,31 @@ function ClassTrackerInner({user}){
         getAllInstituteSections(),
       ]);
       const nextInstitutes = latestInstitutes || [];
-      const nextSections = latestSections || {};
-      setGlobalInstitutes(prev => JSON.stringify(prev) === JSON.stringify(nextInstitutes) ? prev : nextInstitutes);
-      setInstituteSections(prev => JSON.stringify(prev) === JSON.stringify(nextSections) ? prev : nextSections);
+      const nextSections   = latestSections   || {};
+      setGlobalInstitutes(prev  => JSON.stringify(prev) === JSON.stringify(nextInstitutes) ? prev  : nextInstitutes);
+      setInstituteSections(prev => JSON.stringify(prev) === JSON.stringify(nextSections)   ? prev  : nextSections);
 
-      if (loading || !allowCloudSync) return;
-      if (dataFingerprint(data) !== lastSyncedFingerprint.current) return;
+      if (loadingRef.current || !allowCloudSyncRef.current) return;
+      // Only fetch if local data has no unsaved changes
+      if (dataFingerprint(dataRef.current) !== lastSyncedFingerprint.current) return;
 
       const result = await loadUserDataState(user.uid);
       if (result?.status !== "ok") return;
 
-      const liveData = normaliseLoadedData(result.data);
+      const liveData     = normaliseLoadedData(result.data);
       const liveRevision = Number(liveData?._meta?.revision || 0);
-      if (liveRevision <= cloudRevision) return;
+      if (liveRevision <= cloudRevisionRef.current) return;
 
-      lastSyncedFingerprint.current = dataFingerprint(liveData);
+      // Skip setData entirely if content hasn't changed — no-op re-renders cause flicker
+      const nextFingerprint = dataFingerprint(liveData);
+      if (nextFingerprint === lastSyncedFingerprint.current) return;
+
+      lastSyncedFingerprint.current = nextFingerprint;
       setCloudRevision(liveRevision);
       setData(liveData);
     } catch {}
-  }, [allowCloudSync, cloudRevision, data, loading, normaliseLoadedData, user.uid]);
+  // Only truly stable values — function never needs to be recreated
+  }, [normaliseLoadedData, user.uid]);
   const requestForegroundRefresh = React.useCallback((force = false) => {
     const now = Date.now();
     if (!force && now - lastForegroundRefreshAt.current < 120000) return;
