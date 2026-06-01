@@ -1,3 +1,34 @@
+// ── RAW ERROR CAPTURE (runs before React mounts) ─────────────────────────────
+// Captures errors that happen before the error boundary is alive,
+// and stores them so FatalAppScreen can display the full details.
+(function installRawErrorCapture() {
+  const STORE_KEY = "ct_last_raw_error";
+  function save(data) {
+    try { sessionStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (_) {}
+  }
+  window.__CT_RAW_ERROR_KEY = STORE_KEY;
+  window.addEventListener("error", function(e) {
+    // e.error is null for cross-origin scripts — capture everything we can
+    save({
+      message:  e.message  || "Script error",
+      filename: e.filename || "",
+      lineno:   e.lineno   || 0,
+      colno:    e.colno    || 0,
+      stack:    e.error?.stack || null,
+      ts:       Date.now(),
+    });
+  }, true); // capture phase — fires before React
+  window.addEventListener("unhandledrejection", function(e) {
+    const r = e.reason;
+    save({
+      message:  r?.message || String(r || "Unhandled promise rejection"),
+      stack:    r?.stack   || null,
+      ts:       Date.now(),
+    });
+  }, true);
+})();
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { StrictMode, Suspense, lazy, useState, useEffect, useRef, Component } from "react";
 import { createRoot } from "react-dom/client";
 import { onAuth, getUserRole, logout } from "./firebase";
@@ -185,6 +216,39 @@ function FatalAppScreen({ error }) {
   const message = error?.message || String(error || "Unknown error");
   const surfaceLabel = IS_ADMIN_APP ? "admin panel" : (IS_NATIVE_SHELL ? "app" : "teacher panel");
   const chunkFailure = isDynamicImportFailure(error);
+
+  // Pull the raw pre-React captured error (has filename/line/col)
+  let rawCapture = null;
+  try {
+    const stored = sessionStorage.getItem(window.__CT_RAW_ERROR_KEY || "ct_last_raw_error");
+    if (stored) rawCapture = JSON.parse(stored);
+  } catch (_) {}
+
+  // Build the full debug text shown on screen
+  const debugLines = [];
+  debugLines.push(`message:  ${message}`);
+  if (error?.stack && error.stack !== message) {
+    debugLines.push(`\nstack:\n${error.stack}`);
+  }
+  if (rawCapture) {
+    debugLines.push(`\n── raw capture ──`);
+    if (rawCapture.filename) debugLines.push(`file:     ${rawCapture.filename}`);
+    if (rawCapture.lineno)   debugLines.push(`line:     ${rawCapture.lineno}:${rawCapture.colno}`);
+    if (rawCapture.stack)    debugLines.push(`stack:\n${rawCapture.stack}`);
+    if (rawCapture.message && rawCapture.message !== message)
+                             debugLines.push(`raw msg:  ${rawCapture.message}`);
+  }
+  debugLines.push(`\n── device ──`);
+  debugLines.push(`ua:       ${navigator.userAgent}`);
+  debugLines.push(`url:      ${window.location.href}`);
+  debugLines.push(`time:     ${new Date().toISOString()}`);
+
+  const debugText = debugLines.join("\n");
+
+  function copyDebug() {
+    navigator.clipboard?.writeText(debugText).catch(() => {});
+  }
+
   return (
     <div style={{ minHeight:"100vh", background:"#F5F7FA", display:"flex", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Inter',sans-serif" }}>
       <div style={{ width:"100%", maxWidth:460, background:"#FFFFFF", border:"1px solid #DCE3EA", borderRadius:24, boxShadow:"0 16px 40px rgba(16,24,40,0.12)", padding:"28px 24px" }}>
@@ -200,14 +264,20 @@ function FatalAppScreen({ error }) {
         <div style={{ fontSize:12, fontWeight:700, color:"#667085", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
           Error Details
         </div>
-        <pre style={{ margin:0, whiteSpace:"pre-wrap", wordBreak:"break-word", background:"#F8FAFC", border:"1px solid #DCE3EA", borderRadius:14, padding:"14px 15px", color:"#101828", fontSize:13, lineHeight:1.55, fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" }}>
-          {message}
-          {error?.stack ? `\n\n${error.stack}` : ""}
+        <pre style={{ margin:0, whiteSpace:"pre-wrap", wordBreak:"break-word", background:"#F8FAFC", border:"1px solid #DCE3EA", borderRadius:14, padding:"14px 15px", color:"#101828", fontSize:13, lineHeight:1.55, fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", maxHeight:260, overflowY:"auto" }}>
+          {debugText}
         </pre>
+        {/* Copy button — teacher can paste this into WhatsApp/Telegram for you */}
+        <button
+          type="button"
+          onClick={copyDebug}
+          style={{ marginTop:10, width:"100%", border:"1px solid #DCE3EA", borderRadius:14, background:"#F8FAFC", color:"#344054", padding:"10px 18px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
+          📋 Copy error info
+        </button>
         <button
           type="button"
           onClick={() => chunkFailure ? forceChunkRefresh() : window.location.reload()}
-          style={{ marginTop:18, width:"100%", border:"none", borderRadius:14, background:"#16324F", color:"#fff", padding:"13px 18px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+          style={{ marginTop:8, width:"100%", border:"none", borderRadius:14, background:"#16324F", color:"#fff", padding:"13px 18px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
           {chunkFailure ? "Refresh app" : "Reload"}
         </button>
       </div>
