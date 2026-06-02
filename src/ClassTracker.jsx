@@ -5834,8 +5834,8 @@ function ClassTrackerInner({user}){
         {!selCls?(
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:G.textL,fontSize:15}}>Select a class from the left</div>
         ):(
-          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
-            <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${G.border}`,background:G.pageBg,flexShrink:0}}>
+          <div style={{flex:1,display:"flex",flexDirection:"column",overflowY:"auto",minWidth:0}}>
+            <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${G.border}`,background:G.pageBg}}>
               <div style={{background:G.surface,border:`1px solid ${isDarkTeacherTheme ? G.borderM : "rgba(15,23,42,0.92)"}`,borderRadius:22,overflow:"hidden",boxShadow:G.shadowMd}}>
                 <div style={{background:selSurfaceTheme.headerBg,padding:"16px 16px 14px",borderBottom:`1px solid ${selSurfaceTheme.headerBorder}`}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
@@ -5872,7 +5872,7 @@ function ClassTrackerInner({user}){
                 </div>
               </div>
             </div>
-            <div style={{flex:1,overflowY:"auto",padding:"14px 18px 40px"}}>
+            <div style={{padding:"14px 18px 40px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:10,background:G.surface,border:`1px solid ${G.border}`,borderRadius:18,padding:"12px 14px",boxShadow:G.shadowSm}}>
                 <div>
                   <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,marginBottom:4}}>Date focus</div>
