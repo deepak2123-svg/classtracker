@@ -1923,11 +1923,41 @@ const EMPTY_INSTITUTE_GLANCE_SUMMARY = {
   totalStudyMinutes:0,
   totalTodayEntries:0,
 };
-function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataMap = {}, resolveSectionName = null }){
+function getInstituteGlancePeriodMeta(period = "daily"){
+  return period === "weekly"
+    ? {
+        key:"weekly",
+        days:7,
+        filePart:"weekly",
+        label:"Weekly",
+        updatedLabel:"Updated this week",
+        pendingLabel:"Pending this week",
+        activeLabel:"Teachers active this week",
+        submissionLabel:"Submission rate this week",
+        sectionsSubLabel:"this week",
+        hoursSubLabel:"logged this week",
+        title:"Ledgr Report",
+      }
+    : {
+        key:"daily",
+        days:1,
+        filePart:"daily",
+        label:"Daily",
+        updatedLabel:"Updated today",
+        pendingLabel:"Pending today",
+        activeLabel:"Teachers active today",
+        submissionLabel:"Submission rate today",
+        sectionsSubLabel:"today",
+        hoursSubLabel:"logged today",
+        title:"Ledgr Report",
+      };
+}
+function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataMap = {}, resolveSectionName = null, period = "daily" }){
   const data = fullDataMap?.[teacher?.uid];
   const classesHere = data
     ? (data.classes || []).filter(cls => sameInstituteName(cls?.institute, instituteName))
     : [];
+  const periodMeta = getInstituteGlancePeriodMeta(period);
   const monthKey = currentMonthKey();
   const sectionMap = new Map();
   const todayDetails = [];
@@ -1938,7 +1968,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
 
   classesHere.forEach(cls => {
     const classNotes = (data.notes || {})[cls.id] || {};
-    const notesToday = getEntriesInRange(classNotes, 1);
+    const notesToday = getEntriesInRange(classNotes, periodMeta.days);
     monthEntries += countEntriesForMonth(classNotes, monthKey);
     if(!notesToday.length) return;
 
@@ -1952,7 +1982,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       totalMinutes:0,
     };
 
-    notesToday.forEach(({ entry }) => {
+    notesToday.forEach(({ dateKey, entry }) => {
       const mins = entryDurationMinutes(entry);
       todayEntries += 1;
       totalMinutes += mins;
@@ -1961,6 +1991,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       if(mins <= 0) untimedEntries += 1;
       todayDetails.push({
         teacherName:getTeacherDisplayNameFromMap(teacher, fullDataMap),
+        dateKey,
         section:sectionLabel,
         subject:cls?.subject || "",
         timeStart:entry?.timeStart || "",
@@ -2003,7 +2034,9 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       lastEntryTs:lastEntry || null,
       joinedAtTs:joinedAtTs || null,
     }),
-    todayStatusLabel: instituteGlanceTodayStatusLabel({ updatedToday:todayEntries > 0 }),
+    todayStatusLabel: periodMeta.key === "weekly"
+      ? (todayEntries > 0 ? "Updated this week" : "Pending this week")
+      : instituteGlanceTodayStatusLabel({ updatedToday:todayEntries > 0 }),
     sectionCount: sections.length,
     sectionNames: sections.map(section => section.name),
     sections,
@@ -2017,7 +2050,8 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     untimedEntries,
   };
 }
-function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null }){
+function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, period = "daily" }){
+  const periodMeta = getInstituteGlancePeriodMeta(period);
   return institutes.map(inst => {
     const teacherRows = teachers
       .filter(teacher => teacherBelongsToInstituteFromMap(teacher, inst, fullDataMap))
@@ -2026,6 +2060,7 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
         instituteName: inst,
         fullDataMap,
         resolveSectionName,
+        period,
       }));
     const filledTeachers = teacherRows
       .filter(item => item.updatedToday)
@@ -2088,6 +2123,8 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
       missingNames: missingTeachers.map(item => item.name),
       filledNames: filledTeachers.map(item => item.name),
       loadedTeachers,
+      period: periodMeta.key,
+      periodLabel: periodMeta.label,
       sectionsTaught: sectionRows.length,
       sectionRows,
       totalStudyMinutes,
@@ -2297,8 +2334,9 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
   });
   anchor.click();
 }
-async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
+async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period = "daily" }){
   await waitForCanvasFonts();
+  const periodMeta = getInstituteGlancePeriodMeta(period);
   const width = 1280;
   const cardX = 28;
   const cardY = 28;
@@ -2347,14 +2385,14 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
     measureCtx.font = "600 17px 'Inter',sans-serif";
     const summaryText = row.noTeachersSignedUp
       ? "0 teachers linked. No one has signed up in this centre yet."
-      : `${row.totalTeachers} teacher${row.totalTeachers===1?"":"s"} · ${row.filledToday} filled today · ${row.missingToday} pending · ${row.sectionsTaught} sections taught · ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
+      : `${row.totalTeachers} teacher${row.totalTeachers===1?"":"s"} · ${row.filledToday} updated · ${row.missingToday} pending · ${row.sectionsTaught} sections taught · ${formatDurationShort(row.totalStudyMinutes || 0)} study hours`;
     const summaryLines = wrapCanvasText(measureCtx, summaryText, contentWidth - 240);
 
     const pendingText = row.noTeachersSignedUp
       ? "No sign-ups yet. Add teachers to this centre and their daily status will appear here."
       : row.missingNames.length
-        ? `Pending today: ${row.missingNames.join(", ")}`
-        : "Everyone linked to this centre has filled today's entry.";
+        ? `Pending: ${row.missingNames.join(", ")}`
+        : "Everyone linked to this centre is updated.";
     const pendingLines = wrapCanvasText(measureCtx, pendingText, innerWidth);
 
     const signupNoteLines = row.noTeachersSignedUp
@@ -2403,7 +2441,7 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
   ctx.textBaseline = "top";
   ctx.fillStyle = "#111827";
   ctx.font = "800 36px 'Poppins',sans-serif";
-  ctx.fillText("Daily Ledgr Report", contentX, cursorY);
+  ctx.fillText("Ledgr Report", contentX, cursorY);
 
   cursorY += 50;
   ctx.fillStyle = "#4B5563";
@@ -2414,7 +2452,7 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
   ctx.fillStyle = "#6B7280";
   ctx.font = "500 20px 'Inter',sans-serif";
   ctx.fillText(
-    fitCanvasText(ctx, "Institute-wise teacher tables for today's uploads, pending follow-up, sections taught, and study hours.", contentWidth),
+    fitCanvasText(ctx, `${periodMeta.label} institute summary: submissions, pending follow-up, sections, and hours.`, contentWidth),
     contentX,
     cursorY
   );
@@ -2472,7 +2510,7 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
     ctx.font = "800 28px 'Poppins',sans-serif";
     ctx.fillText(fitCanvasText(ctx, row.institute, contentWidth - 300), innerX, rowTop + 18);
 
-    const badgeLabel = row.noTeachersSignedUp ? "No sign-ups" : `${row.filledToday}/${row.totalTeachers} filled`;
+    const badgeLabel = row.noTeachersSignedUp ? "No sign-ups" : `${row.filledToday}/${row.totalTeachers} updated`;
     ctx.font = "700 18px 'Inter',sans-serif";
     const badgeWidth = ctx.measureText(badgeLabel).width + 36;
     drawCanvasPill(ctx, {
@@ -2527,13 +2565,13 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
     } else {
       ctx.fillStyle = "#475569";
       ctx.font = "700 11px 'Inter',sans-serif";
-      ctx.fillText("TEACHERS WHO FILLED TODAY", innerX, bodyY);
+      ctx.fillText(periodMeta.activeLabel.toUpperCase(), innerX, bodyY);
       bodyY += 26;
 
       if(!meta.teacherRows.length){
         ctx.fillStyle = "#9A3412";
         ctx.font = "600 16px 'Inter',sans-serif";
-        ctx.fillText("No teacher has uploaded today's entry for this centre yet.", innerX, bodyY);
+        ctx.fillText(`No teacher uploaded during this ${periodMeta.label.toLowerCase()} period.`, innerX, bodyY);
         bodyY += 34;
       } else {
         const tableX = innerX;
@@ -2608,7 +2646,7 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
 
       ctx.fillStyle = "#475569";
       ctx.font = "700 11px 'Inter',sans-serif";
-      ctx.fillText("TEACHERS PENDING TODAY", innerX, bodyY);
+      ctx.fillText(periodMeta.pendingLabel.toUpperCase(), innerX, bodyY);
       bodyY += 26;
 
       ctx.fillStyle = row.missingNames.length ? "#334155" : "#166534";
@@ -2623,21 +2661,22 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
 
   return canvas;
 }
-async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel }){
-  const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel });
+async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period = "daily" }){
+  const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period });
+  const filePart = getInstituteGlancePeriodMeta(period).filePart;
   const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
   if(blob){
-    triggerBlobDownload(blob, `all_institutes_at_a_glance_${todayKey()}.png`);
+    triggerBlobDownload(blob, `all_institutes_${filePart}_ledgr_report_${todayKey()}.png`);
     return;
   }
   const anchor = Object.assign(document.createElement("a"), {
     href:canvas.toDataURL("image/png"),
-    download:`all_institutes_at_a_glance_${todayKey()}.png`,
+    download:`all_institutes_${filePart}_ledgr_report_${todayKey()}.png`,
   });
   anchor.click();
 }
-function instituteGlancePdfFilename(instituteName){
-  return `${slugifyDownloadPart(instituteName)}_centre_summary_${todayKey()}.pdf`;
+function instituteGlancePdfFilename(instituteName, period = "daily"){
+  return `${slugifyDownloadPart(instituteName)}_${getInstituteGlancePeriodMeta(period).filePart}_ledgr_report_${todayKey()}.pdf`;
 }
 
 // ── HTML-based centre summary export ─────────────────────────────────────────
@@ -2858,14 +2897,15 @@ function buildInstituteGlanceDateCard(generatedOnLabel, label = "Generated"){
     </div>`;
 }
 
-function buildInstituteGlanceCentreCard(row){
+function buildInstituteGlanceCentreCard(row, period = "daily"){
   const e = escapeExportHtml;
+  const periodMeta = getInstituteGlancePeriodMeta(period);
   const tone = row.noTeachersSignedUp ? "empty" : row.missingToday === 0 ? "good" : "warn";
   const status = row.noTeachersSignedUp
     ? "No sign-ups yet"
     : row.missingToday === 0
       ? "All teachers updated"
-      : `${row.missingToday || 0} pending today`;
+      : `${row.missingToday || 0} pending`;
   const submission = row.noTeachersSignedUp
     ? "No linked teachers"
     : `${row.filledToday || 0}/${row.totalTeachers || 0} teachers updated`;
@@ -2876,13 +2916,14 @@ function buildInstituteGlanceCentreCard(row){
       <div class="metric-line"><span>Submission</span><strong>${e(submission)}</strong></div>
       <div class="metric-line"><span>Sections taught</span><strong>${row.sectionsTaught || 0}</strong></div>
       <div class="metric-line"><span>Study hours</span><strong>${e(formatDurationShort(row.totalStudyMinutes || 0))}</strong></div>
-      <div class="metric-line"><span>Month entries</span><strong>${row.monthEntries || 0}</strong></div>
+      <div class="metric-line"><span>Period</span><strong>${e(periodMeta.label)}</strong></div>
     </div>`;
 }
 
 function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
   const e = escapeExportHtml;
-  const { standalone = true } = options;
+  const { standalone = true, period = "daily" } = options;
+  const periodMeta = getInstituteGlancePeriodMeta(period);
   const filled = row.filledTeacherRows || [];
   const pending = row.pendingTeacherRows || [];
   const total = row.totalTeachers || 0;
@@ -2904,7 +2945,7 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
   // Filled teachers HTML
   let filledHtml = "";
   if(!filled.length){
-    filledHtml = `<div class="empty-notice">No teacher has uploaded today's entry for this centre yet.</div>`;
+    filledHtml = `<div class="empty-notice">No teacher has uploaded during this ${e(periodMeta.label.toLowerCase())} period.</div>`;
   } else {
     filledHtml = `<div class="col-head"><span>Section</span><span>Time</span><span>Topic / Title</span><span style="text-align:right">Notes</span></div>`;
     filled.forEach(teacher => {
@@ -2919,7 +2960,7 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
         rows = details.map(d =>
           `<div class="session-row">
             <span class="section-name">${e(d.section || "—")}</span>
-            <span class="time-str">${e(formatExportPdfTime(d.timeStart, d.timeEnd) || "—")}</span>
+            <span class="time-str">${e(periodMeta.key==="weekly" ? `${formatDateLabel(d.dateKey)} · ${formatExportPdfTime(d.timeStart, d.timeEnd) || "—"}` : (formatExportPdfTime(d.timeStart, d.timeEnd) || "—"))}</span>
             <span class="topic">${e(d.title || d.subject || "—")}</span>
             <span class="notes-str">${e(d.notes || "—")}</span>
           </div>`
@@ -2970,17 +3011,10 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
   return `
     ${standalone ? `<section class="report-page">` : ""}
       <div class="centre-hero">
-        <div class="brand-row">
-          <div class="brand-mark">L</div>
-          <div>
-            <div class="brand-title">Ledgr</div>
-            <div class="brand-sub">Daily Ledgr Report</div>
-          </div>
-        </div>
-        <div class="eyebrow">Centre</div>
         <div class="institute-title">${e(row.institute || "Centre Summary")}</div>
-        <div class="institute-subtitle">Submissions, pending teachers, sections, and hours.</div>
+        <div class="institute-subtitle">${e(periodMeta.title)} · Submissions, pending teachers, sections, and hours.</div>
         <div class="centre-hero-meta">
+          <span class="centre-hero-pill">Period <strong>${e(periodMeta.label)}</strong></span>
           <span class="centre-hero-pill">Date <strong>${e(getInstituteGlanceGeneratedParts(generatedOnLabel).date)}</strong></span>
           ${getInstituteGlanceGeneratedParts(generatedOnLabel).time ? `<span class="centre-hero-pill">Generated <strong>${e(getInstituteGlanceGeneratedParts(generatedOnLabel).time)}</strong></span>` : ""}
         </div>
@@ -2988,24 +3022,24 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
 
       <div class="scorecard">
         <div class="card ok">
-          <div class="label">Updated today</div>
+          <div class="label">${e(periodMeta.updatedLabel)}</div>
           <div class="value">${filledCount}/${total}</div>
           <div class="sub">${pct}% submission rate</div>
         </div>
         <div class="card alert">
-          <div class="label">Pending today</div>
+          <div class="label">${e(periodMeta.pendingLabel)}</div>
           <div class="value">${pendingCount}</div>
           <div class="sub">not filled yet</div>
         </div>
         <div class="card">
           <div class="label">Sections taught</div>
           <div class="value">${sections}</div>
-          <div class="sub">today</div>
+          <div class="sub">${e(periodMeta.sectionsSubLabel)}</div>
         </div>
         <div class="card">
           <div class="label">Study hours</div>
           <div class="value">${e(hours)}</div>
-          <div class="sub">logged today</div>
+          <div class="sub">${e(periodMeta.hoursSubLabel)}</div>
         </div>
       </div>
 
@@ -3017,12 +3051,12 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
         ${nActive > 0 ? `<span class="pb-chip green"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nActive} active · missed today</span>` : ""}
       </div>
       <div class="progress-wrap">
-        <span class="progress-label">Submission rate today</span>
+        <span class="progress-label">${e(periodMeta.submissionLabel)}</span>
         <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         <span class="progress-pct">${filledCount} / ${total} · ${pct}%</span>
       </div>` : ""}
 
-      <div class="section-title">Teachers active today (${filled.length})</div>
+      <div class="section-title">${e(periodMeta.activeLabel)} (${filled.length})</div>
       ${filledHtml}
 
       <div class="section-title">Pending follow-up (${pending.length})${pending.length ? " - sorted by urgency" : ""}</div>
@@ -3035,9 +3069,10 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
     ${standalone ? `</section>` : ""}`;
 }
 
-function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
+function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period = "daily" }){
   const e = escapeExportHtml;
   const parts = getInstituteGlanceGeneratedParts(generatedOnLabel);
+  const periodMeta = getInstituteGlancePeriodMeta(period);
   const completionPct = summary.totalTeachers > 0 ? Math.round(((summary.filledToday || 0) / summary.totalTeachers) * 100) : 0;
   const sortedRows = [...(rows || [])].sort((a, b) => {
     if((b.missingToday || 0) !== (a.missingToday || 0)) return (b.missingToday || 0) - (a.missingToday || 0);
@@ -3046,19 +3081,19 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
   const coverScorecard = `
     <div class="scorecard five">
       <div class="card"><div class="label">Institutes</div><div class="value">${summary.totalInstitutes || 0}</div></div>
-      <div class="card ok"><div class="label">Teachers updated</div><div class="value">${summary.filledToday || 0}/${summary.totalTeachers || 0}</div></div>
-      <div class="card alert"><div class="label">Pending today</div><div class="value">${summary.missingToday || 0}</div></div>
+      <div class="card ok"><div class="label">${e(periodMeta.updatedLabel)}</div><div class="value">${summary.filledToday || 0}/${summary.totalTeachers || 0}</div></div>
+      <div class="card alert"><div class="label">${e(periodMeta.pendingLabel)}</div><div class="value">${summary.missingToday || 0}</div></div>
       <div class="card"><div class="label">Sections taught</div><div class="value">${summary.sectionsTaught || 0}</div></div>
       <div class="card"><div class="label">Study hours</div><div class="value">${e(formatDurationShort(summary.totalStudyMinutes || 0))}</div></div>
     </div>`;
 
-  const centreCards = sortedRows.map(row => buildInstituteGlanceCentreCard(row)).join("");
-  const institutePages = (rows || []).map(row => buildInstituteGlanceHtmlPage(row, generatedOnLabel, { standalone:true })).join("");
+  const centreCards = sortedRows.map(row => buildInstituteGlanceCentreCard(row, period)).join("");
+  const institutePages = (rows || []).map(row => buildInstituteGlanceHtmlPage(row, generatedOnLabel, { standalone:true, period })).join("");
 
   return `<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Daily Ledgr Report - ${e(parts.date)}${parts.time ? ` ${e(parts.time)}` : ""}</title>
+    <title>${e(periodMeta.title)} - ${e(parts.date)}${parts.time ? ` ${e(parts.time)}` : ""}</title>
     <style>${CENTRE_SUMMARY_CSS}</style>
   </head><body>
     <section class="report-page">
@@ -3068,15 +3103,15 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
             <div class="brand-mark">L</div>
             <div>
               <div class="brand-title">Ledgr</div>
-              <div class="brand-sub">Daily Ledgr Report</div>
+              <div class="brand-sub">${e(periodMeta.label)} Report</div>
             </div>
           </div>
-          <h1>Daily Ledgr Report</h1>
+          <h1>${e(periodMeta.title)}</h1>
           <div class="cover-copy">Teacher submissions and pending follow-up across all institutes.</div>
           <div class="cover-meta-grid">
+            <div class="cover-meta"><div class="label">Report period</div><div class="value">${e(periodMeta.label)}</div></div>
             <div class="cover-meta"><div class="label">Report date</div><div class="value">${e(parts.date)}</div></div>
             <div class="cover-meta"><div class="label">Generated time</div><div class="value">${e(parts.time || "-")}</div></div>
-            <div class="cover-meta"><div class="label">Centres covered</div><div class="value">${summary.totalInstitutes || 0}</div></div>
           </div>
         </div>
         <div class="cover-copy">Pending institutes appear first.</div>
@@ -3087,14 +3122,14 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
       <div class="executive-header">
         <div>
           <div class="eyebrow">Overview</div>
-          <h1>Daily Ledgr Report</h1>
+          <h1>${e(periodMeta.title)}</h1>
         </div>
         ${buildInstituteGlanceDateCard(generatedOnLabel, "Report generated")}
       </div>
       ${coverScorecard}
       <div class="executive-summary">
         <h2>Summary</h2>
-        <p>${summary.filledToday || 0} of ${summary.totalTeachers || 0} teachers updated today (${completionPct}%). ${summary.missingToday || 0} teachers are pending follow-up. The network logged ${summary.sectionsTaught || 0} sections and ${e(formatDurationShort(summary.totalStudyMinutes || 0))} of study time.</p>
+        <p>${summary.filledToday || 0} of ${summary.totalTeachers || 0} teachers updated (${completionPct}%). ${summary.missingToday || 0} teachers are pending follow-up. The network logged ${summary.sectionsTaught || 0} sections and ${e(formatDurationShort(summary.totalStudyMinutes || 0))} of study time.</p>
       </div>
       <div class="section-title">Institutes - pending first</div>
       <div class="centre-grid">${centreCards}</div>
@@ -3108,16 +3143,17 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
   </body></html>`;
 }
 
-function buildInstituteGlanceInstituteHtml(row, generatedOnLabel){
+function buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period = "daily"){
   const e = escapeExportHtml;
   const parts = getInstituteGlanceGeneratedParts(generatedOnLabel);
+  const periodMeta = getInstituteGlancePeriodMeta(period);
   return `<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>${e(row.institute || "Centre")} - Daily Summary - ${e(parts.date)}${parts.time ? ` ${e(parts.time)}` : ""}</title>
+    <title>${e(row.institute || "Centre")} - ${e(periodMeta.title)} - ${e(parts.date)}${parts.time ? ` ${e(parts.time)}` : ""}</title>
     <style>${CENTRE_SUMMARY_CSS}</style>
   </head><body>
-    ${buildInstituteGlanceHtmlPage(row, generatedOnLabel)}
+    ${buildInstituteGlanceHtmlPage(row, generatedOnLabel, { period })}
   </body></html>`;
 }
 
@@ -3148,23 +3184,23 @@ function _printHtml(html, filename){
   win.document.close();
 }
 
-async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel }){
-  const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel });
-  _printHtml(html, `all_institutes_at_a_glance_${todayKey()}.pdf`);
+async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period = "daily" }){
+  const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period });
+  _printHtml(html, `all_institutes_${getInstituteGlancePeriodMeta(period).filePart}_ledgr_report_${todayKey()}.pdf`);
 }
-async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel }){
-  const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel);
-  _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute"));
+async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel, period = "daily" }){
+  const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period);
+  _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period));
 }
-async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel }){
+async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period = "daily" }){
   // For zip we still produce PDFs — open each in sequence with a small gap
   // so the browser doesn't block multiple windows. Each teacher saves manually.
   // (Fully automated zip-of-PDFs requires a server-side renderer.)
   for(let i = 0; i < (rows || []).length; i++){
     const row  = rows[i];
-    const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel);
+    const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period);
     await new Promise(r => setTimeout(r, i === 0 ? 0 : 600));
-    _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute"));
+    _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period));
   }
 }
 function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
@@ -4651,6 +4687,7 @@ function AdminPanelInner({user}){
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
+  const [instituteGlancePeriod, setInstituteGlancePeriod] = useState("daily");
   const [instituteGlanceExportBusy, setInstituteGlanceExportBusy] = useState("");
   const [instituteGlanceRowExportBusy, setInstituteGlanceRowExportBusy] = useState("");
   const [instituteGlanceReport, setInstituteGlanceReport] = useState(() => ({
@@ -5115,6 +5152,7 @@ function AdminPanelInner({user}){
       teachers: instituteGlanceTeacherList,
       fullDataMap,
       resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
+      period:instituteGlancePeriod,
     });
     return {
       rows,
@@ -5122,7 +5160,7 @@ function AdminPanelInner({user}){
       loadedInstitutes: rows.filter(row => row.ready).length,
       totalInstitutes: rows.length,
     };
-  }, [instSectionsAll, instituteGlanceTeacherList, institutes]);
+  }, [instSectionsAll, instituteGlancePeriod, instituteGlanceTeacherList, institutes]);
 
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
@@ -5246,6 +5284,11 @@ function AdminPanelInner({user}){
     return finalReport;
   }, [buildInstituteGlanceSnapshot, fullData, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
 
+  React.useEffect(() => {
+    if(!instituteGlanceOpen && mobileSurface !== "centreSummary") return;
+    loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure);
+  }, [handleInstituteGlanceLoadFailure, instituteGlanceOpen, instituteGlancePeriod, loadInstituteGlanceReport, mobileSurface]);
+
   const openMobileCentreSummary = React.useCallback(() => {
     setProfileOpen(false);
     setInstituteGlanceOpen(false);
@@ -5318,11 +5361,11 @@ function AdminPanelInner({user}){
       const summary = report.summary || EMPTY_INSTITUTE_GLANCE_SUMMARY;
       const generatedOnLabel = getInstituteGlanceGeneratedOnLabel();
       if(format === "png"){
-        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel });
+        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period:instituteGlancePeriod });
       } else if(format === "zip"){
-        await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel });
+        await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period:instituteGlancePeriod });
       } else {
-        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel });
+        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period:instituteGlancePeriod });
       }
     } catch (error) {
       console.error("institute glance export failed", error);
@@ -5330,7 +5373,7 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceExportBusy("");
     }
-  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceExportBusy, loadInstituteGlanceReport]);
+  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceExportBusy, instituteGlancePeriod, loadInstituteGlanceReport]);
 
   const exportInstituteGlanceRowPdf = React.useCallback(async (row) => {
     if(!row?.institute || !row.ready || instituteGlanceRowExportBusy) return;
@@ -5345,6 +5388,7 @@ function AdminPanelInner({user}){
       await downloadInstituteGlanceInstitutePdf({
         row:freshRow,
         generatedOnLabel:getInstituteGlanceGeneratedOnLabel(),
+        period:instituteGlancePeriod,
       });
     } catch (error) {
       console.error("institute glance row export failed", error);
@@ -5352,7 +5396,7 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceRowExportBusy("");
     }
-  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceRowExportBusy, loadInstituteGlanceReport]);
+  }, [getInstituteGlanceGeneratedOnLabel, instituteGlancePeriod, instituteGlanceRowExportBusy, loadInstituteGlanceReport]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
@@ -5864,6 +5908,7 @@ function AdminPanelInner({user}){
   }, [PANEL_LIMITS, panelCollapsed, panelW, clampPanelWidth]);
 
   const instituteGlanceReadyCount = Math.max(0, instituteGlanceReport.loadedInstitutes || 0);
+  const instituteGlancePeriodMeta = getInstituteGlancePeriodMeta(instituteGlancePeriod);
   const instituteGlanceProgressPct = instituteGlanceReport.total
     ? Math.max(0, Math.min(100, Math.round((instituteGlanceReport.loaded / instituteGlanceReport.total) * 100)))
     : 0;
@@ -5875,8 +5920,8 @@ function AdminPanelInner({user}){
     <div style={{display:"grid",gridTemplateColumns:compact ? "repeat(2,minmax(0,1fr))" : "repeat(5,minmax(0,1fr))",gap:8,marginTop:12}}>
       {[
         { label:"Institutes", value:instituteGlanceReport.summary.totalInstitutes },
-        { label:"Teachers updated", value:`${instituteGlanceReport.summary.filledToday}/${instituteGlanceReport.summary.totalTeachers}` },
-        { label:"Pending today", value:instituteGlanceReport.summary.missingToday },
+        { label:instituteGlancePeriodMeta.updatedLabel, value:`${instituteGlanceReport.summary.filledToday}/${instituteGlanceReport.summary.totalTeachers}` },
+        { label:instituteGlancePeriodMeta.pendingLabel, value:instituteGlanceReport.summary.missingToday },
         { label:"Sections taught", value:instituteGlanceReport.summary.sectionsTaught },
         { label:"Study hours", value:formatDurationShort(instituteGlanceReport.summary.totalStudyMinutes || 0) },
       ].map(item=>(
@@ -5909,6 +5954,34 @@ function AdminPanelInner({user}){
     };
     return (
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+        <div style={{display:"inline-flex",border:`1px solid ${G.border}`,borderRadius:12,overflow:"hidden",height:compact ? 36 : 38,background:"#FFFFFF"}}>
+          {["daily", "weekly"].map(period => {
+            const active = instituteGlancePeriod === period;
+            return (
+              <button
+                key={period}
+                type="button"
+                className="admin-mobile-touch"
+                onClick={()=>{
+                  setInstituteGlancePeriod(period);
+                }}
+                disabled={!!instituteGlanceAnyExportBusy}
+                style={{
+                  padding:"0 12px",
+                  border:"none",
+                  borderRight:period==="daily" ? `1px solid ${G.border}` : "none",
+                  background:active ? G.blueL : "#FFFFFF",
+                  color:active ? G.blue : G.textS,
+                  fontSize:12,
+                  fontWeight:800,
+                  fontFamily:G.sans,
+                  cursor:instituteGlanceAnyExportBusy ? "not-allowed" : "pointer",
+                }}>
+                {period==="daily" ? "Daily" : "Weekly"}
+              </button>
+            );
+          })}
+        </div>
         <button
           className="admin-mobile-touch"
           onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)}
@@ -6037,7 +6110,7 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:12,color:G.textM,lineHeight:1.5,marginTop:5}}>{getInstituteGlanceTeacherSectionCaption(teacher)}</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10}}>
                   {[
-                    { label:"Today logs", value:teacher.todayEntries },
+                    { label:instituteGlancePeriod==="weekly" ? "Week logs" : "Today logs", value:teacher.todayEntries },
                     { label:"This month", value:teacher.monthEntries },
                     { label:"Last entry", value:teacher.lastActivityLabel },
                     { label:"Study hours", value:getInstituteGlanceTeacherHoursLabel(teacher) },
@@ -6058,7 +6131,7 @@ function AdminPanelInner({user}){
       <div style={{marginTop:10,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{minWidth:980,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",background:"#FFFFFF"}}>
           <div style={{display:"grid",gridTemplateColumns:"minmax(170px,1.6fr) minmax(120px,0.85fr) minmax(250px,1.95fr) minmax(74px,0.55fr) minmax(92px,0.7fr) minmax(130px,0.9fr) minmax(92px,0.72fr)",gap:0,background:"#F8FAFC",borderBottom:`1px solid ${G.border}`}}>
-            {["Teacher", "Status", "Sections", "Today", "This month", "Last entry", "Study hours"].map(label=>(
+            {["Teacher", "Status", "Sections", instituteGlancePeriod==="weekly" ? "Week" : "Today", "This month", "Last entry", "Study hours"].map(label=>(
               <div key={label} style={{padding:"10px 12px",fontSize:10.5,fontWeight:800,color:G.textL,fontFamily:G.mono,letterSpacing:0.7,textTransform:"uppercase"}}>
                 {label}
               </div>
@@ -6101,7 +6174,7 @@ function AdminPanelInner({user}){
     if(!pendingRows.length){
       return (
         <div style={{fontSize:12.5,color:"#166534",lineHeight:1.55}}>
-          Everyone linked to this centre has filled today.
+          Everyone linked to this centre is updated.
         </div>
       );
     }
@@ -6196,20 +6269,20 @@ function AdminPanelInner({user}){
             : row.noTeachersSignedUp
               ? "No sign-ups"
               : row.missingToday === 0
-                ? "All filled"
+                ? "All updated"
                 : `${row.missingToday} pending`;
           const metaText = row.noTeachersSignedUp
             ? "No teachers have signed up for this centre yet."
             : row.ready
-              ? `${row.filledToday} of ${row.totalTeachers} teachers filled today`
+              ? `${row.filledToday} of ${row.totalTeachers} teachers updated`
               : `${row.loadedTeachers} of ${row.totalTeachers} teacher records are ready`;
           const helperText = !row.ready
             ? "Syncing teacher data."
             : row.noTeachersSignedUp
               ? "Once teachers sign up, this card will show uploaded names, sections taught, and study hours."
               : row.filledToday > 0
-                ? `${row.sectionsTaught} sections taught today across ${row.filledToday} uploaded teacher${row.filledToday===1?"":"s"}.`
-                : "No teacher has uploaded today's entry yet.";
+                ? `${row.sectionsTaught} sections taught across ${row.filledToday} updated teacher${row.filledToday===1?"":"s"}.`
+                : `No teacher has uploaded during this ${instituteGlancePeriodMeta.label.toLowerCase()} period.`;
           const cardStyle = {
             width:"100%",
             height:"100%",
@@ -6268,8 +6341,8 @@ function AdminPanelInner({user}){
                     {row.noTeachersSignedUp
                       ? "No linked teachers yet. Open the centre once sign-ups begin."
                       : row.missingToday > 0
-                        ? `${row.missingToday} teacher${row.missingToday===1?"":"s"} need follow-up. Use Centre PDF for the detailed teacher list.`
-                        : "All linked teachers have filled today. Use Centre PDF for the detailed teacher list."}
+                        ? `${row.missingToday} teacher${row.missingToday===1?"":"s"} need follow-up. Use Centre PDF for details.`
+                        : "All linked teachers are updated. Use Centre PDF for details."}
                   </div>
                 </>
               )}
@@ -6341,7 +6414,7 @@ function AdminPanelInner({user}){
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:16}}>
             <div style={{minWidth:0,flex:1}}>
               <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>All institutes</div>
-              <h1 style={{fontSize:34,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.02}}>Daily Ledgr Report</h1>
+              <h1 style={{fontSize:34,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.02}}>Ledgr Report</h1>
               <div style={{fontSize:14,color:G.textM,lineHeight:1.65,marginTop:10,maxWidth:980}}>
                 Submissions, pending teachers, sections, and hours.
               </div>
@@ -10488,7 +10561,7 @@ function AdminPanelInner({user}){
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes</div>
-                <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:7}}>Daily Ledgr Report</div>
+                <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:7}}>Ledgr Report</div>
                 <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8}}>
                   Submissions, pending teachers, sections, and hours.
                 </div>
@@ -10571,7 +10644,7 @@ function AdminPanelInner({user}){
 
           <MobileProfileAction
             icon={IconChartBar}
-            title="Daily Ledgr Report"
+            title="Ledgr Report"
             subtitle="See who filled, who is pending, sections taught, and study hours."
             onClick={openMobileCentreSummary}
             badge={instituteGlanceReport.loading
@@ -11568,7 +11641,7 @@ function AdminPanelInner({user}){
                       <AppIcon icon={IconChartBar} size={16} color="#93C5FD" />
                     </div>
                     <div style={{minWidth:0,flex:1}}>
-                      <div style={{fontSize:13.5,fontWeight:800,color:"rgba(255,255,255,0.92)"}}>Daily Ledgr Report</div>
+                      <div style={{fontSize:13.5,fontWeight:800,color:"rgba(255,255,255,0.92)"}}>Ledgr Report</div>
                       <div style={{fontSize:11.5,color:"rgba(255,255,255,0.44)",fontWeight:500,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                         All-institutes report, PDFs, and centre boxes
                       </div>
