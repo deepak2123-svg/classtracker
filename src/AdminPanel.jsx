@@ -2650,36 +2650,77 @@ const CENTRE_SUMMARY_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --ink: #0f1115; --ink-2: #3d4048; --ink-3: #6b7080; --ink-4: #9da3af;
-    --rule: #e4e6ea; --rule-strong: #c8ccd4;
-    --surface: #ffffff; --surface-2: #f6f7f9; --surface-3: #edf0f4;
+    --ink: #111827; --ink-2: #374151; --ink-3: #667085; --ink-4: #98a2b3;
+    --rule: #e5e7eb; --rule-strong: #cbd5e1;
+    --surface: #ffffff; --surface-2: #f8fafc; --surface-3: #eef2f7;
     --green: #16a34a; --green-bg: #f0fdf4; --green-border: #bbf7d0;
     --amber: #b45309; --amber-bg: #fffbeb; --amber-border: #fde68a;
     --red: #dc2626; --red-bg: #fef2f2; --red-border: #fecaca;
     --blue: #1d4ed8; --blue-bg: #eff6ff; --blue-border: #bfdbfe;
-    --purple: #7c3aed; --purple-bg: #f5f3ff; --purple-border: #ddd6fe;
     --teal: #0d9488; --teal-bg: #f0fdfa; --teal-border: #99f6e4;
+    --navy: #172554; --navy-2: #1e3a8a;
   }
   body {
     font-family: 'DM Sans', sans-serif; background: var(--surface-2);
     color: var(--ink); font-size: 13.5px; line-height: 1.5;
-    padding: 28px 20px 56px; max-width: 900px; margin: 0 auto;
+    padding: 30px 24px 56px; max-width: 980px; margin: 0 auto;
   }
+  .report-page { page-break-after: always; min-height: 980px; }
+  .report-page:last-child { page-break-after: auto; }
+  .cover {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%);
+    color: #fff; border-radius: 20px; padding: 42px 44px; min-height: 650px;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .brand-row { display: flex; align-items: center; gap: 14px; }
+  .brand-mark { width: 54px; height: 54px; border-radius: 16px; background: #3b82f6; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; }
+  .brand-title { font-size: 28px; font-weight: 800; letter-spacing: -0.4px; }
+  .brand-sub { font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.68); margin-top: 3px; }
+  .cover h1 { font-size: 46px; line-height: 1.02; letter-spacing: -1.2px; margin: 80px 0 12px; max-width: 680px; }
+  .cover-copy { font-size: 18px; color: rgba(255,255,255,0.78); max-width: 690px; line-height: 1.55; }
+  .cover-meta-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 42px; }
+  .cover-meta { background: rgba(255,255,255,0.11); border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; padding: 14px 16px; }
+  .cover-meta .label { color: rgba(255,255,255,0.64); font-size: 10px; letter-spacing: 1.3px; text-transform: uppercase; margin-bottom: 6px; }
+  .cover-meta .value { color: #fff; font-size: 18px; font-weight: 700; }
+  .executive-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 18px; border-bottom: 2px solid var(--ink); margin-bottom: 18px; }
+  .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--blue); margin-bottom: 6px; }
+  .executive-header h1, .page-header h1 { font-size: 28px; line-height: 1.08; letter-spacing: -0.6px; font-weight: 800; color: var(--ink); }
+  .date-card { background: #fff; border: 1px solid var(--rule-strong); border-radius: 14px; padding: 12px 14px; min-width: 190px; text-align: right; }
+  .date-card .label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-4); font-weight: 700; }
+  .date-card .date { font-size: 16px; color: var(--ink); font-weight: 800; margin-top: 5px; }
+  .date-card .time { font-size: 13px; color: var(--ink-3); font-weight: 600; margin-top: 2px; }
   .page-header {
-    display: flex; justify-content: space-between; align-items: flex-start;
-    margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1.5px solid var(--ink);
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;
+    margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--ink);
   }
-  .page-header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
   .page-header .meta { font-size: 11.5px; color: var(--ink-3); text-align: right; line-height: 1.7; }
-  .scorecard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
-  .card { background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px; padding: 12px 14px; }
+  .institute-title { font-size: 30px; line-height: 1.08; letter-spacing: -0.7px; font-weight: 800; color: var(--ink); max-width: 660px; }
+  .institute-subtitle { font-size: 13px; color: var(--ink-3); margin-top: 7px; }
+  .scorecard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .scorecard.five { grid-template-columns: repeat(5, 1fr); }
+  .card { background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 10px; padding: 13px 14px; }
   .card .label { font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-3); margin-bottom: 4px; }
-  .card .value { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; color: var(--ink); line-height: 1.1; }
+  .card .value { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: var(--ink); line-height: 1.1; }
   .card .sub { font-size: 11px; color: var(--ink-4); margin-top: 2px; }
   .card.alert .value { color: var(--red); }
   .card.ok .value { color: var(--green); }
+  .executive-summary { background: #fff; border: 1px solid var(--rule-strong); border-radius: 14px; padding: 18px 20px; margin: 16px 0; }
+  .executive-summary h2 { font-size: 17px; margin-bottom: 8px; }
+  .executive-summary p { color: var(--ink-2); font-size: 13px; line-height: 1.65; }
+  .centre-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+  .centre-card { background: #fff; border: 1px solid var(--rule-strong); border-radius: 14px; padding: 14px 15px; page-break-inside: avoid; }
+  .centre-card.warn { border-color: var(--amber-border); background: #fffaf2; }
+  .centre-card.good { border-color: var(--green-border); background: #f7fef9; }
+  .centre-card.empty { background: #f8fafc; }
+  .centre-card h3 { font-size: 15px; line-height: 1.25; margin-bottom: 7px; color: var(--ink); }
+  .centre-card .metric-line { display: flex; justify-content: space-between; gap: 10px; color: var(--ink-3); font-size: 12px; margin-top: 5px; }
+  .centre-card .metric-line strong { color: var(--ink); }
+  .centre-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 9px; font-size: 10.5px; font-weight: 800; margin-bottom: 8px; }
+  .centre-pill.good { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .centre-pill.warn { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+  .centre-pill.empty { background: var(--surface-3); color: var(--ink-3); border: 1px solid var(--rule); }
   .pending-breakdown {
-    background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px;
+    background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 12px;
     padding: 11px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   }
   .pb-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-3); margin-right: 6px; white-space: nowrap; }
@@ -2701,7 +2742,7 @@ const CENTRE_SUMMARY_CSS = `
     color: var(--ink-3); margin-bottom: 8px; margin-top: 24px;
     padding-bottom: 5px; border-bottom: 0.5px solid var(--rule);
   }
-  .teacher-block { background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .teacher-block { background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
   .teacher-name-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--surface-3); border-bottom: 0.5px solid var(--rule); }
   .avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--blue-bg); border: 0.5px solid var(--blue-border); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: var(--blue); flex-shrink: 0; }
   .tname { font-weight: 600; font-size: 12.5px; color: var(--ink); }
@@ -2732,36 +2773,23 @@ const CENTRE_SUMMARY_CSS = `
   .badge-amber { background: var(--amber-bg); color: var(--amber); border: 0.5px solid var(--amber-border); }
   .badge-green { background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); }
   .page-footer { margin-top: 36px; padding-top: 12px; border-top: 0.5px solid var(--rule); display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-4); }
-  .all-summary-cover { background: var(--blue-bg); border: 0.5px solid var(--blue-border); border-radius: 12px; padding: 24px 28px; margin-bottom: 24px; }
-  .all-summary-cover h1 { font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -0.4px; margin-bottom: 4px; }
-  .all-summary-cover .sub { font-size: 12px; color: var(--ink-3); margin-bottom: 16px; }
-  .all-summary-cover .scorecard { margin-bottom: 0; }
-  .institute-divider { border: none; border-top: 2px solid var(--rule-strong); margin: 32px 0 28px; }
-  .institute-heading { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -0.3px; margin-bottom: 4px; }
-  .institute-sub { font-size: 11.5px; color: var(--ink-3); margin-bottom: 16px; }
+  .institute-divider { border: none; margin: 0; page-break-before: always; }
   @media print {
-    /* Suppress all browser-added chrome: URL, date, title, page numbers */
     @page {
       margin: 1.1cm 1.2cm;
       size: A4 portrait;
     }
-    /* Force background colours and borders to print */
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     body {
       background: white !important;
-      padding: 14px 16px 28px;
+      padding: 0;
       -webkit-print-color-adjust: exact;
     }
-    /* Each institute section starts on a fresh page */
-    .institute-divider { page-break-before: always; margin-top: 0; border-top: none; }
-    /* Never split a teacher card or the pending table mid-row */
+    .report-page { min-height: 0; }
     .teacher-block { page-break-inside: avoid; break-inside: avoid; }
     .pending-table tr { page-break-inside: avoid; break-inside: avoid; }
-    /* Keep the scorecard and breakdown strip together */
-    .scorecard, .pending-breakdown, .progress-wrap { page-break-inside: avoid; break-inside: avoid; }
-    /* Section titles stay with what follows */
+    .scorecard, .pending-breakdown, .progress-wrap, .centre-card, .executive-summary { page-break-inside: avoid; break-inside: avoid; }
     .section-title { page-break-after: avoid; break-after: avoid; }
-    /* Hide interactive buttons */
     .followup-actions { display: none !important; }
   }
 `;
@@ -2797,8 +2825,52 @@ function _pendingBadge(teacher){
   return { label: "Active · missed today", cls: "badge-green" };
 }
 
-function buildInstituteGlanceHtmlPage(row, generatedOnLabel){
+function getInstituteGlanceGeneratedParts(generatedOnLabel){
+  const raw = String(generatedOnLabel || "").replace(/^Generated\s+/i, "").trim();
+  const [datePart, timePart] = raw.split(",").map(part => part.trim());
+  return {
+    raw,
+    date: datePart || raw || "Today",
+    time: timePart || "",
+  };
+}
+
+function buildInstituteGlanceDateCard(generatedOnLabel, label = "Generated"){
   const e = escapeExportHtml;
+  const parts = getInstituteGlanceGeneratedParts(generatedOnLabel);
+  return `
+    <div class="date-card">
+      <div class="label">${e(label)}</div>
+      <div class="date">${e(parts.date)}</div>
+      ${parts.time ? `<div class="time">${e(parts.time)}</div>` : ""}
+    </div>`;
+}
+
+function buildInstituteGlanceCentreCard(row){
+  const e = escapeExportHtml;
+  const tone = row.noTeachersSignedUp ? "empty" : row.missingToday === 0 ? "good" : "warn";
+  const status = row.noTeachersSignedUp
+    ? "No sign-ups yet"
+    : row.missingToday === 0
+      ? "All teachers updated"
+      : `${row.missingToday || 0} pending today`;
+  const submission = row.noTeachersSignedUp
+    ? "No linked teachers"
+    : `${row.filledToday || 0}/${row.totalTeachers || 0} teachers updated`;
+  return `
+    <div class="centre-card ${tone}">
+      <span class="centre-pill ${tone}">${e(status)}</span>
+      <h3>${e(row.institute || "Institute")}</h3>
+      <div class="metric-line"><span>Submission</span><strong>${e(submission)}</strong></div>
+      <div class="metric-line"><span>Sections taught</span><strong>${row.sectionsTaught || 0}</strong></div>
+      <div class="metric-line"><span>Study hours</span><strong>${e(formatDurationShort(row.totalStudyMinutes || 0))}</strong></div>
+      <div class="metric-line"><span>Month entries</span><strong>${row.monthEntries || 0}</strong></div>
+    </div>`;
+}
+
+function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
+  const e = escapeExportHtml;
+  const { standalone = true } = options;
   const filled = row.filledTeacherRows || [];
   const pending = row.pendingTeacherRows || [];
   const total = row.totalTeachers || 0;
@@ -2884,66 +2956,75 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel){
   }
 
   return `
-    <div class="page-header">
-      <div>
-        <h1>${e(row.institute || "Centre Summary")}</h1>
-        <div style="font-size:12px;color:var(--ink-3);margin-top:3px;">Daily teacher activity report</div>
+    ${standalone ? `<section class="report-page">` : ""}
+      <div class="page-header">
+        <div>
+          <div class="eyebrow">Centre report</div>
+          <div class="institute-title">${e(row.institute || "Centre Summary")}</div>
+          <div class="institute-subtitle">Daily teacher activity, pending follow-up, sections taught, and study hours.</div>
+        </div>
+        ${buildInstituteGlanceDateCard(generatedOnLabel)}
       </div>
-      <div class="meta">${e(generatedOnLabel)}<br>Ledgr centre summary</div>
-    </div>
 
-    <div class="scorecard">
-      <div class="card ok">
-        <div class="label">Updated today</div>
-        <div class="value">${filledCount}</div>
-        <div class="sub">of ${total} teacher${total !== 1 ? "s" : ""}</div>
+      <div class="scorecard">
+        <div class="card ok">
+          <div class="label">Updated today</div>
+          <div class="value">${filledCount}/${total}</div>
+          <div class="sub">${pct}% submission rate</div>
+        </div>
+        <div class="card alert">
+          <div class="label">Pending today</div>
+          <div class="value">${pendingCount}</div>
+          <div class="sub">not filled yet</div>
+        </div>
+        <div class="card">
+          <div class="label">Sections taught</div>
+          <div class="value">${sections}</div>
+          <div class="sub">today</div>
+        </div>
+        <div class="card">
+          <div class="label">Study hours</div>
+          <div class="value">${e(hours)}</div>
+          <div class="sub">logged today</div>
+        </div>
       </div>
-      <div class="card alert">
-        <div class="label">Pending today</div>
-        <div class="value">${pendingCount}</div>
-        <div class="sub">not filled yet</div>
+
+      ${pending.length ? `
+      <div class="pending-breakdown">
+        <span class="pb-label">Pending breakdown</span>
+        ${nInactive > 0 ? `<span class="pb-chip red"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nInactive} inactive / never logged</span><span class="pb-sep">·</span>` : ""}
+        ${nMissed > 0 ? `<span class="pb-chip amber"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nMissed} missed several days</span><span class="pb-sep">·</span>` : ""}
+        ${nActive > 0 ? `<span class="pb-chip green"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nActive} active · missed today</span>` : ""}
       </div>
-      <div class="card">
-        <div class="label">Sections taught</div>
-        <div class="value">${sections}</div>
-        <div class="sub">today</div>
+      <div class="progress-wrap">
+        <span class="progress-label">Submission rate today</span>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <span class="progress-pct">${filledCount} / ${total} · ${pct}%</span>
+      </div>` : ""}
+
+      <div class="section-title">Teachers active today (${filled.length})</div>
+      ${filledHtml}
+
+      <div class="section-title">Pending follow-up (${pending.length})${pending.length ? " - sorted by urgency" : ""}</div>
+      ${pendingHtml}
+
+      <div class="page-footer">
+        <span>${e(row.institute || "Centre")} · Ledgr</span>
+        <span>${e(generatedOnLabel)}</span>
       </div>
-      <div class="card">
-        <div class="label">Study hours</div>
-        <div class="value">${e(hours)}</div>
-        <div class="sub">logged today</div>
-      </div>
-    </div>
-
-    ${pending.length ? `
-    <div class="pending-breakdown">
-      <span class="pb-label">Pending breakdown</span>
-      ${nInactive > 0 ? `<span class="pb-chip red"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nInactive} inactive / never logged</span><span class="pb-sep">·</span>` : ""}
-      ${nMissed > 0 ? `<span class="pb-chip amber"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nMissed} missed several days</span><span class="pb-sep">·</span>` : ""}
-      ${nActive > 0 ? `<span class="pb-chip green"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nActive} active · missed today</span>` : ""}
-    </div>
-    <div class="progress-wrap">
-      <span class="progress-label">Submission rate today</span>
-      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-      <span class="progress-pct">${filledCount} / ${total} · ${pct}%</span>
-    </div>` : ""}
-
-    <div class="section-title">Teachers active today (${filled.length})</div>
-    ${filledHtml}
-
-    <div class="section-title">Pending follow-up (${pending.length})${pending.length ? " — sorted by urgency" : ""}</div>
-    ${pendingHtml}
-
-    <div class="page-footer">
-      <span>${e(row.institute || "Centre")} · Ledgr</span>
-      <span>${e(generatedOnLabel)}</span>
-    </div>`;
+    ${standalone ? `</section>` : ""}`;
 }
 
 function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
   const e = escapeExportHtml;
+  const parts = getInstituteGlanceGeneratedParts(generatedOnLabel);
+  const completionPct = summary.totalTeachers > 0 ? Math.round(((summary.filledToday || 0) / summary.totalTeachers) * 100) : 0;
+  const sortedRows = [...(rows || [])].sort((a, b) => {
+    if((b.missingToday || 0) !== (a.missingToday || 0)) return (b.missingToday || 0) - (a.missingToday || 0);
+    return exportTextSorter.compare(a.institute || "", b.institute || "");
+  });
   const coverScorecard = `
-    <div class="scorecard" style="grid-template-columns:repeat(5,1fr);">
+    <div class="scorecard five">
       <div class="card"><div class="label">Institutes</div><div class="value">${summary.totalInstitutes || 0}</div></div>
       <div class="card ok"><div class="label">Teachers updated</div><div class="value">${summary.filledToday || 0}/${summary.totalTeachers || 0}</div></div>
       <div class="card alert"><div class="label">Pending today</div><div class="value">${summary.missingToday || 0}</div></div>
@@ -2951,24 +3032,54 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
       <div class="card"><div class="label">Study hours</div><div class="value">${e(formatDurationShort(summary.totalStudyMinutes || 0))}</div></div>
     </div>`;
 
-  const institutePages = (rows || []).map((row, i) =>
-    `${i > 0 ? '<hr class="institute-divider">' : ""}
-     <div class="institute-heading">${e(row.institute || "Institute")}</div>
-     <div class="institute-sub">${e(generatedOnLabel)}</div>
-     ${buildInstituteGlanceHtmlPage(row, generatedOnLabel).replace(/<div class="page-header">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/, "").replace(/<div class="page-footer">[\s\S]*?<\/div>/, "")}`
-  ).join("");
+  const centreCards = sortedRows.map(row => buildInstituteGlanceCentreCard(row)).join("");
+  const institutePages = (rows || []).map(row => buildInstituteGlanceHtmlPage(row, generatedOnLabel, { standalone:true })).join("");
 
   return `<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>All institutes at a glance · ${e(generatedOnLabel)}</title>
+    <title>Ledgr Daily Report - ${e(parts.date)}${parts.time ? ` ${e(parts.time)}` : ""}</title>
     <style>${CENTRE_SUMMARY_CSS}</style>
   </head><body>
-    <div class="all-summary-cover">
-      <h1>All institutes at a glance</h1>
-      <div class="sub">${e(generatedOnLabel)} · Each centre starts a fresh section. Teachers who filled today appear first, followed by the pending follow-up list.</div>
+    <section class="report-page">
+      <div class="cover">
+        <div>
+          <div class="brand-row">
+            <div class="brand-mark">L</div>
+            <div>
+              <div class="brand-title">Ledgr</div>
+              <div class="brand-sub">Admin Panel</div>
+            </div>
+          </div>
+          <h1>Ledgr Daily Report</h1>
+          <div class="cover-copy">Executive snapshot of teacher submissions, pending follow-up, sections taught, and study hours across every institute.</div>
+          <div class="cover-meta-grid">
+            <div class="cover-meta"><div class="label">Report date</div><div class="value">${e(parts.date)}</div></div>
+            <div class="cover-meta"><div class="label">Generated time</div><div class="value">${e(parts.time || "-")}</div></div>
+            <div class="cover-meta"><div class="label">Centres covered</div><div class="value">${summary.totalInstitutes || 0}</div></div>
+          </div>
+        </div>
+        <div class="cover-copy">Prepared for daily operations review. Centres with pending teachers are shown first in the overview.</div>
+      </div>
+    </section>
+
+    <section class="report-page">
+      <div class="executive-header">
+        <div>
+          <div class="eyebrow">Executive overview</div>
+          <h1>All institutes at a glance</h1>
+        </div>
+        ${buildInstituteGlanceDateCard(generatedOnLabel, "Report generated")}
+      </div>
       ${coverScorecard}
-    </div>
+      <div class="executive-summary">
+        <h2>Daily readout</h2>
+        <p>${summary.filledToday || 0} of ${summary.totalTeachers || 0} teachers updated today (${completionPct}%). ${summary.missingToday || 0} teachers are pending follow-up. The network logged ${summary.sectionsTaught || 0} sections and ${e(formatDurationShort(summary.totalStudyMinutes || 0))} of study time.</p>
+      </div>
+      <div class="section-title">Institute boxes - pending first</div>
+      <div class="centre-grid">${centreCards}</div>
+    </section>
+
     ${institutePages}
     <div class="page-footer">
       <span>Ledgr · All institutes summary</span>
@@ -2979,10 +3090,11 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
 
 function buildInstituteGlanceInstituteHtml(row, generatedOnLabel){
   const e = escapeExportHtml;
+  const parts = getInstituteGlanceGeneratedParts(generatedOnLabel);
   return `<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>${e(row.institute || "Centre")} — Daily Summary · ${e(generatedOnLabel)}</title>
+    <title>${e(row.institute || "Centre")} - Daily Summary - ${e(parts.date)}${parts.time ? ` ${e(parts.time)}` : ""}</title>
     <style>${CENTRE_SUMMARY_CSS}</style>
   </head><body>
     ${buildInstituteGlanceHtmlPage(row, generatedOnLabel)}
@@ -6042,7 +6154,12 @@ function AdminPanelInner({user}){
       );
     }
     return (
-      <div style={{display:"grid",gap:10}}>
+      <div style={{
+        display:"grid",
+        gridTemplateColumns:isMobile ? "1fr" : "repeat(auto-fit,minmax(280px,1fr))",
+        gap:12,
+        alignItems:"stretch",
+      }}>
         {rows.map(row => {
           const tone = !row.ready
             ? { bg:"#F8FAFC", border:"#DDE3ED", pillBg:"#EEF4FF", pillColor:G.blue, meta:G.textM, softBg:"#FFFFFF" }
@@ -6075,6 +6192,7 @@ function AdminPanelInner({user}){
                 : "No teacher has uploaded today's entry yet.";
           const cardStyle = {
             width:"100%",
+            height:"100%",
             background:tone.bg,
             border:`1px solid ${tone.border}`,
             borderRadius:18,
@@ -6082,6 +6200,8 @@ function AdminPanelInner({user}){
             textAlign:"left",
             boxShadow:!reduceEffects ? "0 12px 24px rgba(15,23,42,0.06)" : "none",
             WebkitTapHighlightColor:"transparent",
+            display:"flex",
+            flexDirection:"column",
           };
           return (
             <div key={row.institute} style={cardStyle}>
@@ -6124,35 +6244,18 @@ function AdminPanelInner({user}){
                       </div>
                     ))}
                   </div>
-
-                  {row.noTeachersSignedUp ? (
-                    <div style={{marginTop:12,background:"#FFFFFF",border:`1px dashed ${G.borderM}`,borderRadius:15,padding:"13px 14px",fontSize:12.5,color:G.textM,lineHeight:1.6}}>
-                      No one has signed up in this centre yet, so this is not an "everyone filled" case. Once teachers are added, this table will appear here.
-                    </div>
-                  ) : (
-                    <>
-                      <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:"12px 13px"}}>
-                        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8}}>All teachers today</div>
-                        <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
-                          Every linked teacher is listed below with whether they filled today, sections taught, total logs for today, month entries, last entry date, and study hours.
-                        </div>
-                        {renderInstituteGlanceAllTeacherTable(row, isMobile)}
-                      </div>
-
-                      <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:"12px 13px"}}>
-                        <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8}}>Teachers pending today</div>
-                        <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
-                          Pending teachers now include their month entry count and the last time they logged. If they have never logged, the table shows when they first signed up.
-                        </div>
-                        {renderInstituteGlancePendingTeacherTable(row, isMobile)}
-                      </div>
-                    </>
-                  )}
+                  <div style={{marginTop:10,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px",fontSize:12,color:G.textM,lineHeight:1.55}}>
+                    {row.noTeachersSignedUp
+                      ? "No linked teachers yet. Open the centre once sign-ups begin."
+                      : row.missingToday > 0
+                        ? `${row.missingToday} teacher${row.missingToday===1?"":"s"} need follow-up. Use Centre PDF for the detailed teacher list.`
+                        : "All linked teachers have filled today. Use Centre PDF for the detailed teacher list."}
+                  </div>
                 </>
               )}
 
               {canOpen&&(
-                <div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",marginTop:12}}>
+                <div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",marginTop:"auto",paddingTop:12}}>
                   <button
                     type="button"
                     className="admin-mobile-touch"
@@ -6238,7 +6341,7 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Desktop workspace view</div>
                 <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.08}}>All institutes at a glance</div>
                 <div style={{fontSize:13,color:G.textM,lineHeight:1.65,marginTop:8,maxWidth:920}}>
-                  This desktop page keeps the full centre summary inside the app, with roomy tables for every teacher and direct export actions for the combined PDF, individual centre PDFs, and the ZIP bundle.
+                  This desktop page keeps every centre visible as a compact box, with direct export actions for the executive PDF, individual centre PDFs, and the ZIP bundle.
                 </div>
               </div>
               {instituteGlanceReport.loading&&(
