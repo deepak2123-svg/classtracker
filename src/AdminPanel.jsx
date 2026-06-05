@@ -5020,6 +5020,7 @@ function AdminPanelInner({user}){
   const instituteGlanceJobRef = React.useRef(0);
   const instituteGlanceDataRef = React.useRef({});
   const instituteGlanceReportRef = React.useRef(instituteGlanceReport);
+  const instituteGlanceAutoLoadKeyRef = React.useRef("");
   const historyReadyRef = React.useRef(false);
   const historyRestoreRef = React.useRef(false);
   const lastHistoryKeyRef = React.useRef("");
@@ -5565,9 +5566,24 @@ function AdminPanelInner({user}){
   }, [buildInstituteGlanceSnapshot, fullData, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
 
   React.useEffect(() => {
-    if(!instituteGlanceOpen && mobileSurface !== "centreSummary") return;
+    const visible = instituteGlanceOpen || mobileSurface === "centreSummary";
+    if(!visible){
+      instituteGlanceAutoLoadKeyRef.current = "";
+      return;
+    }
+    const autoLoadKey = JSON.stringify({
+      surface:instituteGlanceOpen ? "desktop" : "mobile",
+      period:instituteGlancePeriod,
+      month:instituteGlanceMonth,
+      rangeStart:instituteGlanceRangeStart,
+      rangeEnd:instituteGlanceRangeEnd,
+      institutes:institutes.length,
+      teachers:instituteGlanceTeacherList.length,
+    });
+    if(instituteGlanceAutoLoadKeyRef.current === autoLoadKey) return;
+    instituteGlanceAutoLoadKeyRef.current = autoLoadKey;
     loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure);
-  }, [handleInstituteGlanceLoadFailure, instituteGlanceMonth, instituteGlanceOpen, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, loadInstituteGlanceReport, mobileSurface]);
+  }, [handleInstituteGlanceLoadFailure, instituteGlanceMonth, instituteGlanceOpen, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, instituteGlanceTeacherList.length, institutes.length, loadInstituteGlanceReport, mobileSurface]);
 
   const openMobileCentreSummary = React.useCallback(() => {
     setProfileOpen(false);
@@ -6669,7 +6685,7 @@ function AdminPanelInner({user}){
     );
   };
 
-  const DesktopCentreSummaryPage = () => {
+  const renderDesktopCentreSummaryPage = () => {
     if(isMobile || !instituteGlanceOpen) return null;
     return (
       <div style={{flex:1,overflowY:"auto",background:"linear-gradient(180deg,#F2F6FC 0%,#F8FAFC 100%)",padding:"22px 24px 28px"}}>
@@ -12026,7 +12042,7 @@ function AdminPanelInner({user}){
         />
       )}
       {instituteGlanceOpen && !isMobile ? (
-        <DesktopCentreSummaryPage />
+        renderDesktopCentreSummaryPage()
       ) : (
         <>
       {/* Mobile breadcrumb nav — only shown when navigated past step 0 */}
