@@ -1710,6 +1710,20 @@ function longDateLabel(ts){
 function currentMonthKey(now = new Date()){
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
+function localDateKey(value = new Date()){
+  const date = value instanceof Date ? value : new Date(value);
+  if(Number.isNaN(date.getTime())) return todayKey();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function addDaysToDateKey(dateKey, days){
+  const [y, m, d] = String(dateKey || todayKey()).split("-").map(Number);
+  const date = new Date(y || new Date().getFullYear(), (m || 1) - 1, d || 1);
+  date.setDate(date.getDate() + days);
+  return localDateKey(date);
+}
+function currentMonthStartKey(now = new Date()){
+  return `${currentMonthKey(now)}-01`;
+}
 function countEntriesForMonth(classNotes = {}, monthKey = currentMonthKey()){
   return Object.entries(classNotes || {}).reduce((sum, [dk, entries]) => {
     if(!dk.startsWith(monthKey) || !Array.isArray(entries)) return sum;
@@ -1923,41 +1937,90 @@ const EMPTY_INSTITUTE_GLANCE_SUMMARY = {
   totalStudyMinutes:0,
   totalTodayEntries:0,
 };
-function getInstituteGlancePeriodMeta(period = "daily"){
-  return period === "weekly"
-    ? {
-        key:"weekly",
-        days:7,
-        filePart:"weekly",
-        label:"Weekly",
-        updatedLabel:"Updated this week",
-        pendingLabel:"Pending this week",
-        activeLabel:"Teachers active this week",
-        submissionLabel:"Submission rate this week",
-        sectionsSubLabel:"this week",
-        hoursSubLabel:"logged this week",
-        title:"Ledgr Report",
-      }
-    : {
-        key:"daily",
-        days:1,
-        filePart:"daily",
-        label:"Daily",
-        updatedLabel:"Updated today",
-        pendingLabel:"Pending today",
-        activeLabel:"Teachers active today",
-        submissionLabel:"Submission rate today",
-        sectionsSubLabel:"today",
-        hoursSubLabel:"logged today",
-        title:"Ledgr Report",
-      };
+function getInstituteGlancePeriodMeta(period = "daily", rangeStartKey = "", rangeEndKey = ""){
+  const today = todayKey();
+  const rangeStart = String(rangeStartKey || today).trim();
+  const rangeEnd = String(rangeEndKey || rangeStart || today).trim();
+  const safeRangeStart = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
+  const safeRangeEnd = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
+  if(period === "range"){
+    return {
+      key:"range",
+      days:null,
+      startKey:safeRangeStart,
+      endKey:safeRangeEnd,
+      filePart:`range_${safeRangeStart}_to_${safeRangeEnd}`,
+      label:"Range",
+      periodValue:`${safeRangeStart} to ${safeRangeEnd}`,
+      updatedLabel:"Updated in range",
+      pendingLabel:"Pending in range",
+      activeLabel:"Teachers active in range",
+      submissionLabel:"Submission rate in range",
+      sectionsSubLabel:"in range",
+      hoursSubLabel:"logged in range",
+      title:"Ledgr Report",
+    };
+  }
+  if(period === "monthly"){
+    const startKey = currentMonthStartKey();
+    return {
+      key:"monthly",
+      days:null,
+      startKey,
+      endKey:today,
+      filePart:currentMonthKey(),
+      label:"Monthly",
+      periodValue:new Date(`${startKey}T00:00:00`).toLocaleDateString("en-IN", { month:"long", year:"numeric" }),
+      updatedLabel:"Updated this month",
+      pendingLabel:"Pending this month",
+      activeLabel:"Teachers active this month",
+      submissionLabel:"Submission rate this month",
+      sectionsSubLabel:"this month",
+      hoursSubLabel:"logged this month",
+      title:"Ledgr Report",
+    };
+  }
+  if(period === "weekly"){
+    return {
+      key:"weekly",
+      days:7,
+      startKey:addDaysToDateKey(today, -6),
+      endKey:today,
+      filePart:"weekly",
+      label:"Weekly",
+      periodValue:"Last 7 days",
+      updatedLabel:"Updated this week",
+      pendingLabel:"Pending this week",
+      activeLabel:"Teachers active this week",
+      submissionLabel:"Submission rate this week",
+      sectionsSubLabel:"this week",
+      hoursSubLabel:"logged this week",
+      title:"Ledgr Report",
+    };
+  }
+  return {
+    key:"daily",
+    days:1,
+    startKey:today,
+    endKey:today,
+    filePart:"daily",
+    label:"Daily",
+    periodValue:"Today",
+    updatedLabel:"Updated today",
+    pendingLabel:"Pending today",
+    activeLabel:"Teachers active today",
+    submissionLabel:"Submission rate today",
+    sectionsSubLabel:"today",
+    hoursSubLabel:"logged today",
+    title:"Ledgr Report",
+  };
 }
-function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataMap = {}, resolveSectionName = null, period = "daily" }){
+function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataMap = {}, resolveSectionName = null, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const data = fullDataMap?.[teacher?.uid];
   const classesHere = data
     ? (data.classes || []).filter(cls => sameInstituteName(cls?.institute, instituteName))
     : [];
-  const periodMeta = getInstituteGlancePeriodMeta(period);
+  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   const monthKey = currentMonthKey();
   const sectionMap = new Map();
   const todayDetails = [];
@@ -1968,7 +2031,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
 
   classesHere.forEach(cls => {
     const classNotes = (data.notes || {})[cls.id] || {};
-    const notesToday = getEntriesInRange(classNotes, periodMeta.days);
+    const notesToday = getEntriesInRange(classNotes, periodMeta.days, periodMeta.startKey, periodMeta.endKey);
     monthEntries += countEntriesForMonth(classNotes, monthKey);
     if(!notesToday.length) return;
 
@@ -2034,8 +2097,8 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       lastEntryTs:lastEntry || null,
       joinedAtTs:joinedAtTs || null,
     }),
-    todayStatusLabel: periodMeta.key === "weekly"
-      ? (todayEntries > 0 ? "Updated this week" : "Pending this week")
+    todayStatusLabel: periodMeta.key !== "daily"
+      ? (todayEntries > 0 ? periodMeta.updatedLabel : periodMeta.pendingLabel)
       : instituteGlanceTodayStatusLabel({ updatedToday:todayEntries > 0 }),
     sectionCount: sections.length,
     sectionNames: sections.map(section => section.name),
@@ -2050,8 +2113,8 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     untimedEntries,
   };
 }
-function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, period = "daily" }){
-  const periodMeta = getInstituteGlancePeriodMeta(period);
+function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   return institutes.map(inst => {
     const teacherRows = teachers
       .filter(teacher => teacherBelongsToInstituteFromMap(teacher, inst, fullDataMap))
@@ -2061,6 +2124,8 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
         fullDataMap,
         resolveSectionName,
         period,
+        rangeStartKey,
+        rangeEndKey,
       }));
     const filledTeachers = teacherRows
       .filter(item => item.updatedToday)
@@ -2334,9 +2399,9 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
   });
   anchor.click();
 }
-async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period = "daily" }){
+async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   await waitForCanvasFonts();
-  const periodMeta = getInstituteGlancePeriodMeta(period);
+  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   const width = 1280;
   const cardX = 28;
   const cardY = 28;
@@ -2661,9 +2726,9 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, pe
 
   return canvas;
 }
-async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period = "daily" }){
-  const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period });
-  const filePart = getInstituteGlancePeriodMeta(period).filePart;
+async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+  const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period, rangeStartKey, rangeEndKey });
+  const filePart = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart;
   const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
   if(blob){
     triggerBlobDownload(blob, `all_institutes_${filePart}_ledgr_report_${todayKey()}.png`);
@@ -2675,8 +2740,8 @@ async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLab
   });
   anchor.click();
 }
-function instituteGlancePdfFilename(instituteName, period = "daily"){
-  return `${slugifyDownloadPart(instituteName)}_${getInstituteGlancePeriodMeta(period).filePart}_ledgr_report_${todayKey()}.pdf`;
+function instituteGlancePdfFilename(instituteName, period = "daily", rangeStartKey = "", rangeEndKey = ""){
+  return `${slugifyDownloadPart(instituteName)}_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_${todayKey()}.pdf`;
 }
 
 // ── HTML-based centre summary export ─────────────────────────────────────────
@@ -2897,9 +2962,9 @@ function buildInstituteGlanceDateCard(generatedOnLabel, label = "Generated"){
     </div>`;
 }
 
-function buildInstituteGlanceCentreCard(row, period = "daily"){
+function buildInstituteGlanceCentreCard(row, period = "daily", rangeStartKey = "", rangeEndKey = ""){
   const e = escapeExportHtml;
-  const periodMeta = getInstituteGlancePeriodMeta(period);
+  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   const tone = row.noTeachersSignedUp ? "empty" : row.missingToday === 0 ? "good" : "warn";
   const status = row.noTeachersSignedUp
     ? "No sign-ups yet"
@@ -2922,8 +2987,8 @@ function buildInstituteGlanceCentreCard(row, period = "daily"){
 
 function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
   const e = escapeExportHtml;
-  const { standalone = true, period = "daily" } = options;
-  const periodMeta = getInstituteGlancePeriodMeta(period);
+  const { standalone = true, period = "daily", rangeStartKey = "", rangeEndKey = "" } = options;
+  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   const filled = row.filledTeacherRows || [];
   const pending = row.pendingTeacherRows || [];
   const total = row.totalTeachers || 0;
@@ -3069,10 +3134,10 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
     ${standalone ? `</section>` : ""}`;
 }
 
-function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period = "daily" }){
+function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const e = escapeExportHtml;
   const parts = getInstituteGlanceGeneratedParts(generatedOnLabel);
-  const periodMeta = getInstituteGlancePeriodMeta(period);
+  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   const completionPct = summary.totalTeachers > 0 ? Math.round(((summary.filledToday || 0) / summary.totalTeachers) * 100) : 0;
   const sortedRows = [...(rows || [])].sort((a, b) => {
     if((b.missingToday || 0) !== (a.missingToday || 0)) return (b.missingToday || 0) - (a.missingToday || 0);
@@ -3087,8 +3152,8 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, peri
       <div class="card"><div class="label">Study hours</div><div class="value">${e(formatDurationShort(summary.totalStudyMinutes || 0))}</div></div>
     </div>`;
 
-  const centreCards = sortedRows.map(row => buildInstituteGlanceCentreCard(row, period)).join("");
-  const institutePages = (rows || []).map(row => buildInstituteGlanceHtmlPage(row, generatedOnLabel, { standalone:true, period })).join("");
+  const centreCards = sortedRows.map(row => buildInstituteGlanceCentreCard(row, period, rangeStartKey, rangeEndKey)).join("");
+  const institutePages = (rows || []).map(row => buildInstituteGlanceHtmlPage(row, generatedOnLabel, { standalone:true, period, rangeStartKey, rangeEndKey })).join("");
 
   return `<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
@@ -3109,7 +3174,7 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, peri
           <h1>${e(periodMeta.title)}</h1>
           <div class="cover-copy">Teacher submissions and pending follow-up across all institutes.</div>
           <div class="cover-meta-grid">
-            <div class="cover-meta"><div class="label">Report period</div><div class="value">${e(periodMeta.label)}</div></div>
+            <div class="cover-meta"><div class="label">Report period</div><div class="value">${e(periodMeta.periodValue || periodMeta.label)}</div></div>
             <div class="cover-meta"><div class="label">Report date</div><div class="value">${e(parts.date)}</div></div>
             <div class="cover-meta"><div class="label">Generated time</div><div class="value">${e(parts.time || "-")}</div></div>
           </div>
@@ -3143,17 +3208,17 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, peri
   </body></html>`;
 }
 
-function buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period = "daily"){
+function buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = ""){
   const e = escapeExportHtml;
   const parts = getInstituteGlanceGeneratedParts(generatedOnLabel);
-  const periodMeta = getInstituteGlancePeriodMeta(period);
+  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   return `<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>${e(row.institute || "Centre")} - ${e(periodMeta.title)} - ${e(parts.date)}${parts.time ? ` ${e(parts.time)}` : ""}</title>
     <style>${CENTRE_SUMMARY_CSS}</style>
   </head><body>
-    ${buildInstituteGlanceHtmlPage(row, generatedOnLabel, { period })}
+    ${buildInstituteGlanceHtmlPage(row, generatedOnLabel, { period, rangeStartKey, rangeEndKey })}
   </body></html>`;
 }
 
@@ -3184,23 +3249,23 @@ function _printHtml(html, filename){
   win.document.close();
 }
 
-async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period = "daily" }){
-  const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period });
-  _printHtml(html, `all_institutes_${getInstituteGlancePeriodMeta(period).filePart}_ledgr_report_${todayKey()}.pdf`);
+async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+  const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period, rangeStartKey, rangeEndKey });
+  _printHtml(html, `all_institutes_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_${todayKey()}.pdf`);
 }
-async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel, period = "daily" }){
-  const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period);
-  _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period));
+async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+  const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period, rangeStartKey, rangeEndKey);
+  _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey));
 }
-async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period = "daily" }){
+async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   // For zip we still produce PDFs — open each in sequence with a small gap
   // so the browser doesn't block multiple windows. Each teacher saves manually.
   // (Fully automated zip-of-PDFs requires a server-side renderer.)
   for(let i = 0; i < (rows || []).length; i++){
     const row  = rows[i];
-    const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period);
+    const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period, rangeStartKey, rangeEndKey);
     await new Promise(r => setTimeout(r, i === 0 ? 0 : 600));
-    _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period));
+    _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey));
   }
 }
 function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
@@ -4688,6 +4753,8 @@ function AdminPanelInner({user}){
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
   const [instituteGlancePeriod, setInstituteGlancePeriod] = useState("daily");
+  const [instituteGlanceRangeStart, setInstituteGlanceRangeStart] = useState(() => addDaysToDateKey(todayKey(), -6));
+  const [instituteGlanceRangeEnd, setInstituteGlanceRangeEnd] = useState(() => todayKey());
   const [instituteGlanceExportBusy, setInstituteGlanceExportBusy] = useState("");
   const [instituteGlanceRowExportBusy, setInstituteGlanceRowExportBusy] = useState("");
   const [instituteGlanceReport, setInstituteGlanceReport] = useState(() => ({
@@ -5153,6 +5220,8 @@ function AdminPanelInner({user}){
       fullDataMap,
       resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
       period:instituteGlancePeriod,
+      rangeStartKey:instituteGlanceRangeStart,
+      rangeEndKey:instituteGlanceRangeEnd,
     });
     return {
       rows,
@@ -5160,7 +5229,7 @@ function AdminPanelInner({user}){
       loadedInstitutes: rows.filter(row => row.ready).length,
       totalInstitutes: rows.length,
     };
-  }, [instSectionsAll, instituteGlancePeriod, instituteGlanceTeacherList, institutes]);
+  }, [instSectionsAll, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, instituteGlanceTeacherList, institutes]);
 
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
@@ -5287,7 +5356,7 @@ function AdminPanelInner({user}){
   React.useEffect(() => {
     if(!instituteGlanceOpen && mobileSurface !== "centreSummary") return;
     loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure);
-  }, [handleInstituteGlanceLoadFailure, instituteGlanceOpen, instituteGlancePeriod, loadInstituteGlanceReport, mobileSurface]);
+  }, [handleInstituteGlanceLoadFailure, instituteGlanceOpen, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, loadInstituteGlanceReport, mobileSurface]);
 
   const openMobileCentreSummary = React.useCallback(() => {
     setProfileOpen(false);
@@ -5361,11 +5430,11 @@ function AdminPanelInner({user}){
       const summary = report.summary || EMPTY_INSTITUTE_GLANCE_SUMMARY;
       const generatedOnLabel = getInstituteGlanceGeneratedOnLabel();
       if(format === "png"){
-        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period:instituteGlancePeriod });
+        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period:instituteGlancePeriod, rangeStartKey:instituteGlanceRangeStart, rangeEndKey:instituteGlanceRangeEnd });
       } else if(format === "zip"){
-        await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period:instituteGlancePeriod });
+        await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period:instituteGlancePeriod, rangeStartKey:instituteGlanceRangeStart, rangeEndKey:instituteGlanceRangeEnd });
       } else {
-        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period:instituteGlancePeriod });
+        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period:instituteGlancePeriod, rangeStartKey:instituteGlanceRangeStart, rangeEndKey:instituteGlanceRangeEnd });
       }
     } catch (error) {
       console.error("institute glance export failed", error);
@@ -5373,7 +5442,7 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceExportBusy("");
     }
-  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceExportBusy, instituteGlancePeriod, loadInstituteGlanceReport]);
+  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceExportBusy, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, loadInstituteGlanceReport]);
 
   const exportInstituteGlanceRowPdf = React.useCallback(async (row) => {
     if(!row?.institute || !row.ready || instituteGlanceRowExportBusy) return;
@@ -5389,6 +5458,8 @@ function AdminPanelInner({user}){
         row:freshRow,
         generatedOnLabel:getInstituteGlanceGeneratedOnLabel(),
         period:instituteGlancePeriod,
+        rangeStartKey:instituteGlanceRangeStart,
+        rangeEndKey:instituteGlanceRangeEnd,
       });
     } catch (error) {
       console.error("institute glance row export failed", error);
@@ -5396,7 +5467,7 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceRowExportBusy("");
     }
-  }, [getInstituteGlanceGeneratedOnLabel, instituteGlancePeriod, instituteGlanceRowExportBusy, loadInstituteGlanceReport]);
+  }, [getInstituteGlanceGeneratedOnLabel, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, instituteGlanceRowExportBusy, loadInstituteGlanceReport]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
@@ -5908,7 +5979,7 @@ function AdminPanelInner({user}){
   }, [PANEL_LIMITS, panelCollapsed, panelW, clampPanelWidth]);
 
   const instituteGlanceReadyCount = Math.max(0, instituteGlanceReport.loadedInstitutes || 0);
-  const instituteGlancePeriodMeta = getInstituteGlancePeriodMeta(instituteGlancePeriod);
+  const instituteGlancePeriodMeta = getInstituteGlancePeriodMeta(instituteGlancePeriod, instituteGlanceRangeStart, instituteGlanceRangeEnd);
   const instituteGlanceProgressPct = instituteGlanceReport.total
     ? Math.max(0, Math.min(100, Math.round((instituteGlanceReport.loaded / instituteGlanceReport.total) * 100)))
     : 0;
@@ -5954,8 +6025,13 @@ function AdminPanelInner({user}){
     };
     return (
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
-        <div style={{display:"inline-flex",border:`1px solid ${G.border}`,borderRadius:12,overflow:"hidden",height:compact ? 36 : 38,background:"#FFFFFF"}}>
-          {["daily", "weekly"].map(period => {
+        <div style={{display:"inline-flex",border:`1px solid ${G.border}`,borderRadius:12,overflow:"hidden",height:compact ? 36 : 38,background:"#FFFFFF",flexWrap:"nowrap"}}>
+          {[
+            ["daily", "Daily"],
+            ["weekly", "Weekly"],
+            ["monthly", "Monthly"],
+            ["range", "Range"],
+          ].map(([period, label], index, list) => {
             const active = instituteGlancePeriod === period;
             return (
               <button
@@ -5969,7 +6045,7 @@ function AdminPanelInner({user}){
                 style={{
                   padding:"0 12px",
                   border:"none",
-                  borderRight:period==="daily" ? `1px solid ${G.border}` : "none",
+                  borderRight:index < list.length - 1 ? `1px solid ${G.border}` : "none",
                   background:active ? G.blueL : "#FFFFFF",
                   color:active ? G.blue : G.textS,
                   fontSize:12,
@@ -5977,11 +6053,29 @@ function AdminPanelInner({user}){
                   fontFamily:G.sans,
                   cursor:instituteGlanceAnyExportBusy ? "not-allowed" : "pointer",
                 }}>
-                {period==="daily" ? "Daily" : "Weekly"}
+                {label}
               </button>
             );
           })}
         </div>
+        {instituteGlancePeriod==="range"&&(
+          <div style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            <input
+              type="date"
+              value={instituteGlanceRangeStart}
+              onChange={event=>setInstituteGlanceRangeStart(event.target.value || todayKey())}
+              disabled={!!instituteGlanceAnyExportBusy}
+              style={{height:compact ? 36 : 38,border:`1px solid ${G.border}`,borderRadius:12,padding:"0 10px",fontSize:12,fontWeight:700,color:G.text,fontFamily:G.sans,background:"#FFFFFF"}}
+            />
+            <input
+              type="date"
+              value={instituteGlanceRangeEnd}
+              onChange={event=>setInstituteGlanceRangeEnd(event.target.value || todayKey())}
+              disabled={!!instituteGlanceAnyExportBusy}
+              style={{height:compact ? 36 : 38,border:`1px solid ${G.border}`,borderRadius:12,padding:"0 10px",fontSize:12,fontWeight:700,color:G.text,fontFamily:G.sans,background:"#FFFFFF"}}
+            />
+          </div>
+        )}
         <button
           className="admin-mobile-touch"
           onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)}
@@ -6110,7 +6204,7 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:12,color:G.textM,lineHeight:1.5,marginTop:5}}>{getInstituteGlanceTeacherSectionCaption(teacher)}</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10}}>
                   {[
-                    { label:instituteGlancePeriod==="weekly" ? "Week logs" : "Today logs", value:teacher.todayEntries },
+                    { label:instituteGlancePeriodMeta.key==="daily" ? "Today logs" : `${instituteGlancePeriodMeta.label} logs`, value:teacher.todayEntries },
                     { label:"This month", value:teacher.monthEntries },
                     { label:"Last entry", value:teacher.lastActivityLabel },
                     { label:"Study hours", value:getInstituteGlanceTeacherHoursLabel(teacher) },
@@ -6131,7 +6225,7 @@ function AdminPanelInner({user}){
       <div style={{marginTop:10,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
         <div style={{minWidth:980,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",background:"#FFFFFF"}}>
           <div style={{display:"grid",gridTemplateColumns:"minmax(170px,1.6fr) minmax(120px,0.85fr) minmax(250px,1.95fr) minmax(74px,0.55fr) minmax(92px,0.7fr) minmax(130px,0.9fr) minmax(92px,0.72fr)",gap:0,background:"#F8FAFC",borderBottom:`1px solid ${G.border}`}}>
-            {["Teacher", "Status", "Sections", instituteGlancePeriod==="weekly" ? "Week" : "Today", "This month", "Last entry", "Study hours"].map(label=>(
+            {["Teacher", "Status", "Sections", instituteGlancePeriodMeta.key==="daily" ? "Today" : instituteGlancePeriodMeta.label, "This month", "Last entry", "Study hours"].map(label=>(
               <div key={label} style={{padding:"10px 12px",fontSize:10.5,fontWeight:800,color:G.textL,fontFamily:G.mono,letterSpacing:0.7,textTransform:"uppercase"}}>
                 {label}
               </div>
