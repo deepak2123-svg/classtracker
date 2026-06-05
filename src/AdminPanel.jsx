@@ -2403,7 +2403,7 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel }){
   ctx.textBaseline = "top";
   ctx.fillStyle = "#111827";
   ctx.font = "800 36px 'Poppins',sans-serif";
-  ctx.fillText("All institutes at a glance", contentX, cursorY);
+  ctx.fillText("Daily Ledgr Report", contentX, cursorY);
 
   cursorY += 50;
   ctx.fillStyle = "#4B5563";
@@ -2974,12 +2974,12 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
           <div class="brand-mark">L</div>
           <div>
             <div class="brand-title">Ledgr</div>
-            <div class="brand-sub">Daily Report</div>
+            <div class="brand-sub">Daily Ledgr Report</div>
           </div>
         </div>
-        <div class="eyebrow">Centre report</div>
+        <div class="eyebrow">Centre</div>
         <div class="institute-title">${e(row.institute || "Centre Summary")}</div>
-        <div class="institute-subtitle">Daily teacher activity, pending follow-up, sections taught, and study hours.</div>
+        <div class="institute-subtitle">Submissions, pending teachers, sections, and hours.</div>
         <div class="centre-hero-meta">
           <span class="centre-hero-pill">Date <strong>${e(getInstituteGlanceGeneratedParts(generatedOnLabel).date)}</strong></span>
           ${getInstituteGlanceGeneratedParts(generatedOnLabel).time ? `<span class="centre-hero-pill">Generated <strong>${e(getInstituteGlanceGeneratedParts(generatedOnLabel).time)}</strong></span>` : ""}
@@ -3058,7 +3058,7 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
   return `<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Ledgr Daily Report - ${e(parts.date)}${parts.time ? ` ${e(parts.time)}` : ""}</title>
+    <title>Daily Ledgr Report - ${e(parts.date)}${parts.time ? ` ${e(parts.time)}` : ""}</title>
     <style>${CENTRE_SUMMARY_CSS}</style>
   </head><body>
     <section class="report-page">
@@ -3068,35 +3068,35 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel }){
             <div class="brand-mark">L</div>
             <div>
               <div class="brand-title">Ledgr</div>
-              <div class="brand-sub">Admin Panel</div>
+              <div class="brand-sub">Daily Ledgr Report</div>
             </div>
           </div>
-          <h1>Ledgr Daily Report</h1>
-          <div class="cover-copy">Executive snapshot of teacher submissions, pending follow-up, sections taught, and study hours across every institute.</div>
+          <h1>Daily Ledgr Report</h1>
+          <div class="cover-copy">Teacher submissions and pending follow-up across all institutes.</div>
           <div class="cover-meta-grid">
             <div class="cover-meta"><div class="label">Report date</div><div class="value">${e(parts.date)}</div></div>
             <div class="cover-meta"><div class="label">Generated time</div><div class="value">${e(parts.time || "-")}</div></div>
             <div class="cover-meta"><div class="label">Centres covered</div><div class="value">${summary.totalInstitutes || 0}</div></div>
           </div>
         </div>
-        <div class="cover-copy">Prepared for daily operations review. Centres with pending teachers are shown first in the overview.</div>
+        <div class="cover-copy">Pending institutes appear first.</div>
       </div>
     </section>
 
     <section class="report-page">
       <div class="executive-header">
         <div>
-          <div class="eyebrow">Executive overview</div>
-          <h1>All institutes at a glance</h1>
+          <div class="eyebrow">Overview</div>
+          <h1>Daily Ledgr Report</h1>
         </div>
         ${buildInstituteGlanceDateCard(generatedOnLabel, "Report generated")}
       </div>
       ${coverScorecard}
       <div class="executive-summary">
-        <h2>Daily readout</h2>
+        <h2>Summary</h2>
         <p>${summary.filledToday || 0} of ${summary.totalTeachers || 0} teachers updated today (${completionPct}%). ${summary.missingToday || 0} teachers are pending follow-up. The network logged ${summary.sectionsTaught || 0} sections and ${e(formatDurationShort(summary.totalStudyMinutes || 0))} of study time.</p>
       </div>
-      <div class="section-title">Institute boxes - pending first</div>
+      <div class="section-title">Institutes - pending first</div>
       <div class="centre-grid">${centreCards}</div>
     </section>
 
@@ -5960,12 +5960,12 @@ function AdminPanelInner({user}){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
         <div>
           <div style={{fontSize:13,fontWeight:700,color:G.text,fontFamily:G.sans}}>
-            {instituteGlanceReport.loading ? "Loading centres in parallel" : "All centres are ready"}
+            {instituteGlanceReport.loading ? "Loading centres" : "Centres ready"}
           </div>
           <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:4}}>
             {instituteGlanceReport.loading
-              ? "Teacher records now sync in parallel, while the mobile screen waits to show the full list until it can stay stable."
-              : "Review uploaded teachers, pending follow-up, sections taught, and study hours for every centre."}
+              ? "Syncing teacher records."
+              : "All institute data is ready."}
           </div>
         </div>
         <div style={{display:"grid",gap:6,justifyItems:"end"}}>
@@ -5982,7 +5982,7 @@ function AdminPanelInner({user}){
       </div>
       {!instituteGlanceReport.ready&&(
         <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:10}}>
-          Export unlocks automatically when every centre has finished loading.
+          Exports unlock when loading finishes.
         </div>
       )}
     </div>
@@ -6204,7 +6204,7 @@ function AdminPanelInner({user}){
               ? `${row.filledToday} of ${row.totalTeachers} teachers filled today`
               : `${row.loadedTeachers} of ${row.totalTeachers} teacher records are ready`;
           const helperText = !row.ready
-            ? "The centre summary appears as soon as the synced teacher data is ready, without reloading the whole mobile screen."
+            ? "Syncing teacher data."
             : row.noTeachersSignedUp
               ? "Once teachers sign up, this card will show uploaded names, sections taught, and study hours."
               : row.filledToday > 0
@@ -6340,10 +6340,10 @@ function AdminPanelInner({user}){
         <div style={{maxWidth:1500,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:16}}>
             <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>All institutes at a glance</div>
-              <h1 style={{fontSize:34,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.02}}>Centre summary</h1>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>All institutes</div>
+              <h1 style={{fontSize:34,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.02}}>Daily Ledgr Report</h1>
               <div style={{fontSize:14,color:G.textM,lineHeight:1.65,marginTop:10,maxWidth:980}}>
-                Review uploaded teachers, pending follow-up, sections taught, study hours, month entries, and last activity for every centre without leaving the admin workspace.
+                Submissions, pending teachers, sections, and hours.
               </div>
             </div>
             <button
@@ -6358,10 +6358,10 @@ function AdminPanelInner({user}){
           <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:26,padding:"18px 18px 20px",boxShadow:"0 18px 48px rgba(15,23,42,0.08)"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Desktop workspace view</div>
-                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.08}}>All institutes at a glance</div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Workspace</div>
+                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.08}}>All institutes</div>
                 <div style={{fontSize:13,color:G.textM,lineHeight:1.65,marginTop:8,maxWidth:920}}>
-                  This desktop page keeps every centre visible as a compact box, with direct export actions for the executive PDF, individual centre PDFs, and the ZIP bundle.
+                  Compact centre boxes with export actions.
                 </div>
               </div>
               {instituteGlanceReport.loading&&(
@@ -10487,10 +10487,10 @@ function AdminPanelInner({user}){
           <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes at a glance</div>
-                <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:7}}>Centre summary</div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes</div>
+                <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:7}}>Daily Ledgr Report</div>
                 <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8}}>
-                  Review uploaded teachers, pending follow-up, sections taught, and study hours without the screen constantly jumping while data loads.
+                  Submissions, pending teachers, sections, and hours.
                 </div>
               </div>
               <button
@@ -10571,7 +10571,7 @@ function AdminPanelInner({user}){
 
           <MobileProfileAction
             icon={IconChartBar}
-            title="Centre summary"
+            title="Daily Ledgr Report"
             subtitle="See who filled, who is pending, sections taught, and study hours."
             onClick={openMobileCentreSummary}
             badge={instituteGlanceReport.loading
@@ -11568,7 +11568,7 @@ function AdminPanelInner({user}){
                       <AppIcon icon={IconChartBar} size={16} color="#93C5FD" />
                     </div>
                     <div style={{minWidth:0,flex:1}}>
-                      <div style={{fontSize:13.5,fontWeight:800,color:"rgba(255,255,255,0.92)"}}>Daily teacher entry summary</div>
+                      <div style={{fontSize:13.5,fontWeight:800,color:"rgba(255,255,255,0.92)"}}>Daily Ledgr Report</div>
                       <div style={{fontSize:11.5,color:"rgba(255,255,255,0.44)",fontWeight:500,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                         All-institutes report, PDFs, and centre boxes
                       </div>
