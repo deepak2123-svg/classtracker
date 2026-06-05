@@ -2694,6 +2694,18 @@ const CENTRE_SUMMARY_CSS = `
     margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--ink);
   }
   .page-header .meta { font-size: 11.5px; color: var(--ink-3); text-align: right; line-height: 1.7; }
+  .centre-hero {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%);
+    color: #fff; border-radius: 20px; padding: 28px 34px; margin-bottom: 20px;
+    text-align: center; border: 1px solid rgba(255,255,255,0.16);
+  }
+  .centre-hero .brand-row { justify-content: center; margin-bottom: 22px; }
+  .centre-hero .eyebrow { color: #93c5fd; margin-bottom: 9px; }
+  .centre-hero .institute-title { color: #fff; max-width: 820px; margin: 0 auto; font-size: 34px; }
+  .centre-hero .institute-subtitle { color: rgba(255,255,255,0.72); font-size: 14px; margin-top: 10px; }
+  .centre-hero-meta { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+  .centre-hero-pill { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; padding: 7px 12px; font-size: 12px; color: rgba(255,255,255,0.82); }
+  .centre-hero-pill strong { color: #fff; font-weight: 800; margin-left: 5px; }
   .institute-title { font-size: 30px; line-height: 1.08; letter-spacing: -0.7px; font-weight: 800; color: var(--ink); max-width: 660px; }
   .institute-subtitle { font-size: 13px; color: var(--ink-3); margin-top: 7px; }
   .scorecard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
@@ -2957,13 +2969,21 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
 
   return `
     ${standalone ? `<section class="report-page">` : ""}
-      <div class="page-header">
-        <div>
-          <div class="eyebrow">Centre report</div>
-          <div class="institute-title">${e(row.institute || "Centre Summary")}</div>
-          <div class="institute-subtitle">Daily teacher activity, pending follow-up, sections taught, and study hours.</div>
+      <div class="centre-hero">
+        <div class="brand-row">
+          <div class="brand-mark">L</div>
+          <div>
+            <div class="brand-title">Ledgr</div>
+            <div class="brand-sub">Daily Report</div>
+          </div>
         </div>
-        ${buildInstituteGlanceDateCard(generatedOnLabel)}
+        <div class="eyebrow">Centre report</div>
+        <div class="institute-title">${e(row.institute || "Centre Summary")}</div>
+        <div class="institute-subtitle">Daily teacher activity, pending follow-up, sections taught, and study hours.</div>
+        <div class="centre-hero-meta">
+          <span class="centre-hero-pill">Date <strong>${e(getInstituteGlanceGeneratedParts(generatedOnLabel).date)}</strong></span>
+          ${getInstituteGlanceGeneratedParts(generatedOnLabel).time ? `<span class="centre-hero-pill">Generated <strong>${e(getInstituteGlanceGeneratedParts(generatedOnLabel).time)}</strong></span>` : ""}
+        </div>
       </div>
 
       <div class="scorecard">
@@ -11499,52 +11519,58 @@ function AdminPanelInner({user}){
             </div>
             {profileOpen&&(<>
               <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
-              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:200,background:"#0F1E3D",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,boxShadow:"0 12px 40px rgba(0,0,0,0.45)",minWidth:252,overflow:"hidden"}}>
+              <div style={{position:"absolute",top:"calc(100% + 10px)",right:0,zIndex:200,background:"#0B1730",border:"1px solid rgba(255,255,255,0.13)",borderRadius:18,boxShadow:"0 22px 60px rgba(0,0,0,0.42)",width:430,maxWidth:"calc(100vw - 32px)",maxHeight:"calc(100vh - 96px)",overflowY:"auto",overflowX:"hidden"}}>
                 {/* Profile header */}
-                <div style={{padding:"16px 16px 13px",borderBottom:"1px solid rgba(255,255,255,0.09)"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:11}}>
-                    <div style={{width:42,height:42,borderRadius:"50%",background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,color:"#fff",flexShrink:0,fontFamily:G.sans,boxShadow:"0 0 0 3px rgba(59,130,246,0.3)"}}>
+                <div style={{padding:"18px 18px 15px",borderBottom:"1px solid rgba(255,255,255,0.09)",background:"linear-gradient(135deg,rgba(59,130,246,0.16),rgba(15,30,61,0))"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14}}>
+                    <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+                    <div style={{width:48,height:48,borderRadius:16,background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:800,color:"#fff",flexShrink:0,fontFamily:G.display,boxShadow:"0 0 0 4px rgba(59,130,246,0.22)"}}>
                       {(user?.email||"A").charAt(0).toUpperCase()}
                     </div>
                     <div style={{minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:700,color:"rgba(255,255,255,0.95)",fontFamily:G.sans,lineHeight:1.2}}>Administrator</div>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:3,fontFamily:G.mono,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:165}}>{user?.email||"—"}</div>
+                      <div style={{fontSize:16,fontWeight:800,color:"rgba(255,255,255,0.96)",fontFamily:G.sans,lineHeight:1.2}}>Administrator</div>
+                      <div style={{fontSize:12,color:"rgba(255,255,255,0.48)",marginTop:4,fontFamily:G.sans,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:250}}>{user?.email||"—"}</div>
                     </div>
-                  </div>
-                  <div style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:5,background:"rgba(59,130,246,0.15)",border:"1px solid rgba(59,130,246,0.3)",borderRadius:6,padding:"3px 8px"}}>
-                    <span style={{width:6,height:6,borderRadius:"50%",background:"#3B82F6",display:"inline-block"}}/>
-                    <span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:G.mono}}>Session {currentSession()}</span>
+                    </div>
+                    <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(59,130,246,0.16)",border:"1px solid rgba(59,130,246,0.28)",borderRadius:999,padding:"6px 10px",flexShrink:0}}>
+                      <span style={{width:7,height:7,borderRadius:"50%",background:"#3B82F6",display:"inline-block"}}/>
+                      <span style={{fontSize:11,color:"#BFDBFE",fontFamily:G.mono,fontWeight:700}}>{currentSession()}</span>
+                    </div>
                   </div>
                 </div>
                 {/* Menu items */}
-                <div style={{padding:"8px"}}>
-                  <div style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"12px",marginBottom:8}}>
-                    <div style={{fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.42)",fontFamily:G.mono,marginBottom:10}}>Workspace snapshot</div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+                <div style={{padding:"12px"}}>
+                  <div style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:16,padding:"12px",marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+                      <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.42)",fontFamily:G.mono}}>Workspace snapshot</div>
+                      {loadingUids.size>0&&(
+                        <span style={{fontSize:10.5,fontWeight:800,color:"#BFDBFE",fontFamily:G.mono,background:"rgba(59,130,246,0.14)",border:"1px solid rgba(59,130,246,0.22)",borderRadius:999,padding:"4px 8px"}}>Syncing {loadingUids.size}</span>
+                      )}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8}}>
                       {adminWorkspaceStats.map(item=>(
-                        <div key={item.key} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"10px 10px 9px"}}>
-                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
-                            <div style={{width:26,height:26,borderRadius:9,background:"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <div key={item.key} style={{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:13,padding:"9px 9px 10px",minWidth:0}}>
+                          <div style={{width:28,height:28,borderRadius:10,background:"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:8}}>
                               <AppIcon icon={item.icon} size={14} color={item.color} />
-                            </div>
-                            <div style={{fontSize:9,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",color:"rgba(255,255,255,0.4)",fontFamily:G.mono}}>{item.label}</div>
                           </div>
-                          <div style={{fontSize:20,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1,marginTop:9}}>{item.value}</div>
+                          <div style={{fontSize:18,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1}}>{item.value}</div>
+                          <div style={{fontSize:9,fontWeight:800,letterSpacing:0.4,textTransform:"uppercase",color:"rgba(255,255,255,0.42)",fontFamily:G.mono,marginTop:6,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
                         </div>
                       ))}
                     </div>
                   </div>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.36)",fontFamily:G.mono,margin:"4px 4px 8px"}}>Reports</div>
                   <button onClick={()=>{setProfileOpen(false);openInstituteGlancePanel();}}
-                    style={{width:"100%",marginBottom:8,padding:"10px 12px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
+                    style={{width:"100%",marginBottom:10,padding:"12px 13px",background:"rgba(59,130,246,0.12)",border:"1px solid rgba(59,130,246,0.24)",borderRadius:13,cursor:"pointer",display:"flex",alignItems:"center",gap:11,color:"rgba(255,255,255,0.88)",fontSize:13,fontFamily:G.sans,fontWeight:700,textAlign:"left",transition:"background 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(59,130,246,0.18)"}
                     onMouseLeave={e=>e.currentTarget.style.background="rgba(59,130,246,0.1)"}>
-                    <div style={{width:30,height:30,borderRadius:8,background:"rgba(59,130,246,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <div style={{width:34,height:34,borderRadius:11,background:"rgba(59,130,246,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       <AppIcon icon={IconChartBar} size={16} color="#93C5FD" />
                     </div>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.88)"}}>Daily teacher entry summary</div>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>
-                        Load the all-institutes report only when you open it
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:13.5,fontWeight:800,color:"rgba(255,255,255,0.92)"}}>Daily teacher entry summary</div>
+                      <div style={{fontSize:11.5,color:"rgba(255,255,255,0.44)",fontWeight:500,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                        All-institutes report, PDFs, and centre boxes
                       </div>
                     </div>
                     {instituteGlanceReport.ready&&(
@@ -11554,58 +11580,58 @@ function AdminPanelInner({user}){
                     )}
                     <AppIcon icon={IconChevronRight} size={13} color="rgba(255,255,255,0.3)" style={{marginLeft:instituteGlanceReport.ready?0:"auto",flexShrink:0}} />
                   </button>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.36)",fontFamily:G.mono,margin:"4px 4px 8px"}}>Manage</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:10}}>
                   <button onClick={()=>{setProfileOpen(false);openManageTab("teachers");}}
-                    style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
+                    style={{width:"100%",minHeight:82,padding:"11px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:13,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.11)"}
                     onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}>
                     <div style={{width:30,height:30,borderRadius:8,background:"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       <AppIcon icon={IconUsersGroup} size={15} color="rgba(255,255,255,0.7)" />
                     </div>
-                    <div>
+                    <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.88)"}}>Manage teachers</div>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>Teacher accounts, classes &amp; access</div>
                     </div>
-                    <AppIcon icon={IconChevronRight} size={13} color="rgba(255,255,255,0.3)" style={{marginLeft:"auto",flexShrink:0}} />
                   </button>
                   <button onClick={()=>{setProfileOpen(false);openManageTab("admins");}}
-                    style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
+                    style={{width:"100%",minHeight:82,padding:"11px 12px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:13,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.11)"}
                     onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}>
                     <div style={{width:30,height:30,borderRadius:8,background:"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       <AppIcon icon={IconSettings} size={15} color="rgba(255,255,255,0.7)" />
                     </div>
-                    <div>
+                    <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.88)"}}>Manage admins</div>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>Workspace roles and admin permissions</div>
                     </div>
-                    <AppIcon icon={IconChevronRight} size={13} color="rgba(255,255,255,0.3)" style={{marginLeft:"auto",flexShrink:0}} />
                   </button>
                   <button onClick={()=>{setProfileOpen(false);openManageTab("institutes");}}
-                    style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
+                    style={{width:"100%",minHeight:82,padding:"11px 12px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:13,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(59,130,246,0.18)"}
                     onMouseLeave={e=>e.currentTarget.style.background="rgba(59,130,246,0.1)"}>
                     <div style={{width:30,height:30,borderRadius:8,background:"rgba(59,130,246,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       <AppIcon icon={IconBuilding} size={16} color="#93C5FD" />
                     </div>
-                    <div>
+                    <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.88)"}}>Manage institutes</div>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>Institute list, names, and structure</div>
                     </div>
-                    <AppIcon icon={IconChevronRight} size={13} color="rgba(255,255,255,0.3)" style={{marginLeft:"auto",flexShrink:0}} />
                   </button>
                   <button onClick={()=>{setProfileOpen(false);openManageTab("sections",{ detailInstitute: selInst || null });}}
-                    style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
+                    style={{width:"100%",minHeight:82,padding:"11px 12px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:13,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(59,130,246,0.18)"}
                     onMouseLeave={e=>e.currentTarget.style.background="rgba(59,130,246,0.1)"}>
                     <div style={{width:30,height:30,borderRadius:8,background:"rgba(59,130,246,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       <AppIcon icon={IconSchool} size={16} color="#93C5FD" />
                     </div>
-                    <div>
+                    <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.88)"}}>Manage sections</div>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontWeight:400,marginTop:1}}>{selInst ? `${selInst} groups and timetables` : "Section groups and timetable setup"}</div>
                     </div>
-                    <AppIcon icon={IconChevronRight} size={13} color="rgba(255,255,255,0.3)" style={{marginLeft:"auto",flexShrink:0}} />
                   </button>
+                  </div>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.36)",fontFamily:G.mono,margin:"2px 4px 8px"}}>Recovery</div>
                   <button onClick={()=>{setProfileOpen(false);setBinView(true);}}
                     style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.75)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"}
