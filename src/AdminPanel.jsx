@@ -3,11 +3,14 @@ import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import {
   IconBuilding,
+  IconCalendar,
   IconChartBar,
   IconChevronLeft,
   IconChevronRight,
   IconDownload,
+  IconFileText,
   IconLogout,
+  IconPhoto,
   IconSchool,
   IconSettings,
   IconTrash,
@@ -1724,6 +1727,18 @@ function addDaysToDateKey(dateKey, days){
 function currentMonthStartKey(now = new Date()){
   return `${currentMonthKey(now)}-01`;
 }
+function monthBoundsFromKey(monthKey = currentMonthKey()){
+  const [rawYear, rawMonth] = String(monthKey || currentMonthKey()).split("-").map(Number);
+  const year = rawYear || new Date().getFullYear();
+  const month = rawMonth || (new Date().getMonth() + 1);
+  const paddedMonth = String(month).padStart(2, "0");
+  const lastDay = new Date(year, month, 0).getDate();
+  return {
+    startKey:`${year}-${paddedMonth}-01`,
+    endKey:`${year}-${paddedMonth}-${String(lastDay).padStart(2, "0")}`,
+    monthKey:`${year}-${paddedMonth}`,
+  };
+}
 function countEntriesForMonth(classNotes = {}, monthKey = currentMonthKey()){
   return Object.entries(classNotes || {}).reduce((sum, [dk, entries]) => {
     if(!dk.startsWith(monthKey) || !Array.isArray(entries)) return sum;
@@ -1962,15 +1977,15 @@ function getInstituteGlancePeriodMeta(period = "daily", rangeStartKey = "", rang
     };
   }
   if(period === "monthly"){
-    const startKey = currentMonthStartKey();
+    const monthBounds = monthBoundsFromKey(String(rangeStartKey || "").slice(0, 7) || currentMonthKey());
     return {
       key:"monthly",
       days:null,
-      startKey,
-      endKey:today,
-      filePart:currentMonthKey(),
+      startKey:monthBounds.startKey,
+      endKey:monthBounds.endKey,
+      filePart:monthBounds.monthKey,
       label:"Monthly",
-      periodValue:new Date(`${startKey}T00:00:00`).toLocaleDateString("en-IN", { month:"long", year:"numeric" }),
+      periodValue:new Date(`${monthBounds.startKey}T00:00:00`).toLocaleDateString("en-IN", { month:"long", year:"numeric" }),
       updatedLabel:"Updated this month",
       pendingLabel:"Pending this month",
       activeLabel:"Teachers active this month",
@@ -3639,6 +3654,185 @@ function AdminExportModal({ exportActions, onClose }) {
   );
 }
 
+function LedgrReportOptionsModal({
+  period,
+  month,
+  rangeStart,
+  rangeEnd,
+  exportDisabled,
+  busyFormat,
+  onClose,
+  onApply,
+}) {
+  const [draftPeriod, setDraftPeriod] = React.useState(period || "daily");
+  const [draftMonth, setDraftMonth] = React.useState(month || currentMonthKey());
+  const [draftRangeStart, setDraftRangeStart] = React.useState(rangeStart || addDaysToDateKey(todayKey(), -6));
+  const [draftRangeEnd, setDraftRangeEnd] = React.useState(rangeEnd || todayKey());
+  const [format, setFormat] = React.useState("view");
+  const busy = !!busyFormat;
+
+  const inputStyle = {
+    width:"100%",
+    height:46,
+    borderRadius:12,
+    border:"1px solid #DDE3ED",
+    background:"#F8FAFC",
+    color:"#111827",
+    fontSize:15,
+    fontWeight:700,
+    fontFamily:G.sans,
+    padding:"0 12px",
+    boxSizing:"border-box",
+    outline:"none",
+  };
+  const sectionLabel = {
+    fontSize:12,
+    fontWeight:800,
+    color:"#374151",
+    textTransform:"uppercase",
+    letterSpacing:0.7,
+    marginBottom:9,
+    fontFamily:G.mono,
+  };
+  const periodOptions = [
+    ["daily", "Daily"],
+    ["weekly", "Weekly"],
+    ["monthly", "Monthly"],
+    ["range", "Range"],
+  ];
+  const formatOptions = [
+    { key:"view", label:"Update view", icon:IconChartBar, help:"Shows report on this screen" },
+    { key:"pdf", label:"All PDF", icon:IconFileText, help:"Opens executive PDF" },
+    { key:"png", label:"All PNG", icon:IconPhoto, help:"Downloads summary image" },
+    { key:"zip", label:"ZIP PDFs", icon:IconDownload, help:"Opens centre PDFs" },
+  ];
+  const rangeLabel = draftPeriod === "monthly"
+    ? new Date(`${monthBoundsFromKey(draftMonth).startKey}T00:00:00`).toLocaleDateString("en-IN", { month:"long", year:"numeric" })
+    : draftPeriod === "range"
+      ? `${draftRangeStart || "Start"} to ${draftRangeEnd || "End"}`
+      : draftPeriod === "weekly"
+        ? "Last 7 days"
+        : "Today";
+
+  const apply = () => {
+    const safeStart = draftRangeStart && draftRangeEnd && draftRangeStart > draftRangeEnd ? draftRangeEnd : draftRangeStart;
+    const safeEnd = draftRangeStart && draftRangeEnd && draftRangeStart > draftRangeEnd ? draftRangeStart : draftRangeEnd;
+    onApply({
+      period:draftPeriod,
+      month:draftMonth || currentMonthKey(),
+      rangeStart:safeStart || todayKey(),
+      rangeEnd:safeEnd || todayKey(),
+      format,
+    });
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.58)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+      <div style={{background:"#FFFFFF",borderRadius:24,width:"100%",maxWidth:520,boxShadow:"0 28px 80px rgba(15,23,42,0.28)",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{overflowY:"auto",flex:1,padding:"26px 24px 12px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:24}}>
+            <div style={{width:52,height:52,borderRadius:16,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <AppIcon icon={IconCalendar} size={26} color={G.blue} />
+            </div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:22,fontWeight:800,color:"#111827",fontFamily:G.display,lineHeight:1.1}}>Ledgr Report</div>
+              <div style={{fontSize:15,color:"#6B7280",fontFamily:G.sans,lineHeight:1.45,marginTop:4}}>Choose period and output</div>
+            </div>
+            <button type="button" onClick={onClose} disabled={busy} style={{marginLeft:"auto",border:"none",background:"transparent",color:"#9CA3AF",fontSize:28,lineHeight:1,cursor:busy?"not-allowed":"pointer",padding:2}}>×</button>
+          </div>
+
+          <div style={{marginBottom:20}}>
+            <div style={sectionLabel}>Period</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8}}>
+              {periodOptions.map(([key, label]) => {
+                const active = draftPeriod === key;
+                return (
+                  <button key={key} type="button" onClick={()=>setDraftPeriod(key)} disabled={busy} style={{
+                    minHeight:42,
+                    border:"none",
+                    borderRadius:13,
+                    background:active ? G.navy : "rgba(15,23,42,0.07)",
+                    color:active ? "#FFFFFF" : "#374151",
+                    fontSize:14,
+                    fontWeight:800,
+                    fontFamily:G.sans,
+                    cursor:busy ? "not-allowed" : "pointer",
+                  }}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {draftPeriod === "monthly" && (
+            <div style={{marginBottom:20}}>
+              <div style={sectionLabel}>Month</div>
+              <input type="month" value={draftMonth} onChange={event=>setDraftMonth(event.target.value || currentMonthKey())} disabled={busy} style={inputStyle} />
+            </div>
+          )}
+
+          {draftPeriod === "range" && (
+            <div style={{marginBottom:20}}>
+              <div style={sectionLabel}>Date Range</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
+                <input type="date" value={draftRangeStart} max={draftRangeEnd || undefined} onChange={event=>setDraftRangeStart(event.target.value || todayKey())} disabled={busy} style={inputStyle} />
+                <input type="date" value={draftRangeEnd} min={draftRangeStart || undefined} onChange={event=>setDraftRangeEnd(event.target.value || todayKey())} disabled={busy} style={inputStyle} />
+              </div>
+            </div>
+          )}
+
+          <div style={{marginBottom:20}}>
+            <div style={sectionLabel}>Format</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
+              {formatOptions.map(item => {
+                const active = format === item.key;
+                const disabled = busy || (item.key !== "view" && exportDisabled);
+                return (
+                  <button key={item.key} type="button" onClick={()=>setFormat(item.key)} disabled={disabled} style={{
+                    minHeight:72,
+                    border:`2px solid ${active ? G.navy : "#DDE3ED"}`,
+                    borderRadius:16,
+                    background:active ? "#EEF2FF" : "#FFFFFF",
+                    color:disabled ? "#9CA3AF" : active ? G.navy : "#374151",
+                    cursor:disabled ? "not-allowed" : "pointer",
+                    padding:"12px 12px",
+                    display:"flex",
+                    alignItems:"center",
+                    gap:10,
+                    textAlign:"left",
+                    fontFamily:G.sans,
+                  }}>
+                    <AppIcon icon={item.icon} size={22} color={disabled ? "#9CA3AF" : active ? G.navy : "#6B7280"} />
+                    <span style={{minWidth:0}}>
+                      <span style={{display:"block",fontSize:15,fontWeight:800,lineHeight:1.2}}>{item.label}</span>
+                      <span style={{display:"block",fontSize:11.5,fontWeight:600,color:disabled ? "#A1A1AA" : "#6B7280",lineHeight:1.3,marginTop:3}}>{item.help}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{background:"#F8FAFC",borderRadius:14,padding:"12px 14px",fontSize:14,color:"#374151",fontFamily:G.sans,lineHeight:1.35}}>
+            <AppIcon icon={IconCalendar} size={16} color={G.blue} style={{display:"inline-flex",verticalAlign:"-3px",marginRight:7}} />
+            <strong>{rangeLabel}</strong> · {format === "view" ? "updates the on-screen report" : format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "opens centre PDFs"}
+          </div>
+        </div>
+
+        <div style={{flexShrink:0,padding:"14px 24px 22px",borderTop:"1px solid #F1F5F9",display:"flex",gap:12,background:"#FFFFFF"}}>
+          <button type="button" onClick={onClose} disabled={busy} style={{flex:1,height:50,borderRadius:14,border:"1.5px solid #E5E7EB",background:"#FFFFFF",color:"#374151",fontSize:15,fontWeight:800,fontFamily:G.sans,cursor:busy?"not-allowed":"pointer"}}>
+            Cancel
+          </button>
+          <button type="button" onClick={apply} disabled={busy || (format !== "view" && exportDisabled)} style={{flex:1,height:50,borderRadius:14,border:"none",background:(busy || (format !== "view" && exportDisabled)) ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:15,fontWeight:900,fontFamily:G.sans,cursor:(busy || (format !== "view" && exportDisabled)) ? "not-allowed" : "pointer"}}>
+            {busy ? "Preparing..." : format === "view" ? "Apply" : "Export"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Institute Type Picker ─────────────────────────────────────────────────────
 function InstTypePicker({ inst, onSelect, onClose }) {
   const W = { navy:"#1A2F5A",blue:"#1D4ED8",blueL:"#EEF2FF",surface:"#fff",border:"#E2E8F0",text:"#0F172A",textM:"#475569",textL:"#94A3B8",bg:"#F4F6FA",green:"#1B8A4C",greenL:"#ECFDF5",sans:"'Inter',sans-serif",display:"'Poppins',sans-serif" };
@@ -4752,10 +4946,13 @@ function AdminPanelInner({user}){
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
+  const [instituteGlanceOptionsOpen, setInstituteGlanceOptionsOpen] = useState(false);
   const [instituteGlancePeriod, setInstituteGlancePeriod] = useState("daily");
+  const [instituteGlanceMonth, setInstituteGlanceMonth] = useState(() => currentMonthKey());
   const [instituteGlanceRangeStart, setInstituteGlanceRangeStart] = useState(() => addDaysToDateKey(todayKey(), -6));
   const [instituteGlanceRangeEnd, setInstituteGlanceRangeEnd] = useState(() => todayKey());
   const [instituteGlanceExportBusy, setInstituteGlanceExportBusy] = useState("");
+  const [instituteGlancePendingAction, setInstituteGlancePendingAction] = useState("");
   const [instituteGlanceRowExportBusy, setInstituteGlanceRowExportBusy] = useState("");
   const [instituteGlanceReport, setInstituteGlanceReport] = useState(() => ({
     rows: [],
@@ -5027,6 +5224,7 @@ function AdminPanelInner({user}){
       lastHistoryKeyRef.current = JSON.stringify(restoredNavState);
       setProfileOpen(false);
       setExportOpen(false);
+      setInstituteGlanceOptionsOpen(false);
       setInstituteGlanceOpen(false);
       setView(restoredNavState.view ?? "main");
       setMobileSurface(
@@ -5049,6 +5247,7 @@ function AdminPanelInner({user}){
   }, []);
   const closeAdminOverlay = React.useCallback(() => {
     if(exportOpen){ setExportOpen(false); return true; }
+    if(instituteGlanceOptionsOpen){ setInstituteGlanceOptionsOpen(false); return true; }
     if(instituteGlanceOpen){ setInstituteGlanceOpen(false); return true; }
     if(profileOpen){ setProfileOpen(false); return true; }
     if(adminConfirm){ setAdminConfirm(null); return true; }
@@ -5058,7 +5257,7 @@ function AdminPanelInner({user}){
     if(copyGroupModal){ setCopyGroupModal(null); return true; }
     if(legacySectionRepair){ setLegacySectionRepair(null); return true; }
     return false;
-  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, instituteGlanceOpen, legacySectionRepair, profileOpen]);
+  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, instituteGlanceOpen, instituteGlanceOptionsOpen, legacySectionRepair, profileOpen]);
   useEffect(() => {
     if(!Capacitor.isNativePlatform()) return undefined;
     const listenerPromise = CapacitorApp.addListener("backButton", () => {
@@ -5213,15 +5412,27 @@ function AdminPanelInner({user}){
     instituteGlanceReportRef.current = instituteGlanceReport;
   }, [instituteGlanceReport]);
 
+  const getInstituteGlancePeriodRange = React.useCallback((periodKey = instituteGlancePeriod) => {
+    if(periodKey === "monthly"){
+      const bounds = monthBoundsFromKey(instituteGlanceMonth);
+      return { rangeStartKey:bounds.startKey, rangeEndKey:bounds.endKey };
+    }
+    if(periodKey === "range"){
+      return { rangeStartKey:instituteGlanceRangeStart, rangeEndKey:instituteGlanceRangeEnd };
+    }
+    return { rangeStartKey:"", rangeEndKey:"" };
+  }, [instituteGlanceMonth, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart]);
+
   const buildInstituteGlanceSnapshot = React.useCallback((fullDataMap = {}) => {
+    const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange();
     const rows = buildInstituteGlanceRows({
       institutes,
       teachers: instituteGlanceTeacherList,
       fullDataMap,
       resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
       period:instituteGlancePeriod,
-      rangeStartKey:instituteGlanceRangeStart,
-      rangeEndKey:instituteGlanceRangeEnd,
+      rangeStartKey,
+      rangeEndKey,
     });
     return {
       rows,
@@ -5229,7 +5440,7 @@ function AdminPanelInner({user}){
       loadedInstitutes: rows.filter(row => row.ready).length,
       totalInstitutes: rows.length,
     };
-  }, [instSectionsAll, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, instituteGlanceTeacherList, institutes]);
+  }, [getInstituteGlancePeriodRange, instSectionsAll, instituteGlancePeriod, instituteGlanceTeacherList, institutes]);
 
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
@@ -5356,7 +5567,7 @@ function AdminPanelInner({user}){
   React.useEffect(() => {
     if(!instituteGlanceOpen && mobileSurface !== "centreSummary") return;
     loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure);
-  }, [handleInstituteGlanceLoadFailure, instituteGlanceOpen, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, loadInstituteGlanceReport, mobileSurface]);
+  }, [handleInstituteGlanceLoadFailure, instituteGlanceMonth, instituteGlanceOpen, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, loadInstituteGlanceReport, mobileSurface]);
 
   const openMobileCentreSummary = React.useCallback(() => {
     setProfileOpen(false);
@@ -5420,21 +5631,25 @@ function AdminPanelInner({user}){
     minute:"2-digit",
   })}`, []);
 
-  const exportInstituteGlance = React.useCallback(async (format) => {
+  const exportInstituteGlance = React.useCallback(async (format, options = {}) => {
     if(instituteGlanceExportBusy) return;
     setInstituteGlanceExportBusy(format);
     try {
-      const report = await loadInstituteGlanceReport();
+      const report = await loadInstituteGlanceReport({ force:true });
       if(!report) return;
       const rows = report.rows || [];
       const summary = report.summary || EMPTY_INSTITUTE_GLANCE_SUMMARY;
       const generatedOnLabel = getInstituteGlanceGeneratedOnLabel();
+      const exportPeriod = options.period || instituteGlancePeriod;
+      const { rangeStartKey, rangeEndKey } = options.rangeStartKey !== undefined || options.rangeEndKey !== undefined
+        ? { rangeStartKey:options.rangeStartKey || "", rangeEndKey:options.rangeEndKey || "" }
+        : getInstituteGlancePeriodRange(exportPeriod);
       if(format === "png"){
-        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period:instituteGlancePeriod, rangeStartKey:instituteGlanceRangeStart, rangeEndKey:instituteGlanceRangeEnd });
+        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period:exportPeriod, rangeStartKey, rangeEndKey });
       } else if(format === "zip"){
-        await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period:instituteGlancePeriod, rangeStartKey:instituteGlanceRangeStart, rangeEndKey:instituteGlanceRangeEnd });
+        await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period:exportPeriod, rangeStartKey, rangeEndKey });
       } else {
-        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period:instituteGlancePeriod, rangeStartKey:instituteGlanceRangeStart, rangeEndKey:instituteGlanceRangeEnd });
+        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period:exportPeriod, rangeStartKey, rangeEndKey });
       }
     } catch (error) {
       console.error("institute glance export failed", error);
@@ -5442,7 +5657,18 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceExportBusy("");
     }
-  }, [getInstituteGlanceGeneratedOnLabel, instituteGlanceExportBusy, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, loadInstituteGlanceReport]);
+  }, [getInstituteGlanceGeneratedOnLabel, getInstituteGlancePeriodRange, instituteGlanceExportBusy, instituteGlancePeriod, loadInstituteGlanceReport]);
+
+  React.useEffect(() => {
+    if(!instituteGlancePendingAction) return;
+    const action = instituteGlancePendingAction;
+    setInstituteGlancePendingAction("");
+    if(action === "view"){
+      loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure);
+      return;
+    }
+    exportInstituteGlance(action);
+  }, [exportInstituteGlance, handleInstituteGlanceLoadFailure, instituteGlancePendingAction, loadInstituteGlanceReport]);
 
   const exportInstituteGlanceRowPdf = React.useCallback(async (row) => {
     if(!row?.institute || !row.ready || instituteGlanceRowExportBusy) return;
@@ -5454,12 +5680,13 @@ function AdminPanelInner({user}){
       if(!freshRow){
         throw new Error("Could not rebuild the latest centre summary for this institute.");
       }
+      const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange();
       await downloadInstituteGlanceInstitutePdf({
         row:freshRow,
         generatedOnLabel:getInstituteGlanceGeneratedOnLabel(),
         period:instituteGlancePeriod,
-        rangeStartKey:instituteGlanceRangeStart,
-        rangeEndKey:instituteGlanceRangeEnd,
+        rangeStartKey,
+        rangeEndKey,
       });
     } catch (error) {
       console.error("institute glance row export failed", error);
@@ -5467,7 +5694,16 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceRowExportBusy("");
     }
-  }, [getInstituteGlanceGeneratedOnLabel, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, instituteGlanceRowExportBusy, loadInstituteGlanceReport]);
+  }, [getInstituteGlanceGeneratedOnLabel, getInstituteGlancePeriodRange, instituteGlancePeriod, instituteGlanceRowExportBusy, loadInstituteGlanceReport]);
+
+  const applyInstituteGlanceOptions = React.useCallback(({ period:nextPeriod, month:nextMonth, rangeStart, rangeEnd, format }) => {
+    setInstituteGlancePeriod(nextPeriod || "daily");
+    setInstituteGlanceMonth(nextMonth || currentMonthKey());
+    setInstituteGlanceRangeStart(rangeStart || todayKey());
+    setInstituteGlanceRangeEnd(rangeEnd || todayKey());
+    setInstituteGlanceOptionsOpen(false);
+    setInstituteGlancePendingAction(format || "view");
+  }, []);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
@@ -5979,7 +6215,8 @@ function AdminPanelInner({user}){
   }, [PANEL_LIMITS, panelCollapsed, panelW, clampPanelWidth]);
 
   const instituteGlanceReadyCount = Math.max(0, instituteGlanceReport.loadedInstitutes || 0);
-  const instituteGlancePeriodMeta = getInstituteGlancePeriodMeta(instituteGlancePeriod, instituteGlanceRangeStart, instituteGlanceRangeEnd);
+  const instituteGlanceEffectiveRange = getInstituteGlancePeriodRange();
+  const instituteGlancePeriodMeta = getInstituteGlancePeriodMeta(instituteGlancePeriod, instituteGlanceEffectiveRange.rangeStartKey, instituteGlanceEffectiveRange.rangeEndKey);
   const instituteGlanceProgressPct = instituteGlanceReport.total
     ? Math.max(0, Math.min(100, Math.round((instituteGlanceReport.loaded / instituteGlanceReport.total) * 100)))
     : 0;
@@ -6025,98 +6262,30 @@ function AdminPanelInner({user}){
     };
     return (
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
-        <div style={{display:"inline-flex",border:`1px solid ${G.border}`,borderRadius:12,overflow:"hidden",height:compact ? 36 : 38,background:"#FFFFFF",flexWrap:"nowrap"}}>
-          {[
-            ["daily", "Daily"],
-            ["weekly", "Weekly"],
-            ["monthly", "Monthly"],
-            ["range", "Range"],
-          ].map(([period, label], index, list) => {
-            const active = instituteGlancePeriod === period;
-            return (
-              <button
-                key={period}
-                type="button"
-                className="admin-mobile-touch"
-                onClick={()=>{
-                  setInstituteGlancePeriod(period);
-                }}
-                disabled={!!instituteGlanceAnyExportBusy}
-                style={{
-                  padding:"0 12px",
-                  border:"none",
-                  borderRight:index < list.length - 1 ? `1px solid ${G.border}` : "none",
-                  background:active ? G.blueL : "#FFFFFF",
-                  color:active ? G.blue : G.textS,
-                  fontSize:12,
-                  fontWeight:800,
-                  fontFamily:G.sans,
-                  cursor:instituteGlanceAnyExportBusy ? "not-allowed" : "pointer",
-                }}>
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        {instituteGlancePeriod==="range"&&(
-          <div style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-            <input
-              type="date"
-              value={instituteGlanceRangeStart}
-              onChange={event=>setInstituteGlanceRangeStart(event.target.value || todayKey())}
-              disabled={!!instituteGlanceAnyExportBusy}
-              style={{height:compact ? 36 : 38,border:`1px solid ${G.border}`,borderRadius:12,padding:"0 10px",fontSize:12,fontWeight:700,color:G.text,fontFamily:G.sans,background:"#FFFFFF"}}
-            />
-            <input
-              type="date"
-              value={instituteGlanceRangeEnd}
-              onChange={event=>setInstituteGlanceRangeEnd(event.target.value || todayKey())}
-              disabled={!!instituteGlanceAnyExportBusy}
-              style={{height:compact ? 36 : 38,border:`1px solid ${G.border}`,borderRadius:12,padding:"0 10px",fontSize:12,fontWeight:700,color:G.text,fontFamily:G.sans,background:"#FFFFFF"}}
-            />
-          </div>
-        )}
+        <button
+          className="admin-mobile-touch"
+          onClick={()=>setInstituteGlanceOptionsOpen(true)}
+          disabled={!!instituteGlanceAnyExportBusy}
+          style={{
+            ...baseButtonStyle,
+            minWidth:compact ? 170 : 210,
+            justifyContent:"space-between",
+            background:G.blueL,
+            border:`1px solid #BFDBFE`,
+            color:G.blue,
+            cursor:instituteGlanceAnyExportBusy ? "not-allowed" : "pointer",
+          }}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:7,minWidth:0}}>
+            <AppIcon icon={IconCalendar} size={15} color={G.blue} />
+            <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{instituteGlancePeriodMeta.label}</span>
+          </span>
+          <span style={{fontSize:11,fontWeight:800,color:G.textM,whiteSpace:"nowrap"}}>Options</span>
+        </button>
         <button
           className="admin-mobile-touch"
           onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)}
           style={baseButtonStyle}>
           Refresh
-        </button>
-        <button
-          className="admin-mobile-touch"
-          onClick={()=>exportInstituteGlance("pdf")}
-          disabled={!!instituteGlanceExportDisabled}
-          style={{
-            ...baseButtonStyle,
-            opacity:instituteGlanceExportDisabled ? 0.5 : 1,
-            cursor:instituteGlanceExportDisabled ? "not-allowed" : "pointer",
-          }}>
-          <AppIcon icon={IconDownload} size={15} color={G.text} />
-          {instituteGlanceExportBusy==="pdf" ? "PDF..." : "All PDF"}
-        </button>
-        <button
-          className="admin-mobile-touch"
-          onClick={()=>exportInstituteGlance("png")}
-          disabled={!!instituteGlanceExportDisabled}
-          style={{
-            ...baseButtonStyle,
-            opacity:instituteGlanceExportDisabled ? 0.5 : 1,
-            cursor:instituteGlanceExportDisabled ? "not-allowed" : "pointer",
-          }}>
-          <AppIcon icon={IconDownload} size={15} color={G.text} />
-          {instituteGlanceExportBusy==="png" ? "PNG..." : "All PNG"}
-        </button>
-        <button
-          className="admin-mobile-touch"
-          onClick={()=>exportInstituteGlance("zip")}
-          disabled={!!instituteGlanceExportDisabled}
-          style={{
-            ...baseButtonStyle,
-            opacity:instituteGlanceExportDisabled ? 0.5 : 1,
-            cursor:instituteGlanceExportDisabled ? "not-allowed" : "pointer",
-          }}>
-          <AppIcon icon={IconDownload} size={15} color={G.text} />
-          {instituteGlanceExportBusy==="zip" ? "ZIP..." : "ZIP PDFs"}
         </button>
       </div>
     );
@@ -11844,6 +12013,18 @@ function AdminPanelInner({user}){
       )}
       {pendingSectionRenameModal}
       <AdminToastBanner message={adminToast} />
+      {instituteGlanceOptionsOpen&&(
+        <LedgrReportOptionsModal
+          period={instituteGlancePeriod}
+          month={instituteGlanceMonth}
+          rangeStart={instituteGlanceRangeStart}
+          rangeEnd={instituteGlanceRangeEnd}
+          exportDisabled={instituteGlanceExportDisabled}
+          busyFormat={instituteGlanceExportBusy}
+          onClose={()=>!instituteGlanceExportBusy&&setInstituteGlanceOptionsOpen(false)}
+          onApply={applyInstituteGlanceOptions}
+        />
+      )}
       {instituteGlanceOpen && !isMobile ? (
         <DesktopCentreSummaryPage />
       ) : (
