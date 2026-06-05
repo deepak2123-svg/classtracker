@@ -5614,6 +5614,29 @@ function AdminPanelInner({user}){
     setInstituteGlanceOpen(false);
   }, []);
 
+  const openDailyLedgrReport = React.useCallback(() => {
+    setInstituteGlancePeriod("daily");
+    setInstituteGlanceMonth(currentMonthKey());
+    setInstituteGlanceRangeStart(addDaysToDateKey(todayKey(), -6));
+    setInstituteGlanceRangeEnd(todayKey());
+    setProfileOpen(false);
+    if(isMobile){
+      setInstituteGlanceOpen(false);
+      setView("main");
+      setMobileSurface("centreSummary");
+      setSelInst(null);
+      setSelP2(null);
+      setSelP3(null);
+      setFullView(null);
+      setP2Search("");
+      setP3Search("");
+      setActiveProgramFilter(null);
+      setMobileStep(0);
+      return;
+    }
+    setInstituteGlanceOpen(true);
+  }, [isMobile]);
+
   const openInstituteFromGlance = React.useCallback((row) => {
     if(!row?.institute || !row.ready) return;
     const nextEntries = {};
@@ -10705,6 +10728,8 @@ function AdminPanelInner({user}){
     const mobilePageInnerStyle = { padding:"10px 12px 18px" };
     const mobileBottomKey = mobileSurface==="profile"
       ? "profile"
+      : mobileSurface==="centreSummary"
+        ? "report"
       : !selInst
         ? "institutes"
         : tab==="teacher"
@@ -11049,6 +11074,7 @@ function AdminPanelInner({user}){
     const mobileBottomItems = !selInst
       ? [
           { key:"institutes", label:"All institutes", icon:IconBuilding, onClick:openMobileInstituteHome },
+          { key:"report", label:"Report", icon:IconChartBar, onClick:openDailyLedgrReport },
           { key:"profile", label:"Profile", icon:IconUser, onClick:openMobileProfile },
         ]
       : [
@@ -11271,6 +11297,34 @@ function AdminPanelInner({user}){
               No institutes match your search.
             </div>
           )}
+          <button
+            className="admin-mobile-touch"
+            type="button"
+            onClick={openDailyLedgrReport}
+            style={{
+              width:"100%",
+              background:"linear-gradient(180deg,#F8FBFF 0%,#EEF4FF 100%)",
+              border:"1px solid #C7D7F5",
+              borderRadius:18,
+              padding:"13px 13px",
+              display:"flex",
+              alignItems:"center",
+              gap:12,
+              cursor:"pointer",
+              textAlign:"left",
+              boxShadow:reduceEffects ? "none" : "0 12px 24px rgba(29,78,216,0.08)",
+              WebkitTapHighlightColor:"transparent",
+              marginTop:10,
+            }}>
+            <div style={{width:40,height:40,borderRadius:14,background:G.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <AppIcon icon={IconChartBar} size={19} color="#FFFFFF" />
+            </div>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:15,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.2}}>Ledgr Daily Report</div>
+              <div style={{fontSize:12,color:G.textM,fontFamily:G.sans,lineHeight:1.4,marginTop:3}}>All institutes at a glance</div>
+            </div>
+            <AppIcon icon={IconChevronRight} size={18} color={G.blue} />
+          </button>
         </div>
         <MobileBottomNav/>
       </div>
@@ -12165,6 +12219,33 @@ function AdminPanelInner({user}){
                     </div>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={openDailyLedgrReport}
+                  style={{
+                    width:"100%",
+                    margin:"8px 0 2px",
+                    border:"1px solid #C7D7F5",
+                    borderRadius:16,
+                    background:"linear-gradient(180deg,#F8FBFF 0%,#EEF4FF 100%)",
+                    padding:"13px 12px",
+                    display:"flex",
+                    alignItems:"center",
+                    gap:10,
+                    cursor:"pointer",
+                    textAlign:"left",
+                    boxShadow:reduceEffects ? "none" : "0 10px 22px rgba(29,78,216,0.08)",
+                    WebkitTapHighlightColor:"transparent",
+                  }}>
+                  <div style={{width:34,height:34,borderRadius:12,background:G.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <AppIcon icon={IconChartBar} size={17} color="#FFFFFF" />
+                  </div>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:14,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.2}}>Ledgr Daily Report</div>
+                    <div style={{fontSize:11.5,color:G.textM,fontFamily:G.sans,lineHeight:1.35,marginTop:3}}>All institutes at a glance</div>
+                  </div>
+                  <AppIcon icon={IconChevronRight} size={16} color={G.blue} />
+                </button>
               </div>
             </>
           )}
