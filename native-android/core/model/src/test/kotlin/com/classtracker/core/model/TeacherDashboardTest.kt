@@ -71,5 +71,9 @@ class TeacherDashboardTest {
         assertEquals(1, dashboard.classCount)
         assertEquals(1, dashboard.entryCountToday)
         assertEquals(75, dashboard.studyMinutesToday)
+        assertEquals(1, dashboard.loggedClassCountToday)
+        assertEquals(1, dashboard.entryCountThisMonth)
+        assertEquals(1, dashboard.instituteCount)
+        assertTrue("class-1" in dashboard.loggedClassIdsToday)
     }
 }

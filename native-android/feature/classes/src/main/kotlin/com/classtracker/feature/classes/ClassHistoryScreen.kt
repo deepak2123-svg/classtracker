@@ -1,8 +1,10 @@
 package com.classtracker.feature.classes
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,8 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.classtracker.core.designsystem.LedgrClassCard
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrSectionHeading
+import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
 
@@ -32,25 +36,28 @@ fun ClassHistoryScreen(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = 20.dp,
-            top = 22.dp,
-            end = 20.dp,
-            bottom = 28.dp,
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            top = 14.dp,
+            end = 16.dp,
+            bottom = 30.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
+            LedgrClassCard(
+                sectionName = teacherClass.sectionName,
+                instituteName = teacherClass.instituteName,
+                subjectName = teacherClass.subjectName,
+                detail = "${entries.size} ${if (entries.size == 1) "entry" else "entries"} in history",
+            )
+        }
+
+        item {
             LedgrSectionHeading(
-                title = teacherClass.sectionName,
-                supportingText = buildString {
-                    append(teacherClass.instituteName)
-                    if (teacherClass.subjectName.isNotBlank()) {
-                        append(" | ")
-                        append(teacherClass.subjectName)
-                    }
-                },
-                modifier = Modifier.padding(bottom = 8.dp),
+                title = "Teaching history",
+                supportingText = "Oldest entries first",
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
 
@@ -81,36 +88,41 @@ private fun EntryCard(entry: TeacherEntry) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        Column {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = formatDateKey(entry.dateKey),
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = colors.teal,
                 )
                 Text(
                     text = formatTime(entry.timeStart, entry.timeEnd),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.textMuted,
                 )
             }
-            Text(
-                text = entry.title.ifBlank { "Teaching entry" },
-                style = MaterialTheme.typography.titleMedium,
-            )
-            if (entry.body.isNotBlank()) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 Text(
-                    text = entry.body,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = entry.title.ifBlank { "Teaching entry" },
+                    style = MaterialTheme.typography.titleMedium,
                 )
+                if (entry.body.isNotBlank()) {
+                    Text(
+                        text = entry.body,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textMuted,
+                    )
+                }
             }
         }
     }

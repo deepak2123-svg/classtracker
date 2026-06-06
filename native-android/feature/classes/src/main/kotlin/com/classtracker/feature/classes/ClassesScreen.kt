@@ -1,59 +1,132 @@
 package com.classtracker.feature.classes
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.School
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.classtracker.core.designsystem.LedgrClassCard
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrSectionHeading
 import com.classtracker.core.designsystem.LedgrTheme
+import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.model.TeacherClass
+
+private const val AllInstitutes = "All classes"
 
 @Composable
 fun ClassesScreen(
     classes: List<TeacherClass>,
     entryCount: (String) -> Int,
+    hasEntryToday: (String) -> Boolean,
     onClassClick: (TeacherClass) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val institutes = remember(classes) {
+        classes.map(TeacherClass::instituteName).distinct()
+    }
+    var selectedInstitute by rememberSaveable { mutableStateOf(AllInstitutes) }
+    val visibleClasses = remember(classes, selectedInstitute) {
+        if (selectedInstitute == AllInstitutes) {
+            classes
+        } else {
+            classes.filter { it.instituteName == selectedInstitute }
+        }
+    }
+
+    if (selectedInstitute != AllInstitutes && selectedInstitute !in institutes) {
+        selectedInstitute = AllInstitutes
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = 20.dp,
-            top = 22.dp,
-            end = 20.dp,
-            bottom = 28.dp,
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            top = 14.dp,
+            end = 16.dp,
+            bottom = 30.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Classes",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = "${classes.size} assigned across ${institutes.size} " +
+                        if (institutes.size == 1) "institute" else "institutes",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.textMuted,
+                )
+            }
+        }
+
+        if (institutes.size > 1) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "INSTITUTE FILTER",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textMuted,
+                        modifier = Modifier.padding(horizontal = 2.dp),
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(end = 2.dp),
+                    ) {
+                        items(listOf(AllInstitutes) + institutes) { institute ->
+                            val selected = selectedInstitute == institute
+                            FilterChip(
+                                selected = selected,
+                                onClick = { selectedInstitute = institute },
+                                label = {
+                                    Text(
+                                        text = institute,
+                                        maxLines = 1,
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
             LedgrSectionHeading(
-                title = "Classes",
-                supportingText = "${classes.size} assigned",
-                modifier = Modifier.padding(bottom = 8.dp),
+                title = "Your classes",
+                supportingText = "${visibleClasses.size} ${if (visibleClasses.size == 1) "class" else "classes"} ready",
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
 
-        if (classes.isEmpty()) {
+        if (visibleClasses.isEmpty()) {
             item {
                 LedgrEmptyState(
                     title = "No assigned classes",
@@ -63,12 +136,16 @@ fun ClassesScreen(
             }
         } else {
             items(
-                items = classes,
+                items = visibleClasses,
                 key = TeacherClass::id,
             ) { teacherClass ->
-                ClassCard(
-                    teacherClass = teacherClass,
+                LedgrClassCard(
+                    sectionName = teacherClass.sectionName,
+                    instituteName = teacherClass.instituteName,
+                    subjectName = teacherClass.subjectName,
+                    detail = classTimeLabel(teacherClass),
                     entryCount = entryCount(teacherClass.id),
+                    loggedToday = hasEntryToday(teacherClass.id),
                     onClick = { onClassClick(teacherClass) },
                 )
             }
@@ -76,65 +153,14 @@ fun ClassesScreen(
     }
 }
 
-@Composable
-private fun ClassCard(
-    teacherClass: TeacherClass,
-    entryCount: Int,
-    onClick: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = teacherClass.sectionName,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = teacherClass.instituteName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (teacherClass.subjectName.isNotBlank()) {
-                    Text(
-                        text = teacherClass.subjectName,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 5.dp),
-                    )
-                }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = entryCount.toString(),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = if (entryCount == 1) "entry" else "entries",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Icon(
-                imageVector = Icons.Outlined.ChevronRight,
-                contentDescription = "Open class",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+private fun classTimeLabel(teacherClass: TeacherClass): String = when {
+    !teacherClass.startTime.isNullOrBlank() && !teacherClass.endTime.isNullOrBlank() ->
+        "${teacherClass.startTime} - ${teacherClass.endTime}"
+    !teacherClass.startTime.isNullOrBlank() -> teacherClass.startTime.orEmpty()
+    else -> "Schedule not set"
 }
 
-@Preview(showBackground = true, widthDp = 390, heightDp = 760)
+@Preview(showBackground = true, widthDp = 390, heightDp = 800)
 @Composable
 private fun ClassesScreenPreview() {
     LedgrTheme(darkTheme = false) {
@@ -145,11 +171,12 @@ private fun ClassesScreenPreview() {
                     sectionName = "KESHAV-1",
                     instituteName = "Genesis, Panipat",
                     subjectName = "Physics",
-                    startTime = null,
-                    endTime = null,
+                    startTime = "09:00",
+                    endTime = "10:15",
                 ),
             ),
             entryCount = { 4 },
+            hasEntryToday = { true },
             onClassClick = {},
         )
     }

@@ -58,6 +58,8 @@ class FirebaseTeacherDataRepository(
             noteDocuments = noteDocuments,
             instituteConfig = institutesDeferred.await(),
             sectionConfig = sectionsDeferred.await(),
+            isFromCache = mainSnapshot.metadata.isFromCache,
+            loadedAtMillis = System.currentTimeMillis(),
         )
     }
 }

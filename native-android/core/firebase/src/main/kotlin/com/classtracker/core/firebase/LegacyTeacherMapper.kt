@@ -13,6 +13,8 @@ internal fun mapLegacyTeacherSnapshot(
     noteDocuments: Map<String, Map<String, Any?>>,
     instituteConfig: Map<String, Any?>,
     sectionConfig: Map<String, Any?>,
+    isFromCache: Boolean = false,
+    loadedAtMillis: Long = 0L,
 ): TeacherSnapshot {
     val classMaps = legacyClassMaps(main)
     val classes = classMaps
@@ -65,6 +67,8 @@ internal fun mapLegacyTeacherSnapshot(
         availableInstitutes = uniqueLabels(availableInstitutes + classInstitutes),
         configuredInstituteCount = sectionConfig.keys.count { it.isNotBlank() },
         revision = main.map("_meta").long("revision"),
+        isFromCache = isFromCache,
+        loadedAtMillis = loadedAtMillis,
     )
 }
 

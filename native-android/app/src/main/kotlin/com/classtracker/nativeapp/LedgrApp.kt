@@ -2,13 +2,16 @@ package com.classtracker.nativeapp
 
 import android.app.Activity
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
@@ -19,9 +22,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -41,6 +47,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.classtracker.core.designsystem.LedgrBrandMark
+import com.classtracker.core.designsystem.LedgrEmptyState
+import com.classtracker.core.designsystem.LedgrLoadingState
+import com.classtracker.core.designsystem.LedgrOfflineBanner
+import com.classtracker.core.designsystem.LedgrTheme
+import com.classtracker.core.designsystem.LedgrThemeMode
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.feature.auth.AuthScreen
 import com.classtracker.feature.classes.ClassHistoryScreen
@@ -60,6 +72,8 @@ fun LedgrApp(
     environment: String,
     googleWebClientId: String,
     googleSignInConfigured: Boolean,
+    themeMode: LedgrThemeMode,
+    onThemeModeChange: (LedgrThemeMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -113,6 +127,8 @@ fun LedgrApp(
             environment = environment,
             refreshing = state.refreshing,
             errorMessage = state.errorMessage,
+            themeMode = themeMode,
+            onThemeModeChange = onThemeModeChange,
             onRefresh = viewModel::refresh,
             onClearError = viewModel::clearError,
             onSignOut = viewModel::signOut,
@@ -128,6 +144,8 @@ private fun TeacherApp(
     environment: String,
     refreshing: Boolean,
     errorMessage: String?,
+    themeMode: LedgrThemeMode,
+    onThemeModeChange: (LedgrThemeMode) -> Unit,
     onRefresh: () -> Unit,
     onClearError: () -> Unit,
     onSignOut: () -> Unit,
@@ -140,6 +158,8 @@ private fun TeacherApp(
     val isClassHistory = currentRoute == ClassHistoryRoute
     val isBeta = environment.equals("beta", ignoreCase = true)
     val snackbarHostState = remember { SnackbarHostState() }
+    val todayKey = todayKey()
+    val dashboard = snapshot.dashboard(todayKey)
 
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
@@ -155,10 +175,31 @@ private fun TeacherApp(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = if (isClassHistory) "Class history" else "Ledgr",
-                        fontWeight = FontWeight.Bold,
-                    )
+                    if (isClassHistory) {
+                        Text(
+                            text = "Class history",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            LedgrBrandMark(size = 34)
+                            Column {
+                                Text(
+                                    text = "Ledgr",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                )
+                                Text(
+                                    text = "Teacher workspace",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = LedgrTheme.colors.textMuted,
+                                )
+                            }
+                        }
+                    }
                 },
                 navigationIcon = {
                     if (isClassHistory) {
@@ -178,7 +219,7 @@ private fun TeacherApp(
                         ) {
                             if (refreshing) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.padding(10.dp),
+                                    modifier = Modifier.size(20.dp),
                                     strokeWidth = 2.dp,
                                 )
                             } else {
@@ -210,77 +251,114 @@ private fun TeacherApp(
         },
         bottomBar = {
             if (!isClassHistory) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                    AppDestination.entries.forEach { destination ->
-                        val selected = currentDestination
-                            ?.hierarchy
-                            ?.any { it.route == destination.route } == true
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 8.dp,
+                ) {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 0.dp,
+                    ) {
+                        AppDestination.entries.forEach { destination ->
+                            val selected = currentDestination
+                                ?.hierarchy
+                                ?.any { it.route == destination.route } == true
 
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = {
+                                    navController.navigate(destination.route) {
+                                        popUpTo(navController.graph.startDestinationId) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = destination.icon,
-                                    contentDescription = destination.label,
-                                )
-                            },
-                            label = { Text(destination.label) },
-                        )
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = destination.icon,
+                                        contentDescription = destination.label,
+                                    )
+                                },
+                                label = { Text(destination.label) },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                    unselectedIconColor = LedgrTheme.colors.textMuted,
+                                    unselectedTextColor = LedgrTheme.colors.textMuted,
+                                ),
+                            )
+                        }
                     }
                 }
             }
         },
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = AppDestination.Today.route,
-            modifier = Modifier.padding(innerPadding),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
-            composable(AppDestination.Today.route) {
-                TodayScreen(
-                    dashboard = snapshot.dashboard(todayKey()),
+            if (snapshot.isFromCache) {
+                LedgrOfflineBanner(
+                    modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp),
                 )
             }
-            composable(AppDestination.Classes.route) {
-                ClassesScreen(
-                    classes = snapshot.classes,
-                    entryCount = { classId -> snapshot.entriesForClass(classId).size },
-                    onClassClick = { teacherClass ->
-                        navController.navigate("class/${Uri.encode(teacherClass.id)}")
-                    },
-                )
-            }
-            composable(AppDestination.Profile.route) {
-                ProfileScreen(
-                    profile = snapshot.profile,
-                    environmentLabel = environment.replaceFirstChar { it.uppercase() },
-                    revision = snapshot.revision,
-                    onSignOut = onSignOut,
-                )
-            }
-            composable(ClassHistoryRoute) { entry ->
-                val classId = Uri.decode(entry.arguments?.getString("classId").orEmpty())
-                val teacherClass = snapshot.classes.firstOrNull { it.id == classId }
-                if (teacherClass == null) {
-                    FullScreenError(
-                        message = "This class is no longer available.",
-                        onRetry = { navController.navigateUp() },
-                        onSignOut = onSignOut,
-                    )
-                } else {
-                    ClassHistoryScreen(
-                        teacherClass = teacherClass,
-                        entries = snapshot.entriesForClass(classId),
-                    )
+            Box(modifier = Modifier.weight(1f)) {
+                NavHost(
+                    navController = navController,
+                    startDestination = AppDestination.Today.route,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    composable(AppDestination.Today.route) {
+                        TodayScreen(dashboard = dashboard)
+                    }
+                    composable(AppDestination.Classes.route) {
+                        ClassesScreen(
+                            classes = snapshot.classes,
+                            entryCount = { classId -> snapshot.entriesForClass(classId).size },
+                            hasEntryToday = { classId ->
+                                snapshot.entries.any {
+                                    it.classId == classId && it.dateKey == todayKey
+                                }
+                            },
+                            onClassClick = { teacherClass ->
+                                navController.navigate("class/${Uri.encode(teacherClass.id)}")
+                            },
+                        )
+                    }
+                    composable(AppDestination.Profile.route) {
+                        ProfileScreen(
+                            profile = snapshot.profile,
+                            environmentLabel = environment.replaceFirstChar { it.uppercase() },
+                            revision = snapshot.revision,
+                            loggedToday = dashboard.loggedClassCountToday,
+                            monthEntries = dashboard.entryCountThisMonth,
+                            activeClasses = dashboard.classCount,
+                            instituteCount = dashboard.instituteCount,
+                            themeMode = themeMode,
+                            onThemeModeChange = onThemeModeChange,
+                            onSignOut = onSignOut,
+                        )
+                    }
+                    composable(ClassHistoryRoute) { entry ->
+                        val classId = Uri.decode(entry.arguments?.getString("classId").orEmpty())
+                        val teacherClass = snapshot.classes.firstOrNull { it.id == classId }
+                        if (teacherClass == null) {
+                            FullScreenError(
+                                message = "This class is no longer available.",
+                                onRetry = { navController.navigateUp() },
+                                onSignOut = onSignOut,
+                            )
+                        } else {
+                            ClassHistoryScreen(
+                                teacherClass = teacherClass,
+                                entries = snapshot.entriesForClass(classId),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -296,17 +374,7 @@ private fun FullScreenLoading(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            CircularProgressIndicator()
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        LedgrLoadingState(label = label)
     }
 }
 
@@ -324,17 +392,20 @@ private fun FullScreenError(
         contentAlignment = Alignment.Center,
     ) {
         Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyLarge,
+            LedgrEmptyState(
+                title = "Workspace unavailable",
+                message = message,
             )
             Button(onClick = onRetry) {
                 Text("Try again")
             }
-            Button(onClick = onSignOut) {
+            OutlinedButton(
+                onClick = onSignOut,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            ) {
                 Text("Sign out")
             }
         }
