@@ -2907,7 +2907,7 @@ const CENTRE_SUMMARY_CSS = `
   .institute-divider { border: none; margin: 0; page-break-before: always; }
   @media print {
     @page {
-      margin: 1.1cm 1.2cm;
+      margin: 0;
       size: A4 portrait;
     }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -2916,7 +2916,13 @@ const CENTRE_SUMMARY_CSS = `
       padding: 0;
       -webkit-print-color-adjust: exact;
     }
-    .report-page { min-height: 0; }
+    .report-page {
+      min-height: 0;
+      padding: 1.1cm 1.2cm;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }
+    body > .page-footer { margin: 0 1.2cm 1.1cm; }
     .teacher-block { page-break-inside: avoid; break-inside: avoid; }
     .pending-table tr { page-break-inside: avoid; break-inside: avoid; }
     .scorecard, .pending-breakdown, .progress-wrap, .centre-card, .executive-summary { page-break-inside: avoid; break-inside: avoid; }
