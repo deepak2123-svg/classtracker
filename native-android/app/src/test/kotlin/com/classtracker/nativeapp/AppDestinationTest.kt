@@ -13,7 +13,7 @@ class AppDestinationTest {
     }
 
     @Test
-    fun todayIsTheFirstDestination() {
-        assertTrue(AppDestination.entries.first() == AppDestination.Today)
+    fun homeIsTheFirstDestination() {
+        assertTrue(AppDestination.entries.first() == AppDestination.Home)
     }
 }

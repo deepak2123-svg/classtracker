@@ -2,6 +2,7 @@ package com.classtracker.core.designsystem
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Sync
@@ -35,6 +37,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Immutable
 data class LedgrSectionTone(
@@ -47,38 +50,52 @@ data class LedgrSectionTone(
 @Composable
 fun ledgrSectionTone(seed: String): LedgrSectionTone {
     val dark = MaterialTheme.colorScheme.background.red < 0.15f
-    val index = (seed.lowercase().hashCode() and Int.MAX_VALUE) % 6
+    val index = ledgrToneIndex(seed)
     return if (dark) {
         listOf(
             LedgrSectionTone(Color(0xFF60A5FA), Color(0xFF172A42), Color(0xFF294466), Color(0xFFE7F0FF)),
-            LedgrSectionTone(Color(0xFF5DD397), Color(0xFF173028), Color(0xFF285242), Color(0xFFE7FFF4)),
-            LedgrSectionTone(Color(0xFFFBBF24), Color(0xFF342B19), Color(0xFF5A4825), Color(0xFFFFF6D9)),
-            LedgrSectionTone(Color(0xFFF472B6), Color(0xFF392237), Color(0xFF5D3858), Color(0xFFFFE8F7)),
-            LedgrSectionTone(Color(0xFFA78BFA), Color(0xFF2A2542), Color(0xFF453C69), Color(0xFFF1EDFF)),
+            LedgrSectionTone(Color(0xFF60A5FA), Color(0xFF172A42), Color(0xFF294466), Color(0xFFE7F0FF)),
             LedgrSectionTone(Color(0xFF4DB7C8), Color(0xFF173039), Color(0xFF28505B), Color(0xFFE4FBFF)),
+            LedgrSectionTone(Color(0xFF4DB7C8), Color(0xFF173039), Color(0xFF28505B), Color(0xFFE4FBFF)),
+            LedgrSectionTone(Color(0xFF5DD397), Color(0xFF173028), Color(0xFF285242), Color(0xFFE7FFF4)),
+            LedgrSectionTone(Color(0xFF4DB7C8), Color(0xFF173039), Color(0xFF28505B), Color(0xFFE4FBFF)),
+            LedgrSectionTone(Color(0xFF60A5FA), Color(0xFF172A42), Color(0xFF294466), Color(0xFFE7F0FF)),
+            LedgrSectionTone(Color(0xFF5DD397), Color(0xFF173028), Color(0xFF285242), Color(0xFFE7FFF4)),
         )[index]
     } else {
         listOf(
-            LedgrSectionTone(Color(0xFF2563EB), Color(0xFFEFF5FF), Color(0xFFC9DBFF), Color(0xFF173B78)),
-            LedgrSectionTone(Color(0xFF159B55), Color(0xFFECFDF3), Color(0xFFB7E7CA), Color(0xFF14532D)),
-            LedgrSectionTone(Color(0xFFD97706), Color(0xFFFFF7ED), Color(0xFFFED7AA), Color(0xFF7C2D12)),
-            LedgrSectionTone(Color(0xFFDB2777), Color(0xFFFDF2F8), Color(0xFFFBCFE8), Color(0xFF831843)),
-            LedgrSectionTone(Color(0xFF7C3AED), Color(0xFFF5F3FF), Color(0xFFDDD6FE), Color(0xFF4C1D95)),
-            LedgrSectionTone(Color(0xFF0F6B78), Color(0xFFE7F4F6), Color(0xFFB9DDE2), Color(0xFF164E63)),
+            LedgrSectionTone(Color(0xFF1D4ED8), Color(0xFFDCE9FF), Color(0xFFAFCBFF), Color(0xFF1E3A8A)),
+            LedgrSectionTone(Color(0xFF2563EB), Color(0xFFDFEBFF), Color(0xFFBED4FF), Color(0xFF1D4ED8)),
+            LedgrSectionTone(Color(0xFF0F766E), Color(0xFFD7F0EA), Color(0xFFA7DED1), Color(0xFF115E59)),
+            LedgrSectionTone(Color(0xFF0891B2), Color(0xFFD9F0F7), Color(0xFFA9DAE8), Color(0xFF0E7490)),
+            LedgrSectionTone(Color(0xFF15803D), Color(0xFFDCF7E7), Color(0xFFB7E6C8), Color(0xFF166534)),
+            LedgrSectionTone(Color(0xFF0F6B78), Color(0xFFD8ECEF), Color(0xFFB0D8DE), Color(0xFF155E75)),
+            LedgrSectionTone(Color(0xFF1E40AF), Color(0xFFD9E5FF), Color(0xFFAFC3F1), Color(0xFF1E3A8A)),
+            LedgrSectionTone(Color(0xFF047857), Color(0xFFD8F4E8), Color(0xFFAFE2CA), Color(0xFF065F46)),
         )[index]
     }
+}
+
+private fun ledgrToneIndex(value: String): Int {
+    val key = value.trim().replace(Regex("\\s+"), " ").lowercase()
+    if (key.isEmpty()) return 0
+    var hash = 5381L
+    key.forEach { character ->
+        hash = (((hash shl 5) + hash) + character.code) and 0xFFFF_FFFFL
+    }
+    return (hash % 8L).toInt()
 }
 
 @Composable
 fun LedgrBrandMark(
     modifier: Modifier = Modifier,
-    size: Int = 38,
+    size: Int = 40,
 ) {
     Surface(
         modifier = modifier.size(size.dp),
-        color = LedgrBlue,
+        color = LedgrTheme.colors.teal,
         contentColor = Color.White,
-        shape = MaterialTheme.shapes.medium,
+        shape = RoundedCornerShape(12.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
@@ -200,6 +217,7 @@ fun LedgrClassCard(
     detail: String? = null,
     entryCount: Int? = null,
     loggedToday: Boolean? = null,
+    compact: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
     val tone = ledgrSectionTone(sectionName)
@@ -212,7 +230,15 @@ fun LedgrClassCard(
     Card(
         modifier = clickableModifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, tone.border),
+        border = BorderStroke(
+            width = 1.5.dp,
+            color = if (MaterialTheme.colorScheme.background.red < 0.15f) {
+                LedgrTheme.colors.outlineStrong
+            } else {
+                Color(0xFF0F172A).copy(alpha = 0.92f)
+            },
+        ),
+        shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column {
@@ -220,7 +246,10 @@ fun LedgrClassCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(tone.surface)
-                    .padding(horizontal = 15.dp, vertical = 14.dp),
+                    .padding(
+                        horizontal = 15.dp,
+                        vertical = if (compact) 13.dp else 14.dp,
+                    ),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -230,9 +259,12 @@ fun LedgrClassCard(
                 ) {
                     Text(
                         text = sectionName,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = if (compact) 24.sp else 20.sp,
+                            lineHeight = if (compact) 26.sp else 26.sp,
+                        ),
                         color = tone.text,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Row(
@@ -259,11 +291,14 @@ fun LedgrClassCard(
                     }
                 }
                 loggedToday?.let {
-                    LedgrStatusDot(active = it, modifier = Modifier.padding(top = 2.dp))
+                    ClassCompletionRing(
+                        active = it,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
             }
 
-            if (detail != null || entryCount != null) {
+            if (!compact && (detail != null || entryCount != null)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -292,6 +327,29 @@ fun LedgrClassCard(
             }
         }
     }
+}
+
+@Composable
+private fun ClassCompletionRing(
+    active: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val borderColor = if (active) LedgrTheme.colors.green else LedgrTheme.colors.textSecondary
+    val fillColor = if (active) LedgrTheme.colors.green.copy(alpha = 0.16f) else Color.Transparent
+    Box(
+        modifier = modifier
+            .size(22.dp)
+            .semantics {
+                contentDescription = if (active) {
+                    "Today's entry is filled"
+                } else {
+                    "Today's entry is not filled"
+                }
+            }
+            .clip(CircleShape)
+            .background(fillColor)
+            .border(2.dp, borderColor, CircleShape),
+    )
 }
 
 @Composable

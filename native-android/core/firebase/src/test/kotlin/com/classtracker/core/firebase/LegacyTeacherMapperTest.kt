@@ -68,4 +68,36 @@ class LegacyTeacherMapperTest {
         assertEquals(listOf("Genesis", "KIS"), snapshot.availableInstitutes)
         assertEquals(7L, snapshot.revision)
     }
+
+    @Test
+    fun ordersActiveClassesLikeTheTeacherWebApp() {
+        val snapshot = mapLegacyTeacherSnapshot(
+            teacher = AuthenticatedTeacher(
+                uid = "teacher-1",
+                displayName = "Teacher",
+                email = "teacher@example.com",
+                photoUrl = null,
+            ),
+            main = mapOf(
+                "classes" to listOf(
+                    mapOf(
+                        "id" to "older",
+                        "section" to "Older",
+                        "created" to 100L,
+                    ),
+                    mapOf(
+                        "id" to "newer",
+                        "section" to "Newer",
+                        "created" to 200L,
+                    ),
+                ),
+            ),
+            teacherIndex = emptyMap(),
+            noteDocuments = emptyMap(),
+            instituteConfig = emptyMap(),
+            sectionConfig = emptyMap(),
+        )
+
+        assertEquals(listOf("newer", "older"), snapshot.classes.map { it.id })
+    }
 }

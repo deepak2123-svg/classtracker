@@ -42,6 +42,7 @@ data class TeacherClass(
     val subjectName: String,
     val startTime: String?,
     val endTime: String?,
+    val createdAt: Long = 0L,
 )
 
 data class TeacherProfile(

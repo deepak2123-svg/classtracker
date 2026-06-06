@@ -10,32 +10,39 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.outlined.Apartment
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.classtracker.core.designsystem.LedgrForest
-import com.classtracker.core.designsystem.LedgrSectionHeading
-import com.classtracker.core.designsystem.LedgrTealBright
+import com.classtracker.core.designsystem.LedgrTeal
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.designsystem.LedgrThemeMode
@@ -44,14 +51,13 @@ import com.classtracker.core.model.TeacherProfile
 @Composable
 fun ProfileScreen(
     profile: TeacherProfile,
-    environmentLabel: String,
-    revision: Long,
     loggedToday: Int,
     monthEntries: Int,
     activeClasses: Int,
     instituteCount: Int,
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
+    onOpenStats: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -61,7 +67,7 @@ fun ProfileScreen(
             start = 16.dp,
             top = 14.dp,
             end = 16.dp,
-            bottom = 30.dp,
+            bottom = 28.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -74,88 +80,62 @@ fun ProfileScreen(
                 instituteCount = instituteCount,
             )
         }
-
         item {
-            LedgrSectionHeading(
-                title = "Workspace",
-                supportingText = "Your teacher account",
-                modifier = Modifier.padding(top = 4.dp),
+            Text(
+                text = "WORKSPACE",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSubtle,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
             )
         }
-
         item {
-            ProfileDetailCard(
-                icon = Icons.Outlined.Apartment,
-                title = "Institutes",
-                value = profile.institutes.joinToString().ifBlank { "No institute assigned" },
+            ProfileActionCard(
+                icon = Icons.Outlined.BarChart,
+                title = "View Stats",
+                subtitle = "See teaching hours and class breakdowns.",
+                accent = Color(0xFF1455B3),
+                onClick = onOpenStats,
             )
         }
-
         item {
-            ProfileDetailCard(
-                icon = Icons.AutoMirrored.Outlined.MenuBook,
-                title = "Subjects",
-                value = profile.subjects.joinToString().ifBlank { "No subjects assigned" },
+            ProfileActionCard(
+                icon = Icons.Outlined.NotificationsNone,
+                title = "Notifications",
+                subtitle = "No unread updates right now.",
+                accent = Color(0xFFD97706),
             )
         }
-
         item {
-            ThemeChooser(
+            ProfileActionCard(
+                icon = Icons.Outlined.Archive,
+                title = "Recycle Bin",
+                subtitle = "Nothing in the recycle bin right now.",
+                accent = colors.textSecondary,
+            )
+        }
+        item {
+            ProfileActionCard(
+                icon = Icons.Outlined.Download,
+                title = "Export Data",
+                subtitle = "Download your teacher entries from this shared panel.",
+                accent = colors.green,
+            )
+        }
+        item {
+            ThemeCard(
                 themeMode = themeMode,
                 onThemeModeChange = onThemeModeChange,
             )
         }
-
         item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface,
-                shape = MaterialTheme.shapes.large,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column {
-                        Text(
-                            text = "APP STATUS",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colors.textMuted,
-                        )
-                        Text(
-                            text = environmentLabel,
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = 3.dp),
-                        )
-                    }
-                    Text(
-                        text = "Cloud revision $revision",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.teal,
-                    )
-                }
-            }
-        }
-
-        item {
-            OutlinedButton(
+            ProfileActionCard(
+                icon = Icons.AutoMirrored.Outlined.Logout,
+                title = "Sign Out",
+                subtitle = "Sign out of your teacher workspace.",
+                accent = colors.red,
+                danger = true,
                 onClick = onSignOut,
-                modifier = Modifier.fillMaxWidth(),
-                border = BorderStroke(1.dp, colors.red.copy(alpha = 0.42f)),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.Logout,
-                    contentDescription = null,
-                    tint = colors.red,
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                Text(
-                    text = "Sign out",
-                    color = colors.red,
-                )
-            }
+            )
         }
     }
 }
@@ -168,149 +148,166 @@ private fun ProfileHero(
     activeClasses: Int,
     instituteCount: Int,
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = LedgrForest,
-        contentColor = Color.White,
-        shape = MaterialTheme.shapes.extraLarge,
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(28.dp))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(LedgrForest, LedgrTeal),
+                ),
+            )
+            .padding(horizontal = 20.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(13.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Box(
+                modifier = Modifier
+                    .size(62.dp)
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp)),
+                contentAlignment = Alignment.Center,
             ) {
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
-                        .background(Color.White.copy(alpha = 0.12f), MaterialTheme.shapes.large),
+                        .size(44.dp)
+                        .background(Color.White.copy(alpha = 0.14f), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(LedgrTealBright, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = initials(profile.name),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                        )
-                    }
-                }
-                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "WORKSPACE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.62f),
-                    )
-                    Text(
-                        text = profile.name.ifBlank { "Teacher" },
-                        style = MaterialTheme.typography.headlineSmall,
+                        text = initials(profile.name),
+                        style = MaterialTheme.typography.titleLarge,
                         color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 3.dp),
-                    )
-                    Text(
-                        text = profile.email,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.72f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 3.dp),
                     )
                 }
             }
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ProfileHeroMetric("Logged today", loggedToday.toString(), Modifier.weight(1f))
-                    ProfileHeroMetric("This month", monthEntries.toString(), Modifier.weight(1f))
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ProfileHeroMetric("Active classes", activeClasses.toString(), Modifier.weight(1f))
-                    ProfileHeroMetric("Institutes", instituteCount.toString(), Modifier.weight(1f))
-                }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "WORKSPACE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.60f),
+                )
+                Text(
+                    text = profile.name.ifBlank { "Teacher" },
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = 28.sp,
+                        lineHeight = 30.sp,
+                    ),
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 5.dp),
+                )
+                Text(
+                    text = profile.email.ifBlank { "No email available" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.68f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 5.dp),
+                )
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                HeroMetric("Logged Today", loggedToday.toString(), Modifier.weight(1f))
+                HeroMetric("This Month", monthEntries.toString(), Modifier.weight(1f))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                HeroMetric("Active Classes", activeClasses.toString(), Modifier.weight(1f))
+                HeroMetric("Institutes", instituteCount.toString(), Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun ProfileHeroMetric(
+private fun HeroMetric(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
-            .background(Color.White.copy(alpha = 0.09f), MaterialTheme.shapes.medium)
+            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
             .padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Text(
             text = label.uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.58f),
+            color = Color.White.copy(alpha = 0.52f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
             color = Color.White,
         )
     }
 }
 
 @Composable
-private fun ProfileDetailCard(
+private fun ProfileActionCard(
     icon: ImageVector,
     title: String,
-    value: String,
+    subtitle: String,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    danger: Boolean = false,
+    onClick: (() -> Unit)? = null,
 ) {
+    val clickModifier = if (onClick == null) modifier else modifier.clickable(onClick = onClick)
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = clickModifier.fillMaxWidth(),
+        color = if (danger) colors.errorSurface else MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(
+            1.dp,
+            if (danger) colors.red.copy(alpha = 0.22f) else MaterialTheme.colorScheme.outline,
+        ),
+        shadowElevation = 1.dp,
     ) {
         Row(
-            modifier = Modifier.padding(15.dp),
-            horizontalArrangement = Arrangement.spacedBy(13.dp),
-            verticalAlignment = Alignment.Top,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.primary,
-                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.size(48.dp),
+                color = accent.copy(alpha = 0.12f),
+                contentColor = accent,
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.16f)),
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.padding(10.dp),
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
             }
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
+                    color = if (danger) colors.red else MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = value,
+                    text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.textMuted,
                 )
@@ -320,47 +317,71 @@ private fun ProfileDetailCard(
 }
 
 @Composable
-private fun ThemeChooser(
+private fun ThemeCard(
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(
-            modifier = Modifier.padding(15.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Column {
-                Text(
-                    text = "Choose your theme",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = "Match Ledgr to daytime or low-light use.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textMuted,
-                    modifier = Modifier.padding(top = 3.dp),
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    color = colors.teal.copy(alpha = 0.12f),
+                    contentColor = colors.teal,
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (themeMode == LedgrThemeMode.Dark) {
+                                Icons.Outlined.DarkMode
+                            } else {
+                                Icons.Outlined.LightMode
+                            },
+                            contentDescription = null,
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Choose your theme",
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
+                    )
+                    Text(
+                        text = "Pick a bright daytime layout or a softer dark mode.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textMuted,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                ThemeOption(
+                ThemePreview(
                     label = "Light",
                     icon = Icons.Outlined.LightMode,
                     selected = themeMode == LedgrThemeMode.Light,
+                    dark = false,
                     onClick = { onThemeModeChange(LedgrThemeMode.Light) },
                     modifier = Modifier.weight(1f),
                 )
-                ThemeOption(
+                ThemePreview(
                     label = "Dark",
                     icon = Icons.Outlined.DarkMode,
                     selected = themeMode == LedgrThemeMode.Dark,
+                    dark = true,
                     onClick = { onThemeModeChange(LedgrThemeMode.Dark) },
                     modifier = Modifier.weight(1f),
                 )
@@ -370,40 +391,109 @@ private fun ThemeChooser(
 }
 
 @Composable
-private fun ThemeOption(
+private fun ThemePreview(
     label: String,
     icon: ImageVector,
     selected: Boolean,
+    dark: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val borderColor = if (selected) colors.teal else MaterialTheme.colorScheme.outline
-    val background = if (selected) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        colors.surfaceSoft
-    }
+    val previewBackground = if (dark) Color(0xFF0A1420) else Color(0xFFF5F7FA)
+    val previewSurface = if (dark) Color.White.copy(alpha = 0.08f) else Color.White
+    val accent = if (dark) Color(0xFF4DB7C8) else colors.teal
     Surface(
         modifier = modifier.clickable(onClick = onClick),
-        color = background,
-        contentColor = if (selected) colors.teal else colors.textSecondary,
-        shape = MaterialTheme.shapes.medium,
-        border = BorderStroke(1.dp, borderColor),
+        color = if (selected) colors.teal.copy(alpha = 0.10f) else colors.surfaceSoft,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(
+            1.dp,
+            if (selected) colors.teal else MaterialTheme.colorScheme.outline,
+        ),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-            )
+        Column(modifier = Modifier.padding(11.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(84.dp)
+                    .background(previewBackground, RoundedCornerShape(14.dp))
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(accent, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                    Surface(
+                        modifier = Modifier.size(18.dp),
+                        shape = CircleShape,
+                        color = Color.Transparent,
+                        border = BorderStroke(2.dp, accent),
+                    ) {
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.padding(2.dp),
+                            )
+                        }
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(11.dp)
+                            .background(previewSurface, CircleShape),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        repeat(2) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(24.dp)
+                                    .background(previewSurface, RoundedCornerShape(8.dp)),
+                            )
+                        }
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                if (selected) {
+                    Text(
+                        text = "ACTIVE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        modifier = Modifier
+                            .background(colors.teal, CircleShape)
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -416,7 +506,7 @@ private fun initials(name: String): String =
         .joinToString("") { it.take(1).uppercase() }
         .ifBlank { "T" }
 
-@Preview(showBackground = true, widthDp = 390, heightDp = 820)
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
 private fun ProfileScreenPreview() {
     LedgrTheme(darkTheme = false) {
@@ -429,14 +519,13 @@ private fun ProfileScreenPreview() {
                 subjects = listOf("GS", "SS"),
                 institutes = listOf("GIS Karnal", "KIS SIP"),
             ),
-            environmentLabel = "Beta",
-            revision = 142,
             loggedToday = 2,
             monthEntries = 18,
             activeClasses = 6,
             instituteCount = 3,
             themeMode = LedgrThemeMode.Light,
             onThemeModeChange = {},
+            onOpenStats = {},
             onSignOut = {},
         )
     }

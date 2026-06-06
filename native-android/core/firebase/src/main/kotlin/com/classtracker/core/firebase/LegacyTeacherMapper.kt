@@ -20,7 +20,8 @@ internal fun mapLegacyTeacherSnapshot(
     val classes = classMaps
         .mapNotNull(::mapLegacyClass)
         .sortedWith(
-            compareBy<TeacherClass> { it.instituteName.lowercase() }
+            compareByDescending<TeacherClass> { it.createdAt }
+                .thenBy { it.instituteName.lowercase() }
                 .thenBy { it.sectionName.lowercase() },
         )
 
@@ -85,6 +86,7 @@ private fun mapLegacyClass(source: Map<String, Any?>): TeacherClass? {
         subjectName = source.string("subject"),
         startTime = source.string("timeStart").ifBlank { null },
         endTime = source.string("timeEnd").ifBlank { null },
+        createdAt = source.long("created"),
     )
 }
 

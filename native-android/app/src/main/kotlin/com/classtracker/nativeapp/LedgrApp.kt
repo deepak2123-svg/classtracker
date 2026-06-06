@@ -10,12 +10,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.Badge
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
@@ -56,9 +56,9 @@ import com.classtracker.core.designsystem.LedgrThemeMode
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.feature.auth.AuthScreen
 import com.classtracker.feature.classes.ClassHistoryScreen
-import com.classtracker.feature.classes.ClassesScreen
+import com.classtracker.feature.classes.StatsScreen
 import com.classtracker.feature.profile.ProfileScreen
-import com.classtracker.feature.today.TodayScreen
+import com.classtracker.feature.today.HomeScreen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -124,12 +124,9 @@ fun LedgrApp(
 
         else -> TeacherApp(
             snapshot = requireNotNull(state.snapshot),
-            environment = environment,
-            refreshing = state.refreshing,
             errorMessage = state.errorMessage,
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
-            onRefresh = viewModel::refresh,
             onClearError = viewModel::clearError,
             onSignOut = viewModel::signOut,
             modifier = modifier,
@@ -141,12 +138,9 @@ fun LedgrApp(
 @Composable
 private fun TeacherApp(
     snapshot: TeacherSnapshot,
-    environment: String,
-    refreshing: Boolean,
     errorMessage: String?,
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
-    onRefresh: () -> Unit,
     onClearError: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
@@ -156,8 +150,8 @@ private fun TeacherApp(
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
     val isClassHistory = currentRoute == ClassHistoryRoute
-    val isBeta = environment.equals("beta", ignoreCase = true)
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val todayKey = todayKey()
     val dashboard = snapshot.dashboard(todayKey)
 
@@ -182,22 +176,18 @@ private fun TeacherApp(
                         )
                     } else {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            LedgrBrandMark(size = 34)
-                            Column {
-                                Text(
-                                    text = "Ledgr",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.ExtraBold,
-                                )
-                                Text(
-                                    text = "Teacher workspace",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = LedgrTheme.colors.textMuted,
-                                )
-                            }
+                            LedgrBrandMark(size = 40)
+                            Text(
+                                text = "Ledgr",
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontSize = 22.sp,
+                                    lineHeight = 24.sp,
+                                ),
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                     }
                 },
@@ -213,33 +203,30 @@ private fun TeacherApp(
                 },
                 actions = {
                     if (!isClassHistory) {
-                        IconButton(
-                            onClick = onRefresh,
-                            enabled = !refreshing,
+                        Surface(
+                            modifier = Modifier
+                                .padding(end = 12.dp)
+                                .size(40.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            contentColor = LedgrTheme.colors.textMuted,
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         ) {
-                            if (refreshing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                            } else {
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "No unread updates right now.",
+                                        )
+                                    }
+                                },
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Outlined.Refresh,
-                                    contentDescription = "Refresh teacher data",
+                                    imageVector = Icons.Outlined.NotificationsNone,
+                                    contentDescription = "Notifications",
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
-                        }
-                    }
-                    if (isBeta) {
-                        Badge(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(end = 12.dp),
-                        ) {
-                            Text(
-                                text = "BETA",
-                                modifier = Modifier.padding(horizontal = 6.dp),
-                            )
                         }
                     }
                 },
@@ -309,21 +296,23 @@ private fun TeacherApp(
             Box(modifier = Modifier.weight(1f)) {
                 NavHost(
                     navController = navController,
-                    startDestination = AppDestination.Today.route,
+                    startDestination = AppDestination.Home.route,
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    composable(AppDestination.Today.route) {
-                        TodayScreen(dashboard = dashboard)
-                    }
-                    composable(AppDestination.Classes.route) {
-                        ClassesScreen(
+                    composable(AppDestination.Home.route) {
+                        HomeScreen(
+                            dashboard = dashboard,
                             classes = snapshot.classes,
-                            entryCount = { classId -> snapshot.entriesForClass(classId).size },
-                            hasEntryToday = { classId ->
-                                snapshot.entries.any {
-                                    it.classId == classId && it.dateKey == todayKey
-                                }
+                            entries = snapshot.entries,
+                            onClassClick = { teacherClass ->
+                                navController.navigate("class/${Uri.encode(teacherClass.id)}")
                             },
+                        )
+                    }
+                    composable(AppDestination.Stats.route) {
+                        StatsScreen(
+                            classes = snapshot.classes,
+                            entries = snapshot.entries,
                             onClassClick = { teacherClass ->
                                 navController.navigate("class/${Uri.encode(teacherClass.id)}")
                             },
@@ -332,14 +321,21 @@ private fun TeacherApp(
                     composable(AppDestination.Profile.route) {
                         ProfileScreen(
                             profile = snapshot.profile,
-                            environmentLabel = environment.replaceFirstChar { it.uppercase() },
-                            revision = snapshot.revision,
                             loggedToday = dashboard.loggedClassCountToday,
                             monthEntries = dashboard.entryCountThisMonth,
                             activeClasses = dashboard.classCount,
                             instituteCount = dashboard.instituteCount,
                             themeMode = themeMode,
                             onThemeModeChange = onThemeModeChange,
+                            onOpenStats = {
+                                navController.navigate(AppDestination.Stats.route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
                             onSignOut = onSignOut,
                         )
                     }
