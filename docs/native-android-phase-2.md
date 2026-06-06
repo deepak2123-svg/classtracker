@@ -4,8 +4,8 @@
 
 - Added Firebase Authentication and Firestore through the Firebase Android BoM.
 - Added native email/password sign-in.
-- Added Google sign-in through Android Credential Manager, feature-gated until
-  the beta Android app is registered in Firebase.
+- Added Google sign-in through Android Credential Manager's dedicated button
+  flow, feature-gated until the beta Android app is registered in Firebase.
 - Added Hilt dependency injection and persistent Firebase Auth sessions.
 - Added read-only adapters for the existing web data:
   - `users/{uid}/appdata/main`
