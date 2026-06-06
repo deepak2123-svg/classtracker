@@ -5509,22 +5509,46 @@ function AdminPanelInner({user}){
       : teacherUids.filter(uid => !hydratedFullData[uid]);
     let loaded = force ? 0 : teacherUids.filter(uid => !!hydratedFullData[uid]).length;
 
-    const seedSnapshot = buildInstituteGlanceSnapshot(hydratedFullData, resolvedConfig);
-    const seedReport = {
-      ...seedSnapshot,
-      configKey,
-      loading: pendingUids.length > 0,
-      loaded,
-      total,
-      ready: pendingUids.length === 0,
-      error: "",
-    };
-    scheduleInstituteGlanceReport(seedReport);
-    if(!pendingUids.length) return seedReport;
+    if(!pendingUids.length){
+      const snapshot = buildInstituteGlanceSnapshot(hydratedFullData, resolvedConfig);
+      const readyReport = {
+        ...snapshot,
+        configKey,
+        loading:false,
+        loaded:total,
+        total,
+        ready:snapshot.loadedInstitutes >= snapshot.totalInstitutes,
+        error:"",
+      };
+      scheduleInstituteGlanceReport(readyReport);
+      return readyReport;
+    }
+
+    const preserveReadyReport = currentMatches && currentReport.ready && !currentReport.error;
+    const loadingReport = preserveReadyReport
+      ? {
+          ...currentReport,
+          loading:true,
+          loaded,
+          total,
+          error:"",
+        }
+      : {
+          configKey,
+          rows:[],
+          summary:EMPTY_INSTITUTE_GLANCE_SUMMARY,
+          loading:true,
+          loaded,
+          total,
+          loadedInstitutes:0,
+          totalInstitutes:institutes.length,
+          ready:false,
+          error:"",
+        };
+    scheduleInstituteGlanceReport(loadingReport);
 
     let firstError = null;
     let nextPendingIndex = 0;
-    let publishedLoaded = loaded;
     const maxConcurrentLoads = Math.max(
       1,
       Math.min(
@@ -5534,21 +5558,6 @@ function AdminPanelInner({user}){
           : (isWeakDevice ? 5 : 8)
       )
     );
-    const publishBatchSize = isMobile ? 16 : 4;
-    const publishProgress = () => {
-      const snapshot = buildInstituteGlanceSnapshot(hydratedFullData, resolvedConfig);
-      const nextReport = {
-        ...snapshot,
-        configKey,
-        loading: loaded < total,
-        loaded,
-        total,
-        ready: loaded >= total && snapshot.loadedInstitutes >= snapshot.totalInstitutes && !firstError,
-        error: firstError?.message || "",
-      };
-      scheduleInstituteGlanceReport(nextReport);
-      publishedLoaded = loaded;
-    };
 
     const worker = async () => {
       while(true){
@@ -5570,10 +5579,6 @@ function AdminPanelInner({user}){
         }
 
         loaded += 1;
-        const shouldPublishProgress = loaded >= total || (loaded - publishedLoaded) >= publishBatchSize || !!firstError;
-        if(shouldPublishProgress){
-          publishProgress();
-        }
       }
     };
 
@@ -5595,7 +5600,7 @@ function AdminPanelInner({user}){
     };
     scheduleInstituteGlanceReport(finalReport);
     return finalReport;
-  }, [buildInstituteGlanceSnapshot, fullData, getInstituteGlanceConfig, getInstituteGlanceConfigKey, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
+  }, [buildInstituteGlanceSnapshot, fullData, getInstituteGlanceConfig, getInstituteGlanceConfigKey, instituteGlanceTeacherList, institutes.length, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
 
   React.useEffect(() => {
     const visible = instituteGlanceOpen || mobileSurface === "centreSummary";
@@ -6366,32 +6371,43 @@ function AdminPanelInner({user}){
 
   const renderInstituteGlanceProgressBlock = (compact = false) => (
     <div style={{marginTop:14,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:compact ? "12px 12px 13px" : "15px 16px 16px"}}>
+      <style>{`@keyframes ledgrReportPulse{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}`}</style>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
         <div>
           <div style={{fontSize:13,fontWeight:700,color:G.text,fontFamily:G.sans}}>
-            {instituteGlanceReport.loading ? "Loading centres" : "Centres ready"}
+            {instituteGlanceReport.loading
+              ? instituteGlanceReport.ready ? "Updating in background" : "Preparing report in background"
+              : "Centres ready"}
           </div>
           <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:4}}>
             {instituteGlanceReport.loading
-              ? "Syncing teacher records."
+              ? instituteGlanceReport.ready
+                ? "The current report stays available while fresh data is synced."
+                : "You can continue using the admin panel while teacher records are prepared."
               : "All institute data is ready."}
           </div>
         </div>
         <div style={{display:"grid",gap:6,justifyItems:"end"}}>
           <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
-            {instituteGlanceReadyCount}/{Math.max(instituteGlanceReport.totalInstitutes || 0, instituteGlanceReport.summary.totalInstitutes || 0)} centres ready
+            {instituteGlanceReport.loading
+              ? "Background sync"
+              : `${instituteGlanceReadyCount}/${Math.max(instituteGlanceReport.totalInstitutes || 0, instituteGlanceReport.summary.totalInstitutes || 0)} centres ready`}
           </span>
           <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,color:G.textL,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
-            {Math.min(instituteGlanceReport.loaded, instituteGlanceReport.total)}/{instituteGlanceReport.total} teachers synced
+            {instituteGlanceReport.loading
+              ? `${instituteGlanceReport.total} teacher records`
+              : `${Math.min(instituteGlanceReport.loaded, instituteGlanceReport.total)}/${instituteGlanceReport.total} teachers synced`}
           </span>
         </div>
       </div>
-      <div style={{height:10,background:"#E5ECF6",borderRadius:999,overflow:"hidden",marginTop:12}}>
-        <div style={{height:"100%",width:`${Math.max(instituteGlanceProgressPct, instituteGlanceReport.loaded>0 ? 5 : 0)}%`,borderRadius:999,background:"linear-gradient(90deg,#3B82F6 0%,#1D4ED8 100%)",transition:"width 0.2s ease"}} />
+      <div style={{height:8,background:"#E5ECF6",borderRadius:999,overflow:"hidden",marginTop:12}}>
+        <div style={instituteGlanceReport.loading
+          ? {height:"100%",width:"38%",borderRadius:999,background:"linear-gradient(90deg,#93C5FD 0%,#2563EB 100%)",animation:"ledgrReportPulse 1.3s ease-in-out infinite"}
+          : {height:"100%",width:`${Math.max(instituteGlanceProgressPct, instituteGlanceReport.loaded>0 ? 5 : 0)}%`,borderRadius:999,background:"linear-gradient(90deg,#3B82F6 0%,#1D4ED8 100%)",transition:"width 0.2s ease"}} />
       </div>
       {!instituteGlanceReport.ready&&(
         <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:10}}>
-          Exports unlock when loading finishes.
+          Report options unlock when the first background sync finishes.
         </div>
       )}
     </div>
