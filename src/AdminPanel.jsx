@@ -7,10 +7,12 @@ import {
   IconChartBar,
   IconChevronLeft,
   IconChevronRight,
+  IconClock,
   IconDownload,
   IconFileText,
   IconLogout,
   IconPhoto,
+  IconPlus,
   IconSchool,
   IconSettings,
   IconTrash,
@@ -29,6 +31,7 @@ import {
   repairTeacherIndex, saveProfileName, saveUserData,
   deleteInstituteCompletely, deleteInstituteAndMigrate,
   getAdminBin, saveAdminBin,
+  getLedgrReportSchedule, saveLedgrReportSchedule,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
 
@@ -3685,11 +3688,20 @@ function LedgrReportOptionsModal({
   month,
   rangeStart,
   rangeEnd,
+  schedule,
+  scheduleLoading,
+  scheduleSaving,
   exportDisabled,
   busyFormat,
   onClose,
   onApply,
+  onSaveSchedule,
 }) {
+  const browserTimezone = React.useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
+    []
+  );
+  const [actionMode, setActionMode] = React.useState("export");
   const [draftPeriod, setDraftPeriod] = React.useState(period || "daily");
   const [draftMonth, setDraftMonth] = React.useState(month || currentMonthKey());
   const [draftRangeStart, setDraftRangeStart] = React.useState(rangeStart || addDaysToDateKey(todayKey(), -6));
@@ -3697,8 +3709,18 @@ function LedgrReportOptionsModal({
   const [scope, setScope] = React.useState("all");
   const [selectedInstitutes, setSelectedInstitutes] = React.useState(() => [...(institutes || [])]);
   const [format, setFormat] = React.useState("pdf");
-  const busy = !!busyFormat;
+  const [scheduleEnabled, setScheduleEnabled] = React.useState(schedule?.enabled !== false);
+  const [scheduleTimes, setScheduleTimes] = React.useState(() => schedule?.times?.length ? [...schedule.times] : ["09:00"]);
+  const [scheduleTimezone, setScheduleTimezone] = React.useState(schedule?.timezone || browserTimezone);
+  const busy = actionMode === "schedule" ? !!scheduleSaving : !!busyFormat;
   const allInstitutes = institutes || [];
+
+  React.useEffect(() => {
+    if(!schedule) return;
+    setScheduleEnabled(schedule.enabled !== false);
+    setScheduleTimes(schedule.times?.length ? [...schedule.times] : ["09:00"]);
+    setScheduleTimezone(schedule.timezone || browserTimezone);
+  }, [browserTimezone, schedule?.updatedAt]);
 
   const inputStyle = {
     width:"100%",
@@ -3739,24 +3761,78 @@ function LedgrReportOptionsModal({
     ? "All institutes"
     : `${selectedInstitutes.length} institute${selectedInstitutes.length === 1 ? "" : "s"} selected`;
   const rangeLabel = draftPeriod === "monthly"
-    ? new Date(`${monthBoundsFromKey(draftMonth).startKey}T00:00:00`).toLocaleDateString("en-IN", { month:"long", year:"numeric" })
+    ? actionMode === "schedule"
+      ? "Current month"
+      : new Date(`${monthBoundsFromKey(draftMonth).startKey}T00:00:00`).toLocaleDateString("en-IN", { month:"long", year:"numeric" })
     : draftPeriod === "range"
       ? `${draftRangeStart || "Start"} to ${draftRangeEnd || "End"}`
       : draftPeriod === "weekly"
         ? "Last 7 days"
         : "Today";
+  const validScheduleTimes = [...new Set(scheduleTimes.filter(value => /^([01]\d|2[0-3]):[0-5]\d$/.test(value)))].sort((a, b) => a.localeCompare(b));
+  const scheduleLastRunAt = Number(schedule?.execution?.lastRunAt || schedule?.lastRunAt || 0);
+  const actionDisabled = busy
+    || effectiveInstitutes.length === 0
+    || (actionMode === "export" && exportDisabled)
+    || (actionMode === "schedule" && scheduleEnabled && validScheduleTimes.length === 0);
+
+  const selectActionMode = (nextMode) => {
+    if(busy || nextMode === actionMode) return;
+    setActionMode(nextMode);
+    if(nextMode !== "schedule") return;
+    setFormat("pdf");
+    if(!schedule) return;
+    const savedReport = schedule.report || {};
+    setDraftPeriod(savedReport.period || "daily");
+    setDraftMonth(savedReport.month || currentMonthKey());
+    setDraftRangeStart(savedReport.rangeStart || addDaysToDateKey(todayKey(), -6));
+    setDraftRangeEnd(savedReport.rangeEnd || todayKey());
+    const savedScope = schedule.scope?.type === "selected" ? "selected" : "all";
+    setScope(savedScope);
+    setSelectedInstitutes(savedScope === "selected"
+      ? (schedule.scope?.institutes || []).filter(saved => allInstitutes.some(institute => sameInstituteName(saved, institute)))
+      : [...allInstitutes]);
+  };
+
+  const addScheduleTime = () => {
+    if(scheduleTimes.length >= 6) return;
+    const used = new Set(scheduleTimes);
+    const last = scheduleTimes[scheduleTimes.length - 1] || "08:00";
+    const [hours, minutes] = last.split(":").map(Number);
+    let candidateMinutes = ((Number.isFinite(hours) ? hours : 8) * 60 + (Number.isFinite(minutes) ? minutes : 0) + 60) % 1440;
+    let candidate = "";
+    for(let attempt = 0; attempt < 24; attempt += 1){
+      candidate = `${String(Math.floor(candidateMinutes / 60)).padStart(2, "0")}:${String(candidateMinutes % 60).padStart(2, "0")}`;
+      if(!used.has(candidate)) break;
+      candidateMinutes = (candidateMinutes + 60) % 1440;
+    }
+    setScheduleTimes(current => [...current, candidate || "09:00"]);
+  };
 
   const apply = () => {
     const safeStart = draftRangeStart && draftRangeEnd && draftRangeStart > draftRangeEnd ? draftRangeEnd : draftRangeStart;
     const safeEnd = draftRangeStart && draftRangeEnd && draftRangeStart > draftRangeEnd ? draftRangeStart : draftRangeEnd;
-    onApply({
+    const reportConfig = {
       period:draftPeriod,
       month:draftMonth || currentMonthKey(),
       rangeStart:safeStart || todayKey(),
       rangeEnd:safeEnd || todayKey(),
-      format,
-      selectedInstitutes:effectiveInstitutes,
-    });
+    };
+    if(actionMode === "schedule"){
+      onSaveSchedule({
+        enabled:scheduleEnabled,
+        times:validScheduleTimes,
+        timezone:scheduleTimezone || browserTimezone,
+        report:reportConfig,
+        scope:{
+          type:scope,
+          institutes:scope === "selected" ? effectiveInstitutes : [],
+        },
+        output:{ format:"pdf" },
+      });
+      return;
+    }
+    onApply({ ...reportConfig, format, selectedInstitutes:effectiveInstitutes });
   };
 
   return (
@@ -3769,10 +3845,40 @@ function LedgrReportOptionsModal({
             </div>
             <div style={{minWidth:0}}>
               <div style={{fontSize:22,fontWeight:800,color:"#111827",fontFamily:G.display,lineHeight:1.1}}>Ledgr Report</div>
-              <div style={{fontSize:15,color:"#6B7280",fontFamily:G.sans,lineHeight:1.45,marginTop:4}}>Choose period and output</div>
+              <div style={{fontSize:15,color:"#6B7280",fontFamily:G.sans,lineHeight:1.45,marginTop:4}}>{actionMode === "schedule" ? "Choose when this report should run" : "Choose period and output"}</div>
               <div style={{fontSize:12.5,color:G.blue,fontFamily:G.sans,fontWeight:800,lineHeight:1.4,marginTop:5}}>Institutes: {scopeLabel}</div>
             </div>
             <button type="button" onClick={onClose} disabled={busy} style={{marginLeft:"auto",border:"none",background:"transparent",color:"#9CA3AF",fontSize:28,lineHeight:1,cursor:busy?"not-allowed":"pointer",padding:2}}>×</button>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:20,padding:5,borderRadius:15,background:"#F1F5F9"}}>
+            {[
+              ["export", "Export now", IconDownload],
+              ["schedule", "Schedule", IconClock],
+            ].map(([key, label, icon]) => {
+              const active = actionMode === key;
+              return (
+                <button key={key} type="button" onClick={()=>selectActionMode(key)} disabled={busy} style={{
+                  height:42,
+                  border:"none",
+                  borderRadius:11,
+                  background:active ? "#FFFFFF" : "transparent",
+                  boxShadow:active ? G.shadowSm : "none",
+                  color:active ? G.navy : G.textM,
+                  display:"inline-flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  gap:7,
+                  fontSize:13.5,
+                  fontWeight:800,
+                  fontFamily:G.sans,
+                  cursor:busy ? "not-allowed" : "pointer",
+                }}>
+                  <AppIcon icon={icon} size={17} color={active ? G.blue : G.textL} />
+                  {label}
+                </button>
+              );
+            })}
           </div>
 
           <div style={{marginBottom:20}}>
@@ -3851,10 +3957,15 @@ function LedgrReportOptionsModal({
             )}
           </div>
 
-          {draftPeriod === "monthly" && (
+          {draftPeriod === "monthly" && actionMode === "export" && (
             <div style={{marginBottom:20}}>
               <div style={sectionLabel}>Month</div>
               <input type="month" value={draftMonth} onChange={event=>setDraftMonth(event.target.value || currentMonthKey())} disabled={busy} style={inputStyle} />
+            </div>
+          )}
+          {draftPeriod === "monthly" && actionMode === "schedule" && (
+            <div style={{marginBottom:20,background:"#F8FAFC",border:"1px solid #DDE3ED",borderRadius:13,padding:"11px 13px",fontSize:12.5,color:G.textM,lineHeight:1.5}}>
+              Each scheduled run uses the current calendar month.
             </div>
           )}
 
@@ -3870,10 +3981,10 @@ function LedgrReportOptionsModal({
 
           <div style={{marginBottom:20}}>
             <div style={sectionLabel}>Format</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
-              {formatOptions.map(item => {
+            <div style={{display:"grid",gridTemplateColumns:actionMode === "schedule" ? "1fr" : "repeat(2,minmax(0,1fr))",gap:10}}>
+              {formatOptions.filter(item => actionMode === "export" || item.key === "pdf").map(item => {
                 const active = format === item.key;
-                const disabled = busy || exportDisabled;
+                const disabled = busy || (actionMode === "export" && exportDisabled);
                 return (
                   <button key={item.key} type="button" onClick={()=>setFormat(item.key)} disabled={disabled} style={{
                     minHeight:72,
@@ -3898,11 +4009,71 @@ function LedgrReportOptionsModal({
                 );
               })}
             </div>
+            {actionMode === "schedule" && (
+              <div style={{fontSize:11.5,color:G.textL,lineHeight:1.45,marginTop:8}}>
+                Scheduled automation generates the executive PDF.
+              </div>
+            )}
           </div>
 
+          {actionMode === "schedule" && (
+            <div style={{marginBottom:20}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10}}>
+                <div style={{...sectionLabel,marginBottom:0}}>Daily Times</div>
+                <label style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800,color:scheduleEnabled?G.blue:G.textM,fontFamily:G.sans,cursor:busy?"not-allowed":"pointer"}}>
+                  <input type="checkbox" checked={scheduleEnabled} onChange={event=>setScheduleEnabled(event.target.checked)} disabled={busy} style={{width:17,height:17,accentColor:G.blue}} />
+                  {scheduleEnabled ? "Active" : "Paused"}
+                </label>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {scheduleTimes.map((time, index) => (
+                  <div key={`${index}-${time}`} style={{display:"flex",alignItems:"center",gap:4,border:"1px solid #DDE3ED",borderRadius:12,background:"#F8FAFC",padding:"4px 5px 4px 9px"}}>
+                    <AppIcon icon={IconClock} size={16} color={G.blue} />
+                    <input
+                      type="time"
+                      value={time}
+                      disabled={busy}
+                      aria-label={`Report time ${index + 1}`}
+                      onChange={event=>setScheduleTimes(current=>current.map((item, itemIndex)=>itemIndex===index?event.target.value:item))}
+                      style={{width:112,height:34,border:"none",outline:"none",background:"transparent",color:G.text,fontSize:14,fontWeight:800,fontFamily:G.sans}}
+                    />
+                    <button
+                      type="button"
+                      title="Remove time"
+                      aria-label={`Remove report time ${index + 1}`}
+                      onClick={()=>setScheduleTimes(current=>current.filter((_, itemIndex)=>itemIndex!==index))}
+                      disabled={busy || scheduleTimes.length === 1}
+                      style={{width:32,height:32,border:"none",borderRadius:9,background:"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:busy||scheduleTimes.length===1?"not-allowed":"pointer",opacity:scheduleTimes.length===1?0.35:1}}>
+                      <AppIcon icon={IconTrash} size={16} color={G.red} />
+                    </button>
+                  </div>
+                ))}
+                {scheduleTimes.length < 6 && (
+                  <button type="button" onClick={addScheduleTime} disabled={busy} style={{height:44,border:"1px dashed #93C5FD",borderRadius:12,background:"#EFF6FF",color:G.blue,padding:"0 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:800,fontFamily:G.sans,cursor:busy?"not-allowed":"pointer"}}>
+                    <AppIcon icon={IconPlus} size={16} color={G.blue} />
+                    Add time
+                  </button>
+                )}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,color:G.textL,lineHeight:1.45,marginTop:9}}>
+                <AppIcon icon={IconClock} size={15} color={G.textL} />
+                Timezone: <strong style={{color:G.textM}}>{scheduleTimezone}</strong>
+              </div>
+              <div style={{marginTop:10,border:`1px solid ${scheduleLastRunAt ? "#BBF7D0" : "#FDE68A"}`,borderRadius:12,background:scheduleLastRunAt ? "#F0FDF4" : "#FFFBEB",padding:"10px 12px",fontSize:11.5,color:scheduleLastRunAt ? "#166534" : "#92400E",lineHeight:1.5}}>
+                {scheduleLoading
+                  ? "Loading the saved schedule..."
+                  : scheduleLastRunAt
+                    ? `Background runner connected. Last generated ${new Date(scheduleLastRunAt).toLocaleString("en-IN")}.`
+                    : "This saves the automation schedule. Background generation begins after the Firebase server runner is deployed."}
+              </div>
+            </div>
+          )}
+
           <div style={{background:"#F8FAFC",borderRadius:14,padding:"12px 14px",fontSize:14,color:"#374151",fontFamily:G.sans,lineHeight:1.35}}>
-            <AppIcon icon={IconCalendar} size={16} color={G.blue} style={{display:"inline-flex",verticalAlign:"-3px",marginRight:7}} />
-            <strong>{scopeLabel}</strong> · {rangeLabel} · {format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "opens centre PDFs"}
+            <AppIcon icon={actionMode === "schedule" ? IconClock : IconCalendar} size={16} color={G.blue} style={{display:"inline-flex",verticalAlign:"-3px",marginRight:7}} />
+            <strong>{scopeLabel}</strong> · {rangeLabel} · {actionMode === "schedule"
+              ? `${scheduleEnabled ? validScheduleTimes.length : 0} daily run${validScheduleTimes.length === 1 ? "" : "s"}`
+              : format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "opens centre PDFs"}
           </div>
         </div>
 
@@ -3910,8 +4081,8 @@ function LedgrReportOptionsModal({
           <button type="button" onClick={onClose} disabled={busy} style={{flex:1,height:50,borderRadius:14,border:"1.5px solid #E5E7EB",background:"#FFFFFF",color:"#374151",fontSize:15,fontWeight:800,fontFamily:G.sans,cursor:busy?"not-allowed":"pointer"}}>
             Cancel
           </button>
-          <button type="button" onClick={apply} disabled={busy || exportDisabled || effectiveInstitutes.length === 0} style={{flex:1,height:50,borderRadius:14,border:"none",background:(busy || exportDisabled || effectiveInstitutes.length === 0) ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:15,fontWeight:900,fontFamily:G.sans,cursor:(busy || exportDisabled || effectiveInstitutes.length === 0) ? "not-allowed" : "pointer"}}>
-            {busy ? "Preparing..." : "Export"}
+          <button type="button" onClick={apply} disabled={actionDisabled} style={{flex:1,height:50,borderRadius:14,border:"none",background:actionDisabled ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:15,fontWeight:900,fontFamily:G.sans,cursor:actionDisabled ? "not-allowed" : "pointer"}}>
+            {busy ? (actionMode === "schedule" ? "Saving..." : "Preparing...") : actionMode === "schedule" ? "Save schedule" : "Export"}
           </button>
         </div>
       </div>
@@ -5039,6 +5210,9 @@ function AdminPanelInner({user}){
   const [instituteGlanceRangeEnd, setInstituteGlanceRangeEnd] = useState(() => todayKey());
   const [instituteGlanceExportBusy, setInstituteGlanceExportBusy] = useState("");
   const [instituteGlanceRowExportBusy, setInstituteGlanceRowExportBusy] = useState("");
+  const [ledgrReportSchedule, setLedgrReportSchedule] = useState(null);
+  const [ledgrReportScheduleLoading, setLedgrReportScheduleLoading] = useState(true);
+  const [ledgrReportScheduleSaving, setLedgrReportScheduleSaving] = useState(false);
   const [instituteGlanceReport, setInstituteGlanceReport] = useState(() => ({
     configKey: "",
     rows: [],
@@ -5200,8 +5374,17 @@ function AdminPanelInner({user}){
   useEffect(()=>{
     (async()=>{
       // Load index + roles + global institutes list in parallel
-      const [t,r,gInst,gDeleted,savedBin]=await Promise.all([getAllTeachers(),getAllRoles(),getGlobalInstitutes(),getDeletedInstitutesList(),getAdminBin()]);
+      const [t,r,gInst,gDeleted,savedBin,savedLedgrSchedule]=await Promise.all([
+        getAllTeachers(),
+        getAllRoles(),
+        getGlobalInstitutes(),
+        getDeletedInstitutesList(),
+        getAdminBin(),
+        getLedgrReportSchedule(),
+      ]);
       setTeachers(t); setRoles(r);
+      setLedgrReportSchedule(savedLedgrSchedule);
+      setLedgrReportScheduleLoading(false);
       // Restore persisted deleted-institutes set so page refresh doesn't un-hide them
       if(gDeleted.length>0) setDeletedInstitutes(new Set(gDeleted.map(i=>i.trim())));
       // Restore persisted admin recycle bin
@@ -5877,6 +6060,24 @@ function AdminPanelInner({user}){
     exportInstituteGlance(format, { config:nextConfig, selectedInstitutes });
   }, [exportInstituteGlance]);
 
+  const saveInstituteGlanceSchedule = React.useCallback(async (nextSchedule) => {
+    if(ledgrReportScheduleSaving) return;
+    setLedgrReportScheduleSaving(true);
+    try {
+      const saved = await saveLedgrReportSchedule(nextSchedule, user?.uid || "");
+      setLedgrReportSchedule(current => ({ ...(current || {}), ...saved }));
+      setInstituteGlanceOptionsOpen(false);
+      showAdminToast(saved.enabled
+        ? `Ledgr schedule saved for ${saved.times.length} daily time${saved.times.length === 1 ? "" : "s"}.`
+        : "Ledgr report schedule paused.");
+    } catch(error) {
+      console.error("save Ledgr report schedule failed", error);
+      showAdminToast(error?.message || "Could not save the Ledgr report schedule.");
+    } finally {
+      setLedgrReportScheduleSaving(false);
+    }
+  }, [ledgrReportScheduleSaving, showAdminToast, user?.uid]);
+
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
       if(!instituteName) return false;
@@ -6451,7 +6652,11 @@ function AdminPanelInner({user}){
             <AppIcon icon={IconCalendar} size={15} color={G.blue} />
             <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{instituteGlancePeriodMeta.label}</span>
           </span>
-          <span style={{fontSize:11,fontWeight:800,color:G.textM,whiteSpace:"nowrap"}}>Options</span>
+          <span style={{fontSize:11,fontWeight:800,color:G.textM,whiteSpace:"nowrap"}}>
+            {ledgrReportSchedule?.enabled
+              ? `${ledgrReportSchedule.times?.length || 0} ${ledgrReportSchedule?.execution?.lastRunAt || ledgrReportSchedule?.lastRunAt ? "scheduled" : "saved"}`
+              : "Options"}
+          </span>
         </button>
         <button
           className="admin-mobile-touch"
@@ -12234,10 +12439,14 @@ function AdminPanelInner({user}){
           month={instituteGlanceMonth}
           rangeStart={instituteGlanceRangeStart}
           rangeEnd={instituteGlanceRangeEnd}
+          schedule={ledgrReportSchedule}
+          scheduleLoading={ledgrReportScheduleLoading}
+          scheduleSaving={ledgrReportScheduleSaving}
           exportDisabled={instituteGlanceExportDisabled}
           busyFormat={instituteGlanceExportBusy}
-          onClose={()=>!instituteGlanceExportBusy&&setInstituteGlanceOptionsOpen(false)}
+          onClose={()=>!instituteGlanceExportBusy&&!ledgrReportScheduleSaving&&setInstituteGlanceOptionsOpen(false)}
           onApply={applyInstituteGlanceOptions}
+          onSaveSchedule={saveInstituteGlanceSchedule}
         />
       )}
       {instituteGlanceOpen && !isMobile ? (

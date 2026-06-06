@@ -977,6 +977,72 @@ export async function saveGlobalInstitute(name) {
   }, { merge: true });
 }
 
+// ── Ledgr report automation ───────────────────────────────────────────────────
+// config/ledgrReportSchedule stores the admin's desired schedule. A trusted
+// backend runner can read this document and write execution metadata alongside
+// it without the web client overwriting those fields.
+
+function normaliseLedgrScheduleTimes(times) {
+  return [...new Set((times || [])
+    .map(value => String(value || "").trim())
+    .filter(value => /^([01]\d|2[0-3]):[0-5]\d$/.test(value)))]
+    .sort((a, b) => a.localeCompare(b));
+}
+
+export async function getLedgrReportSchedule() {
+  try {
+    const snap = await getDoc(doc(db, "config", "ledgrReportSchedule"));
+    return snap.exists() ? snap.data() : null;
+  } catch (error) {
+    console.error("getLedgrReportSchedule", error);
+    return null;
+  }
+}
+
+export async function saveLedgrReportSchedule(schedule = {}, updatedBy = "") {
+  const times = normaliseLedgrScheduleTimes(schedule.times);
+  const enabled = !!schedule.enabled;
+  if (enabled && !times.length) {
+    throw new Error("Add at least one valid report time.");
+  }
+
+  const scopeType = schedule.scope?.type === "selected" ? "selected" : "all";
+  const selectedInstitutes = scopeType === "selected"
+    ? uniqueTrimmed(schedule.scope?.institutes || [])
+    : [];
+  if (enabled && scopeType === "selected" && !selectedInstitutes.length) {
+    throw new Error("Select at least one institute for this schedule.");
+  }
+
+  const payload = {
+    schemaVersion: 1,
+    enabled,
+    times,
+    timezone: String(schedule.timezone || "Asia/Kolkata").trim() || "Asia/Kolkata",
+    report: {
+      period: ["daily", "weekly", "monthly", "range"].includes(schedule.report?.period)
+        ? schedule.report.period
+        : "daily",
+      month: String(schedule.report?.month || "").trim(),
+      monthMode: schedule.report?.period === "monthly" ? "current" : "",
+      rangeStart: String(schedule.report?.rangeStart || "").trim(),
+      rangeEnd: String(schedule.report?.rangeEnd || "").trim(),
+    },
+    scope: {
+      type: scopeType,
+      institutes: selectedInstitutes,
+    },
+    output: {
+      format: "pdf",
+    },
+    updatedAt: Date.now(),
+    updatedBy: String(updatedBy || "").trim(),
+  };
+
+  await setDoc(doc(db, "config", "ledgrReportSchedule"), payload, { merge: true });
+  return payload;
+}
+
 export async function deleteGlobalInstitute(name) {
   const existing = await getGlobalInstitutes();
   const filtered = existing.filter(i => i.toLowerCase() !== name.trim().toLowerCase());
