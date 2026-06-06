@@ -1,0 +1,4 @@
+# Copy this file to firebase.local.properties after registering
+# com.classtracker.app.nativebeta in Firebase.
+firebaseApplicationId=1:170006710635:android:REPLACE_WITH_BETA_APP_ID
+betaGoogleSignInConfigured=true

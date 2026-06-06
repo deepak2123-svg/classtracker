@@ -1,10 +1,28 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.kotlin.compose)
 }
+
+fun loadFirebaseProperties(): Properties {
+    val values = Properties()
+    rootProject.file("firebase.defaults.properties").inputStream().use(values::load)
+    val localFile = rootProject.file("firebase.local.properties")
+    if (localFile.exists()) {
+        localFile.inputStream().use(values::load)
+    }
+    return values
+}
+
+fun String.asBuildConfigString(): String =
+    "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+val firebaseProperties = loadFirebaseProperties()
 
 kotlin {
     compilerOptions {
@@ -25,6 +43,37 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+
+        buildConfigField(
+            "String",
+            "FIREBASE_API_KEY",
+            firebaseProperties.getProperty("firebaseApiKey").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "FIREBASE_APPLICATION_ID",
+            firebaseProperties.getProperty("firebaseApplicationId").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "FIREBASE_PROJECT_ID",
+            firebaseProperties.getProperty("firebaseProjectId").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "FIREBASE_STORAGE_BUCKET",
+            firebaseProperties.getProperty("firebaseStorageBucket").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "FIREBASE_SENDER_ID",
+            firebaseProperties.getProperty("firebaseSenderId").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "GOOGLE_WEB_CLIENT_ID",
+            firebaseProperties.getProperty("googleWebClientId").asBuildConfigString(),
+        )
     }
 
     flavorDimensions += "environment"
@@ -34,11 +83,17 @@ android {
             applicationIdSuffix = ".nativebeta"
             versionNameSuffix = "-beta"
             buildConfigField("String", "ENVIRONMENT", "\"beta\"")
+            buildConfigField(
+                "boolean",
+                "GOOGLE_SIGN_IN_CONFIGURED",
+                firebaseProperties.getProperty("betaGoogleSignInConfigured", "false"),
+            )
             resValue("string", "app_name", "Ledgr Teacher Beta")
         }
         create("production") {
             dimension = "environment"
             buildConfigField("String", "ENVIRONMENT", "\"production\"")
+            buildConfigField("boolean", "GOOGLE_SIGN_IN_CONFIGURED", "true")
             resValue("string", "app_name", "Ledgr Teacher")
         }
     }
@@ -89,15 +144,27 @@ androidComponents {
 
 dependencies {
     implementation(project(":core:designsystem"))
+    implementation(project(":core:firebase"))
     implementation(project(":core:model"))
+    implementation(project(":feature:auth"))
     implementation(project(":feature:classes"))
     implementation(project(":feature:profile"))
     implementation(project(":feature:today"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.googleid)
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material.icons.extended)
@@ -106,6 +173,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -114,4 +182,12 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+kapt {
+    correctErrorTypes = true
+}
+
+hilt {
+    enableAggregatingTask = true
 }

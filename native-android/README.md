@@ -6,7 +6,7 @@ Compose. It is intentionally separate from:
 - the Vite/React teacher and admin web application at the repository root;
 - the Capacitor Android application in `../android`.
 
-## Phase 1 variants
+## Application variants
 
 | Variant | Application ID | Purpose |
 | --- | --- | --- |
@@ -33,9 +33,27 @@ The APK is written to:
 app/build/outputs/apk/beta/debug/app-beta-debug.apk
 ```
 
+## Firebase beta setup
+
+The committed defaults keep CI reproducible and leave Google sign-in disabled
+for the beta package. Before installing the beta for live account testing:
+
+1. Register `com.classtracker.app.nativebeta` as an Android app in Firebase
+   project `classtracker-84920`.
+2. Add the debug signing SHA-1 and SHA-256 fingerprints listed in
+   `../docs/native-android-phase-2.md`.
+3. Copy `firebase.local.properties.example` to
+   `firebase.local.properties`.
+4. Set the beta Firebase application ID and enable Google sign-in in that
+   ignored local file.
+
+Do not commit `firebase.local.properties`.
+
 ## Current scope
 
-Phase 1 contains the native shell, design system, navigation, module boundaries,
-and test foundation. It does not connect to Firebase or production data.
+Phase 2 adds native Firebase authentication and read-only compatibility access
+to the existing teacher profile, institutes, classes, and entry history.
+Teacher data loads after account changes and on manual refresh only. The native
+client has no Firestore write API.
 
 See `../docs/native-android-roadmap.md` for the complete migration plan.

@@ -17,6 +17,8 @@ build output. Until the final release:
 
 ## Phase 1: Native foundation
 
+Status: completed at tag `native-phase-1-foundation`.
+
 ### Deliverables
 
 - Standalone Kotlin and Jetpack Compose project.
@@ -36,6 +38,9 @@ build output. Until the final release:
 - No Firebase rules, documents, authentication settings, or web code change.
 
 ## Phase 2: Authentication and compatibility reads
+
+Status: implementation complete; Firebase console registration and live-device
+acceptance remain before internal distribution.
 
 ### Deliverables
 

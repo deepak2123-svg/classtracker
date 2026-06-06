@@ -20,4 +20,5 @@ pnpm-debug.log*
 native-android/.gradle/
 native-android/.idea/
 native-android/local.properties
+native-android/firebase.local.properties
 native-android/**/build/

@@ -13,7 +13,7 @@ kotlin {
 }
 
 android {
-    namespace = "com.classtracker.feature.classes"
+    namespace = "com.classtracker.feature.auth"
     compileSdk = 36
 
     defaultConfig {
@@ -32,7 +32,6 @@ android {
 
 dependencies {
     implementation(project(":core:designsystem"))
-    implementation(project(":core:model"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.foundation)

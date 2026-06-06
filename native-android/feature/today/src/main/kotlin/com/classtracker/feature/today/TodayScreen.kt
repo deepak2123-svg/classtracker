@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +23,7 @@ import com.classtracker.core.designsystem.LedgrSectionHeading
 import com.classtracker.core.designsystem.LedgrSummaryTile
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.model.TeacherDashboard
+import com.classtracker.core.model.TeacherClass
 
 @Composable
 fun TodayScreen(
@@ -86,6 +91,42 @@ fun TodayScreen(
                     message = "Assigned classes will appear here after your account is connected.",
                     icon = Icons.Outlined.EventBusy,
                 )
+            }
+        } else {
+            items(
+                items = dashboard.upcomingClasses,
+                key = TeacherClass::id,
+            ) { teacherClass ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                ) {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier.padding(16.dp),
+                    ) {
+                        Text(
+                            text = teacherClass.sectionName,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = teacherClass.instituteName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (teacherClass.subjectName.isNotBlank()) {
+                            Text(
+                                text = teacherClass.subjectName,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 5.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }
