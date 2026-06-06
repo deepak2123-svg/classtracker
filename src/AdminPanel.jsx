@@ -4952,9 +4952,9 @@ function AdminPanelInner({user}){
   const [instituteGlanceRangeStart, setInstituteGlanceRangeStart] = useState(() => addDaysToDateKey(todayKey(), -6));
   const [instituteGlanceRangeEnd, setInstituteGlanceRangeEnd] = useState(() => todayKey());
   const [instituteGlanceExportBusy, setInstituteGlanceExportBusy] = useState("");
-  const [instituteGlancePendingAction, setInstituteGlancePendingAction] = useState("");
   const [instituteGlanceRowExportBusy, setInstituteGlanceRowExportBusy] = useState("");
   const [instituteGlanceReport, setInstituteGlanceReport] = useState(() => ({
+    configKey: "",
     rows: [],
     summary: EMPTY_INSTITUTE_GLANCE_SUMMARY,
     loading: false,
@@ -5413,25 +5413,44 @@ function AdminPanelInner({user}){
     instituteGlanceReportRef.current = instituteGlanceReport;
   }, [instituteGlanceReport]);
 
-  const getInstituteGlancePeriodRange = React.useCallback((periodKey = instituteGlancePeriod) => {
-    if(periodKey === "monthly"){
-      const bounds = monthBoundsFromKey(instituteGlanceMonth);
+  const getInstituteGlanceConfig = React.useCallback((overrides = {}) => ({
+    period:overrides.period || instituteGlancePeriod,
+    month:overrides.month || instituteGlanceMonth,
+    rangeStart:overrides.rangeStart || instituteGlanceRangeStart,
+    rangeEnd:overrides.rangeEnd || instituteGlanceRangeEnd,
+  }), [instituteGlanceMonth, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart]);
+
+  const getInstituteGlanceConfigKey = React.useCallback((config) => {
+    const resolved = getInstituteGlanceConfig(config);
+    return JSON.stringify({
+      period:resolved.period,
+      month:resolved.period === "monthly" ? resolved.month : "",
+      rangeStart:resolved.period === "range" ? resolved.rangeStart : "",
+      rangeEnd:resolved.period === "range" ? resolved.rangeEnd : "",
+    });
+  }, [getInstituteGlanceConfig]);
+
+  const getInstituteGlancePeriodRange = React.useCallback((config = {}) => {
+    const resolved = getInstituteGlanceConfig(config);
+    if(resolved.period === "monthly"){
+      const bounds = monthBoundsFromKey(resolved.month);
       return { rangeStartKey:bounds.startKey, rangeEndKey:bounds.endKey };
     }
-    if(periodKey === "range"){
-      return { rangeStartKey:instituteGlanceRangeStart, rangeEndKey:instituteGlanceRangeEnd };
+    if(resolved.period === "range"){
+      return { rangeStartKey:resolved.rangeStart, rangeEndKey:resolved.rangeEnd };
     }
     return { rangeStartKey:"", rangeEndKey:"" };
-  }, [instituteGlanceMonth, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart]);
+  }, [getInstituteGlanceConfig]);
 
-  const buildInstituteGlanceSnapshot = React.useCallback((fullDataMap = {}) => {
-    const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange();
+  const buildInstituteGlanceSnapshot = React.useCallback((fullDataMap = {}, config = {}) => {
+    const resolved = getInstituteGlanceConfig(config);
+    const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange(resolved);
     const rows = buildInstituteGlanceRows({
       institutes,
       teachers: instituteGlanceTeacherList,
       fullDataMap,
       resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
-      period:instituteGlancePeriod,
+      period:resolved.period,
       rangeStartKey,
       rangeEndKey,
     });
@@ -5441,7 +5460,7 @@ function AdminPanelInner({user}){
       loadedInstitutes: rows.filter(row => row.ready).length,
       totalInstitutes: rows.length,
     };
-  }, [getInstituteGlancePeriodRange, instSectionsAll, instituteGlancePeriod, instituteGlanceTeacherList, institutes]);
+  }, [getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, institutes]);
 
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
@@ -5465,10 +5484,13 @@ function AdminPanelInner({user}){
     });
   }, []);
 
-  const loadInstituteGlanceReport = React.useCallback(async ({ force = false } = {}) => {
+  const loadInstituteGlanceReport = React.useCallback(async ({ force = false, config = {} } = {}) => {
+    const resolvedConfig = getInstituteGlanceConfig(config);
+    const configKey = getInstituteGlanceConfigKey(resolvedConfig);
     const currentReport = instituteGlanceReportRef.current;
-    if(!force && currentReport.loading) return currentReport;
-    if(!force && currentReport.ready && !currentReport.error) return currentReport;
+    const currentMatches = currentReport.configKey === configKey;
+    if(!force && currentMatches && currentReport.loading) return currentReport;
+    if(!force && currentMatches && currentReport.ready && !currentReport.error) return currentReport;
 
     const jobId = ++instituteGlanceJobRef.current;
     const teacherUids = instituteGlanceTeacherList.map(t => t.uid).filter(Boolean);
@@ -5478,15 +5500,16 @@ function AdminPanelInner({user}){
     const pendingUids = force
       ? teacherUids
       : teacherUids.filter(uid => !hydratedFullData[uid]);
-    let loaded = teacherUids.filter(uid => !!hydratedFullData[uid]).length;
+    let loaded = force ? 0 : teacherUids.filter(uid => !!hydratedFullData[uid]).length;
 
-    const seedSnapshot = buildInstituteGlanceSnapshot(hydratedFullData);
+    const seedSnapshot = buildInstituteGlanceSnapshot(hydratedFullData, resolvedConfig);
     const seedReport = {
       ...seedSnapshot,
+      configKey,
       loading: pendingUids.length > 0,
       loaded,
       total,
-      ready: pendingUids.length === 0 && !force && !currentReport.error,
+      ready: pendingUids.length === 0,
       error: "",
     };
     scheduleInstituteGlanceReport(seedReport);
@@ -5506,9 +5529,10 @@ function AdminPanelInner({user}){
     );
     const publishBatchSize = isMobile ? 16 : 4;
     const publishProgress = () => {
-      const snapshot = buildInstituteGlanceSnapshot(hydratedFullData);
+      const snapshot = buildInstituteGlanceSnapshot(hydratedFullData, resolvedConfig);
       const nextReport = {
         ...snapshot,
+        configKey,
         loading: loaded < total,
         loaded,
         total,
@@ -5552,9 +5576,10 @@ function AdminPanelInner({user}){
 
     if(jobId !== instituteGlanceJobRef.current) return null;
 
-    const finalSnapshot = buildInstituteGlanceSnapshot(hydratedFullData);
+    const finalSnapshot = buildInstituteGlanceSnapshot(hydratedFullData, resolvedConfig);
     const finalReport = {
       ...finalSnapshot,
+      configKey,
       loading: false,
       loaded: total,
       total,
@@ -5563,7 +5588,7 @@ function AdminPanelInner({user}){
     };
     scheduleInstituteGlanceReport(finalReport);
     return finalReport;
-  }, [buildInstituteGlanceSnapshot, fullData, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
+  }, [buildInstituteGlanceSnapshot, fullData, getInstituteGlanceConfig, getInstituteGlanceConfigKey, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
 
   React.useEffect(() => {
     const visible = instituteGlanceOpen || mobileSurface === "centreSummary";
@@ -5571,19 +5596,24 @@ function AdminPanelInner({user}){
       instituteGlanceAutoLoadKeyRef.current = "";
       return;
     }
-    const autoLoadKey = JSON.stringify({
-      surface:instituteGlanceOpen ? "desktop" : "mobile",
+    const activeConfig = {
       period:instituteGlancePeriod,
       month:instituteGlanceMonth,
       rangeStart:instituteGlanceRangeStart,
       rangeEnd:instituteGlanceRangeEnd,
+    };
+    const autoLoadKey = JSON.stringify({
+      surface:instituteGlanceOpen ? "desktop" : "mobile",
+      config:getInstituteGlanceConfigKey(activeConfig),
       institutes:institutes.length,
       teachers:instituteGlanceTeacherList.length,
     });
     if(instituteGlanceAutoLoadKeyRef.current === autoLoadKey) return;
     instituteGlanceAutoLoadKeyRef.current = autoLoadKey;
-    loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure);
-  }, [handleInstituteGlanceLoadFailure, instituteGlanceMonth, instituteGlanceOpen, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, instituteGlanceTeacherList.length, institutes.length, loadInstituteGlanceReport, mobileSurface]);
+    loadInstituteGlanceReport({
+      config:activeConfig,
+    }).catch(handleInstituteGlanceLoadFailure);
+  }, [getInstituteGlanceConfigKey, handleInstituteGlanceLoadFailure, instituteGlanceMonth, instituteGlanceOpen, instituteGlancePeriod, instituteGlanceRangeEnd, instituteGlanceRangeStart, instituteGlanceTeacherList.length, institutes.length, loadInstituteGlanceReport, mobileSurface]);
 
   const openMobileCentreSummary = React.useCallback(() => {
     setProfileOpen(false);
@@ -5670,25 +5700,25 @@ function AdminPanelInner({user}){
     minute:"2-digit",
   })}`, []);
 
-  const exportInstituteGlance = React.useCallback(async (format, options = {}) => {
+  const exportInstituteGlance = React.useCallback(async (format, { config = {} } = {}) => {
     if(instituteGlanceExportBusy) return;
     setInstituteGlanceExportBusy(format);
     try {
-      const report = await loadInstituteGlanceReport({ force:true });
-      if(!report) return;
+      const resolvedConfig = getInstituteGlanceConfig(config);
+      const report = await loadInstituteGlanceReport({ config:resolvedConfig });
+      if(!report?.ready){
+        throw new Error("The report is still loading. Please try again when all centres are ready.");
+      }
       const rows = report.rows || [];
       const summary = report.summary || EMPTY_INSTITUTE_GLANCE_SUMMARY;
       const generatedOnLabel = getInstituteGlanceGeneratedOnLabel();
-      const exportPeriod = options.period || instituteGlancePeriod;
-      const { rangeStartKey, rangeEndKey } = options.rangeStartKey !== undefined || options.rangeEndKey !== undefined
-        ? { rangeStartKey:options.rangeStartKey || "", rangeEndKey:options.rangeEndKey || "" }
-        : getInstituteGlancePeriodRange(exportPeriod);
+      const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange(resolvedConfig);
       if(format === "png"){
-        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period:exportPeriod, rangeStartKey, rangeEndKey });
+        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period:resolvedConfig.period, rangeStartKey, rangeEndKey });
       } else if(format === "zip"){
-        await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period:exportPeriod, rangeStartKey, rangeEndKey });
+        await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period:resolvedConfig.period, rangeStartKey, rangeEndKey });
       } else {
-        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period:exportPeriod, rangeStartKey, rangeEndKey });
+        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period:resolvedConfig.period, rangeStartKey, rangeEndKey });
       }
     } catch (error) {
       console.error("institute glance export failed", error);
@@ -5696,18 +5726,7 @@ function AdminPanelInner({user}){
     } finally {
       setInstituteGlanceExportBusy("");
     }
-  }, [getInstituteGlanceGeneratedOnLabel, getInstituteGlancePeriodRange, instituteGlanceExportBusy, instituteGlancePeriod, loadInstituteGlanceReport]);
-
-  React.useEffect(() => {
-    if(!instituteGlancePendingAction) return;
-    const action = instituteGlancePendingAction;
-    setInstituteGlancePendingAction("");
-    if(action === "view"){
-      loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure);
-      return;
-    }
-    exportInstituteGlance(action);
-  }, [exportInstituteGlance, handleInstituteGlanceLoadFailure, instituteGlancePendingAction, loadInstituteGlanceReport]);
+  }, [getInstituteGlanceConfig, getInstituteGlanceGeneratedOnLabel, getInstituteGlancePeriodRange, instituteGlanceExportBusy, loadInstituteGlanceReport]);
 
   const exportInstituteGlanceRowPdf = React.useCallback(async (row) => {
     if(!row?.institute || !row.ready || instituteGlanceRowExportBusy) return;
@@ -5736,13 +5755,21 @@ function AdminPanelInner({user}){
   }, [getInstituteGlanceGeneratedOnLabel, getInstituteGlancePeriodRange, instituteGlancePeriod, instituteGlanceRowExportBusy, loadInstituteGlanceReport]);
 
   const applyInstituteGlanceOptions = React.useCallback(({ period:nextPeriod, month:nextMonth, rangeStart, rangeEnd, format }) => {
-    setInstituteGlancePeriod(nextPeriod || "daily");
-    setInstituteGlanceMonth(nextMonth || currentMonthKey());
-    setInstituteGlanceRangeStart(rangeStart || todayKey());
-    setInstituteGlanceRangeEnd(rangeEnd || todayKey());
+    const nextConfig = {
+      period:nextPeriod || "daily",
+      month:nextMonth || currentMonthKey(),
+      rangeStart:rangeStart || todayKey(),
+      rangeEnd:rangeEnd || todayKey(),
+    };
+    setInstituteGlancePeriod(nextConfig.period);
+    setInstituteGlanceMonth(nextConfig.month);
+    setInstituteGlanceRangeStart(nextConfig.rangeStart);
+    setInstituteGlanceRangeEnd(nextConfig.rangeEnd);
     setInstituteGlanceOptionsOpen(false);
-    setInstituteGlancePendingAction(format || "view");
-  }, []);
+    if(format && format !== "view"){
+      exportInstituteGlance(format, { config:nextConfig });
+    }
+  }, [exportInstituteGlance]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
