@@ -2119,6 +2119,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     sectionNames: sections.map(section => section.name),
     sections,
     todayDetails: todayDetails.sort((a, b) => {
+      if((a.dateKey || "") !== (b.dateKey || "")) return (a.dateKey || "").localeCompare(b.dateKey || "");
       if((a.timeStart || "") !== (b.timeStart || "")) return (a.timeStart || "").localeCompare(b.timeStart || "");
       const sectionCmp = exportTextSorter.compare(a.section || "", b.section || "");
       if(sectionCmp !== 0) return sectionCmp;
@@ -2880,7 +2881,9 @@ const CENTRE_SUMMARY_CSS = `
   .subject-tag { margin-left: auto; font-size: 10.5px; padding: 2px 8px; border-radius: 99px; background: var(--blue-bg); color: var(--blue); border: 0.5px solid var(--blue-border); font-weight: 500; }
   .col-head { display: grid; grid-template-columns: 90px 130px 1fr 1fr; gap: 0; padding: 5px 14px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-4); border-bottom: 0.5px solid var(--rule); background: var(--surface); }
   .session-row { display: grid; grid-template-columns: 90px 130px 1fr 1fr; gap: 0; padding: 7px 14px; border-bottom: 0.5px solid var(--rule); align-items: center; font-size: 12px; }
+  .col-head.multi-day, .session-row.multi-day { grid-template-columns: 86px 82px 112px minmax(150px, 1fr) minmax(100px, 0.8fr); }
   .session-row:last-child { border-bottom: none; }
+  .date-str { color: var(--ink); font-size: 11px; font-weight: 600; white-space: nowrap; }
   .section-name { font-weight: 500; color: var(--ink); }
   .time-str { color: var(--ink-3); font-size: 11.5px; }
   .topic { color: var(--ink-2); }
@@ -2983,6 +2986,16 @@ function buildInstituteGlanceDateCard(generatedOnLabel, label = "Generated"){
     </div>`;
 }
 
+function formatInstituteReportEntryDate(dateKey){
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  if(!year || !month || !day) return String(dateKey || "—");
+  return new Date(year, month - 1, day).toLocaleDateString("en-IN", {
+    day:"numeric",
+    month:"short",
+    year:"numeric",
+  });
+}
+
 function buildInstituteGlanceCentreCard(row, period = "daily", rangeStartKey = "", rangeEndKey = ""){
   const e = escapeExportHtml;
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
@@ -3018,6 +3031,7 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
   const sections = row.sectionsTaught || 0;
   const hours = formatDurationShort(row.totalStudyMinutes || 0);
   const pct = total > 0 ? Math.round((filledCount / total) * 100) : 0;
+  const showEntryDates = periodMeta.key !== "daily";
 
   // Pending breakdown counts
   let nInactive = 0, nMissed = 0, nActive = 0;
@@ -3033,7 +3047,9 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
   if(!filled.length){
     filledHtml = `<div class="empty-notice">No teacher has uploaded during this ${e(periodMeta.label.toLowerCase())} period.</div>`;
   } else {
-    filledHtml = `<div class="col-head"><span>Section</span><span>Time</span><span>Topic / Title</span><span style="text-align:right">Notes</span></div>`;
+    filledHtml = showEntryDates
+      ? `<div class="col-head multi-day"><span>Date</span><span>Section</span><span>Time</span><span>Topic / Title</span><span style="text-align:right">Notes</span></div>`
+      : `<div class="col-head"><span>Section</span><span>Time</span><span>Topic / Title</span><span style="text-align:right">Notes</span></div>`;
     filled.forEach(teacher => {
       const details = Array.isArray(teacher.todayDetails) ? teacher.todayDetails : [];
       const initials = _avatarInitials(teacher.name);
@@ -3041,12 +3057,15 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
       const subjectLabel = subjectSet.join(", ") || "—";
       let rows = "";
       if(!details.length){
-        rows = `<div class="session-row"><span class="section-name">${e(instituteGlanceTeacherSectionCaption(teacher))}</span><span class="time-str">—</span><span class="topic">${e(teacher.todayEntries || 0)} entr${teacher.todayEntries===1?"y":"ies"} uploaded</span><span class="notes-str">${e(instituteGlanceTeacherHoursLabel(teacher))}</span></div>`;
+        rows = showEntryDates
+          ? `<div class="session-row multi-day"><span class="date-str">—</span><span class="section-name">${e(instituteGlanceTeacherSectionCaption(teacher))}</span><span class="time-str">—</span><span class="topic">${e(teacher.todayEntries || 0)} entr${teacher.todayEntries===1?"y":"ies"} uploaded</span><span class="notes-str">${e(instituteGlanceTeacherHoursLabel(teacher))}</span></div>`
+          : `<div class="session-row"><span class="section-name">${e(instituteGlanceTeacherSectionCaption(teacher))}</span><span class="time-str">—</span><span class="topic">${e(teacher.todayEntries || 0)} entr${teacher.todayEntries===1?"y":"ies"} uploaded</span><span class="notes-str">${e(instituteGlanceTeacherHoursLabel(teacher))}</span></div>`;
       } else {
         rows = details.map(d =>
-          `<div class="session-row">
+          `<div class="session-row${showEntryDates ? " multi-day" : ""}">
+            ${showEntryDates ? `<span class="date-str">${e(formatInstituteReportEntryDate(d.dateKey))}</span>` : ""}
             <span class="section-name">${e(d.section || "—")}</span>
-            <span class="time-str">${e(periodMeta.key==="weekly" ? `${formatDateLabel(d.dateKey)} · ${formatExportPdfTime(d.timeStart, d.timeEnd) || "—"}` : (formatExportPdfTime(d.timeStart, d.timeEnd) || "—"))}</span>
+            <span class="time-str">${e(formatExportPdfTime(d.timeStart, d.timeEnd) || "—")}</span>
             <span class="topic">${e(d.title || d.subject || "—")}</span>
             <span class="notes-str">${e(d.notes || "—")}</span>
           </div>`
