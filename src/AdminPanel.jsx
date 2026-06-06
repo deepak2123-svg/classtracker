@@ -2414,7 +2414,7 @@ async function downloadTeacherStatusShareImage({ instituteName, rows, summary, g
   });
   anchor.click();
 }
-async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "", scopeLabel = "All institutes" }){
   await waitForCanvasFonts();
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   const width = 1280;
@@ -2532,7 +2532,7 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, pe
   ctx.fillStyle = "#6B7280";
   ctx.font = "500 20px 'Inter',sans-serif";
   ctx.fillText(
-    fitCanvasText(ctx, `${periodMeta.label} institute summary: submissions, pending follow-up, sections, and hours.`, contentWidth),
+    fitCanvasText(ctx, `${scopeLabel} · ${periodMeta.label} summary: submissions, pending follow-up, sections, and hours.`, contentWidth),
     contentX,
     cursorY
   );
@@ -2741,17 +2741,17 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, pe
 
   return canvas;
 }
-async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
-  const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period, rangeStartKey, rangeEndKey });
+async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "", scopeLabel = "All institutes", scopeFilePart = "all_institutes" }){
+  const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period, rangeStartKey, rangeEndKey, scopeLabel });
   const filePart = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart;
   const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
   if(blob){
-    triggerBlobDownload(blob, `all_institutes_${filePart}_ledgr_report_${todayKey()}.png`);
+    triggerBlobDownload(blob, `${scopeFilePart}_${filePart}_ledgr_report_${todayKey()}.png`);
     return;
   }
   const anchor = Object.assign(document.createElement("a"), {
     href:canvas.toDataURL("image/png"),
-    download:`all_institutes_${filePart}_ledgr_report_${todayKey()}.png`,
+    download:`${scopeFilePart}_${filePart}_ledgr_report_${todayKey()}.png`,
   });
   anchor.click();
 }
@@ -3155,7 +3155,7 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
     ${standalone ? `</section>` : ""}`;
 }
 
-function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "", scopeLabel = "All institutes" }){
   const e = escapeExportHtml;
   const parts = getInstituteGlanceGeneratedParts(generatedOnLabel);
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
@@ -3193,11 +3193,11 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, peri
             </div>
           </div>
           <h1>${e(periodMeta.title)}</h1>
-          <div class="cover-copy">Teacher submissions and pending follow-up across all institutes.</div>
+          <div class="cover-copy">Teacher submissions and pending follow-up for ${e(scopeLabel === "All institutes" ? "all institutes" : scopeLabel)}.</div>
           <div class="cover-meta-grid">
             <div class="cover-meta"><div class="label">Report period</div><div class="value">${e(periodMeta.periodValue || periodMeta.label)}</div></div>
-            <div class="cover-meta"><div class="label">Report date</div><div class="value">${e(parts.date)}</div></div>
-            <div class="cover-meta"><div class="label">Generated time</div><div class="value">${e(parts.time || "-")}</div></div>
+            <div class="cover-meta"><div class="label">Scope</div><div class="value">${e(scopeLabel)}</div></div>
+            <div class="cover-meta"><div class="label">Generated</div><div class="value">${e(`${parts.date}${parts.time ? ` · ${parts.time}` : ""}`)}</div></div>
           </div>
         </div>
         <div class="cover-copy">Pending institutes appear first.</div>
@@ -3223,7 +3223,7 @@ function buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, peri
 
     ${institutePages}
     <div class="page-footer">
-      <span>Ledgr · All institutes summary</span>
+      <span>Ledgr · ${e(scopeLabel)} summary</span>
       <span>${e(generatedOnLabel)}</span>
     </div>
   </body></html>`;
@@ -3270,9 +3270,9 @@ function _printHtml(html, filename){
   win.document.close();
 }
 
-async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
-  const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period, rangeStartKey, rangeEndKey });
-  _printHtml(html, `all_institutes_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_${todayKey()}.pdf`);
+async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "", scopeLabel = "All institutes", scopeFilePart = "all_institutes" }){
+  const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period, rangeStartKey, rangeEndKey, scopeLabel });
+  _printHtml(html, `${scopeFilePart}_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_${todayKey()}.pdf`);
 }
 async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period, rangeStartKey, rangeEndKey);
@@ -3661,6 +3661,7 @@ function AdminExportModal({ exportActions, onClose }) {
 }
 
 function LedgrReportOptionsModal({
+  institutes,
   period,
   month,
   rangeStart,
@@ -3674,8 +3675,11 @@ function LedgrReportOptionsModal({
   const [draftMonth, setDraftMonth] = React.useState(month || currentMonthKey());
   const [draftRangeStart, setDraftRangeStart] = React.useState(rangeStart || addDaysToDateKey(todayKey(), -6));
   const [draftRangeEnd, setDraftRangeEnd] = React.useState(rangeEnd || todayKey());
-  const [format, setFormat] = React.useState("view");
+  const [scope, setScope] = React.useState("all");
+  const [selectedInstitutes, setSelectedInstitutes] = React.useState(() => [...(institutes || [])]);
+  const [format, setFormat] = React.useState("pdf");
   const busy = !!busyFormat;
+  const allInstitutes = institutes || [];
 
   const inputStyle = {
     width:"100%",
@@ -3707,11 +3711,14 @@ function LedgrReportOptionsModal({
     ["range", "Range"],
   ];
   const formatOptions = [
-    { key:"view", label:"Update view", icon:IconChartBar, help:"Shows report on this screen" },
-    { key:"pdf", label:"All PDF", icon:IconFileText, help:"Opens executive PDF" },
-    { key:"png", label:"All PNG", icon:IconPhoto, help:"Downloads summary image" },
-    { key:"zip", label:"ZIP PDFs", icon:IconDownload, help:"Opens centre PDFs" },
+    { key:"pdf", label:"PDF report", icon:IconFileText, help:"Opens executive PDF" },
+    { key:"png", label:"PNG summary", icon:IconPhoto, help:"Downloads summary image" },
+    { key:"zip", label:"Centre PDFs", icon:IconDownload, help:"Opens selected centre PDFs" },
   ];
+  const effectiveInstitutes = scope === "all" ? allInstitutes : selectedInstitutes;
+  const scopeLabel = scope === "all"
+    ? "All institutes"
+    : `${selectedInstitutes.length} institute${selectedInstitutes.length === 1 ? "" : "s"} selected`;
   const rangeLabel = draftPeriod === "monthly"
     ? new Date(`${monthBoundsFromKey(draftMonth).startKey}T00:00:00`).toLocaleDateString("en-IN", { month:"long", year:"numeric" })
     : draftPeriod === "range"
@@ -3729,6 +3736,7 @@ function LedgrReportOptionsModal({
       rangeStart:safeStart || todayKey(),
       rangeEnd:safeEnd || todayKey(),
       format,
+      selectedInstitutes:effectiveInstitutes,
     });
   };
 
@@ -3743,7 +3751,7 @@ function LedgrReportOptionsModal({
             <div style={{minWidth:0}}>
               <div style={{fontSize:22,fontWeight:800,color:"#111827",fontFamily:G.display,lineHeight:1.1}}>Ledgr Report</div>
               <div style={{fontSize:15,color:"#6B7280",fontFamily:G.sans,lineHeight:1.45,marginTop:4}}>Choose period and output</div>
-              <div style={{fontSize:12.5,color:G.blue,fontFamily:G.sans,fontWeight:800,lineHeight:1.4,marginTop:5}}>Institute: All institutes</div>
+              <div style={{fontSize:12.5,color:G.blue,fontFamily:G.sans,fontWeight:800,lineHeight:1.4,marginTop:5}}>Institutes: {scopeLabel}</div>
             </div>
             <button type="button" onClick={onClose} disabled={busy} style={{marginLeft:"auto",border:"none",background:"transparent",color:"#9CA3AF",fontSize:28,lineHeight:1,cursor:busy?"not-allowed":"pointer",padding:2}}>×</button>
           </div>
@@ -3772,6 +3780,58 @@ function LedgrReportOptionsModal({
             </div>
           </div>
 
+          <div style={{marginBottom:20}}>
+            <div style={sectionLabel}>Institutes</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+              {[
+                ["all", "All institutes"],
+                ["selected", "Select institutes"],
+              ].map(([key, label]) => {
+                const active = scope === key;
+                return (
+                  <button key={key} type="button" onClick={()=>setScope(key)} disabled={busy} style={{
+                    minHeight:42,
+                    border:`2px solid ${active ? G.navy : "#DDE3ED"}`,
+                    borderRadius:13,
+                    background:active ? "#EEF2FF" : "#FFFFFF",
+                    color:active ? G.navy : "#374151",
+                    fontSize:13.5,
+                    fontWeight:800,
+                    fontFamily:G.sans,
+                    cursor:busy ? "not-allowed" : "pointer",
+                  }}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {scope === "selected" && (
+              <div style={{marginTop:10,border:"1px solid #DDE3ED",borderRadius:14,background:"#F8FAFC",padding:"6px",maxHeight:190,overflowY:"auto"}}>
+                <div style={{display:"flex",justifyContent:"flex-end",gap:6,padding:"3px 4px 7px"}}>
+                  <button type="button" onClick={()=>setSelectedInstitutes([...allInstitutes])} disabled={busy} style={{border:"none",background:"transparent",color:G.blue,fontSize:11.5,fontWeight:800,fontFamily:G.sans,cursor:"pointer",padding:"3px 5px"}}>Select all</button>
+                  <button type="button" onClick={()=>setSelectedInstitutes([])} disabled={busy} style={{border:"none",background:"transparent",color:G.textM,fontSize:11.5,fontWeight:800,fontFamily:G.sans,cursor:"pointer",padding:"3px 5px"}}>Clear</button>
+                </div>
+                {allInstitutes.map(institute => {
+                  const checked = selectedInstitutes.some(item => sameInstituteName(item, institute));
+                  return (
+                    <label key={institute} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 10px",borderRadius:10,cursor:busy?"not-allowed":"pointer",background:checked?"#EEF4FF":"transparent",fontFamily:G.sans}}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={busy}
+                        onChange={() => setSelectedInstitutes(current => checked
+                          ? current.filter(item => !sameInstituteName(item, institute))
+                          : [...current, institute])}
+                        style={{width:17,height:17,marginTop:1,accentColor:G.navy,flexShrink:0}}
+                      />
+                      <span style={{fontSize:13,fontWeight:checked?800:600,color:G.text,lineHeight:1.35}}>{institute}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {draftPeriod === "monthly" && (
             <div style={{marginBottom:20}}>
               <div style={sectionLabel}>Month</div>
@@ -3794,7 +3854,7 @@ function LedgrReportOptionsModal({
             <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
               {formatOptions.map(item => {
                 const active = format === item.key;
-                const disabled = busy || (item.key !== "view" && exportDisabled);
+                const disabled = busy || exportDisabled;
                 return (
                   <button key={item.key} type="button" onClick={()=>setFormat(item.key)} disabled={disabled} style={{
                     minHeight:72,
@@ -3823,7 +3883,7 @@ function LedgrReportOptionsModal({
 
           <div style={{background:"#F8FAFC",borderRadius:14,padding:"12px 14px",fontSize:14,color:"#374151",fontFamily:G.sans,lineHeight:1.35}}>
             <AppIcon icon={IconCalendar} size={16} color={G.blue} style={{display:"inline-flex",verticalAlign:"-3px",marginRight:7}} />
-            <strong>All institutes</strong> · {rangeLabel} · {format === "view" ? "updates the on-screen report" : format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "opens centre PDFs"}
+            <strong>{scopeLabel}</strong> · {rangeLabel} · {format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "opens centre PDFs"}
           </div>
         </div>
 
@@ -3831,8 +3891,8 @@ function LedgrReportOptionsModal({
           <button type="button" onClick={onClose} disabled={busy} style={{flex:1,height:50,borderRadius:14,border:"1.5px solid #E5E7EB",background:"#FFFFFF",color:"#374151",fontSize:15,fontWeight:800,fontFamily:G.sans,cursor:busy?"not-allowed":"pointer"}}>
             Cancel
           </button>
-          <button type="button" onClick={apply} disabled={busy || (format !== "view" && exportDisabled)} style={{flex:1,height:50,borderRadius:14,border:"none",background:(busy || (format !== "view" && exportDisabled)) ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:15,fontWeight:900,fontFamily:G.sans,cursor:(busy || (format !== "view" && exportDisabled)) ? "not-allowed" : "pointer"}}>
-            {busy ? "Preparing..." : format === "view" ? "Apply" : "Export"}
+          <button type="button" onClick={apply} disabled={busy || exportDisabled || effectiveInstitutes.length === 0} style={{flex:1,height:50,borderRadius:14,border:"none",background:(busy || exportDisabled || effectiveInstitutes.length === 0) ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:15,fontWeight:900,fontFamily:G.sans,cursor:(busy || exportDisabled || effectiveInstitutes.length === 0) ? "not-allowed" : "pointer"}}>
+            {busy ? "Preparing..." : "Export"}
           </button>
         </div>
       </div>
@@ -5712,7 +5772,7 @@ function AdminPanelInner({user}){
     minute:"2-digit",
   })}`, []);
 
-  const exportInstituteGlance = React.useCallback(async (format, { config = {} } = {}) => {
+  const exportInstituteGlance = React.useCallback(async (format, { config = {}, selectedInstitutes = [] } = {}) => {
     if(instituteGlanceExportBusy) return;
     setInstituteGlanceExportBusy(format);
     try {
@@ -5721,16 +5781,33 @@ function AdminPanelInner({user}){
       if(!report?.ready){
         throw new Error("The report is still loading. Please try again when all centres are ready.");
       }
-      const rows = report.rows || [];
-      const summary = report.summary || EMPTY_INSTITUTE_GLANCE_SUMMARY;
+      const reportRows = report.rows || [];
+      const rows = selectedInstitutes.length
+        ? reportRows.filter(row => selectedInstitutes.some(institute => sameInstituteName(institute, row.institute)))
+        : reportRows;
+      if(!rows.length){
+        throw new Error("Select at least one institute to export.");
+      }
+      const summary = summariseInstituteGlanceRows(rows);
+      const allSelected = rows.length === reportRows.length;
+      const scopeLabel = allSelected
+        ? "All institutes"
+        : rows.length === 1
+          ? rows[0].institute
+          : `${rows.length} selected institutes`;
+      const scopeFilePart = allSelected
+        ? "all_institutes"
+        : rows.length === 1
+          ? slugifyDownloadPart(rows[0].institute)
+          : `selected_${rows.length}_institutes`;
       const generatedOnLabel = getInstituteGlanceGeneratedOnLabel();
       const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange(resolvedConfig);
       if(format === "png"){
-        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period:resolvedConfig.period, rangeStartKey, rangeEndKey });
+        await downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period:resolvedConfig.period, rangeStartKey, rangeEndKey, scopeLabel, scopeFilePart });
       } else if(format === "zip"){
         await downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period:resolvedConfig.period, rangeStartKey, rangeEndKey });
       } else {
-        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period:resolvedConfig.period, rangeStartKey, rangeEndKey });
+        await downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period:resolvedConfig.period, rangeStartKey, rangeEndKey, scopeLabel, scopeFilePart });
       }
     } catch (error) {
       console.error("institute glance export failed", error);
@@ -5766,7 +5843,7 @@ function AdminPanelInner({user}){
     }
   }, [getInstituteGlanceGeneratedOnLabel, getInstituteGlancePeriodRange, instituteGlancePeriod, instituteGlanceRowExportBusy, loadInstituteGlanceReport]);
 
-  const applyInstituteGlanceOptions = React.useCallback(({ period:nextPeriod, month:nextMonth, rangeStart, rangeEnd, format }) => {
+  const applyInstituteGlanceOptions = React.useCallback(({ period:nextPeriod, month:nextMonth, rangeStart, rangeEnd, format, selectedInstitutes }) => {
     const nextConfig = {
       period:nextPeriod || "daily",
       month:nextMonth || currentMonthKey(),
@@ -5778,9 +5855,7 @@ function AdminPanelInner({user}){
     setInstituteGlanceRangeStart(nextConfig.rangeStart);
     setInstituteGlanceRangeEnd(nextConfig.rangeEnd);
     setInstituteGlanceOptionsOpen(false);
-    if(format && format !== "view"){
-      exportInstituteGlance(format, { config:nextConfig });
-    }
+    exportInstituteGlance(format, { config:nextConfig, selectedInstitutes });
   }, [exportInstituteGlance]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
@@ -12135,6 +12210,7 @@ function AdminPanelInner({user}){
       <AdminToastBanner message={adminToast} />
       {instituteGlanceOptionsOpen&&(
         <LedgrReportOptionsModal
+          institutes={institutes}
           period={instituteGlancePeriod}
           month={instituteGlanceMonth}
           rangeStart={instituteGlanceRangeStart}
