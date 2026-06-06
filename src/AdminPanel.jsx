@@ -3737,6 +3737,7 @@ function LedgrReportOptionsModal({
             <div style={{minWidth:0}}>
               <div style={{fontSize:22,fontWeight:800,color:"#111827",fontFamily:G.display,lineHeight:1.1}}>Ledgr Report</div>
               <div style={{fontSize:15,color:"#6B7280",fontFamily:G.sans,lineHeight:1.45,marginTop:4}}>Choose period and output</div>
+              <div style={{fontSize:12.5,color:G.blue,fontFamily:G.sans,fontWeight:800,lineHeight:1.4,marginTop:5}}>Institute: All institutes</div>
             </div>
             <button type="button" onClick={onClose} disabled={busy} style={{marginLeft:"auto",border:"none",background:"transparent",color:"#9CA3AF",fontSize:28,lineHeight:1,cursor:busy?"not-allowed":"pointer",padding:2}}>×</button>
           </div>
@@ -3816,7 +3817,7 @@ function LedgrReportOptionsModal({
 
           <div style={{background:"#F8FAFC",borderRadius:14,padding:"12px 14px",fontSize:14,color:"#374151",fontFamily:G.sans,lineHeight:1.35}}>
             <AppIcon icon={IconCalendar} size={16} color={G.blue} style={{display:"inline-flex",verticalAlign:"-3px",marginRight:7}} />
-            <strong>{rangeLabel}</strong> · {format === "view" ? "updates the on-screen report" : format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "opens centre PDFs"}
+            <strong>All institutes</strong> · {rangeLabel} · {format === "view" ? "updates the on-screen report" : format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "opens centre PDFs"}
           </div>
         </div>
 
