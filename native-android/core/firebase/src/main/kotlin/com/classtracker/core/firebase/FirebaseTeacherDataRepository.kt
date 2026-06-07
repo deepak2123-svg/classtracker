@@ -1,6 +1,7 @@
 package com.classtracker.core.firebase
 
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.async
@@ -11,6 +12,8 @@ import kotlinx.coroutines.tasks.await
 class FirebaseTeacherDataRepository(
     private val firestore: FirebaseFirestore,
 ) : TeacherDataRepository {
+    private val entryWriter = FirebaseTeacherEntryWriter(firestore)
+
     override suspend fun loadTeacherSnapshot(
         teacher: AuthenticatedTeacher,
     ): TeacherSnapshot = coroutineScope {
@@ -62,4 +65,15 @@ class FirebaseTeacherDataRepository(
             loadedAtMillis = System.currentTimeMillis(),
         )
     }
+
+    override suspend fun saveEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        draft: TeacherEntryDraft,
+    ): TeacherSnapshot = entryWriter.saveEntry(
+        teacher = teacher,
+        expectedRevision = expectedRevision,
+        draft = draft,
+        reload = { loadTeacherSnapshot(teacher) },
+    )
 }

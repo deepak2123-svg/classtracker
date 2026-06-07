@@ -23,6 +23,7 @@ include(
     ":core:model",
     ":feature:auth",
     ":feature:classes",
+    ":feature:entries",
     ":feature:profile",
     ":feature:today",
 )

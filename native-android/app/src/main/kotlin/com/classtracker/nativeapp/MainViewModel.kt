@@ -6,8 +6,13 @@ import com.classtracker.core.firebase.AuthSession
 import com.classtracker.core.firebase.TeacherAuthRepository
 import com.classtracker.core.firebase.TeacherDataMissingException
 import com.classtracker.core.firebase.TeacherDataRepository
+import com.classtracker.core.firebase.TeacherEntryConflictException
+import com.classtracker.core.firebase.TeacherRevisionConflictException
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherEntryDraft
+import com.classtracker.core.model.TeacherEntryValidation
 import com.classtracker.core.model.TeacherSnapshot
+import com.classtracker.core.model.validateTeacherEntryDraft
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -28,6 +33,8 @@ data class MainUiState(
     val loadingData: Boolean = false,
     val authenticating: Boolean = false,
     val refreshing: Boolean = false,
+    val savingEntry: Boolean = false,
+    val entrySaved: Boolean = false,
     val errorMessage: String? = null,
 )
 
@@ -90,6 +97,96 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.signOut()
         }
+    }
+
+    fun saveEntry(draft: TeacherEntryDraft) {
+        val current = mutableState.value
+        val teacher = current.teacher ?: return
+        val snapshot = current.snapshot ?: return
+        if (current.savingEntry) return
+
+        when (
+            val validation = validateTeacherEntryDraft(
+                draft = draft,
+                existingEntries = snapshot.entriesForClass(draft.classId),
+            )
+        ) {
+            TeacherEntryValidation.Valid -> Unit
+            is TeacherEntryValidation.Invalid -> {
+                mutableState.update { it.copy(errorMessage = validation.message) }
+                return
+            }
+        }
+
+        viewModelScope.launch {
+            mutableState.update {
+                it.copy(
+                    savingEntry = true,
+                    entrySaved = false,
+                    errorMessage = null,
+                )
+            }
+            runCatching {
+                dataRepository.saveEntry(
+                    teacher = teacher,
+                    expectedRevision = snapshot.revision,
+                    draft = draft,
+                )
+            }.onSuccess { updatedSnapshot ->
+                mutableState.update {
+                    it.copy(
+                        snapshot = updatedSnapshot,
+                        savingEntry = false,
+                        entrySaved = true,
+                        errorMessage = null,
+                    )
+                }
+            }.onFailure { error ->
+                if (error is TeacherRevisionConflictException) {
+                    runCatching { dataRepository.loadTeacherSnapshot(teacher) }
+                        .onSuccess { latestSnapshot ->
+                            val alreadySaved = latestSnapshot.entries.any { entry ->
+                                entry.id == draft.resolvedIdOrNull() &&
+                                    entry.classId == draft.classId &&
+                                    entry.dateKey == draft.dateKey &&
+                                    entry.title == draft.title.trim() &&
+                                    entry.timeStart.orEmpty() == draft.timeStart.trim()
+                            }
+                            mutableState.update {
+                                it.copy(
+                                    snapshot = latestSnapshot,
+                                    savingEntry = false,
+                                    entrySaved = alreadySaved,
+                                    errorMessage = if (alreadySaved) {
+                                        null
+                                    } else {
+                                        "Newer web changes were loaded. Review and save again."
+                                    },
+                                )
+                            }
+                        }
+                        .onFailure { refreshError ->
+                            mutableState.update {
+                                it.copy(
+                                    savingEntry = false,
+                                    errorMessage = refreshError.toFriendlyMessage(),
+                                )
+                            }
+                        }
+                } else {
+                    mutableState.update {
+                        it.copy(
+                            savingEntry = false,
+                            errorMessage = error.toFriendlyMessage(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun consumeEntrySaved() {
+        mutableState.update { it.copy(entrySaved = false) }
     }
 
     fun clearError() {
@@ -158,8 +255,14 @@ class MainViewModel @Inject constructor(
     }
 }
 
+private fun TeacherEntryDraft.resolvedIdOrNull(): String? =
+    entryId ?: mutationId.takeIf(String::isNotBlank)
+
 private fun Throwable.toFriendlyMessage(): String = when (this) {
     is TeacherDataMissingException -> message.orEmpty()
+    is TeacherRevisionConflictException ->
+        "Newer web changes are available. Review and save again."
+    is TeacherEntryConflictException -> message.orEmpty()
     is FirebaseNetworkException -> "Unable to reach the server. Check your connection."
     is FirebaseAuthException -> when (errorCode) {
         "ERROR_INVALID_CREDENTIAL",

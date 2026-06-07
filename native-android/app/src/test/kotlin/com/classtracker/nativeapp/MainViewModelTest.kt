@@ -3,7 +3,10 @@ package com.classtracker.nativeapp
 import com.classtracker.core.firebase.AuthSession
 import com.classtracker.core.firebase.TeacherAuthRepository
 import com.classtracker.core.firebase.TeacherDataRepository
+import com.classtracker.core.firebase.TeacherRevisionConflictException
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherEntry
+import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherProfile
 import com.classtracker.core.model.TeacherSnapshot
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +66,114 @@ class MainViewModelTest {
         assertEquals(2, dataRepository.loadCount)
         assertFalse(viewModel.state.value.refreshing)
     }
+
+    @Test
+    fun savingEntryReplacesSnapshotAndSignalsCompletion() = runTest(dispatcher) {
+        val teacher = AuthenticatedTeacher(
+            uid = "teacher-1",
+            displayName = "Teacher",
+            email = "teacher@example.com",
+            photoUrl = null,
+        )
+        val authRepository = FakeAuthRepository()
+        val original = snapshotFor(teacher)
+        val updated = original.copy(revision = 2)
+        val dataRepository = FakeDataRepository(original, updated)
+        val viewModel = MainViewModel(authRepository, dataRepository)
+
+        authRepository.sessions.value = AuthSession.SignedIn(teacher)
+        advanceUntilIdle()
+        viewModel.saveEntry(
+            TeacherEntryDraft(
+                classId = "class-1",
+                dateKey = "2026-06-07",
+                title = "Motion",
+                timeStart = "09:00",
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, dataRepository.saveCount)
+        assertEquals(2L, viewModel.state.value.snapshot?.revision)
+        assertEquals(true, viewModel.state.value.entrySaved)
+        assertFalse(viewModel.state.value.savingEntry)
+
+        viewModel.consumeEntrySaved()
+        assertFalse(viewModel.state.value.entrySaved)
+    }
+
+    @Test
+    fun revisionConflictRecognizesAlreadyCommittedMutation() = runTest(dispatcher) {
+        val teacher = AuthenticatedTeacher(
+            uid = "teacher-1",
+            displayName = "Teacher",
+            email = "teacher@example.com",
+            photoUrl = null,
+        )
+        val draft = TeacherEntryDraft(
+            mutationId = "native-fixed-id",
+            classId = "class-1",
+            dateKey = "2026-06-07",
+            title = "Motion",
+            timeStart = "09:00",
+        )
+        val original = snapshotFor(teacher)
+        val latest = original.copy(
+            revision = 2,
+            entries = listOf(
+                TeacherEntry(
+                    id = draft.mutationId,
+                    classId = draft.classId,
+                    dateKey = draft.dateKey,
+                    title = draft.title,
+                    body = "",
+                    tag = "note",
+                    status = "",
+                    timeStart = draft.timeStart,
+                    timeEnd = null,
+                    teacherName = "Teacher",
+                    createdAt = 1L,
+                ),
+            ),
+        )
+        val authRepository = FakeAuthRepository()
+        val dataRepository = RevisionConflictRepository(original, latest)
+        val viewModel = MainViewModel(authRepository, dataRepository)
+
+        authRepository.sessions.value = AuthSession.SignedIn(teacher)
+        advanceUntilIdle()
+        viewModel.saveEntry(draft)
+        advanceUntilIdle()
+
+        assertEquals(2L, viewModel.state.value.snapshot?.revision)
+        assertEquals(true, viewModel.state.value.entrySaved)
+        assertEquals(null, viewModel.state.value.errorMessage)
+    }
+}
+
+private class RevisionConflictRepository(
+    private val original: TeacherSnapshot,
+    private val latest: TeacherSnapshot,
+) : TeacherDataRepository {
+    private var loadCount = 0
+
+    override suspend fun loadTeacherSnapshot(
+        teacher: AuthenticatedTeacher,
+    ): TeacherSnapshot {
+        loadCount += 1
+        return if (loadCount == 1) original else latest
+    }
+
+    override suspend fun saveEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        draft: TeacherEntryDraft,
+    ): TeacherSnapshot {
+        throw TeacherRevisionConflictException(
+            expectedRevision = expectedRevision,
+            actualRevision = expectedRevision + 1,
+        )
+    }
 }
 
 private class FakeAuthRepository : TeacherAuthRepository {
@@ -80,8 +191,11 @@ private class FakeAuthRepository : TeacherAuthRepository {
 
 private class FakeDataRepository(
     private val snapshot: TeacherSnapshot,
+    private val savedSnapshot: TeacherSnapshot = snapshot,
 ) : TeacherDataRepository {
     var loadCount: Int = 0
+        private set
+    var saveCount: Int = 0
         private set
 
     override suspend fun loadTeacherSnapshot(
@@ -89,6 +203,15 @@ private class FakeDataRepository(
     ): TeacherSnapshot {
         loadCount += 1
         return snapshot
+    }
+
+    override suspend fun saveEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        draft: TeacherEntryDraft,
+    ): TeacherSnapshot {
+        saveCount += 1
+        return savedSnapshot
     }
 }
 

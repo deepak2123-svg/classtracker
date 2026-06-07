@@ -33,8 +33,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -53,18 +55,25 @@ import com.classtracker.core.designsystem.LedgrLoadingState
 import com.classtracker.core.designsystem.LedgrOfflineBanner
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrThemeMode
+import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherEntry
+import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.feature.auth.AuthScreen
 import com.classtracker.feature.classes.ClassHistoryScreen
 import com.classtracker.feature.classes.StatsScreen
+import com.classtracker.feature.entries.EntryEditorScreen
 import com.classtracker.feature.profile.ProfileScreen
 import com.classtracker.feature.today.HomeScreen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.launch
 
 private const val ClassHistoryRoute = "class/{classId}"
+private const val NewEntryRoute = "entry/new/{classId}"
+private const val EditEntryRoute = "entry/edit/{classId}/{entryId}"
 
 @Composable
 fun LedgrApp(
@@ -123,11 +132,16 @@ fun LedgrApp(
         )
 
         else -> TeacherApp(
+            teacher = requireNotNull(state.teacher),
             snapshot = requireNotNull(state.snapshot),
             errorMessage = state.errorMessage,
+            savingEntry = state.savingEntry,
+            entrySaved = state.entrySaved,
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
             onClearError = viewModel::clearError,
+            onSaveEntry = viewModel::saveEntry,
+            onConsumeEntrySaved = viewModel::consumeEntrySaved,
             onSignOut = viewModel::signOut,
             modifier = modifier,
         )
@@ -137,11 +151,16 @@ fun LedgrApp(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TeacherApp(
+    teacher: AuthenticatedTeacher,
     snapshot: TeacherSnapshot,
     errorMessage: String?,
+    savingEntry: Boolean,
+    entrySaved: Boolean,
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
     onClearError: () -> Unit,
+    onSaveEntry: (TeacherEntryDraft) -> Unit,
+    onConsumeEntrySaved: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -150,8 +169,14 @@ private fun TeacherApp(
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
     val isClassHistory = currentRoute == ClassHistoryRoute
+    val isEntryEditor = currentRoute == NewEntryRoute || currentRoute == EditEntryRoute
+    val isDetailRoute = isClassHistory || isEntryEditor
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val draftStore = remember(context) {
+        EntryDraftStore(context.applicationContext)
+    }
     val todayKey = todayKey()
     val dashboard = snapshot.dashboard(todayKey)
 
@@ -169,7 +194,16 @@ private fun TeacherApp(
         topBar = {
             TopAppBar(
                 title = {
-                    if (isClassHistory) {
+                    if (isEntryEditor) {
+                        Text(
+                            text = if (currentRoute == NewEntryRoute) {
+                                "Add entry"
+                            } else {
+                                "Edit entry"
+                            },
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    } else if (isClassHistory) {
                         Text(
                             text = "Class history",
                             style = MaterialTheme.typography.titleLarge,
@@ -192,7 +226,7 @@ private fun TeacherApp(
                     }
                 },
                 navigationIcon = {
-                    if (isClassHistory) {
+                    if (isDetailRoute) {
                         IconButton(onClick = navController::navigateUp) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
@@ -202,7 +236,7 @@ private fun TeacherApp(
                     }
                 },
                 actions = {
-                    if (!isClassHistory) {
+                    if (!isDetailRoute) {
                         Surface(
                             modifier = Modifier
                                 .padding(end = 12.dp)
@@ -237,7 +271,7 @@ private fun TeacherApp(
             )
         },
         bottomBar = {
-            if (!isClassHistory) {
+            if (!isDetailRoute) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     shadowElevation = 8.dp,
@@ -352,10 +386,164 @@ private fun TeacherApp(
                             ClassHistoryScreen(
                                 teacherClass = teacherClass,
                                 entries = snapshot.entriesForClass(classId),
+                                createEnabled = BuildConfig.NATIVE_ENTRY_CREATE_ENABLED,
+                                editEnabled = BuildConfig.NATIVE_ENTRY_EDIT_ENABLED,
+                                onAddEntry = {
+                                    navController.navigate(
+                                        "entry/new/${Uri.encode(classId)}",
+                                    )
+                                },
+                                onEditEntry = { teacherEntry ->
+                                    navController.navigate(
+                                        "entry/edit/${Uri.encode(classId)}/" +
+                                            Uri.encode(teacherEntry.id),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    composable(NewEntryRoute) { entry ->
+                        val classId = Uri.decode(
+                            entry.arguments?.getString("classId").orEmpty(),
+                        )
+                        val teacherClass = snapshot.classes.firstOrNull { it.id == classId }
+                        if (teacherClass == null) {
+                            MissingClassScreen(
+                                onBack = navController::navigateUp,
+                            )
+                        } else {
+                            EntryEditorRoute(
+                                teacher = teacher,
+                                teacherClass = teacherClass,
+                                existingEntry = null,
+                                existingEntries = snapshot.entriesForClass(classId),
+                                saving = savingEntry,
+                                entrySaved = entrySaved,
+                                draftStore = draftStore,
+                                onSaveEntry = onSaveEntry,
+                                onConsumeEntrySaved = onConsumeEntrySaved,
+                                onSaved = { navController.navigateUp() },
+                            )
+                        }
+                    }
+                    composable(EditEntryRoute) { entry ->
+                        val classId = Uri.decode(
+                            entry.arguments?.getString("classId").orEmpty(),
+                        )
+                        val entryId = Uri.decode(
+                            entry.arguments?.getString("entryId").orEmpty(),
+                        )
+                        val teacherClass = snapshot.classes.firstOrNull { it.id == classId }
+                        val existingEntry = snapshot.entriesForClass(classId)
+                            .firstOrNull { it.id == entryId }
+                        if (teacherClass == null || existingEntry == null) {
+                            MissingClassScreen(
+                                message = "This teaching entry is no longer available.",
+                                onBack = navController::navigateUp,
+                            )
+                        } else {
+                            EntryEditorRoute(
+                                teacher = teacher,
+                                teacherClass = teacherClass,
+                                existingEntry = existingEntry,
+                                existingEntries = snapshot.entriesForClass(classId),
+                                saving = savingEntry,
+                                entrySaved = entrySaved,
+                                draftStore = draftStore,
+                                onSaveEntry = onSaveEntry,
+                                onConsumeEntrySaved = onConsumeEntrySaved,
+                                onSaved = { navController.navigateUp() },
                             )
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EntryEditorRoute(
+    teacher: AuthenticatedTeacher,
+    teacherClass: com.classtracker.core.model.TeacherClass,
+    existingEntry: TeacherEntry?,
+    existingEntries: List<TeacherEntry>,
+    saving: Boolean,
+    entrySaved: Boolean,
+    draftStore: EntryDraftStore,
+    onSaveEntry: (TeacherEntryDraft) -> Unit,
+    onConsumeEntrySaved: () -> Unit,
+    onSaved: () -> Unit,
+) {
+    val entryId = existingEntry?.id
+    val baseDraft = remember(teacherClass.id, entryId) {
+        existingEntry?.toDraft() ?: TeacherEntryDraft(
+            mutationId = "native_${UUID.randomUUID()}",
+            classId = teacherClass.id,
+            dateKey = todayKey(),
+            status = "",
+            timeStart = teacherClass.startTime.orEmpty(),
+            timeEnd = teacherClass.endTime.orEmpty(),
+        )
+    }
+    val recovered = remember(teacher.uid, teacherClass.id, entryId) {
+        draftStore.read(
+            uid = teacher.uid,
+            classId = teacherClass.id,
+            entryId = entryId,
+        )
+    }
+    var draft by remember(teacher.uid, teacherClass.id, entryId) {
+        mutableStateOf(recovered?.draft ?: baseDraft)
+    }
+
+    LaunchedEffect(entrySaved) {
+        if (entrySaved) {
+            draftStore.clear(
+                uid = teacher.uid,
+                classId = teacherClass.id,
+                entryId = entryId,
+            )
+            onConsumeEntrySaved()
+            onSaved()
+        }
+    }
+
+    EntryEditorScreen(
+        teacherClass = teacherClass,
+        draft = draft,
+        existingEntries = existingEntries,
+        saving = saving,
+        recoveredDraft = recovered != null,
+        onDraftChanged = { updated ->
+            draft = updated
+            draftStore.write(teacher.uid, updated)
+        },
+        onSave = onSaveEntry,
+    )
+}
+
+@Composable
+private fun MissingClassScreen(
+    message: String = "This class is no longer available.",
+    onBack: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            LedgrEmptyState(
+                title = "Entry unavailable",
+                message = message,
+            )
+            Button(onClick = onBack) {
+                Text("Back to class")
             }
         }
     }
@@ -410,3 +598,17 @@ private fun FullScreenError(
 
 private fun todayKey(): String =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+private fun TeacherEntry.toDraft(): TeacherEntryDraft = TeacherEntryDraft(
+    entryId = id,
+    mutationId = "",
+    classId = classId,
+    dateKey = dateKey,
+    title = title,
+    body = body,
+    tag = tag,
+    status = status,
+    timeStart = timeStart.orEmpty(),
+    timeEnd = timeEnd.orEmpty(),
+    createdAt = createdAt,
+)

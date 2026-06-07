@@ -81,6 +81,10 @@ acceptance remain before internal distribution.
 
 ## Phase 4: Core teacher workflows
 
+Status: checkpoint 1 implements beta-only online create/edit with compatibility
+writes. Offline synchronization and the remaining destructive workflows are not
+yet complete.
+
 ### Deliverables
 
 - Create, edit, duplicate, and delete daily entries.

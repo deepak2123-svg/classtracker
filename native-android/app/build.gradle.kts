@@ -38,8 +38,8 @@ android {
         applicationId = "com.classtracker.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3.1"
+        versionCode = 5
+        versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -88,12 +88,18 @@ android {
                 "GOOGLE_SIGN_IN_CONFIGURED",
                 firebaseProperties.getProperty("betaGoogleSignInConfigured", "false"),
             )
+            buildConfigField("boolean", "NATIVE_ENTRY_CREATE_ENABLED", "true")
+            buildConfigField("boolean", "NATIVE_ENTRY_EDIT_ENABLED", "true")
+            buildConfigField("boolean", "NATIVE_ENTRY_DELETE_ENABLED", "false")
             resValue("string", "app_name", "Ledgr Teacher Beta")
         }
         create("production") {
             dimension = "environment"
             buildConfigField("String", "ENVIRONMENT", "\"production\"")
             buildConfigField("boolean", "GOOGLE_SIGN_IN_CONFIGURED", "true")
+            buildConfigField("boolean", "NATIVE_ENTRY_CREATE_ENABLED", "false")
+            buildConfigField("boolean", "NATIVE_ENTRY_EDIT_ENABLED", "false")
+            buildConfigField("boolean", "NATIVE_ENTRY_DELETE_ENABLED", "false")
             resValue("string", "app_name", "Ledgr Teacher")
         }
     }
@@ -148,6 +154,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":feature:auth"))
     implementation(project(":feature:classes"))
+    implementation(project(":feature:entries"))
     implementation(project(":feature:profile"))
     implementation(project(":feature:today"))
 
