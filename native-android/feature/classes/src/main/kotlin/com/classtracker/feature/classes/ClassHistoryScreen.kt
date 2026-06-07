@@ -32,6 +32,7 @@ import com.classtracker.core.designsystem.LedgrSectionHeading
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
+import com.classtracker.core.model.TeacherEntrySyncState
 import com.classtracker.core.model.isTeacherEntryDateWithinWindow
 
 @Composable
@@ -105,7 +106,8 @@ fun ClassHistoryScreen(
                 EntryCard(
                     entry = entry,
                     editEnabled = editEnabled &&
-                        isTeacherEntryDateWithinWindow(entry.dateKey),
+                        isTeacherEntryDateWithinWindow(entry.dateKey) &&
+                        entry.syncState != TeacherEntrySyncState.Syncing,
                     onEdit = { onEditEntry(entry) },
                 )
             }
@@ -167,6 +169,21 @@ private fun EntryCard(
                     text = entry.title.ifBlank { "Teaching entry" },
                     style = MaterialTheme.typography.titleMedium,
                 )
+                if (entry.syncState != TeacherEntrySyncState.Synced) {
+                    Text(
+                        text = when (entry.syncState) {
+                            TeacherEntrySyncState.Pending -> "Saved on this device"
+                            TeacherEntrySyncState.Syncing -> "Syncing"
+                            TeacherEntrySyncState.Failed -> "Sync needs attention"
+                            TeacherEntrySyncState.Synced -> ""
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = when (entry.syncState) {
+                            TeacherEntrySyncState.Failed -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.primary
+                        },
+                    )
+                }
                 if (entry.body.isNotBlank()) {
                     Text(
                         text = entry.body,

@@ -12,6 +12,7 @@ import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherEntryValidation
 import com.classtracker.core.model.TeacherSnapshot
+import com.classtracker.core.model.TeacherSyncSummary
 import com.classtracker.core.model.validateTeacherEntryDraft
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuthException
@@ -35,6 +36,7 @@ data class MainUiState(
     val refreshing: Boolean = false,
     val savingEntry: Boolean = false,
     val entrySaved: Boolean = false,
+    val syncSummary: TeacherSyncSummary = TeacherSyncSummary.Idle,
     val errorMessage: String? = null,
 )
 
@@ -47,6 +49,8 @@ class MainViewModel @Inject constructor(
     val state: StateFlow<MainUiState> = mutableState.asStateFlow()
 
     private var loadJob: Job? = null
+    private var snapshotJob: Job? = null
+    private var syncSummaryJob: Job? = null
     private var loadedUid: String? = null
 
     init {
@@ -59,6 +63,8 @@ class MainViewModel @Inject constructor(
                     AuthSession.SignedOut -> {
                         loadedUid = null
                         loadJob?.cancel()
+                        snapshotJob?.cancel()
+                        syncSummaryJob?.cancel()
                         mutableState.value = MainUiState(checkingSession = false)
                     }
                     is AuthSession.SignedIn -> {
@@ -72,6 +78,7 @@ class MainViewModel @Inject constructor(
                         }
                         if (loadedUid != session.teacher.uid) {
                             loadedUid = session.teacher.uid
+                            observeLocalData(session.teacher.uid)
                             loadTeacherData(session.teacher, refresh = false)
                         }
                     }
@@ -96,6 +103,13 @@ class MainViewModel @Inject constructor(
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
+        }
+    }
+
+    fun retrySync() {
+        val uid = mutableState.value.teacher?.uid ?: return
+        viewModelScope.launch {
+            dataRepository.retryFailed(uid)
         }
     }
 
@@ -251,6 +265,29 @@ class MainViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+    }
+
+    private fun observeLocalData(uid: String) {
+        snapshotJob?.cancel()
+        snapshotJob = viewModelScope.launch {
+            dataRepository.observeTeacherSnapshot(uid).collectLatest { snapshot ->
+                if (snapshot != null) {
+                    mutableState.update {
+                        it.copy(
+                            snapshot = snapshot,
+                            loadingData = false,
+                        )
+                    }
+                }
+            }
+        }
+
+        syncSummaryJob?.cancel()
+        syncSummaryJob = viewModelScope.launch {
+            dataRepository.observeSyncSummary(uid).collectLatest { summary ->
+                mutableState.update { it.copy(syncSummary = summary) }
+            }
         }
     }
 }

@@ -4,7 +4,7 @@ import android.content.Context
 import com.classtracker.core.firebase.FirebaseTeacherAuthRepository
 import com.classtracker.core.firebase.FirebaseTeacherDataRepository
 import com.classtracker.core.firebase.TeacherAuthRepository
-import com.classtracker.core.firebase.TeacherDataRepository
+import com.classtracker.core.firebase.TeacherRemoteDataSource
 import com.classtracker.nativeapp.BuildConfig
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -58,7 +58,7 @@ object FirebaseModule {
 
     @Provides
     @Singleton
-    fun provideTeacherDataRepository(
+    fun provideTeacherRemoteDataSource(
         firestore: FirebaseFirestore,
-    ): TeacherDataRepository = FirebaseTeacherDataRepository(firestore)
+    ): TeacherRemoteDataSource = FirebaseTeacherDataRepository(firestore)
 }

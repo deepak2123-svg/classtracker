@@ -51,9 +51,12 @@ Do not commit `firebase.local.properties`.
 
 ## Current scope
 
-Phase 2 adds native Firebase authentication and read-only compatibility access
-to the existing teacher profile, institutes, classes, and entry history.
-Teacher data loads after account changes and on manual refresh only. The native
-client has no Firestore write API.
+Phase 4 checkpoint 2 includes native Firebase authentication, compatibility
+reads, beta-only entry creation and editing, Room-backed offline browsing, and a
+durable WorkManager outbox. Production native builds remain read-only, and the
+teacher/admin web applications continue to use the existing Firestore model.
+
+See `../docs/native-android-phase-4-checkpoint-2.md` for synchronization
+behavior, verification, and rollback details.
 
 See `../docs/native-android-roadmap.md` for the complete migration plan.

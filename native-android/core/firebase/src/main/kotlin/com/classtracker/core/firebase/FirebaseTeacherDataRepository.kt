@@ -11,7 +11,7 @@ import kotlinx.coroutines.tasks.await
 
 class FirebaseTeacherDataRepository(
     private val firestore: FirebaseFirestore,
-) : TeacherDataRepository {
+) : TeacherRemoteDataSource {
     private val entryWriter = FirebaseTeacherEntryWriter(firestore)
 
     override suspend fun loadTeacherSnapshot(

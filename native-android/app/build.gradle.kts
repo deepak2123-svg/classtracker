@@ -38,8 +38,8 @@ android {
         applicationId = "com.classtracker.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.4.0"
+        versionCode = 6
+        versionName = "0.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -149,9 +149,11 @@ androidComponents {
 }
 
 dependencies {
+    implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:firebase"))
     implementation(project(":core:model"))
+    implementation(project(":core:sync"))
     implementation(project(":feature:auth"))
     implementation(project(":feature:classes"))
     implementation(project(":feature:entries"))
@@ -165,6 +167,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.googleid)
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)

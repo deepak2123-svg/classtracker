@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,6 +60,7 @@ import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
+import com.classtracker.core.model.TeacherSyncSummary
 import com.classtracker.feature.auth.AuthScreen
 import com.classtracker.feature.classes.ClassHistoryScreen
 import com.classtracker.feature.classes.StatsScreen
@@ -137,11 +139,13 @@ fun LedgrApp(
             errorMessage = state.errorMessage,
             savingEntry = state.savingEntry,
             entrySaved = state.entrySaved,
+            syncSummary = state.syncSummary,
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
             onClearError = viewModel::clearError,
             onSaveEntry = viewModel::saveEntry,
             onConsumeEntrySaved = viewModel::consumeEntrySaved,
+            onRetrySync = viewModel::retrySync,
             onSignOut = viewModel::signOut,
             modifier = modifier,
         )
@@ -156,11 +160,13 @@ private fun TeacherApp(
     errorMessage: String?,
     savingEntry: Boolean,
     entrySaved: Boolean,
+    syncSummary: TeacherSyncSummary,
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
     onClearError: () -> Unit,
     onSaveEntry: (TeacherEntryDraft) -> Unit,
     onConsumeEntrySaved: () -> Unit,
+    onRetrySync: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -327,6 +333,13 @@ private fun TeacherApp(
                     modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp),
                 )
             }
+            if (syncSummary.hasWork) {
+                SyncStatusBanner(
+                    summary = syncSummary,
+                    onRetry = onRetrySync,
+                    modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp),
+                )
+            }
             Box(modifier = Modifier.weight(1f)) {
                 NavHost(
                     navController = navController,
@@ -456,6 +469,52 @@ private fun TeacherApp(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncStatusBanner(
+    summary: TeacherSyncSummary,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val failed = summary.failedCount > 0
+    val label = when {
+        failed -> "${summary.failedCount} ${if (summary.failedCount == 1) "entry needs" else "entries need"} attention"
+        summary.syncingCount > 0 -> "Syncing ${summary.syncingCount} ${if (summary.syncingCount == 1) "entry" else "entries"}"
+        else -> "${summary.pendingCount} ${if (summary.pendingCount == 1) "entry is" else "entries are"} saved on this device"
+    }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = if (failed) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        contentColor = if (failed) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        },
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            if (failed) {
+                OutlinedButton(onClick = onRetry) {
+                    Text("Retry")
                 }
             }
         }

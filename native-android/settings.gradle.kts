@@ -18,9 +18,11 @@ rootProject.name = "LedgrNative"
 
 include(
     ":app",
+    ":core:database",
     ":core:designsystem",
     ":core:firebase",
     ":core:model",
+    ":core:sync",
     ":feature:auth",
     ":feature:classes",
     ":feature:entries",

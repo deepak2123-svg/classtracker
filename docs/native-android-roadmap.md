@@ -63,6 +63,9 @@ acceptance remain before internal distribution.
 
 ## Phase 3: Offline database and synchronization
 
+Status: completed as part of
+`native-phase-4-offline-sync-checkpoint`.
+
 ### Deliverables
 
 - Room database as the native app's local source of truth.
@@ -81,9 +84,9 @@ acceptance remain before internal distribution.
 
 ## Phase 4: Core teacher workflows
 
-Status: checkpoint 1 implements beta-only online create/edit with compatibility
-writes. Offline synchronization and the remaining destructive workflows are not
-yet complete.
+Status: checkpoint 2 implements beta-only offline create/edit with durable
+Room persistence and WorkManager synchronization. The remaining destructive
+workflows are not yet complete.
 
 ### Deliverables
 

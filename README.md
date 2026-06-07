@@ -7,6 +7,7 @@ ClassLog is a Vite + React + Firebase app for classroom logging, with a dedicate
 - Teacher web app for daily class logging, history, export, offline-safe drafting, and teacher profile tools
 - Admin web app for managing teachers, institutes, sections, and data operations
 - Shared native shell for Android and iOS using Capacitor
+- Standalone native Android teacher app in Kotlin and Jetpack Compose
 - Firebase-backed auth, role checks, persistence, and sync
 
 ## Product surfaces
@@ -78,6 +79,7 @@ npm run build
 - `src/platform.js` teacher/admin/native mode routing helpers
 - `android/` Capacitor Android project
 - `ios/` Capacitor iOS project
+- `native-android/` standalone native Android teacher application
 
 ## Mobile build notes
 

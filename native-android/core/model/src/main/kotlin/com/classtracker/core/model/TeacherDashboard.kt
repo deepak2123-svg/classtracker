@@ -70,7 +70,29 @@ data class TeacherEntry(
     val timeEnd: String?,
     val teacherName: String?,
     val createdAt: Long,
+    val syncState: TeacherEntrySyncState = TeacherEntrySyncState.Synced,
 )
+
+enum class TeacherEntrySyncState {
+    Synced,
+    Pending,
+    Syncing,
+    Failed,
+}
+
+data class TeacherSyncSummary(
+    val pendingCount: Int = 0,
+    val syncingCount: Int = 0,
+    val failedCount: Int = 0,
+    val lastError: String? = null,
+) {
+    val hasWork: Boolean
+        get() = pendingCount > 0 || syncingCount > 0 || failedCount > 0
+
+    companion object {
+        val Idle = TeacherSyncSummary()
+    }
+}
 
 data class TeacherEntryDraft(
     val entryId: String? = null,
