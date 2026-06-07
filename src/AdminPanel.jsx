@@ -3716,6 +3716,14 @@ function LedgrReportOptionsModal({
   const allInstitutes = institutes || [];
 
   React.useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  React.useEffect(() => {
     if(!schedule) return;
     setScheduleEnabled(schedule.enabled !== false);
     setScheduleTimes(schedule.times?.length ? [...schedule.times] : ["09:00"]);
@@ -3836,9 +3844,38 @@ function LedgrReportOptionsModal({
   };
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.58)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
-      <div style={{background:"#FFFFFF",borderRadius:24,width:"100%",maxWidth:520,boxShadow:"0 28px 80px rgba(15,23,42,0.28)",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <div style={{overflowY:"auto",flex:1,padding:"26px 24px 12px"}}>
+    <div className="ledgr-report-modal-overlay" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.58)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",overflow:"hidden"}}>
+      <style>{`
+        .ledgr-report-modal-overlay {
+          height: 100vh;
+          height: 100dvh;
+          box-sizing: border-box;
+        }
+        .ledgr-report-modal {
+          max-height: calc(100dvh - 32px);
+        }
+        .ledgr-report-modal-scroll {
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+        }
+        @media (max-width: 600px) {
+          .ledgr-report-modal-overlay {
+            padding: max(8px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px)) !important;
+          }
+          .ledgr-report-modal {
+            max-height: calc(100dvh - 16px) !important;
+            border-radius: 20px !important;
+          }
+          .ledgr-report-modal-scroll {
+            padding: 20px 16px 10px !important;
+          }
+          .ledgr-report-modal-footer {
+            padding: 12px 16px max(14px, env(safe-area-inset-bottom, 0px)) !important;
+          }
+        }
+      `}</style>
+      <div className="ledgr-report-modal" style={{background:"#FFFFFF",borderRadius:24,width:"100%",maxWidth:520,boxShadow:"0 28px 80px rgba(15,23,42,0.28)",maxHeight:"calc(100dvh - 32px)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div className="ledgr-report-modal-scroll" style={{overflowY:"auto",minHeight:0,flex:1,padding:"26px 24px 12px"}}>
           <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:24}}>
             <div style={{width:52,height:52,borderRadius:16,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
               <AppIcon icon={IconCalendar} size={26} color={G.blue} />
@@ -4077,7 +4114,7 @@ function LedgrReportOptionsModal({
           </div>
         </div>
 
-        <div style={{flexShrink:0,padding:"14px 24px 22px",borderTop:"1px solid #F1F5F9",display:"flex",gap:12,background:"#FFFFFF"}}>
+        <div className="ledgr-report-modal-footer" style={{flexShrink:0,padding:"14px 24px 22px",borderTop:"1px solid #F1F5F9",display:"flex",gap:12,background:"#FFFFFF"}}>
           <button type="button" onClick={onClose} disabled={busy} style={{flex:1,height:50,borderRadius:14,border:"1.5px solid #E5E7EB",background:"#FFFFFF",color:"#374151",fontSize:15,fontWeight:800,fontFamily:G.sans,cursor:busy?"not-allowed":"pointer"}}>
             Cancel
           </button>
@@ -11207,6 +11244,23 @@ function AdminPanelInner({user}){
     const MobileCentreSummaryScreen = () => (
       <div style={mobilePageShellStyle}>
         <MobileMotionStyles />
+        {instituteGlanceOptionsOpen&&(
+          <LedgrReportOptionsModal
+            institutes={institutes}
+            period={instituteGlancePeriod}
+            month={instituteGlanceMonth}
+            rangeStart={instituteGlanceRangeStart}
+            rangeEnd={instituteGlanceRangeEnd}
+            schedule={ledgrReportSchedule}
+            scheduleLoading={ledgrReportScheduleLoading}
+            scheduleSaving={ledgrReportScheduleSaving}
+            exportDisabled={instituteGlanceExportDisabled}
+            busyFormat={instituteGlanceExportBusy}
+            onClose={()=>!instituteGlanceExportBusy&&!ledgrReportScheduleSaving&&setInstituteGlanceOptionsOpen(false)}
+            onApply={applyInstituteGlanceOptions}
+            onSaveSchedule={saveInstituteGlanceSchedule}
+          />
+        )}
         <AdminToastBanner message={adminToast} />
         <MobileNav/>
         <div style={mobilePageInnerStyle}>
