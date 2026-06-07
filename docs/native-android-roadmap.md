@@ -84,9 +84,9 @@ Status: completed as part of
 
 ## Phase 4: Core teacher workflows
 
-Status: checkpoint 2 implements beta-only offline create/edit with durable
-Room persistence and WorkManager synchronization. The remaining destructive
-workflows are not yet complete.
+Status: checkpoint 3 improves teacher mobile web parity for native class
+detail and entry editing on top of the checkpoint 2 offline create/edit
+foundation. The remaining destructive workflows are not yet complete.
 
 ### Deliverables
 
@@ -96,6 +96,8 @@ workflows are not yet complete.
 - History, search, trash, and restore.
 - Compatibility writes that remain visible to teacher web and admin web.
 - Feature flags for each write capability.
+- Native class-detail and add-entry screens that visually match the mobile
+  teacher web information hierarchy before new workflows are added.
 
 ### Acceptance gate
 

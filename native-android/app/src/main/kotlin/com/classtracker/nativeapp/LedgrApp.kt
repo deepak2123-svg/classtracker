@@ -74,7 +74,7 @@ import java.util.UUID
 import kotlinx.coroutines.launch
 
 private const val ClassHistoryRoute = "class/{classId}"
-private const val NewEntryRoute = "entry/new/{classId}"
+private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
 private const val EditEntryRoute = "entry/edit/{classId}/{entryId}"
 
 @Composable
@@ -211,7 +211,7 @@ private fun TeacherApp(
                         )
                     } else if (isClassHistory) {
                         Text(
-                            text = "Class history",
+                            text = "Class detail",
                             style = MaterialTheme.typography.titleLarge,
                         )
                     } else {
@@ -401,9 +401,9 @@ private fun TeacherApp(
                                 entries = snapshot.entriesForClass(classId),
                                 createEnabled = BuildConfig.NATIVE_ENTRY_CREATE_ENABLED,
                                 editEnabled = BuildConfig.NATIVE_ENTRY_EDIT_ENABLED,
-                                onAddEntry = {
+                                onAddEntry = { dateKey ->
                                     navController.navigate(
-                                        "entry/new/${Uri.encode(classId)}",
+                                        "entry/new/${Uri.encode(classId)}/${Uri.encode(dateKey)}",
                                     )
                                 },
                                 onEditEntry = { teacherEntry ->
@@ -419,6 +419,9 @@ private fun TeacherApp(
                         val classId = Uri.decode(
                             entry.arguments?.getString("classId").orEmpty(),
                         )
+                        val dateKey = Uri.decode(
+                            entry.arguments?.getString("dateKey").orEmpty(),
+                        ).ifBlank { todayKey() }
                         val teacherClass = snapshot.classes.firstOrNull { it.id == classId }
                         if (teacherClass == null) {
                             MissingClassScreen(
@@ -429,6 +432,7 @@ private fun TeacherApp(
                                 teacher = teacher,
                                 teacherClass = teacherClass,
                                 existingEntry = null,
+                                initialDateKey = dateKey,
                                 existingEntries = snapshot.entriesForClass(classId),
                                 saving = savingEntry,
                                 entrySaved = entrySaved,
@@ -459,6 +463,7 @@ private fun TeacherApp(
                                 teacher = teacher,
                                 teacherClass = teacherClass,
                                 existingEntry = existingEntry,
+                                initialDateKey = existingEntry.dateKey,
                                 existingEntries = snapshot.entriesForClass(classId),
                                 saving = savingEntry,
                                 entrySaved = entrySaved,
@@ -526,6 +531,7 @@ private fun EntryEditorRoute(
     teacher: AuthenticatedTeacher,
     teacherClass: com.classtracker.core.model.TeacherClass,
     existingEntry: TeacherEntry?,
+    initialDateKey: String,
     existingEntries: List<TeacherEntry>,
     saving: Boolean,
     entrySaved: Boolean,
@@ -535,11 +541,11 @@ private fun EntryEditorRoute(
     onSaved: () -> Unit,
 ) {
     val entryId = existingEntry?.id
-    val baseDraft = remember(teacherClass.id, entryId) {
+    val baseDraft = remember(teacherClass.id, entryId, initialDateKey) {
         existingEntry?.toDraft() ?: TeacherEntryDraft(
             mutationId = "native_${UUID.randomUUID()}",
             classId = teacherClass.id,
-            dateKey = todayKey(),
+            dateKey = initialDateKey.ifBlank { todayKey() },
             status = "",
             timeStart = teacherClass.startTime.orEmpty(),
             timeEnd = teacherClass.endTime.orEmpty(),

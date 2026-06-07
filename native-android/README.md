@@ -51,12 +51,15 @@ Do not commit `firebase.local.properties`.
 
 ## Current scope
 
-Phase 4 checkpoint 2 includes native Firebase authentication, compatibility
-reads, beta-only entry creation and editing, Room-backed offline browsing, and a
-durable WorkManager outbox. Production native builds remain read-only, and the
-teacher/admin web applications continue to use the existing Firestore model.
+Phase 4 checkpoint 3 includes native Firebase authentication, compatibility
+reads, beta-only entry creation and editing, Room-backed offline browsing, a
+durable WorkManager outbox, and teacher mobile web parity improvements for
+class detail and add-entry screens. Production native builds remain read-only,
+and the teacher/admin web applications continue to use the existing Firestore
+model.
 
-See `../docs/native-android-phase-4-checkpoint-2.md` for synchronization
-behavior, verification, and rollback details.
+See `../docs/native-android-phase-4-checkpoint-3.md` for the latest parity
+behavior, verification, and rollback details. See
+`../docs/native-android-phase-4-checkpoint-2.md` for synchronization details.
 
 See `../docs/native-android-roadmap.md` for the complete migration plan.

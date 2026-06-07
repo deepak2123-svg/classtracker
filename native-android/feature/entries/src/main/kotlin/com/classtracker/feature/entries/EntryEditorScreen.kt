@@ -3,8 +3,10 @@ package com.classtracker.feature.entries
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,6 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -23,7 +28,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -34,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -133,6 +138,15 @@ fun EntryEditorScreen(
             )
         }
 
+        if (draft.timeStart.isNotBlank()) {
+            item {
+                DurationCard(
+                    draft = draft,
+                    onDraftChanged = onDraftChanged,
+                )
+            }
+        }
+
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -149,7 +163,15 @@ fun EntryEditorScreen(
                             status = status,
                             selected = draft.status == status.storageValue,
                             onClick = {
-                                onDraftChanged(draft.copy(status = status.storageValue))
+                                onDraftChanged(
+                                    draft.copy(
+                                        status = if (draft.status == status.storageValue) {
+                                            ""
+                                        } else {
+                                            status.storageValue
+                                        },
+                                    ),
+                                )
                             },
                             modifier = Modifier.weight(1f),
                         )
@@ -164,7 +186,15 @@ fun EntryEditorScreen(
                             status = status,
                             selected = draft.status == status.storageValue,
                             onClick = {
-                                onDraftChanged(draft.copy(status = status.storageValue))
+                                onDraftChanged(
+                                    draft.copy(
+                                        status = if (draft.status == status.storageValue) {
+                                            ""
+                                        } else {
+                                            status.storageValue
+                                        },
+                                    ),
+                                )
                             },
                             modifier = Modifier.weight(1f),
                         )
@@ -298,7 +328,16 @@ private fun ScheduleCard(
                     onClick = {
                         showTimePicker(
                             initialValue = draft.timeStart,
-                            onSelected = { onDraftChanged(draft.copy(timeStart = it)) },
+                            onSelected = { selectedStart ->
+                                onDraftChanged(
+                                    draft.copy(
+                                        timeStart = selectedStart,
+                                        timeEnd = draft.timeEnd.ifBlank {
+                                            addMinutes(selectedStart, 60)
+                                        },
+                                    ),
+                                )
+                            },
                             context = context,
                         )
                     },
@@ -319,6 +358,75 @@ private fun ScheduleCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun DurationCard(
+    draft: TeacherEntryDraft,
+    onDraftChanged: (TeacherEntryDraft) -> Unit,
+) {
+    val options = listOf(45, 60, 75, 90, 105, 120)
+    val selectedDuration = durationMinutes(draft.timeStart, draft.timeEnd)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "DURATION",
+                style = MaterialTheme.typography.labelLarge,
+                color = LedgrTheme.colors.textMuted,
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(options, key = { it }) { minutes ->
+                    DurationChip(
+                        minutes = minutes,
+                        selected = selectedDuration == minutes,
+                        onClick = {
+                            onDraftChanged(
+                                draft.copy(
+                                    timeEnd = addMinutes(draft.timeStart, minutes),
+                                ),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DurationChip(
+    minutes: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        color = if (selected) LedgrTheme.colors.forest else Color.Transparent,
+        contentColor = if (selected) Color.White else LedgrTheme.colors.textMuted,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.5.dp,
+            color = if (selected) LedgrTheme.colors.forest else MaterialTheme.colorScheme.outline,
+        ),
+    ) {
+        Text(
+            text = durationLabel(minutes),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }
 
@@ -369,18 +477,38 @@ private fun StatusChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = {
-            Text(
-                text = status.label,
-                modifier = Modifier.fillMaxWidth(),
-                fontWeight = FontWeight.SemiBold,
+    val tone = statusTone(status)
+    Surface(
+        modifier = modifier
+            .clickable(onClick = onClick),
+        color = if (selected) tone.background else MaterialTheme.colorScheme.surface,
+        contentColor = if (selected) tone.content else LedgrTheme.colors.textMuted,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(
+            width = 1.5.dp,
+            color = if (selected) tone.dot else MaterialTheme.colorScheme.outline,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        color = if (selected) tone.dot else LedgrTheme.colors.textSubtle,
+                        shape = CircleShape,
+                    ),
             )
-        },
-        modifier = modifier,
-    )
+            Text(
+                text = tone.label,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+    }
 }
 
 private fun showTimePicker(
@@ -430,4 +558,70 @@ private fun formatDisplayTime(value: String): String {
     val target = SimpleDateFormat("h:mm a", Locale.US)
     return runCatching { target.format(requireNotNull(source.parse(value))) }
         .getOrDefault(value)
+}
+
+private data class StatusTone(
+    val background: Color,
+    val content: Color,
+    val dot: Color,
+    val label: String,
+)
+
+private fun statusTone(status: TeacherEntryStatus): StatusTone = when (status) {
+    TeacherEntryStatus.Started -> StatusTone(
+        background = Color(0xFFDBEAFE),
+        content = Color(0xFF1D4ED8),
+        dot = Color(0xFF3B82F6),
+        label = "Started",
+    )
+    TeacherEntryStatus.InProgress -> StatusTone(
+        background = Color(0xFFFEF3C7),
+        content = Color(0xFFB45309),
+        dot = Color(0xFFF59E0B),
+        label = "In Progress",
+    )
+    TeacherEntryStatus.Completed -> StatusTone(
+        background = Color(0xFFD1FAE5),
+        content = Color(0xFF065F46),
+        dot = Color(0xFF10B981),
+        label = "Completed",
+    )
+    TeacherEntryStatus.Doubts -> StatusTone(
+        background = Color(0xFFFFEDD5),
+        content = Color(0xFF9A3412),
+        dot = Color(0xFFF97316),
+        label = "Doubts",
+    )
+}
+
+private fun durationMinutes(start: String, end: String): Int? {
+    val startMinutes = timeMinutes(start) ?: return null
+    val endMinutes = timeMinutes(end) ?: return null
+    return (endMinutes - startMinutes).takeIf { it in 1..479 }
+}
+
+private fun addMinutes(start: String, minutes: Int): String {
+    val startMinutes = timeMinutes(start) ?: return ""
+    val next = (startMinutes + minutes).coerceIn(0, 23 * 60 + 59)
+    return "%02d:%02d".format(Locale.US, next / 60, next % 60)
+}
+
+private fun timeMinutes(value: String): Int? {
+    val parts = value.split(":")
+    if (parts.size < 2) return null
+    val hour = parts[0].toIntOrNull() ?: return null
+    val minute = parts[1].toIntOrNull() ?: return null
+    if (hour !in 0..23 || minute !in 0..59) return null
+    return hour * 60 + minute
+}
+
+private fun durationLabel(minutes: Int): String {
+    if (minutes < 60) return "${minutes}m"
+    val hours = minutes / 60
+    val remainder = minutes % 60
+    return if (remainder == 0) {
+        "${hours} hr"
+    } else {
+        "${hours}h ${remainder}m"
+    }
 }
