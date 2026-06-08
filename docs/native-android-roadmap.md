@@ -84,9 +84,10 @@ Status: completed as part of
 
 ## Phase 4: Core teacher workflows
 
-Status: checkpoint 8 upgrades class-detail swiping to a sliding pager motion on
-top of checkpoint 7 sticky banner/newest-first history/class swiping, checkpoint
-6 entry search/status filters, checkpoint 5 beta-only recoverable entry
+Status: checkpoint 9 adds a web-style native entry calendar and smoother
+animated date/filter controls on top of checkpoint 8 sliding class pager,
+checkpoint 7 sticky banner/newest-first history/class swiping, checkpoint 6
+entry search/status filters, checkpoint 5 beta-only recoverable entry
 delete/restore, checkpoint 4 duplicate workflow support, checkpoint 3 teacher
 mobile web parity, and checkpoint 2 offline create/edit foundation.
 
@@ -95,7 +96,7 @@ mobile web parity, and checkpoint 2 offline create/edit foundation.
 - Create, edit, duplicate, and delete daily entries.
 - Institute, class, section, subject, date, and time selection.
 - Draft recovery and form validation.
-- History, search, trash, and restore.
+- History, search, trash, restore, and web-style native date selection.
 - Sticky class-detail summary and sliding swipe navigation across classes.
 - Compatibility writes that remain visible to teacher web and admin web.
 - Feature flags for each write capability.

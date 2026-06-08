@@ -1,5 +1,8 @@
 package com.classtracker.feature.classes
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -39,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrSectionHeading
@@ -389,16 +393,37 @@ private fun HistoryStatusChip(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) colors.forest else colors.surfaceAlt,
+        label = "history-chip-container",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) Color.White else colors.textSecondary,
+        label = "history-chip-content",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) colors.forest else MaterialTheme.colorScheme.outline,
+        label = "history-chip-border",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.03f else 1f,
+        animationSpec = spring(stiffness = 460f, dampingRatio = 0.82f),
+        label = "history-chip-scale",
+    )
     Surface(
         modifier = Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .size(width = 112.dp, height = 42.dp)
             .clickable(onClick = onClick),
-        color = if (selected) colors.forest else colors.surfaceAlt,
-        contentColor = if (selected) Color.White else colors.textSecondary,
+        color = containerColor,
+        contentColor = contentColor,
         shape = RoundedCornerShape(999.dp),
         border = BorderStroke(
             width = if (selected) 2.dp else 1.dp,
-            color = if (selected) colors.forest else MaterialTheme.colorScheme.outline,
+            color = borderColor,
         ),
     ) {
         Row(

@@ -1,7 +1,11 @@
 package com.classtracker.feature.entries
 
-import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ChevronLeft
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
@@ -35,12 +41,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.classtracker.core.designsystem.LedgrClassCard
 import com.classtracker.core.designsystem.LedgrSectionHeading
@@ -134,6 +144,7 @@ fun EntryEditorScreen(
         item {
             ScheduleCard(
                 draft = draft,
+                existingEntries = existingEntries,
                 onDraftChanged = onDraftChanged,
             )
         }
@@ -268,12 +279,10 @@ fun EntryEditorScreen(
 @Composable
 private fun ScheduleCard(
     draft: TeacherEntryDraft,
+    existingEntries: List<TeacherEntry>,
     onDraftChanged: (TeacherEntryDraft) -> Unit,
 ) {
     val context = LocalContext.current
-    val selectedDate = remember(draft.dateKey) {
-        parseDateKey(draft.dateKey) ?: Calendar.getInstance()
-    }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -284,36 +293,13 @@ private fun ScheduleCard(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            PickerField(
-                label = "Date",
-                value = formatDisplayDate(draft.dateKey),
-                icon = Icons.Outlined.CalendarMonth,
-                onClick = {
-                    val dialog = DatePickerDialog(
-                        context,
-                        { _, year, month, day ->
-                            onDraftChanged(
-                                draft.copy(
-                                    dateKey = "%04d-%02d-%02d".format(
-                                        Locale.US,
-                                        year,
-                                        month + 1,
-                                        day,
-                                    ),
-                                ),
-                            )
-                        },
-                        selectedDate.get(Calendar.YEAR),
-                        selectedDate.get(Calendar.MONTH),
-                        selectedDate.get(Calendar.DAY_OF_MONTH),
-                    )
-                    val today = Calendar.getInstance()
-                    val earliest = Calendar.getInstance().apply {
-                        add(Calendar.DAY_OF_YEAR, -7)
-                    }
-                    dialog.datePicker.minDate = earliest.timeInMillis
-                    dialog.datePicker.maxDate = today.timeInMillis
-                    dialog.show()
+            EntryDateCalendar(
+                selectedDate = draft.dateKey,
+                entryCounts = remember(existingEntries) {
+                    existingEntries.groupingBy(TeacherEntry::dateKey).eachCount()
+                },
+                onDateSelected = { dateKey ->
+                    onDraftChanged(draft.copy(dateKey = dateKey))
                 },
             )
 
@@ -357,6 +343,270 @@ private fun ScheduleCard(
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun EntryDateCalendar(
+    selectedDate: String,
+    entryCounts: Map<String, Int>,
+    onDateSelected: (String) -> Unit,
+) {
+    val selectedCalendar = remember(selectedDate) {
+        parseDateKey(selectedDate) ?: Calendar.getInstance()
+    }
+    var viewYear by remember(selectedDate) {
+        mutableIntStateOf(selectedCalendar.get(Calendar.YEAR))
+    }
+    var viewMonth by remember(selectedDate) {
+        mutableIntStateOf(selectedCalendar.get(Calendar.MONTH))
+    }
+    val todayKey = remember { dateKey(Calendar.getInstance()) }
+    val editableDateKeys = remember(todayKey) { buildEditableDateKeys(todayKey).toSet() }
+    val cells = remember(viewYear, viewMonth, selectedDate, todayKey, editableDateKeys, entryCounts) {
+        buildMonthCells(
+            viewYear = viewYear,
+            viewMonth = viewMonth,
+            selectedDate = selectedDate,
+            todayKey = todayKey,
+            editableDateKeys = editableDateKeys,
+            entryCounts = entryCounts,
+        )
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        color = LedgrTheme.colors.surfaceSoft,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CalendarNavButton(
+                    icon = Icons.Outlined.ChevronLeft,
+                    onClick = {
+                        val next = Calendar.getInstance().apply {
+                            set(Calendar.YEAR, viewYear)
+                            set(Calendar.MONTH, viewMonth)
+                            set(Calendar.DAY_OF_MONTH, 1)
+                            add(Calendar.MONTH, -1)
+                        }
+                        viewYear = next.get(Calendar.YEAR)
+                        viewMonth = next.get(Calendar.MONTH)
+                    },
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CalendarMonth,
+                            contentDescription = null,
+                            tint = LedgrTheme.colors.green,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            text = monthTitle(viewYear, viewMonth),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Text(
+                        text = formatDisplayDate(selectedDate),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LedgrTheme.colors.textMuted,
+                    )
+                }
+                CalendarNavButton(
+                    icon = Icons.Outlined.ChevronRight,
+                    onClick = {
+                        val next = Calendar.getInstance().apply {
+                            set(Calendar.YEAR, viewYear)
+                            set(Calendar.MONTH, viewMonth)
+                            set(Calendar.DAY_OF_MONTH, 1)
+                            add(Calendar.MONTH, 1)
+                        }
+                        viewYear = next.get(Calendar.YEAR)
+                        viewMonth = next.get(Calendar.MONTH)
+                    },
+                )
+            }
+
+            CalendarWeekLabels()
+
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                cells.chunked(7).forEach { week ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        week.forEach { cell ->
+                            CalendarDayCell(
+                                cell = cell,
+                                onClick = {
+                                    if (cell.canSelect) {
+                                        onDateSelected(cell.key)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarNavButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .size(34.dp)
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = LedgrTheme.colors.textMuted,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalendarWeekLabels() {
+    val days = listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa")
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        days.forEach { day ->
+            Text(
+                text = day,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (day == "Su") {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    LedgrTheme.colors.textSubtle
+                },
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalendarDayCell(
+    cell: CalendarCell,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val background by animateColorAsState(
+        targetValue = when {
+            cell.selected || cell.today -> LedgrTheme.colors.forest
+            cell.editable -> LedgrTheme.colors.successSurface
+            else -> Color.Transparent
+        },
+        label = "calendar-day-bg",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = when {
+            cell.selected || cell.today -> Color.White
+            cell.sunday -> MaterialTheme.colorScheme.error
+            cell.editable || cell.entryCount > 0 -> MaterialTheme.colorScheme.onSurface
+            else -> LedgrTheme.colors.textSubtle
+        },
+        label = "calendar-day-content",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (cell.selected) {
+            LedgrTheme.colors.green
+        } else {
+            Color.Transparent
+        },
+        label = "calendar-day-border",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (cell.selected) 1.04f else 1f,
+        animationSpec = spring(stiffness = 450f, dampingRatio = 0.78f),
+        label = "calendar-day-scale",
+    )
+    val dotSize by animateDpAsState(
+        targetValue = if (cell.entryCount > 0) 4.dp else 0.dp,
+        label = "calendar-dot-size",
+    )
+    Surface(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(enabled = cell.canSelect, onClick = onClick),
+        color = background,
+        contentColor = contentColor,
+        shape = RoundedCornerShape(9.dp),
+        border = BorderStroke(
+            width = if (cell.selected) 1.5.dp else 0.dp,
+            color = borderColor,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = cell.day.toString(),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (cell.selected || cell.today || cell.editable) {
+                    FontWeight.Bold
+                } else {
+                    FontWeight.Normal
+                },
+                color = contentColor.copy(
+                    alpha = when {
+                        cell.otherMonth -> 0.22f
+                        cell.canSelect -> 1f
+                        else -> 0.42f
+                    },
+                ),
+            )
+            Box(
+                modifier = Modifier
+                    .size(dotSize)
+                    .background(
+                        color = if (cell.selected || cell.today) {
+                            LedgrTheme.colors.green
+                        } else {
+                            LedgrTheme.colors.teal
+                        },
+                        shape = CircleShape,
+                    ),
+            )
         }
     }
 }
@@ -511,6 +761,81 @@ private fun StatusChip(
     }
 }
 
+private data class CalendarCell(
+    val key: String,
+    val day: Int,
+    val otherMonth: Boolean,
+    val selected: Boolean,
+    val today: Boolean,
+    val editable: Boolean,
+    val canSelect: Boolean,
+    val sunday: Boolean,
+    val entryCount: Int,
+)
+
+private fun buildMonthCells(
+    viewYear: Int,
+    viewMonth: Int,
+    selectedDate: String,
+    todayKey: String,
+    editableDateKeys: Set<String>,
+    entryCounts: Map<String, Int>,
+): List<CalendarCell> {
+    val firstDay = Calendar.getInstance().apply {
+        set(Calendar.YEAR, viewYear)
+        set(Calendar.MONTH, viewMonth)
+        set(Calendar.DAY_OF_MONTH, 1)
+    }.get(Calendar.DAY_OF_WEEK) - 1
+    val daysInMonth = Calendar.getInstance().apply {
+        set(Calendar.YEAR, viewYear)
+        set(Calendar.MONTH, viewMonth + 1)
+        set(Calendar.DAY_OF_MONTH, 0)
+    }.get(Calendar.DAY_OF_MONTH)
+    val totalCells = ((firstDay + daysInMonth + 6) / 7) * 7
+
+    return List(totalCells) { index ->
+        val date = Calendar.getInstance().apply {
+            set(Calendar.YEAR, viewYear)
+            set(Calendar.MONTH, viewMonth)
+            set(Calendar.DAY_OF_MONTH, 1)
+            add(Calendar.DAY_OF_MONTH, index - firstDay)
+        }
+        val key = dateKey(date)
+        val otherMonth = date.get(Calendar.MONTH) != viewMonth
+        val editable = !otherMonth && key in editableDateKeys
+        val future = key > todayKey
+        CalendarCell(
+            key = key,
+            day = date.get(Calendar.DAY_OF_MONTH),
+            otherMonth = otherMonth,
+            selected = key == selectedDate,
+            today = key == todayKey,
+            editable = editable,
+            canSelect = editable && !future,
+            sunday = date.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY,
+            entryCount = entryCounts[key] ?: 0,
+        )
+    }
+}
+
+private fun buildEditableDateKeys(todayKey: String): List<String> {
+    val calendar = parseDateKey(todayKey) ?: Calendar.getInstance()
+    return List(8) {
+        val key = dateKey(calendar)
+        calendar.add(Calendar.DAY_OF_YEAR, -1)
+        key
+    }
+}
+
+private fun monthTitle(year: Int, month: Int): String =
+    SimpleDateFormat("MMMM yyyy", Locale.US).format(
+        Calendar.getInstance().apply {
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, month)
+            set(Calendar.DAY_OF_MONTH, 1)
+        }.time,
+    )
+
 private fun showTimePicker(
     initialValue: String,
     onSelected: (String) -> Unit,
@@ -540,6 +865,14 @@ private fun parseDateKey(value: String): Calendar? {
     val parsed = runCatching { formatter.parse(value) }.getOrNull() ?: return null
     return Calendar.getInstance().apply { time = parsed }
 }
+
+private fun dateKey(calendar: Calendar): String =
+    "%04d-%02d-%02d".format(
+        Locale.US,
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH) + 1,
+        calendar.get(Calendar.DAY_OF_MONTH),
+    )
 
 private fun formatDisplayDate(dateKey: String): String {
     val source = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {

@@ -51,18 +51,21 @@ Do not commit `firebase.local.properties`.
 
 ## Current scope
 
-Phase 4 checkpoint 8 includes native Firebase authentication, compatibility
+Phase 4 checkpoint 9 includes native Firebase authentication, compatibility
 reads, beta-only entry creation and editing, Room-backed offline browsing, a
 durable WorkManager outbox, and teacher mobile web parity improvements for
 class detail and add-entry screens, a beta duplicate-entry draft flow, and
 beta-only recoverable entry delete/restore through the existing web-compatible
 recycle bin, local entry search and status filters, class-detail sticky banner,
-newest-first history, and sliding left/right class swiping. Production native
-builds remain read-only, and the teacher/admin web applications continue to use
-the existing Firestore model.
+newest-first history, sliding left/right class swiping, a web-style native entry
+calendar, and smoother animated date/filter controls. Production native builds
+remain read-only, and the teacher/admin web applications continue to use the
+existing Firestore model.
 
-See `../docs/native-android-phase-4-checkpoint-8.md` for the latest sliding
-class pager behavior, verification, and rollback details. See
+See `../docs/native-android-phase-4-checkpoint-9.md` for the latest entry
+calendar and motion polish behavior, verification, and rollback details. See
+`../docs/native-android-phase-4-checkpoint-8.md` for sliding class pager
+behavior, see
 `../docs/native-android-phase-4-checkpoint-7.md` for class-detail navigation
 polish, see
 `../docs/native-android-phase-4-checkpoint-6.md` for search/filter behavior,

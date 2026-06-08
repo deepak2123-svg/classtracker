@@ -1,5 +1,8 @@
 package com.classtracker.feature.classes
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +21,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.model.TeacherEntry
@@ -78,14 +83,36 @@ private fun DateChip(
     onClick: () -> Unit,
 ) {
     val today = dateKey == todayKey()
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) colors.forest else MaterialTheme.colorScheme.surface,
+        label = "date-chip-container",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+        label = "date-chip-content",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) colors.forest else MaterialTheme.colorScheme.outline,
+        label = "date-chip-border",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.04f else 1f,
+        animationSpec = spring(stiffness = 460f, dampingRatio = 0.8f),
+        label = "date-chip-scale",
+    )
     Surface(
-        modifier = Modifier.clickable(onClick = onClick),
-        color = if (selected) colors.forest else MaterialTheme.colorScheme.surface,
-        contentColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(onClick = onClick),
+        color = containerColor,
+        contentColor = contentColor,
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(
             width = if (selected) 2.dp else 1.dp,
-            color = if (selected) colors.forest else MaterialTheme.colorScheme.outline,
+            color = borderColor,
         ),
     ) {
         Column(
@@ -113,6 +140,14 @@ internal fun DateFocusCard(
     canAdd: Boolean,
     onAddEntry: () -> Unit,
 ) {
+    val actionColor by animateColorAsState(
+        targetValue = if (canAdd) colors.teal else colors.surfaceAlt,
+        label = "date-focus-action",
+    )
+    val actionContent by animateColorAsState(
+        targetValue = if (canAdd) Color.White else colors.textSubtle,
+        label = "date-focus-action-content",
+    )
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
@@ -146,8 +181,8 @@ internal fun DateFocusCard(
             }
             Surface(
                 modifier = Modifier.clickable(enabled = canAdd, onClick = onAddEntry),
-                color = if (canAdd) colors.teal else colors.surfaceAlt,
-                contentColor = if (canAdd) Color.White else colors.textSubtle,
+                color = actionColor,
+                contentColor = actionContent,
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Row(
