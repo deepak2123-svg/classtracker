@@ -72,6 +72,22 @@ class TeacherEntryFiltersTest {
                 .map(TeacherEntry::id),
         )
     }
+
+    @Test
+    fun newestFirstSortUsesDateTimeCreatedAtAndId() {
+        val entries = listOf(
+            entry("older-date", dateKey = "2026-04-16", timeStart = "11:00", createdAt = 50L),
+            entry("newer-date", dateKey = "2026-04-18", timeStart = "09:00", createdAt = 10L),
+            entry("later-time", dateKey = "2026-04-17", timeStart = "10:30", createdAt = 20L),
+            entry("earlier-time", dateKey = "2026-04-17", timeStart = "09:00", createdAt = 30L),
+            entry("later-created", dateKey = "2026-04-17", timeStart = "09:00", createdAt = 40L),
+        )
+
+        assertEquals(
+            listOf("newer-date", "later-time", "later-created", "earlier-time", "older-date"),
+            sortTeacherEntriesNewestFirst(entries).map(TeacherEntry::id),
+        )
+    }
 }
 
 private fun entry(
@@ -82,6 +98,7 @@ private fun entry(
     dateKey: String = "2026-06-08",
     timeStart: String? = "09:00",
     teacherName: String? = "Teacher",
+    createdAt: Long = 1L,
 ) = TeacherEntry(
     id = id,
     classId = "class-1",
@@ -93,5 +110,5 @@ private fun entry(
     timeStart = timeStart,
     timeEnd = "10:00",
     teacherName = teacherName,
-    createdAt = 1L,
+    createdAt = createdAt,
 )

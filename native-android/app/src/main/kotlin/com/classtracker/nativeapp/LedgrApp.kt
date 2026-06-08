@@ -406,6 +406,16 @@ private fun TeacherApp(
                                 onSignOut = onSignOut,
                             )
                         } else {
+                            val classIndex = snapshot.classes.indexOfFirst { it.id == classId }
+                            fun navigateToClassAt(index: Int) {
+                                val targetClass = snapshot.classes.getOrNull(index) ?: return
+                                navController.navigate("class/${Uri.encode(targetClass.id)}") {
+                                    popUpTo(ClassHistoryRoute) {
+                                        inclusive = true
+                                    }
+                                    launchSingleTop = true
+                                }
+                            }
                             ClassHistoryScreen(
                                 teacherClass = teacherClass,
                                 entries = snapshot.entriesForClass(classId),
@@ -434,6 +444,10 @@ private fun TeacherApp(
                                     onDeleteEntry(teacherEntry, teacherClass)
                                 },
                                 onRestoreEntry = onRestoreEntry,
+                                canSwipeToPreviousClass = classIndex > 0,
+                                canSwipeToNextClass = classIndex in 0 until snapshot.classes.lastIndex,
+                                onSwipeToPreviousClass = { navigateToClassAt(classIndex - 1) },
+                                onSwipeToNextClass = { navigateToClassAt(classIndex + 1) },
                             )
                         }
                     }

@@ -11,6 +11,14 @@ fun filterTeacherEntries(
     }
 }
 
+fun sortTeacherEntriesNewestFirst(entries: List<TeacherEntry>): List<TeacherEntry> =
+    entries.sortedWith(
+        compareByDescending<TeacherEntry> { it.dateKey }
+            .thenByDescending { it.timeStart.orEmpty() }
+            .thenByDescending { it.createdAt }
+            .thenByDescending { it.id },
+    )
+
 fun TeacherEntry.matchesStatus(status: String): Boolean =
     status.isBlank() || this.status == status
 
