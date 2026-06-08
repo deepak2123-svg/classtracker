@@ -84,9 +84,10 @@ Status: completed as part of
 
 ## Phase 4: Core teacher workflows
 
-Status: checkpoint 5 adds beta-only recoverable entry delete and restore on top
-of checkpoint 4 duplicate workflow support, checkpoint 3 teacher mobile web
-parity, and checkpoint 2 offline create/edit foundation.
+Status: checkpoint 6 adds entry search and status filters on top of checkpoint
+5 beta-only recoverable entry delete/restore, checkpoint 4 duplicate workflow
+support, checkpoint 3 teacher mobile web parity, and checkpoint 2 offline
+create/edit foundation.
 
 ### Deliverables
 
@@ -105,24 +106,41 @@ parity, and checkpoint 2 offline create/edit foundation.
 - Offline writes synchronize correctly after reconnecting.
 - Destructive actions are recoverable.
 
-## Phase 5: Notifications, analytics, and exports
+## Phase 5: Teacher reports and exports
 
 ### Deliverables
 
-- Firebase Cloud Messaging and notification deep links.
-- Native reminders and admin notices.
-- Teacher analytics and timelines.
-- Native PDF/file generation, storage, and Android share sheet integration.
+- Daily, weekly, monthly, and custom-range reports.
+- Institute scope for one institute, selected institutes, or all institutes.
+- Weekly, monthly, and range reports that include dates.
+- Native PDF generation.
+- Local file saving and Android share sheet integration.
 - Background export work that does not block browsing.
-- Profile, preferences, accessibility, and theme completion.
+- Export progress, completion, and failure states.
+
+### Acceptance gate
+
+- Reports match the teacher web app's existing class-entry totals.
+- Exports continue when the user navigates elsewhere.
+- Generated files open and share correctly on representative devices.
+
+## Phase 6: Notifications and reminders
+
+### Deliverables
+
+- Firebase Cloud Messaging.
+- Daily entry reminders.
+- Admin notices.
+- Notification deep links.
+- Per-user notification preferences.
 
 ### Acceptance gate
 
 - Notifications open the intended destination.
-- Exports continue when the user navigates elsewhere.
-- Large histories remain responsive on representative devices.
+- Reminder preferences survive app restart.
+- Web and Capacitor fallbacks remain available.
 
-## Phase 6: Granular Firebase model
+## Phase 7: Granular Firebase model
 
 This phase is additive and may begin only after the native compatibility client
 is stable.
@@ -151,7 +169,7 @@ users/{uid}/devices/{installationId}
 - Rollback does not discard writes made during the migration window.
 - No large all-user or all-class document rewrite is required.
 
-## Phase 7: Internal production pilot
+## Phase 8: Internal production pilot
 
 ### Deliverables
 
@@ -167,7 +185,7 @@ users/{uid}/devices/{installationId}
 - Crash-free sessions and synchronization success meet release thresholds.
 - Web and Capacitor fallbacks remain available.
 
-## Phase 8: Stable replacement release
+## Phase 9: Stable replacement release
 
 ### Deliverables
 
@@ -182,7 +200,7 @@ users/{uid}/devices/{installationId}
 - Staged rollout telemetry is healthy.
 - Teacher and admin web apps remain supported.
 
-## Phase 9: Post-release cleanup
+## Phase 10: Post-release cleanup
 
 - Increase rollout to 100 percent.
 - Remove Capacitor Android only after the rollback window closes.

@@ -51,16 +51,19 @@ Do not commit `firebase.local.properties`.
 
 ## Current scope
 
-Phase 4 checkpoint 5 includes native Firebase authentication, compatibility
+Phase 4 checkpoint 6 includes native Firebase authentication, compatibility
 reads, beta-only entry creation and editing, Room-backed offline browsing, a
 durable WorkManager outbox, and teacher mobile web parity improvements for
 class detail and add-entry screens, a beta duplicate-entry draft flow, and
 beta-only recoverable entry delete/restore through the existing web-compatible
-recycle bin. Production native builds remain read-only, and the teacher/admin
-web applications continue to use the existing Firestore model.
+recycle bin, plus local entry search and status filters. Production native
+builds remain read-only, and the teacher/admin web applications continue to use
+the existing Firestore model.
 
-See `../docs/native-android-phase-4-checkpoint-5.md` for the latest
-recoverable delete/restore behavior, verification, and rollback details. See
+See `../docs/native-android-phase-4-checkpoint-6.md` for the latest
+search/filter behavior, verification, and rollback details. See
+`../docs/native-android-phase-4-checkpoint-5.md` for recoverable
+delete/restore behavior, see
 `../docs/native-android-phase-4-checkpoint-4.md` for duplicate behavior,
 `../docs/native-android-phase-4-checkpoint-3.md` for parity behavior, and see
 `../docs/native-android-phase-4-checkpoint-2.md` for synchronization details.
