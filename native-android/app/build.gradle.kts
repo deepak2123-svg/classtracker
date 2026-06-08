@@ -90,7 +90,7 @@ android {
             )
             buildConfigField("boolean", "NATIVE_ENTRY_CREATE_ENABLED", "true")
             buildConfigField("boolean", "NATIVE_ENTRY_EDIT_ENABLED", "true")
-            buildConfigField("boolean", "NATIVE_ENTRY_DELETE_ENABLED", "false")
+            buildConfigField("boolean", "NATIVE_ENTRY_DELETE_ENABLED", "true")
             resValue("string", "app_name", "Ledgr Teacher Beta")
         }
         create("production") {

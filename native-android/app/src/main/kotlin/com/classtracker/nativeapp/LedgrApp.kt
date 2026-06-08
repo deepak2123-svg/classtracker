@@ -57,10 +57,13 @@ import com.classtracker.core.designsystem.LedgrOfflineBanner
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrThemeMode
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
+import com.classtracker.core.model.TeacherTrashedEntry
+import com.classtracker.core.model.toDuplicateDraft
 import com.classtracker.feature.auth.AuthScreen
 import com.classtracker.feature.classes.ClassHistoryScreen
 import com.classtracker.feature.classes.StatsScreen
@@ -76,6 +79,7 @@ import kotlinx.coroutines.launch
 private const val ClassHistoryRoute = "class/{classId}"
 private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
 private const val EditEntryRoute = "entry/edit/{classId}/{entryId}"
+private const val DuplicateEntryRoute = "entry/duplicate/{classId}/{entryId}"
 
 @Composable
 fun LedgrApp(
@@ -144,6 +148,8 @@ fun LedgrApp(
             onThemeModeChange = onThemeModeChange,
             onClearError = viewModel::clearError,
             onSaveEntry = viewModel::saveEntry,
+            onDeleteEntry = viewModel::deleteEntry,
+            onRestoreEntry = viewModel::restoreEntry,
             onConsumeEntrySaved = viewModel::consumeEntrySaved,
             onRetrySync = viewModel::retrySync,
             onSignOut = viewModel::signOut,
@@ -165,6 +171,8 @@ private fun TeacherApp(
     onThemeModeChange: (LedgrThemeMode) -> Unit,
     onClearError: () -> Unit,
     onSaveEntry: (TeacherEntryDraft) -> Unit,
+    onDeleteEntry: (TeacherEntry, TeacherClass) -> Unit,
+    onRestoreEntry: (TeacherTrashedEntry) -> Unit,
     onConsumeEntrySaved: () -> Unit,
     onRetrySync: () -> Unit,
     onSignOut: () -> Unit,
@@ -175,7 +183,9 @@ private fun TeacherApp(
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
     val isClassHistory = currentRoute == ClassHistoryRoute
-    val isEntryEditor = currentRoute == NewEntryRoute || currentRoute == EditEntryRoute
+    val isEntryEditor = currentRoute == NewEntryRoute ||
+        currentRoute == EditEntryRoute ||
+        currentRoute == DuplicateEntryRoute
     val isDetailRoute = isClassHistory || isEntryEditor
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -202,10 +212,10 @@ private fun TeacherApp(
                 title = {
                     if (isEntryEditor) {
                         Text(
-                            text = if (currentRoute == NewEntryRoute) {
-                                "Add entry"
-                            } else {
-                                "Edit entry"
+                            text = when (currentRoute) {
+                                NewEntryRoute -> "Add entry"
+                                DuplicateEntryRoute -> "Duplicate entry"
+                                else -> "Edit entry"
                             },
                             style = MaterialTheme.typography.titleLarge,
                         )
@@ -399,8 +409,10 @@ private fun TeacherApp(
                             ClassHistoryScreen(
                                 teacherClass = teacherClass,
                                 entries = snapshot.entriesForClass(classId),
+                                trashedEntries = snapshot.trashedEntriesForClass(classId),
                                 createEnabled = BuildConfig.NATIVE_ENTRY_CREATE_ENABLED,
                                 editEnabled = BuildConfig.NATIVE_ENTRY_EDIT_ENABLED,
+                                deleteEnabled = BuildConfig.NATIVE_ENTRY_DELETE_ENABLED,
                                 onAddEntry = { dateKey ->
                                     navController.navigate(
                                         "entry/new/${Uri.encode(classId)}/${Uri.encode(dateKey)}",
@@ -412,6 +424,16 @@ private fun TeacherApp(
                                             Uri.encode(teacherEntry.id),
                                     )
                                 },
+                                onDuplicateEntry = { teacherEntry ->
+                                    navController.navigate(
+                                        "entry/duplicate/${Uri.encode(classId)}/" +
+                                            Uri.encode(teacherEntry.id),
+                                    )
+                                },
+                                onDeleteEntry = { teacherEntry ->
+                                    onDeleteEntry(teacherEntry, teacherClass)
+                                },
+                                onRestoreEntry = onRestoreEntry,
                             )
                         }
                     }
@@ -434,6 +456,44 @@ private fun TeacherApp(
                                 existingEntry = null,
                                 initialDateKey = dateKey,
                                 existingEntries = snapshot.entriesForClass(classId),
+                                saving = savingEntry,
+                                entrySaved = entrySaved,
+                                draftStore = draftStore,
+                                onSaveEntry = onSaveEntry,
+                                onConsumeEntrySaved = onConsumeEntrySaved,
+                                onSaved = { navController.navigateUp() },
+                            )
+                        }
+                    }
+                    composable(DuplicateEntryRoute) { entry ->
+                        val classId = Uri.decode(
+                            entry.arguments?.getString("classId").orEmpty(),
+                        )
+                        val entryId = Uri.decode(
+                            entry.arguments?.getString("entryId").orEmpty(),
+                        )
+                        val teacherClass = snapshot.classes.firstOrNull { it.id == classId }
+                        val sourceEntry = snapshot.entriesForClass(classId)
+                            .firstOrNull { it.id == entryId }
+                        if (teacherClass == null || sourceEntry == null) {
+                            MissingClassScreen(
+                                message = "This teaching entry is no longer available.",
+                                onBack = navController::navigateUp,
+                            )
+                        } else {
+                            val duplicateDraft = remember(sourceEntry.id) {
+                                sourceEntry.toDuplicateDraft(
+                                    mutationId = "native_${UUID.randomUUID()}",
+                                )
+                            }
+                            EntryEditorRoute(
+                                teacher = teacher,
+                                teacherClass = teacherClass,
+                                existingEntry = null,
+                                initialDateKey = sourceEntry.dateKey,
+                                initialDraft = duplicateDraft,
+                                existingEntries = snapshot.entriesForClass(classId),
+                                draftStoreEntryId = "duplicate-${sourceEntry.id}",
                                 saving = savingEntry,
                                 entrySaved = entrySaved,
                                 draftStore = draftStore,
@@ -532,7 +592,9 @@ private fun EntryEditorRoute(
     teacherClass: com.classtracker.core.model.TeacherClass,
     existingEntry: TeacherEntry?,
     initialDateKey: String,
+    initialDraft: TeacherEntryDraft? = null,
     existingEntries: List<TeacherEntry>,
+    draftStoreEntryId: String? = null,
     saving: Boolean,
     entrySaved: Boolean,
     draftStore: EntryDraftStore,
@@ -541,8 +603,9 @@ private fun EntryEditorRoute(
     onSaved: () -> Unit,
 ) {
     val entryId = existingEntry?.id
-    val baseDraft = remember(teacherClass.id, entryId, initialDateKey) {
-        existingEntry?.toDraft() ?: TeacherEntryDraft(
+    val draftKeyEntryId = draftStoreEntryId ?: entryId
+    val baseDraft = remember(teacherClass.id, entryId, initialDateKey, initialDraft) {
+        initialDraft ?: existingEntry?.toDraft() ?: TeacherEntryDraft(
             mutationId = "native_${UUID.randomUUID()}",
             classId = teacherClass.id,
             dateKey = initialDateKey.ifBlank { todayKey() },
@@ -551,14 +614,14 @@ private fun EntryEditorRoute(
             timeEnd = teacherClass.endTime.orEmpty(),
         )
     }
-    val recovered = remember(teacher.uid, teacherClass.id, entryId) {
+    val recovered = remember(teacher.uid, teacherClass.id, draftKeyEntryId) {
         draftStore.read(
             uid = teacher.uid,
             classId = teacherClass.id,
-            entryId = entryId,
+            entryId = draftKeyEntryId,
         )
     }
-    var draft by remember(teacher.uid, teacherClass.id, entryId) {
+    var draft by remember(teacher.uid, teacherClass.id, draftKeyEntryId) {
         mutableStateOf(recovered?.draft ?: baseDraft)
     }
 
@@ -567,7 +630,7 @@ private fun EntryEditorRoute(
             draftStore.clear(
                 uid = teacher.uid,
                 classId = teacherClass.id,
-                entryId = entryId,
+                entryId = draftKeyEntryId,
             )
             onConsumeEntrySaved()
             onSaved()
@@ -582,7 +645,11 @@ private fun EntryEditorRoute(
         recoveredDraft = recovered != null,
         onDraftChanged = { updated ->
             draft = updated
-            draftStore.write(teacher.uid, updated)
+            draftStore.write(
+                uid = teacher.uid,
+                draft = updated,
+                entryId = draftKeyEntryId,
+            )
         },
         onSave = onSaveEntry,
     )

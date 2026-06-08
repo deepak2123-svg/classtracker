@@ -7,9 +7,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -24,13 +28,18 @@ import com.classtracker.core.designsystem.LedgrPill
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntrySyncState
+import com.classtracker.core.model.TeacherTrashedEntry
 
 @Composable
 internal fun EntryCard(
     entry: TeacherEntry,
     showDate: Boolean,
     editEnabled: Boolean,
+    duplicateEnabled: Boolean,
+    deleteEnabled: Boolean,
     onEdit: () -> Unit,
+    onDuplicate: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -62,12 +71,39 @@ internal fun EntryCard(
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textMuted,
                     )
+                    if (duplicateEnabled) {
+                        IconButton(
+                            onClick = onDuplicate,
+                            modifier = Modifier.size(38.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ContentCopy,
+                                contentDescription = "Duplicate entry",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                     if (editEnabled) {
-                        IconButton(onClick = onEdit) {
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(38.dp),
+                        ) {
                             Icon(
                                 imageVector = Icons.Outlined.Edit,
                                 contentDescription = "Edit entry",
                                 tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    if (deleteEnabled) {
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(38.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Delete,
+                                contentDescription = "Delete entry",
+                                tint = MaterialTheme.colorScheme.error,
                             )
                         }
                     }
@@ -99,6 +135,92 @@ internal fun EntryCard(
                         },
                     )
                 }
+                if (entry.body.isNotBlank()) {
+                    Text(
+                        text = entry.body,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textMuted,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TrashedEntryCard(
+    entry: TeacherTrashedEntry,
+    restoreEnabled: Boolean,
+    onRestore: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shadowElevation = 1.dp,
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = formatDateKey(entry.dateKey),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.textSecondary,
+                )
+                IconButton(
+                    onClick = onRestore,
+                    enabled = restoreEnabled,
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.RestoreFromTrash,
+                        contentDescription = "Restore entry",
+                        tint = if (restoreEnabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            colors.textMuted
+                        },
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (!entry.timeStart.isNullOrBlank()) {
+                        LedgrPill(
+                            text = formatTime(entry.timeStart, entry.timeEnd),
+                            containerColor = colors.surfaceAlt,
+                            contentColor = colors.textSecondary,
+                            leadingColor = colors.textMuted,
+                        )
+                    }
+                    if (entry.syncState != TeacherEntrySyncState.Synced) {
+                        StatusPill(
+                            when (entry.syncState) {
+                                TeacherEntrySyncState.Pending -> "pending"
+                                TeacherEntrySyncState.Syncing -> "syncing"
+                                TeacherEntrySyncState.Failed -> "failed"
+                                TeacherEntrySyncState.Synced -> ""
+                            },
+                        )
+                    }
+                }
+                Text(
+                    text = entry.title.ifBlank { "Teaching entry" },
+                    style = MaterialTheme.typography.titleMedium,
+                )
                 if (entry.body.isNotBlank()) {
                     Text(
                         text = entry.body,

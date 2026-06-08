@@ -8,6 +8,7 @@ import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherProfile
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
+import com.classtracker.core.model.TeacherTrashedEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -54,6 +55,44 @@ class TeacherSyncProcessorTest {
         assertEquals("Permission denied", local.failedError)
         assertEquals(mutation, local.pending)
     }
+
+    @Test
+    fun deleteMutationUsesRemoteDeletePath() = runTest {
+        val mutation = pendingDeleteMutation()
+        val local = FakeLocalDataSource(mutation)
+        val returned = snapshot(revision = 8)
+        val remote = FakeRemoteDataSource(returned)
+        val processor = TeacherSyncProcessor(local, remote)
+
+        val result = processor.process(
+            uid = "teacher-1",
+            teacher = teacher(),
+        )
+
+        assertEquals(TeacherSyncResult.Success, result)
+        assertEquals(1, remote.deleteCount)
+        assertEquals(0, remote.saveCount)
+        assertEquals(8L, local.completedSnapshot?.revision)
+    }
+
+    @Test
+    fun restoreMutationUsesRemoteRestorePath() = runTest {
+        val mutation = pendingRestoreMutation()
+        val local = FakeLocalDataSource(mutation)
+        val returned = snapshot(revision = 8)
+        val remote = FakeRemoteDataSource(returned)
+        val processor = TeacherSyncProcessor(local, remote)
+
+        val result = processor.process(
+            uid = "teacher-1",
+            teacher = teacher(),
+        )
+
+        assertEquals(TeacherSyncResult.Success, result)
+        assertEquals(1, remote.restoreCount)
+        assertEquals(0, remote.saveCount)
+        assertEquals(8L, local.completedSnapshot?.revision)
+    }
 }
 
 private class FakeRemoteDataSource(
@@ -61,6 +100,8 @@ private class FakeRemoteDataSource(
     private val saveFailure: Throwable? = null,
 ) : TeacherRemoteDataSource {
     var saveCount = 0
+    var deleteCount = 0
+    var restoreCount = 0
 
     override suspend fun loadTeacherSnapshot(
         teacher: AuthenticatedTeacher,
@@ -73,6 +114,24 @@ private class FakeRemoteDataSource(
     ): TeacherSnapshot {
         saveCount += 1
         saveFailure?.let { throw it }
+        return returnedSnapshot
+    }
+
+    override suspend fun deleteEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot {
+        deleteCount += 1
+        return returnedSnapshot
+    }
+
+    override suspend fun restoreEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot {
+        restoreCount += 1
         return returnedSnapshot
     }
 }
@@ -96,6 +155,18 @@ private class FakeLocalDataSource(
         uid: String,
         expectedRevision: Long,
         draft: TeacherEntryDraft,
+    ): TeacherSnapshot = snapshot(expectedRevision)
+
+    override suspend fun enqueueDelete(
+        uid: String,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = snapshot(expectedRevision)
+
+    override suspend fun enqueueRestore(
+        uid: String,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
     ): TeacherSnapshot = snapshot(expectedRevision)
 
     override suspend fun resetSyncing(uid: String) = Unit
@@ -141,6 +212,43 @@ private fun pendingMutation() = PendingEntryMutation(
         timeStart = "09:00",
     ),
     attemptCount = 0,
+)
+
+private fun pendingDeleteMutation() = PendingEntryMutation(
+    mutationId = "delete-entry",
+    uid = "teacher-1",
+    operation = "DELETE",
+    expectedRevision = 7,
+    resolvedEntryId = "entry-1",
+    draft = TeacherEntryDraft(
+        entryId = "entry-1",
+        classId = "class-1",
+        dateKey = "2026-06-07",
+        title = "Motion",
+        timeStart = "09:00",
+    ),
+    trashedEntry = TeacherTrashedEntry(
+        id = "entry-1",
+        classId = "class-1",
+        className = "11th",
+        instituteName = "Institute",
+        dateKey = "2026-06-07",
+        title = "Motion",
+        body = "",
+        tag = "note",
+        status = "",
+        timeStart = "09:00",
+        timeEnd = null,
+        teacherName = "Teacher",
+        createdAt = 1L,
+        deletedAt = 2L,
+    ),
+    attemptCount = 0,
+)
+
+private fun pendingRestoreMutation() = pendingDeleteMutation().copy(
+    mutationId = "restore-entry",
+    operation = "RESTORE",
 )
 
 private fun teacher() = AuthenticatedTeacher(

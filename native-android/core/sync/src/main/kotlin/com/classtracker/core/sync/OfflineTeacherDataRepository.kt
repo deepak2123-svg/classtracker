@@ -7,6 +7,7 @@ import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
+import com.classtracker.core.model.TeacherTrashedEntry
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.firestore.FirebaseFirestoreException
 import javax.inject.Inject
@@ -57,6 +58,34 @@ class OfflineTeacherDataRepository @Inject constructor(
             uid = teacher.uid,
             expectedRevision = expectedRevision,
             draft = draft,
+        )
+        scheduler.enqueue(teacher.uid)
+        return snapshot
+    }
+
+    override suspend fun deleteEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot {
+        val snapshot = local.enqueueDelete(
+            uid = teacher.uid,
+            expectedRevision = expectedRevision,
+            entry = entry,
+        )
+        scheduler.enqueue(teacher.uid)
+        return snapshot
+    }
+
+    override suspend fun restoreEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot {
+        val snapshot = local.enqueueRestore(
+            uid = teacher.uid,
+            expectedRevision = expectedRevision,
+            entry = entry,
         )
         scheduler.enqueue(teacher.uid)
         return snapshot

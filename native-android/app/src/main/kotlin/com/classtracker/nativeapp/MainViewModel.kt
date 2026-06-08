@@ -9,10 +9,15 @@ import com.classtracker.core.firebase.TeacherDataRepository
 import com.classtracker.core.firebase.TeacherEntryConflictException
 import com.classtracker.core.firebase.TeacherRevisionConflictException
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClass
+import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
+import com.classtracker.core.model.TeacherEntrySyncState
 import com.classtracker.core.model.TeacherEntryValidation
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
+import com.classtracker.core.model.TeacherTrashedEntry
+import com.classtracker.core.model.toTrashedEntry
 import com.classtracker.core.model.validateTeacherEntryDraft
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuthException
@@ -35,6 +40,7 @@ data class MainUiState(
     val authenticating: Boolean = false,
     val refreshing: Boolean = false,
     val savingEntry: Boolean = false,
+    val mutatingEntry: Boolean = false,
     val entrySaved: Boolean = false,
     val syncSummary: TeacherSyncSummary = TeacherSyncSummary.Idle,
     val errorMessage: String? = null,
@@ -203,6 +209,56 @@ class MainViewModel @Inject constructor(
         mutableState.update { it.copy(entrySaved = false) }
     }
 
+    fun deleteEntry(
+        entry: TeacherEntry,
+        teacherClass: TeacherClass,
+    ) {
+        val current = mutableState.value
+        val teacher = current.teacher ?: return
+        val snapshot = current.snapshot ?: return
+        if (current.mutatingEntry) return
+        if (entry.syncState != TeacherEntrySyncState.Synced) {
+            mutableState.update {
+                it.copy(errorMessage = "Wait for this entry to sync before deleting it.")
+            }
+            return
+        }
+
+        val trashedEntry = entry.toTrashedEntry(
+            className = teacherClass.sectionName,
+            instituteName = teacherClass.instituteName,
+            deletedAt = System.currentTimeMillis(),
+        )
+        runEntryMutation {
+            dataRepository.deleteEntry(
+                teacher = teacher,
+                expectedRevision = snapshot.revision,
+                entry = trashedEntry,
+            )
+        }
+    }
+
+    fun restoreEntry(entry: TeacherTrashedEntry) {
+        val current = mutableState.value
+        val teacher = current.teacher ?: return
+        val snapshot = current.snapshot ?: return
+        if (current.mutatingEntry) return
+        if (entry.syncState == TeacherEntrySyncState.Syncing) {
+            mutableState.update {
+                it.copy(errorMessage = "Wait for this entry to sync before restoring it.")
+            }
+            return
+        }
+
+        runEntryMutation {
+            dataRepository.restoreEntry(
+                teacher = teacher,
+                expectedRevision = snapshot.revision,
+                entry = entry,
+            )
+        }
+    }
+
     fun clearError() {
         mutableState.update { it.copy(errorMessage = null) }
     }
@@ -227,6 +283,57 @@ class MainViewModel @Inject constructor(
                             authenticating = false,
                             errorMessage = error.toFriendlyMessage(),
                         )
+                    }
+                }
+        }
+    }
+
+    private fun runEntryMutation(action: suspend () -> TeacherSnapshot) {
+        val teacher = mutableState.value.teacher ?: return
+        viewModelScope.launch {
+            mutableState.update {
+                it.copy(
+                    mutatingEntry = true,
+                    errorMessage = null,
+                )
+            }
+            runCatching { action() }
+                .onSuccess { updatedSnapshot ->
+                    mutableState.update {
+                        it.copy(
+                            snapshot = updatedSnapshot,
+                            mutatingEntry = false,
+                            errorMessage = null,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    if (error is TeacherRevisionConflictException) {
+                        runCatching { dataRepository.loadTeacherSnapshot(teacher) }
+                            .onSuccess { latestSnapshot ->
+                                mutableState.update {
+                                    it.copy(
+                                        snapshot = latestSnapshot,
+                                        mutatingEntry = false,
+                                        errorMessage = "Newer web changes were loaded. Review and try again.",
+                                    )
+                                }
+                            }
+                            .onFailure { refreshError ->
+                                mutableState.update {
+                                    it.copy(
+                                        mutatingEntry = false,
+                                        errorMessage = refreshError.toFriendlyMessage(),
+                                    )
+                                }
+                            }
+                    } else {
+                        mutableState.update {
+                            it.copy(
+                                mutatingEntry = false,
+                                errorMessage = error.toFriendlyMessage(),
+                            )
+                        }
                     }
                 }
         }

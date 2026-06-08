@@ -5,6 +5,7 @@ import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherProfile
 import com.classtracker.core.model.TeacherSnapshot
+import com.classtracker.core.model.TeacherTrashedEntry
 
 internal fun mapLegacyTeacherSnapshot(
     teacher: AuthenticatedTeacher,
@@ -37,6 +38,8 @@ internal fun mapLegacyTeacherSnapshot(
                 .thenBy { it.timeStart.orEmpty() }
                 .thenBy { it.createdAt },
         )
+    val classesById = classes.associateBy(TeacherClass::id)
+    val trashedEntries = mapLegacyTrashedEntries(main, classesById)
 
     val profileMap = main.map("profile")
     val classInstitutes = classes.map { it.instituteName }
@@ -65,6 +68,7 @@ internal fun mapLegacyTeacherSnapshot(
         ),
         classes = classes,
         entries = entries,
+        trashedEntries = trashedEntries,
         availableInstitutes = uniqueLabels(availableInstitutes + classInstitutes),
         configuredInstituteCount = sectionConfig.keys.count { it.isNotBlank() },
         revision = main.map("_meta").long("revision"),
@@ -72,6 +76,44 @@ internal fun mapLegacyTeacherSnapshot(
         loadedAtMillis = loadedAtMillis,
     )
 }
+
+private fun mapLegacyTrashedEntries(
+    main: Map<String, Any?>,
+    classesById: Map<String, TeacherClass>,
+): List<TeacherTrashedEntry> =
+    main.map("trash")
+        .mapList("notes")
+        .mapNotNull { map ->
+            val id = map.string("id")
+            val classId = map.string("classId")
+            val dateKey = map.string("dateKey")
+            if (id.isBlank() || classId.isBlank() || dateKey.isBlank()) return@mapNotNull null
+            val teacherClass = classesById[classId]
+            TeacherTrashedEntry(
+                id = id,
+                classId = classId,
+                className = firstNonBlank(
+                    map.string("className"),
+                    teacherClass?.sectionName,
+                ),
+                instituteName = firstNonBlank(
+                    map.string("institute"),
+                    map.string("instituteName"),
+                    teacherClass?.instituteName,
+                ),
+                dateKey = dateKey,
+                title = map.string("title"),
+                body = map.string("body"),
+                tag = map.string("tag").ifBlank { "note" },
+                status = map.string("status"),
+                timeStart = map.string("timeStart").ifBlank { null },
+                timeEnd = map.string("timeEnd").ifBlank { null },
+                teacherName = map.string("teacherName").ifBlank { null },
+                createdAt = map.long("created"),
+                deletedAt = map.long("deletedAt"),
+            )
+        }
+        .sortedWith(compareByDescending<TeacherTrashedEntry> { it.deletedAt }.thenBy { it.id })
 
 internal fun legacyClassMaps(main: Map<String, Any?>): List<Map<String, Any?>> =
     main.mapList("classes").filterNot { it.boolean("left") }

@@ -84,9 +84,9 @@ Status: completed as part of
 
 ## Phase 4: Core teacher workflows
 
-Status: checkpoint 3 improves teacher mobile web parity for native class
-detail and entry editing on top of the checkpoint 2 offline create/edit
-foundation. The remaining destructive workflows are not yet complete.
+Status: checkpoint 5 adds beta-only recoverable entry delete and restore on top
+of checkpoint 4 duplicate workflow support, checkpoint 3 teacher mobile web
+parity, and checkpoint 2 offline create/edit foundation.
 
 ### Deliverables
 

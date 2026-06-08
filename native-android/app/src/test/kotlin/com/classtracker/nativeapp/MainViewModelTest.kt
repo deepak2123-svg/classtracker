@@ -9,6 +9,7 @@ import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherProfile
 import com.classtracker.core.model.TeacherSnapshot
+import com.classtracker.core.model.TeacherTrashedEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -174,6 +175,18 @@ private class RevisionConflictRepository(
             actualRevision = expectedRevision + 1,
         )
     }
+
+    override suspend fun deleteEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = latest
+
+    override suspend fun restoreEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = latest
 }
 
 private class FakeAuthRepository : TeacherAuthRepository {
@@ -213,6 +226,18 @@ private class FakeDataRepository(
         saveCount += 1
         return savedSnapshot
     }
+
+    override suspend fun deleteEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = savedSnapshot
+
+    override suspend fun restoreEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = savedSnapshot
 }
 
 private fun snapshotFor(teacher: AuthenticatedTeacher): TeacherSnapshot =

@@ -31,11 +31,7 @@ class TeacherSyncProcessor @Inject constructor(
             val mutation = local.nextMutation(uid) ?: return TeacherSyncResult.Success
             local.markSyncing(mutation)
             try {
-                val snapshot = remote.saveEntry(
-                    teacher = teacher,
-                    expectedRevision = mutation.expectedRevision,
-                    draft = mutation.draft,
-                )
+                val snapshot = syncMutation(teacher, mutation)
                 local.completeMutation(uid, mutation, snapshot)
             } catch (conflict: TeacherRevisionConflictException) {
                 val resolution = resolveRevisionConflict(teacher, mutation)
@@ -50,6 +46,27 @@ class TeacherSyncProcessor @Inject constructor(
                 return TeacherSyncResult.Success
             }
         }
+    }
+
+    private suspend fun syncMutation(
+        teacher: AuthenticatedTeacher,
+        mutation: PendingEntryMutation,
+    ): TeacherSnapshot = when (mutation.operation) {
+        OperationDelete -> remote.deleteEntry(
+            teacher = teacher,
+            expectedRevision = mutation.expectedRevision,
+            entry = requireNotNull(mutation.trashedEntry),
+        )
+        OperationRestore -> remote.restoreEntry(
+            teacher = teacher,
+            expectedRevision = mutation.expectedRevision,
+            entry = requireNotNull(mutation.trashedEntry),
+        )
+        else -> remote.saveEntry(
+            teacher = teacher,
+            expectedRevision = mutation.expectedRevision,
+            draft = mutation.draft,
+        )
     }
 
     private suspend fun resolveRevisionConflict(
@@ -67,9 +84,7 @@ class TeacherSyncProcessor @Inject constructor(
             return null
         }
 
-        val committed = latest.entries.any { entry ->
-            entry.matches(mutation)
-        }
+        val committed = latest.hasCommitted(mutation)
         if (committed) {
             local.completeMutation(teacher.uid, mutation, latest)
             return TeacherSyncResult.Success
@@ -83,6 +98,18 @@ class TeacherSyncProcessor @Inject constructor(
         return null
     }
 }
+
+private const val OperationDelete = "DELETE"
+private const val OperationRestore = "RESTORE"
+
+private fun TeacherSnapshot.hasCommitted(mutation: PendingEntryMutation): Boolean =
+    when (mutation.operation) {
+        OperationDelete -> entries.none { it.id == mutation.resolvedEntryId } &&
+            trashedEntries.any { it.id == mutation.resolvedEntryId }
+        OperationRestore -> entries.any { entry -> entry.matches(mutation) } &&
+            trashedEntries.none { it.id == mutation.resolvedEntryId }
+        else -> entries.any { entry -> entry.matches(mutation) }
+    }
 
 private fun TeacherEntry.matches(mutation: PendingEntryMutation): Boolean =
     id == mutation.resolvedEntryId &&

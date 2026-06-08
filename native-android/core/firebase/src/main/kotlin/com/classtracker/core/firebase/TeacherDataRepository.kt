@@ -4,6 +4,7 @@ import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
+import com.classtracker.core.model.TeacherTrashedEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -14,6 +15,18 @@ interface TeacherRemoteDataSource {
         teacher: AuthenticatedTeacher,
         expectedRevision: Long,
         draft: TeacherEntryDraft,
+    ): TeacherSnapshot
+
+    suspend fun deleteEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot
+
+    suspend fun restoreEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
     ): TeacherSnapshot
 }
 

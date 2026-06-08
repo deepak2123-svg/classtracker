@@ -3,6 +3,7 @@ package com.classtracker.core.firebase
 import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
+import com.classtracker.core.model.TeacherTrashedEntry
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -74,6 +75,28 @@ class FirebaseTeacherDataRepository(
         teacher = teacher,
         expectedRevision = expectedRevision,
         draft = draft,
+        reload = { loadTeacherSnapshot(teacher) },
+    )
+
+    override suspend fun deleteEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = entryWriter.deleteEntry(
+        teacher = teacher,
+        expectedRevision = expectedRevision,
+        entry = entry,
+        reload = { loadTeacherSnapshot(teacher) },
+    )
+
+    override suspend fun restoreEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = entryWriter.restoreEntry(
+        teacher = teacher,
+        expectedRevision = expectedRevision,
+        entry = entry,
         reload = { loadTeacherSnapshot(teacher) },
     )
 }

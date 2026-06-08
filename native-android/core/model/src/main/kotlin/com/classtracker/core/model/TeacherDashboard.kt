@@ -73,6 +73,24 @@ data class TeacherEntry(
     val syncState: TeacherEntrySyncState = TeacherEntrySyncState.Synced,
 )
 
+data class TeacherTrashedEntry(
+    val id: String,
+    val classId: String,
+    val className: String,
+    val instituteName: String,
+    val dateKey: String,
+    val title: String,
+    val body: String,
+    val tag: String,
+    val status: String,
+    val timeStart: String?,
+    val timeEnd: String?,
+    val teacherName: String?,
+    val createdAt: Long,
+    val deletedAt: Long,
+    val syncState: TeacherEntrySyncState = TeacherEntrySyncState.Synced,
+)
+
 enum class TeacherEntrySyncState {
     Synced,
     Pending,
@@ -110,6 +128,55 @@ data class TeacherEntryDraft(
 
 fun TeacherEntryDraft.resolvedEntryId(fallback: String): String =
     entryId ?: mutationId.takeIf(String::isNotBlank) ?: fallback
+
+fun TeacherEntry.toDuplicateDraft(mutationId: String): TeacherEntryDraft = TeacherEntryDraft(
+    mutationId = mutationId,
+    classId = classId,
+    dateKey = dateKey,
+    title = title,
+    body = body,
+    tag = tag,
+    status = status,
+    timeStart = timeStart.orEmpty(),
+    timeEnd = timeEnd.orEmpty(),
+)
+
+fun TeacherEntry.toTrashedEntry(
+    className: String,
+    instituteName: String,
+    deletedAt: Long,
+    syncState: TeacherEntrySyncState = TeacherEntrySyncState.Pending,
+): TeacherTrashedEntry = TeacherTrashedEntry(
+    id = id,
+    classId = classId,
+    className = className,
+    instituteName = instituteName,
+    dateKey = dateKey,
+    title = title,
+    body = body,
+    tag = tag,
+    status = status,
+    timeStart = timeStart,
+    timeEnd = timeEnd,
+    teacherName = teacherName,
+    createdAt = createdAt,
+    deletedAt = deletedAt,
+    syncState = syncState,
+)
+
+fun TeacherTrashedEntry.toRestoreDraft(mutationId: String): TeacherEntryDraft = TeacherEntryDraft(
+    entryId = id,
+    mutationId = mutationId,
+    classId = classId,
+    dateKey = dateKey,
+    title = title,
+    body = body,
+    tag = tag,
+    status = status,
+    timeStart = timeStart.orEmpty(),
+    timeEnd = timeEnd.orEmpty(),
+    createdAt = createdAt,
+)
 
 enum class TeacherEntryStatus(
     val storageValue: String,
@@ -200,6 +267,7 @@ data class TeacherSnapshot(
     val profile: TeacherProfile,
     val classes: List<TeacherClass>,
     val entries: List<TeacherEntry>,
+    val trashedEntries: List<TeacherTrashedEntry> = emptyList(),
     val availableInstitutes: List<String>,
     val configuredInstituteCount: Int,
     val revision: Long,
@@ -208,6 +276,9 @@ data class TeacherSnapshot(
 ) {
     fun entriesForClass(classId: String): List<TeacherEntry> =
         entries.filter { it.classId == classId }
+
+    fun trashedEntriesForClass(classId: String): List<TeacherTrashedEntry> =
+        trashedEntries.filter { it.classId == classId }
 
     fun dashboard(todayKey: String): TeacherDashboard {
         val todayEntries = entries.filter { it.dateKey == todayKey }

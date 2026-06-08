@@ -72,4 +72,34 @@ class TeacherEntryDraftTest {
         assertTrue(newOverlap is TeacherEntryValidation.Invalid)
         assertEquals(TeacherEntryValidation.Valid, sameEntryEdit)
     }
+
+    @Test
+    fun duplicateDraftKeepsContentButDropsOriginalIdentity() {
+        val original = TeacherEntry(
+            id = "entry-1",
+            classId = "class-1",
+            dateKey = "2026-06-07",
+            title = "Motion",
+            body = "Newton's laws",
+            tag = "note",
+            status = "completed",
+            timeStart = "09:00",
+            timeEnd = "10:00",
+            teacherName = "Teacher",
+            createdAt = 123L,
+        )
+
+        val duplicate = original.toDuplicateDraft(mutationId = "native-copy")
+
+        assertEquals(null, duplicate.entryId)
+        assertEquals("native-copy", duplicate.mutationId)
+        assertEquals(null, duplicate.createdAt)
+        assertEquals(original.classId, duplicate.classId)
+        assertEquals(original.dateKey, duplicate.dateKey)
+        assertEquals(original.title, duplicate.title)
+        assertEquals(original.body, duplicate.body)
+        assertEquals(original.status, duplicate.status)
+        assertEquals(original.timeStart, duplicate.timeStart)
+        assertEquals(original.timeEnd, duplicate.timeEnd)
+    }
 }

@@ -52,6 +52,31 @@ data class TeacherEntryEntity(
 )
 
 @Entity(
+    tableName = "teacher_trashed_entries",
+    primaryKeys = ["uid", "entryId"],
+    indices = [
+        Index(value = ["uid", "classId"]),
+    ],
+)
+data class TeacherTrashedEntryEntity(
+    val uid: String,
+    val entryId: String,
+    val classId: String,
+    val className: String,
+    val instituteName: String,
+    val dateKey: String,
+    val title: String,
+    val body: String,
+    val tag: String,
+    val status: String,
+    val timeStart: String?,
+    val timeEnd: String?,
+    val teacherName: String?,
+    val createdAt: Long,
+    val deletedAt: Long,
+)
+
+@Entity(
     tableName = "entry_mutations",
     primaryKeys = ["mutationId"],
     indices = [
@@ -74,7 +99,9 @@ data class EntryMutationEntity(
     val status: String,
     val timeStart: String,
     val timeEnd: String,
+    val teacherName: String?,
     val createdAt: Long?,
+    val deletedAt: Long?,
     val state: String,
     val attemptCount: Int,
     val lastError: String?,
@@ -82,8 +109,10 @@ data class EntryMutationEntity(
     val updatedAt: Long,
 )
 
-internal object MutationOperation {
+object MutationOperation {
     const val Upsert = "UPSERT"
+    const val Delete = "DELETE"
+    const val Restore = "RESTORE"
 }
 
 internal object MutationState {

@@ -5,6 +5,7 @@ import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherEntryValidation
 import com.classtracker.core.model.TeacherSnapshot
+import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.resolvedEntryId
 import com.classtracker.core.model.validateTeacherEntryDraft
 import com.google.firebase.firestore.DocumentSnapshot
@@ -81,6 +82,194 @@ internal class FirebaseTeacherEntryWriter(
                 "nativeEditEntry"
             }
             val updatedMain = main.withRevision(
+                revision = nextRevision,
+                previousRevision = actualRevision,
+                updatedAt = now,
+                source = source,
+            )
+            val backupId = "${nextRevision.toString().padStart(6, '0')}_$now"
+            val backupPayload = buildBackupPayload(
+                main = updatedMain,
+                revision = nextRevision,
+                savedAt = now,
+                source = source,
+                backupId = backupId,
+            )
+            val historyReference = firestore.document(
+                "users/${teacher.uid}/appdata/main_backup_$backupId",
+            )
+
+            transaction.set(notesReference, updatedNotes)
+            transaction.set(mainReference, updatedMain)
+            transaction.set(
+                teacherReference,
+                buildTeacherIndexPatch(
+                    teacher = teacher,
+                    main = updatedMain,
+                    revision = nextRevision,
+                    savedAt = now,
+                ),
+                SetOptions.merge(),
+            )
+            transaction.set(backupReference, backupPayload)
+            transaction.set(historyReference, backupPayload)
+        }.await()
+
+        runCatching { pruneBackupHistory(teacher.uid) }
+        return reload()
+    }
+
+    suspend fun deleteEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+        reload: suspend () -> TeacherSnapshot,
+    ): TeacherSnapshot {
+        val mainReference = firestore.document("users/${teacher.uid}/appdata/main")
+        val notesReference = firestore.document(
+            "users/${teacher.uid}/appdata/notes_${entry.classId}",
+        )
+        val teacherReference = firestore.document("teachers/${teacher.uid}")
+        val backupReference = firestore.document(
+            "users/${teacher.uid}/appdata/main_backup_latest",
+        )
+
+        firestore.runTransaction { transaction ->
+            val mainSnapshot = transaction.get(mainReference)
+            if (!mainSnapshot.exists()) throw TeacherDataMissingException()
+
+            val main = mainSnapshot.data.orEmpty()
+            val actualRevision = main.nestedMap("_meta").longValue("revision")
+            if (actualRevision != expectedRevision) {
+                throw TeacherRevisionConflictException(
+                    expectedRevision = expectedRevision,
+                    actualRevision = actualRevision,
+                )
+            }
+            val classMap = legacyClassMaps(main)
+                .firstOrNull { it.string("id") == entry.classId }
+                ?: throw TeacherEntryConflictException(
+                    "This class is no longer available. Refresh and try again.",
+                )
+
+            val notesSnapshot = transaction.get(notesReference)
+            val removal = removeLegacyEntry(
+                noteDocument = notesSnapshot.data.orEmpty(),
+                entryId = entry.id,
+            )
+            val removedEntry = removal.entryMap
+                ?: throw TeacherEntryConflictException(
+                    "This entry is no longer available. Refresh and try again.",
+                )
+
+            val now = System.currentTimeMillis()
+            val trashEntry = buildLegacyTrashEntryMap(
+                entry = entry,
+                noteEntry = removedEntry,
+                classMap = classMap,
+                dateKey = requireNotNull(removal.dateKey),
+                deletedAt = now,
+            )
+            val nextRevision = actualRevision + 1
+            val source = "nativeDeleteEntry"
+            val updatedMain = addLegacyTrashNote(main, trashEntry).withRevision(
+                revision = nextRevision,
+                previousRevision = actualRevision,
+                updatedAt = now,
+                source = source,
+            )
+            val backupId = "${nextRevision.toString().padStart(6, '0')}_$now"
+            val backupPayload = buildBackupPayload(
+                main = updatedMain,
+                revision = nextRevision,
+                savedAt = now,
+                source = source,
+                backupId = backupId,
+            )
+            val historyReference = firestore.document(
+                "users/${teacher.uid}/appdata/main_backup_$backupId",
+            )
+
+            transaction.set(notesReference, removal.noteDocument)
+            transaction.set(mainReference, updatedMain)
+            transaction.set(
+                teacherReference,
+                buildTeacherIndexPatch(
+                    teacher = teacher,
+                    main = updatedMain,
+                    revision = nextRevision,
+                    savedAt = now,
+                ),
+                SetOptions.merge(),
+            )
+            transaction.set(backupReference, backupPayload)
+            transaction.set(historyReference, backupPayload)
+        }.await()
+
+        runCatching { pruneBackupHistory(teacher.uid) }
+        return reload()
+    }
+
+    suspend fun restoreEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+        reload: suspend () -> TeacherSnapshot,
+    ): TeacherSnapshot {
+        val mainReference = firestore.document("users/${teacher.uid}/appdata/main")
+        val notesReference = firestore.document(
+            "users/${teacher.uid}/appdata/notes_${entry.classId}",
+        )
+        val teacherReference = firestore.document("teachers/${teacher.uid}")
+        val backupReference = firestore.document(
+            "users/${teacher.uid}/appdata/main_backup_latest",
+        )
+
+        firestore.runTransaction { transaction ->
+            val mainSnapshot = transaction.get(mainReference)
+            if (!mainSnapshot.exists()) throw TeacherDataMissingException()
+
+            val main = mainSnapshot.data.orEmpty()
+            val actualRevision = main.nestedMap("_meta").longValue("revision")
+            if (actualRevision != expectedRevision) {
+                throw TeacherRevisionConflictException(
+                    expectedRevision = expectedRevision,
+                    actualRevision = actualRevision,
+                )
+            }
+            if (legacyClassMaps(main).none { it.string("id") == entry.classId }) {
+                throw TeacherEntryConflictException(
+                    "This class is no longer available. Refresh and try again.",
+                )
+            }
+
+            val restoredTrash = removeLegacyTrashNote(main, entry.id)
+                ?: throw TeacherEntryConflictException(
+                    "This entry is no longer in the recycle bin. Refresh and try again.",
+                )
+            val draft = restoredTrash.trashEntry.toDraftForRestore()
+            val notesSnapshot = transaction.get(notesReference)
+            val noteDocument = notesSnapshot.data.orEmpty()
+            val existingEntries = mapLegacyEntriesForMutation(
+                classId = draft.classId,
+                noteDocument = noteDocument,
+            )
+            when (val validation = validateTeacherEntryDraft(draft, existingEntries)) {
+                TeacherEntryValidation.Valid -> Unit
+                is TeacherEntryValidation.Invalid -> {
+                    throw TeacherEntryConflictException(validation.message)
+                }
+            }
+
+            val now = System.currentTimeMillis()
+            val updatedNotes = upsertLegacyEntry(
+                noteDocument = noteDocument,
+                dateKey = draft.dateKey,
+                entryMap = buildLegacyEntryMapFromTrash(restoredTrash.trashEntry),
+            )
+            val nextRevision = actualRevision + 1
+            val source = "nativeRestoreEntry"
+            val updatedMain = restoredTrash.main.withRevision(
                 revision = nextRevision,
                 previousRevision = actualRevision,
                 updatedAt = now,
@@ -204,6 +393,148 @@ internal fun upsertLegacyEntry(
         put(dateKey, updatedDay)
     }
 }
+
+internal data class LegacyEntryRemoval(
+    val noteDocument: Map<String, Any?>,
+    val entryMap: Map<String, Any?>?,
+    val dateKey: String?,
+)
+
+internal fun removeLegacyEntry(
+    noteDocument: Map<String, Any?>,
+    entryId: String,
+): LegacyEntryRemoval {
+    var removedEntry: Map<String, Any?>? = null
+    var removedDateKey: String? = null
+    val updated = noteDocument.mapValues { (dateKey, rawEntries) ->
+        (rawEntries as? List<*>)
+            .orEmpty()
+            .mapNotNull(Any?::asStringMap)
+            .filterNot { entry ->
+                val shouldRemove = entry.string("id") == entryId
+                if (shouldRemove && removedEntry == null) {
+                    removedEntry = entry
+                    removedDateKey = dateKey
+                }
+                shouldRemove
+            }
+    }.filterValues(List<*>::isNotEmpty)
+    return LegacyEntryRemoval(
+        noteDocument = updated,
+        entryMap = removedEntry,
+        dateKey = removedDateKey,
+    )
+}
+
+internal fun addLegacyTrashNote(
+    main: Map<String, Any?>,
+    trashEntry: Map<String, Any?>,
+): Map<String, Any?> {
+    val entryId = trashEntry["id"]?.toString().orEmpty()
+    val trash = main.nestedMap("trash")
+    val existingNotes = (trash["notes"] as? List<*>)
+        .orEmpty()
+        .mapNotNull(Any?::asStringMap)
+        .filterNot { it.string("id") == entryId }
+    return main.toMutableMap().apply {
+        put(
+            "trash",
+            trash.toMutableMap().apply {
+                put("notes", existingNotes + trashEntry)
+                putIfAbsent("classes", (trash["classes"] as? List<*>).orEmpty())
+            },
+        )
+    }
+}
+
+internal data class LegacyTrashRestore(
+    val main: Map<String, Any?>,
+    val trashEntry: Map<String, Any?>,
+)
+
+internal fun removeLegacyTrashNote(
+    main: Map<String, Any?>,
+    entryId: String,
+): LegacyTrashRestore? {
+    val trash = main.nestedMap("trash")
+    var restored: Map<String, Any?>? = null
+    val remainingNotes = (trash["notes"] as? List<*>)
+        .orEmpty()
+        .mapNotNull(Any?::asStringMap)
+        .filterNot { entry ->
+            val shouldRestore = entry.string("id") == entryId
+            if (shouldRestore && restored == null) {
+                restored = entry
+            }
+            shouldRestore
+        }
+    val trashEntry = restored ?: return null
+    val updatedMain = main.toMutableMap().apply {
+        put(
+            "trash",
+            trash.toMutableMap().apply {
+                put("notes", remainingNotes)
+                putIfAbsent("classes", (trash["classes"] as? List<*>).orEmpty())
+            },
+        )
+    }
+    return LegacyTrashRestore(
+        main = updatedMain,
+        trashEntry = trashEntry,
+    )
+}
+
+internal fun buildLegacyTrashEntryMap(
+    entry: TeacherTrashedEntry,
+    noteEntry: Map<String, Any?>,
+    classMap: Map<String, Any?>,
+    dateKey: String,
+    deletedAt: Long,
+): Map<String, Any?> = linkedMapOf(
+    "id" to entry.id,
+    "title" to noteEntry.string("title").ifBlank { entry.title },
+    "body" to noteEntry.string("body").ifBlank { entry.body },
+    "tag" to noteEntry.string("tag").ifBlank { entry.tag.ifBlank { "note" } },
+    "status" to noteEntry.string("status").ifBlank { entry.status },
+    "timeStart" to noteEntry.string("timeStart").ifBlank { entry.timeStart.orEmpty() },
+    "timeEnd" to noteEntry.string("timeEnd").ifBlank { entry.timeEnd.orEmpty() },
+    "teacherName" to noteEntry.string("teacherName").ifBlank { entry.teacherName.orEmpty() },
+    "created" to noteEntry.longValue("created").takeIf { it > 0L }.let {
+        it ?: entry.createdAt
+    },
+    "classId" to entry.classId,
+    "className" to classMap.string("section").ifBlank { entry.className },
+    "institute" to classMap.string("institute").ifBlank { entry.instituteName },
+    "dateKey" to dateKey,
+    "deletedAt" to deletedAt,
+)
+
+internal fun buildLegacyEntryMapFromTrash(
+    trashEntry: Map<String, Any?>,
+): Map<String, Any?> = linkedMapOf(
+    "id" to trashEntry.string("id"),
+    "title" to trashEntry.string("title"),
+    "body" to trashEntry.string("body"),
+    "tag" to trashEntry.string("tag").ifBlank { "note" },
+    "status" to trashEntry.string("status"),
+    "timeStart" to trashEntry.string("timeStart"),
+    "timeEnd" to trashEntry.string("timeEnd"),
+    "teacherName" to trashEntry.string("teacherName"),
+    "created" to trashEntry.longValue("created"),
+)
+
+private fun Map<String, Any?>.toDraftForRestore(): TeacherEntryDraft = TeacherEntryDraft(
+    entryId = string("id"),
+    classId = string("classId"),
+    dateKey = string("dateKey"),
+    title = string("title"),
+    body = string("body"),
+    tag = string("tag").ifBlank { "note" },
+    status = string("status"),
+    timeStart = string("timeStart"),
+    timeEnd = string("timeEnd"),
+    createdAt = longValue("created"),
+)
 
 private fun Map<String, Any?>.withRevision(
     revision: Long,

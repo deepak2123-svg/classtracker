@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
@@ -11,9 +13,10 @@ import androidx.room.RoomDatabase
         TeacherMetadataEntity::class,
         TeacherClassEntity::class,
         TeacherEntryEntity::class,
+        TeacherTrashedEntryEntity::class,
         EntryMutationEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class LedgrDatabase : RoomDatabase() {
@@ -24,6 +27,43 @@ abstract class LedgrDatabase : RoomDatabase() {
             context,
             LedgrDatabase::class.java,
             "ledgr-teacher.db",
-        ).build()
+        )
+            .addMigrations(MIGRATION_1_2)
+            .build()
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `teacher_trashed_entries` (
+                        `uid` TEXT NOT NULL,
+                        `entryId` TEXT NOT NULL,
+                        `classId` TEXT NOT NULL,
+                        `className` TEXT NOT NULL,
+                        `instituteName` TEXT NOT NULL,
+                        `dateKey` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `body` TEXT NOT NULL,
+                        `tag` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `timeStart` TEXT,
+                        `timeEnd` TEXT,
+                        `teacherName` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        `deletedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`uid`, `entryId`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_teacher_trashed_entries_uid_classId`
+                    ON `teacher_trashed_entries` (`uid`, `classId`)
+                    """.trimIndent(),
+                )
+                db.execSQL("ALTER TABLE `entry_mutations` ADD COLUMN `teacherName` TEXT")
+                db.execSQL("ALTER TABLE `entry_mutations` ADD COLUMN `deletedAt` INTEGER")
+            }
+        }
     }
 }

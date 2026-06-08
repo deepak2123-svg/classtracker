@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
+import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.resolvedEntryId
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
@@ -13,9 +14,11 @@ import kotlinx.coroutines.flow.map
 data class PendingEntryMutation(
     val mutationId: String,
     val uid: String,
+    val operation: String = MutationOperation.Upsert,
     val expectedRevision: Long,
     val resolvedEntryId: String,
     val draft: TeacherEntryDraft,
+    val trashedEntry: TeacherTrashedEntry? = null,
     val attemptCount: Int,
 )
 
@@ -32,6 +35,18 @@ interface TeacherLocalDataSource {
         uid: String,
         expectedRevision: Long,
         draft: TeacherEntryDraft,
+    ): TeacherSnapshot
+
+    suspend fun enqueueDelete(
+        uid: String,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot
+
+    suspend fun enqueueRestore(
+        uid: String,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
     ): TeacherSnapshot
 
     suspend fun resetSyncing(uid: String)
@@ -58,15 +73,24 @@ class RoomTeacherLocalDataSource(
 ) : TeacherLocalDataSource {
     private val dao = database.teacherDao()
 
-    override fun observeSnapshot(uid: String): Flow<TeacherSnapshot?> = combine(
-        dao.observeProfile(uid),
-        dao.observeMetadata(uid),
-        dao.observeClasses(uid),
-        dao.observeEntries(uid),
-        dao.observeMutations(uid),
-    ) { profile, metadata, classes, entries, mutations ->
-        buildSnapshot(profile, metadata, classes, entries)
-            ?.let { overlayMutations(it, mutations) }
+    override fun observeSnapshot(uid: String): Flow<TeacherSnapshot?> {
+        val entryRecords = combine(
+            dao.observeEntries(uid),
+            dao.observeTrashedEntries(uid),
+        ) { entries, trashedEntries ->
+            entries to trashedEntries
+        }
+        return combine(
+            dao.observeProfile(uid),
+            dao.observeMetadata(uid),
+            dao.observeClasses(uid),
+            entryRecords,
+            dao.observeMutations(uid),
+        ) { profile, metadata, classes, records, mutations ->
+            val (entries, trashedEntries) = records
+            buildSnapshot(profile, metadata, classes, entries, trashedEntries)
+                ?.let { overlayMutations(it, mutations) }
+        }
     }
 
     override fun observeSyncSummary(uid: String): Flow<TeacherSyncSummary> =
@@ -78,6 +102,7 @@ class RoomTeacherLocalDataSource(
             metadata = dao.metadata(uid),
             classes = dao.classes(uid),
             entries = dao.entries(uid),
+            trashedEntries = dao.trashedEntries(uid),
         )?.let { snapshot ->
             overlayMutations(snapshot, dao.mutations(uid))
         }
@@ -121,11 +146,34 @@ class RoomTeacherLocalDataSource(
                 metadata = dao.metadata(uid),
                 classes = dao.classes(uid),
                 entries = dao.entries(uid),
+                trashedEntries = dao.trashedEntries(uid),
             ),
         ).let { snapshot ->
             overlayMutations(snapshot, dao.mutations(uid))
         }
     }
+
+    override suspend fun enqueueDelete(
+        uid: String,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = enqueueTrashMutation(
+        uid = uid,
+        expectedRevision = expectedRevision,
+        entry = entry,
+        operation = MutationOperation.Delete,
+    )
+
+    override suspend fun enqueueRestore(
+        uid: String,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = enqueueTrashMutation(
+        uid = uid,
+        expectedRevision = expectedRevision,
+        entry = entry,
+        operation = MutationOperation.Restore,
+    )
 
     override suspend fun resetSyncing(uid: String) {
         dao.resetSyncing(uid, System.currentTimeMillis())
@@ -199,7 +247,40 @@ class RoomTeacherLocalDataSource(
         dao.upsertMetadata(snapshot.toMetadataEntity(uid))
         dao.deleteClasses(uid)
         dao.deleteEntries(uid)
+        dao.deleteTrashedEntries(uid)
         dao.insertClasses(snapshot.classes.map { it.toEntity(uid) })
         dao.insertEntries(snapshot.entries.map { it.toEntity(uid) })
+        dao.insertTrashedEntries(snapshot.trashedEntries.map { it.toEntity(uid) })
+    }
+
+    private suspend fun enqueueTrashMutation(
+        uid: String,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+        operation: String,
+    ): TeacherSnapshot = database.withTransaction {
+        val now = System.currentTimeMillis()
+        val mutationId = "native_${operation.lowercase()}_${UUID.randomUUID()}"
+        dao.upsertMutation(
+            entry.toMutationEntity(
+                uid = uid,
+                operation = operation,
+                mutationId = mutationId,
+                expectedRevision = expectedRevision,
+                queuedAt = now,
+                now = now,
+            ),
+        )
+        requireNotNull(
+            buildSnapshot(
+                profile = dao.profile(uid),
+                metadata = dao.metadata(uid),
+                classes = dao.classes(uid),
+                entries = dao.entries(uid),
+                trashedEntries = dao.trashedEntries(uid),
+            ),
+        ).let { snapshot ->
+            overlayMutations(snapshot, dao.mutations(uid))
+        }
     }
 }

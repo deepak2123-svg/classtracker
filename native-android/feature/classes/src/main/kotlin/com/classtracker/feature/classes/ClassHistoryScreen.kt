@@ -7,10 +7,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.RestoreFromTrash
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -21,20 +27,27 @@ import com.classtracker.core.designsystem.LedgrSectionHeading
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntrySyncState
+import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.isTeacherEntryDateWithinWindow
 
 @Composable
 fun ClassHistoryScreen(
     teacherClass: TeacherClass,
     entries: List<TeacherEntry>,
+    trashedEntries: List<TeacherTrashedEntry> = emptyList(),
     createEnabled: Boolean = false,
     editEnabled: Boolean = false,
+    deleteEnabled: Boolean = false,
     onAddEntry: (String) -> Unit = {},
     onEditEntry: (TeacherEntry) -> Unit = {},
+    onDuplicateEntry: (TeacherEntry) -> Unit = {},
+    onDeleteEntry: (TeacherEntry) -> Unit = {},
+    onRestoreEntry: (TeacherTrashedEntry) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val todayKey = remember { todayKey() }
     var selectedDate by rememberSaveable(teacherClass.id) { androidx.compose.runtime.mutableStateOf(todayKey) }
+    var deleteCandidate by remember { mutableStateOf<TeacherEntry?>(null) }
     val dateCounts = remember(entries) { entries.groupingBy(TeacherEntry::dateKey).eachCount() }
     val focusDates = remember(entries, todayKey) { buildFocusDateKeys(entries, todayKey) }
     val focusedEntries = remember(entries, selectedDate) {
@@ -104,13 +117,17 @@ fun ClassHistoryScreen(
                 items = focusedEntries,
                 key = TeacherEntry::id,
             ) { entry ->
+                val canMutateEntry = isTeacherEntryDateWithinWindow(entry.dateKey) &&
+                    entry.syncState != TeacherEntrySyncState.Syncing
                 EntryCard(
                     entry = entry,
                     showDate = false,
-                    editEnabled = editEnabled &&
-                        isTeacherEntryDateWithinWindow(entry.dateKey) &&
-                        entry.syncState != TeacherEntrySyncState.Syncing,
+                    editEnabled = editEnabled && canMutateEntry,
+                    duplicateEnabled = createEnabled && canMutateEntry,
+                    deleteEnabled = deleteEnabled && entry.syncState == TeacherEntrySyncState.Synced,
                     onEdit = { onEditEntry(entry) },
+                    onDuplicate = { onDuplicateEntry(entry) },
+                    onDelete = { deleteCandidate = entry },
                 )
             }
         }
@@ -136,15 +153,78 @@ fun ClassHistoryScreen(
                 items = entries,
                 key = { "history-${it.id}" },
             ) { entry ->
+                val canMutateEntry = isTeacherEntryDateWithinWindow(entry.dateKey) &&
+                    entry.syncState != TeacherEntrySyncState.Syncing
                 EntryCard(
                     entry = entry,
                     showDate = true,
-                    editEnabled = editEnabled &&
-                        isTeacherEntryDateWithinWindow(entry.dateKey) &&
-                        entry.syncState != TeacherEntrySyncState.Syncing,
+                    editEnabled = editEnabled && canMutateEntry,
+                    duplicateEnabled = createEnabled && canMutateEntry,
+                    deleteEnabled = deleteEnabled && entry.syncState == TeacherEntrySyncState.Synced,
                     onEdit = { onEditEntry(entry) },
+                    onDuplicate = { onDuplicateEntry(entry) },
+                    onDelete = { deleteCandidate = entry },
                 )
             }
         }
+
+        if (trashedEntries.isNotEmpty()) {
+            item {
+                LedgrSectionHeading(
+                    title = "Recycle bin",
+                    supportingText = "${trashedEntries.size} deleted ${if (trashedEntries.size == 1) "entry" else "entries"}",
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            items(
+                items = trashedEntries,
+                key = { "trash-${it.id}" },
+            ) { entry ->
+                TrashedEntryCard(
+                    entry = entry,
+                    restoreEnabled = deleteEnabled && entry.syncState != TeacherEntrySyncState.Syncing,
+                    onRestore = { onRestoreEntry(entry) },
+                )
+            }
+        } else if (deleteEnabled) {
+            item {
+                LedgrEmptyState(
+                    title = "Recycle bin is empty",
+                    message = "Deleted entries from this class will appear here.",
+                    icon = Icons.Outlined.RestoreFromTrash,
+                )
+            }
+        }
+    }
+
+    deleteCandidate?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            icon = {
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = null,
+                )
+            },
+            title = { Text("Move entry to recycle bin?") },
+            text = {
+                Text(entry.title.ifBlank { "This teaching entry can be restored later." })
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleteCandidate = null
+                        onDeleteEntry(entry)
+                    },
+                ) {
+                    Text("Move to bin")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteCandidate = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }

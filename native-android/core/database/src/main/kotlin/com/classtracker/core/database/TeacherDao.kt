@@ -20,6 +20,9 @@ interface TeacherDao {
     @Query("SELECT * FROM teacher_entries WHERE uid = :uid ORDER BY dateKey, createdAt, entryId")
     fun observeEntries(uid: String): Flow<List<TeacherEntryEntity>>
 
+    @Query("SELECT * FROM teacher_trashed_entries WHERE uid = :uid ORDER BY deletedAt DESC, entryId")
+    fun observeTrashedEntries(uid: String): Flow<List<TeacherTrashedEntryEntity>>
+
     @Query("SELECT * FROM entry_mutations WHERE uid = :uid ORDER BY queuedAt, mutationId")
     fun observeMutations(uid: String): Flow<List<EntryMutationEntity>>
 
@@ -34,6 +37,9 @@ interface TeacherDao {
 
     @Query("SELECT * FROM teacher_entries WHERE uid = :uid ORDER BY dateKey, createdAt, entryId")
     suspend fun entries(uid: String): List<TeacherEntryEntity>
+
+    @Query("SELECT * FROM teacher_trashed_entries WHERE uid = :uid ORDER BY deletedAt DESC, entryId")
+    suspend fun trashedEntries(uid: String): List<TeacherTrashedEntryEntity>
 
     @Query("SELECT * FROM entry_mutations WHERE uid = :uid ORDER BY queuedAt, mutationId")
     suspend fun mutations(uid: String): List<EntryMutationEntity>
@@ -74,6 +80,9 @@ interface TeacherDao {
     suspend fun insertEntries(entries: List<TeacherEntryEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTrashedEntries(entries: List<TeacherTrashedEntryEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMutation(mutation: EntryMutationEntity)
 
     @Query("DELETE FROM teacher_classes WHERE uid = :uid")
@@ -81,6 +90,9 @@ interface TeacherDao {
 
     @Query("DELETE FROM teacher_entries WHERE uid = :uid")
     suspend fun deleteEntries(uid: String)
+
+    @Query("DELETE FROM teacher_trashed_entries WHERE uid = :uid")
+    suspend fun deleteTrashedEntries(uid: String)
 
     @Query("DELETE FROM entry_mutations WHERE mutationId = :mutationId")
     suspend fun deleteMutation(mutationId: String)

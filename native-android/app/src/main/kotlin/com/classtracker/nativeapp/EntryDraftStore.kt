@@ -46,6 +46,7 @@ class EntryDraftStore(context: Context) {
     fun write(
         uid: String,
         draft: TeacherEntryDraft,
+        entryId: String? = draft.entryId,
     ) {
         val json = JSONObject()
             .put("entryId", draft.entryId.orEmpty())
@@ -61,7 +62,7 @@ class EntryDraftStore(context: Context) {
             .put("createdAt", draft.createdAt ?: 0L)
             .put("savedAt", System.currentTimeMillis())
         preferences.edit {
-            putString(key(uid, draft.classId, draft.entryId), json.toString())
+            putString(key(uid, draft.classId, entryId), json.toString())
         }
     }
 
