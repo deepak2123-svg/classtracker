@@ -3,6 +3,7 @@ package com.classtracker.nativeapp
 import android.app.Activity
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -38,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -74,6 +78,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 private const val ClassHistoryRoute = "class/{classId}"
@@ -406,48 +411,41 @@ private fun TeacherApp(
                                 onSignOut = onSignOut,
                             )
                         } else {
-                            val classIndex = snapshot.classes.indexOfFirst { it.id == classId }
-                            fun navigateToClassAt(index: Int) {
-                                val targetClass = snapshot.classes.getOrNull(index) ?: return
-                                navController.navigate("class/${Uri.encode(targetClass.id)}") {
-                                    popUpTo(ClassHistoryRoute) {
-                                        inclusive = true
-                                    }
-                                    launchSingleTop = true
-                                }
-                            }
-                            ClassHistoryScreen(
-                                teacherClass = teacherClass,
-                                entries = snapshot.entriesForClass(classId),
-                                trashedEntries = snapshot.trashedEntriesForClass(classId),
+                            ClassHistoryPagerRoute(
+                                initialClassId = classId,
+                                snapshot = snapshot,
                                 createEnabled = BuildConfig.NATIVE_ENTRY_CREATE_ENABLED,
                                 editEnabled = BuildConfig.NATIVE_ENTRY_EDIT_ENABLED,
                                 deleteEnabled = BuildConfig.NATIVE_ENTRY_DELETE_ENABLED,
-                                onAddEntry = { dateKey ->
+                                onNavigateToClass = { targetClassId ->
                                     navController.navigate(
-                                        "entry/new/${Uri.encode(classId)}/${Uri.encode(dateKey)}",
+                                        "class/${Uri.encode(targetClassId)}",
+                                    ) {
+                                        popUpTo(ClassHistoryRoute) {
+                                            inclusive = true
+                                        }
+                                        launchSingleTop = true
+                                    }
+                                },
+                                onAddEntry = { targetClassId, dateKey ->
+                                    navController.navigate(
+                                        "entry/new/${Uri.encode(targetClassId)}/${Uri.encode(dateKey)}",
                                     )
                                 },
-                                onEditEntry = { teacherEntry ->
+                                onEditEntry = { targetClassId, teacherEntry ->
                                     navController.navigate(
-                                        "entry/edit/${Uri.encode(classId)}/" +
+                                        "entry/edit/${Uri.encode(targetClassId)}/" +
                                             Uri.encode(teacherEntry.id),
                                     )
                                 },
-                                onDuplicateEntry = { teacherEntry ->
+                                onDuplicateEntry = { targetClassId, teacherEntry ->
                                     navController.navigate(
-                                        "entry/duplicate/${Uri.encode(classId)}/" +
+                                        "entry/duplicate/${Uri.encode(targetClassId)}/" +
                                             Uri.encode(teacherEntry.id),
                                     )
                                 },
-                                onDeleteEntry = { teacherEntry ->
-                                    onDeleteEntry(teacherEntry, teacherClass)
-                                },
+                                onDeleteEntry = onDeleteEntry,
                                 onRestoreEntry = onRestoreEntry,
-                                canSwipeToPreviousClass = classIndex > 0,
-                                canSwipeToNextClass = classIndex in 0 until snapshot.classes.lastIndex,
-                                onSwipeToPreviousClass = { navigateToClassAt(classIndex - 1) },
-                                onSwipeToNextClass = { navigateToClassAt(classIndex + 1) },
                             )
                         }
                     }
@@ -551,6 +549,67 @@ private fun TeacherApp(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ClassHistoryPagerRoute(
+    initialClassId: String,
+    snapshot: TeacherSnapshot,
+    createEnabled: Boolean,
+    editEnabled: Boolean,
+    deleteEnabled: Boolean,
+    onNavigateToClass: (String) -> Unit,
+    onAddEntry: (classId: String, dateKey: String) -> Unit,
+    onEditEntry: (classId: String, entry: TeacherEntry) -> Unit,
+    onDuplicateEntry: (classId: String, entry: TeacherEntry) -> Unit,
+    onDeleteEntry: (TeacherEntry, TeacherClass) -> Unit,
+    onRestoreEntry: (TeacherTrashedEntry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val initialPage = snapshot.classes.indexOfFirst { it.id == initialClassId }.coerceAtLeast(0)
+    val pagerState = rememberPagerState(initialPage = initialPage) {
+        snapshot.classes.size
+    }
+
+    LaunchedEffect(initialPage, snapshot.classes.size) {
+        if (pagerState.currentPage != initialPage) {
+            pagerState.scrollToPage(initialPage)
+        }
+    }
+
+    LaunchedEffect(pagerState, snapshot.classes, initialClassId) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                val targetClassId = snapshot.classes.getOrNull(page)?.id
+                if (targetClassId != null && targetClassId != initialClassId) {
+                    onNavigateToClass(targetClassId)
+                }
+            }
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = modifier.fillMaxSize(),
+        key = { page -> snapshot.classes[page].id },
+        beyondViewportPageCount = 1,
+    ) { page ->
+        val pageClass = snapshot.classes[page]
+        ClassHistoryScreen(
+            teacherClass = pageClass,
+            entries = snapshot.entriesForClass(pageClass.id),
+            trashedEntries = snapshot.trashedEntriesForClass(pageClass.id),
+            createEnabled = createEnabled,
+            editEnabled = editEnabled,
+            deleteEnabled = deleteEnabled,
+            onAddEntry = { dateKey -> onAddEntry(pageClass.id, dateKey) },
+            onEditEntry = { teacherEntry -> onEditEntry(pageClass.id, teacherEntry) },
+            onDuplicateEntry = { teacherEntry -> onDuplicateEntry(pageClass.id, teacherEntry) },
+            onDeleteEntry = { teacherEntry -> onDeleteEntry(teacherEntry, pageClass) },
+            onRestoreEntry = onRestoreEntry,
+        )
     }
 }
 

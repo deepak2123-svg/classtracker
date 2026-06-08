@@ -3,7 +3,6 @@ package com.classtracker.feature.classes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,8 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrSectionHeading
@@ -54,7 +51,6 @@ import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.filterTeacherEntries
 import com.classtracker.core.model.isTeacherEntryDateWithinWindow
 import com.classtracker.core.model.sortTeacherEntriesNewestFirst
-import kotlin.math.abs
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -70,10 +66,6 @@ fun ClassHistoryScreen(
     onDuplicateEntry: (TeacherEntry) -> Unit = {},
     onDeleteEntry: (TeacherEntry) -> Unit = {},
     onRestoreEntry: (TeacherTrashedEntry) -> Unit = {},
-    canSwipeToPreviousClass: Boolean = false,
-    canSwipeToNextClass: Boolean = false,
-    onSwipeToPreviousClass: () -> Unit = {},
-    onSwipeToNextClass: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val todayKey = remember { todayKey() }
@@ -111,40 +103,9 @@ fun ClassHistoryScreen(
         )
     }
     val canAddForSelectedDate = createEnabled && isTeacherEntryDateWithinWindow(selectedDate)
-    val classSwipeThresholdPx = with(LocalDensity.current) { ClassSwipeThreshold.toPx() }
-    val classSwipeModifier = if (canSwipeToPreviousClass || canSwipeToNextClass) {
-        Modifier.pointerInput(teacherClass.id, canSwipeToPreviousClass, canSwipeToNextClass) {
-            var dragDistance = 0f
-            detectHorizontalDragGestures(
-                onDragStart = { dragDistance = 0f },
-                onHorizontalDrag = { change, dragAmount ->
-                    dragDistance += dragAmount
-                    if (abs(dragDistance) > ClassSwipeConsumeThresholdPx) {
-                        change.consume()
-                    }
-                },
-                onDragEnd = {
-                    when {
-                        dragDistance <= -classSwipeThresholdPx && canSwipeToNextClass -> {
-                            onSwipeToNextClass()
-                        }
-                        dragDistance >= classSwipeThresholdPx && canSwipeToPreviousClass -> {
-                            onSwipeToPreviousClass()
-                        }
-                    }
-                    dragDistance = 0f
-                },
-                onDragCancel = { dragDistance = 0f },
-            )
-        }
-    } else {
-        Modifier
-    }
 
     LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .then(classSwipeModifier),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = 16.dp,
             top = 14.dp,
@@ -460,8 +421,6 @@ private data class HistoryStatusFilter(
 )
 
 private const val AllStatusFilter = ""
-private val ClassSwipeThreshold = 72.dp
-private const val ClassSwipeConsumeThresholdPx = 8f
 
 private val HistoryStatusFilters = listOf(
     HistoryStatusFilter(AllStatusFilter, "All"),

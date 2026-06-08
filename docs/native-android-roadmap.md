@@ -84,11 +84,11 @@ Status: completed as part of
 
 ## Phase 4: Core teacher workflows
 
-Status: checkpoint 7 adds class-detail sticky banner, newest-first history, and
-left/right class swiping on top of checkpoint 6 entry search/status filters,
-checkpoint 5 beta-only recoverable entry delete/restore, checkpoint 4 duplicate
-workflow support, checkpoint 3 teacher mobile web parity, and checkpoint 2
-offline create/edit foundation.
+Status: checkpoint 8 upgrades class-detail swiping to a sliding pager motion on
+top of checkpoint 7 sticky banner/newest-first history/class swiping, checkpoint
+6 entry search/status filters, checkpoint 5 beta-only recoverable entry
+delete/restore, checkpoint 4 duplicate workflow support, checkpoint 3 teacher
+mobile web parity, and checkpoint 2 offline create/edit foundation.
 
 ### Deliverables
 
@@ -96,7 +96,7 @@ offline create/edit foundation.
 - Institute, class, section, subject, date, and time selection.
 - Draft recovery and form validation.
 - History, search, trash, and restore.
-- Sticky class-detail summary and swipe navigation across classes.
+- Sticky class-detail summary and sliding swipe navigation across classes.
 - Compatibility writes that remain visible to teacher web and admin web.
 - Feature flags for each write capability.
 - Native class-detail and add-entry screens that visually match the mobile
