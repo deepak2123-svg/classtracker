@@ -55,9 +55,11 @@ fun ProfileScreen(
     monthEntries: Int,
     activeClasses: Int,
     instituteCount: Int,
+    trashedCount: Int,
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
     onOpenStats: () -> Unit,
+    onOpenRecycleBin: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -109,8 +111,13 @@ fun ProfileScreen(
             ProfileActionCard(
                 icon = Icons.Outlined.Archive,
                 title = "Recycle Bin",
-                subtitle = "Nothing in the recycle bin right now.",
-                accent = colors.textSecondary,
+                subtitle = if (trashedCount == 0) {
+                    "Nothing in the recycle bin right now."
+                } else {
+                    "$trashedCount deleted ${if (trashedCount == 1) "entry" else "entries"} — tap to restore."
+                },
+                accent = if (trashedCount > 0) colors.red else colors.textSecondary,
+                onClick = onOpenRecycleBin,
             )
         }
         item {
@@ -523,9 +530,11 @@ private fun ProfileScreenPreview() {
             monthEntries = 18,
             activeClasses = 6,
             instituteCount = 3,
+            trashedCount = 0,
             themeMode = LedgrThemeMode.Light,
             onThemeModeChange = {},
             onOpenStats = {},
+            onOpenRecycleBin = {},
             onSignOut = {},
         )
     }

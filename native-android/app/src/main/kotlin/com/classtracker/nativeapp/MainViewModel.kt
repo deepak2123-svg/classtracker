@@ -132,6 +132,7 @@ class MainViewModel @Inject constructor(
             )
         ) {
             TeacherEntryValidation.Valid -> Unit
+            is TeacherEntryValidation.Overlap -> Unit // UI soft-warned; allow save
             is TeacherEntryValidation.Invalid -> {
                 mutableState.update { it.copy(errorMessage = validation.message) }
                 return

@@ -57,6 +57,7 @@ internal class FirebaseTeacherEntryWriter(
             )
             when (val validation = validateTeacherEntryDraft(draft, existingEntries)) {
                 TeacherEntryValidation.Valid -> Unit
+                is TeacherEntryValidation.Overlap -> Unit // UI soft-warned; allow save
                 is TeacherEntryValidation.Invalid -> {
                     throw TeacherEntryConflictException(validation.message)
                 }
@@ -256,6 +257,7 @@ internal class FirebaseTeacherEntryWriter(
             )
             when (val validation = validateTeacherEntryDraft(draft, existingEntries)) {
                 TeacherEntryValidation.Valid -> Unit
+                is TeacherEntryValidation.Overlap -> Unit // UI soft-warned; allow restore
                 is TeacherEntryValidation.Invalid -> {
                     throw TeacherEntryConflictException(validation.message)
                 }

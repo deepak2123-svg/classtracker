@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,6 +76,7 @@ fun EntryEditorScreen(
     onDraftChanged: (TeacherEntryDraft) -> Unit,
     onSave: (TeacherEntryDraft) -> Unit,
     modifier: Modifier = Modifier,
+    showClassHeader: Boolean = true,
 ) {
     val validation = remember(draft, existingEntries) {
         validateTeacherEntryDraft(draft, existingEntries)
@@ -90,17 +92,19 @@ fun EntryEditorScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item {
-            LedgrClassCard(
-                sectionName = teacherClass.sectionName,
-                instituteName = teacherClass.instituteName,
-                subjectName = teacherClass.subjectName,
-                detail = if (draft.entryId == null) {
-                    "Add a teaching entry"
-                } else {
-                    "Editing teaching entry"
-                },
-            )
+        if (showClassHeader) {
+            item {
+                LedgrClassCard(
+                    sectionName = teacherClass.sectionName,
+                    instituteName = teacherClass.instituteName,
+                    subjectName = teacherClass.subjectName,
+                    detail = if (draft.entryId == null) {
+                        "Add a teaching entry"
+                    } else {
+                        "Editing teaching entry"
+                    },
+                )
+            }
         }
 
         if (recoveredDraft) {
@@ -134,11 +138,13 @@ fun EntryEditorScreen(
             }
         }
 
-        item {
-            LedgrSectionHeading(
-                title = if (draft.entryId == null) "New entry" else "Entry details",
-                supportingText = "Saved entries remain compatible with the teacher web app.",
-            )
+        if (showClassHeader) {
+            item {
+                LedgrSectionHeading(
+                    title = if (draft.entryId == null) "New entry" else "Entry details",
+                    supportingText = "Saved entries remain compatible with the teacher web app.",
+                )
+            }
         }
 
         item {
@@ -246,10 +252,29 @@ fun EntryEditorScreen(
             }
         }
 
+        if (validation is TeacherEntryValidation.Overlap) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = LedgrTheme.colors.warningSurface,
+                    contentColor = LedgrTheme.colors.textSecondary,
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(
+                        text = validation.message,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LedgrTheme.colors.textSecondary,
+                    )
+                }
+            }
+        }
+
         item {
             Button(
                 onClick = { onSave(draft) },
-                enabled = validation == TeacherEntryValidation.Valid && !saving,
+                enabled = (validation == TeacherEntryValidation.Valid ||
+                    validation is TeacherEntryValidation.Overlap) && !saving,
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(vertical = 15.dp),
                 shape = RoundedCornerShape(14.dp),
@@ -956,5 +981,170 @@ private fun durationLabel(minutes: Int): String {
         "${hours} hr"
     } else {
         "${hours}h ${remainder}m"
+    }
+}
+
+/**
+ * Non-scrolling Column variant of the entry editor form.
+ * Used by ClassEntryScreen to embed the editor inside its own LazyColumn
+ * without nesting scrollable containers.
+ */
+@Composable
+fun EntryEditorColumn(
+    draft: TeacherEntryDraft,
+    existingEntries: List<TeacherEntry>,
+    saving: Boolean,
+    validation: TeacherEntryValidation,
+    onDraftChanged: (TeacherEntryDraft) -> Unit,
+    onSave: (TeacherEntryDraft) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Only show validation errors after the user has tapped Save at least once.
+    // Resets whenever the draft's mutationId changes (i.e. after a successful save).
+    var saveAttempted by remember(draft.mutationId) { mutableStateOf(false) }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        ScheduleCard(
+            draft = draft,
+            existingEntries = existingEntries,
+            onDraftChanged = onDraftChanged,
+        )
+
+        if (draft.timeStart.isNotBlank()) {
+            DurationCard(
+                draft = draft,
+                onDraftChanged = onDraftChanged,
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "STATUS",
+                style = MaterialTheme.typography.labelLarge,
+                color = LedgrTheme.colors.textMuted,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TeacherEntryStatus.entries.take(2).forEach { status ->
+                    StatusChip(
+                        status = status,
+                        selected = draft.status == status.storageValue,
+                        onClick = {
+                            onDraftChanged(
+                                draft.copy(
+                                    status = if (draft.status == status.storageValue) "" else status.storageValue,
+                                ),
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TeacherEntryStatus.entries.drop(2).forEach { status ->
+                    StatusChip(
+                        status = status,
+                        selected = draft.status == status.storageValue,
+                        onClick = {
+                            onDraftChanged(
+                                draft.copy(
+                                    status = if (draft.status == status.storageValue) "" else status.storageValue,
+                                ),
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+
+        OutlinedTextField(
+            value = draft.title,
+            onValueChange = { onDraftChanged(draft.copy(title = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Topic / title") },
+            supportingText = { Text("Required") },
+            singleLine = true,
+        )
+
+        OutlinedTextField(
+            value = draft.body,
+            onValueChange = { onDraftChanged(draft.copy(body = it)) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Notes") },
+            minLines = 4,
+            maxLines = 8,
+        )
+
+        if (saveAttempted && validation is TeacherEntryValidation.Invalid) {
+            Text(
+                text = validation.message,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
+        // Soft overlap warning — shown proactively, allows saving anyway
+        if (validation is TeacherEntryValidation.Overlap) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = LedgrTheme.colors.warningSurface,
+                contentColor = LedgrTheme.colors.textSecondary,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = validation.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                        color = LedgrTheme.colors.textSecondary,
+                    )
+                }
+            }
+        }
+
+        Button(
+            onClick = {
+                saveAttempted = true
+                if (validation == TeacherEntryValidation.Valid ||
+                    validation is TeacherEntryValidation.Overlap
+                ) onSave(draft)
+            },
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(vertical = 15.dp),
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            if (saving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.Save,
+                    contentDescription = null,
+                )
+                Text(
+                    text = if (draft.entryId == null) "Save entry" else "Save changes",
+                    modifier = Modifier.padding(start = 10.dp),
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
     }
 }

@@ -69,10 +69,12 @@ import com.classtracker.core.model.TeacherSyncSummary
 import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.toDuplicateDraft
 import com.classtracker.feature.auth.AuthScreen
+import com.classtracker.feature.classes.ClassEntryScreen
 import com.classtracker.feature.classes.ClassHistoryScreen
 import com.classtracker.feature.classes.StatsScreen
 import com.classtracker.feature.entries.EntryEditorScreen
 import com.classtracker.feature.profile.ProfileScreen
+import com.classtracker.feature.profile.RecycleBinScreen
 import com.classtracker.feature.today.HomeScreen
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -81,7 +83,9 @@ import java.util.UUID
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
+private const val ClassEntryRoute = "class-entry/{classId}"
 private const val ClassHistoryRoute = "class/{classId}"
+private const val RecycleBinRoute = "recycle-bin"
 private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
 private const val EditEntryRoute = "entry/edit/{classId}/{entryId}"
 private const val DuplicateEntryRoute = "entry/duplicate/{classId}/{entryId}"
@@ -187,11 +191,13 @@ private fun TeacherApp(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
+    val isClassEntry = currentRoute == ClassEntryRoute
     val isClassHistory = currentRoute == ClassHistoryRoute
+    val isRecycleBin = currentRoute == RecycleBinRoute
     val isEntryEditor = currentRoute == NewEntryRoute ||
         currentRoute == EditEntryRoute ||
         currentRoute == DuplicateEntryRoute
-    val isDetailRoute = isClassHistory || isEntryEditor
+    val isDetailRoute = isClassEntry || isClassHistory || isRecycleBin || isEntryEditor
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -205,6 +211,17 @@ private fun TeacherApp(
         errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             onClearError()
+        }
+    }
+
+    LaunchedEffect(entrySaved) {
+        if (entrySaved) {
+            snackbarHostState.showSnackbar(
+                message = "✓ Entry saved successfully",
+                duration = androidx.compose.material3.SnackbarDuration.Short,
+                withDismissAction = true,
+            )
+            onConsumeEntrySaved()
         }
     }
 
@@ -222,6 +239,16 @@ private fun TeacherApp(
                                 DuplicateEntryRoute -> "Duplicate entry"
                                 else -> "Edit entry"
                             },
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    } else if (isRecycleBin) {
+                        Text(
+                            text = "Recycle bin",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    } else if (isClassEntry) {
+                        Text(
+                            text = "Add entry",
                             style = MaterialTheme.typography.titleLarge,
                         )
                     } else if (isClassHistory) {
@@ -367,7 +394,7 @@ private fun TeacherApp(
                             classes = snapshot.classes,
                             entries = snapshot.entries,
                             onClassClick = { teacherClass ->
-                                navController.navigate("class/${Uri.encode(teacherClass.id)}")
+                                navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
                             },
                         )
                     }
@@ -376,7 +403,7 @@ private fun TeacherApp(
                             classes = snapshot.classes,
                             entries = snapshot.entries,
                             onClassClick = { teacherClass ->
-                                navController.navigate("class/${Uri.encode(teacherClass.id)}")
+                                navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
                             },
                         )
                     }
@@ -387,6 +414,7 @@ private fun TeacherApp(
                             monthEntries = dashboard.entryCountThisMonth,
                             activeClasses = dashboard.classCount,
                             instituteCount = dashboard.instituteCount,
+                            trashedCount = snapshot.trashedEntries.size,
                             themeMode = themeMode,
                             onThemeModeChange = onThemeModeChange,
                             onOpenStats = {
@@ -398,8 +426,63 @@ private fun TeacherApp(
                                     restoreState = true
                                 }
                             },
+                            onOpenRecycleBin = {
+                                navController.navigate(RecycleBinRoute)
+                            },
                             onSignOut = onSignOut,
                         )
+                    }
+                    composable(RecycleBinRoute) {
+                        RecycleBinScreen(
+                            trashedEntries = snapshot.trashedEntries,
+                            onRestoreEntry = onRestoreEntry,
+                        )
+                    }
+                    composable(ClassEntryRoute) { entry ->
+                        val classId = Uri.decode(entry.arguments?.getString("classId").orEmpty())
+                        val teacherClass = snapshot.classes.firstOrNull { it.id == classId }
+                        if (teacherClass == null) {
+                            FullScreenError(
+                                message = "This class is no longer available.",
+                                onRetry = { navController.navigateUp() },
+                                onSignOut = onSignOut,
+                            )
+                        } else {
+                            ClassEntryPagerRoute(
+                                initialClassId = classId,
+                                teacher = teacher,
+                                snapshot = snapshot,
+                                createEnabled = BuildConfig.NATIVE_ENTRY_CREATE_ENABLED,
+                                editEnabled = BuildConfig.NATIVE_ENTRY_EDIT_ENABLED,
+                                deleteEnabled = BuildConfig.NATIVE_ENTRY_DELETE_ENABLED,
+                                savingEntry = savingEntry,
+                                entrySaved = entrySaved,
+                                draftStore = draftStore,
+                                todayKey = todayKey,
+                                onNavigateToClass = { targetClassId ->
+                                    navController.navigate(
+                                        "class-entry/${Uri.encode(targetClassId)}",
+                                    ) {
+                                        popUpTo(ClassEntryRoute) { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                },
+                                onEditEntry = { targetClassId, teacherEntry ->
+                                    navController.navigate(
+                                        "entry/edit/${Uri.encode(targetClassId)}/${Uri.encode(teacherEntry.id)}",
+                                    )
+                                },
+                                onDuplicateEntry = { targetClassId, teacherEntry ->
+                                    navController.navigate(
+                                        "entry/duplicate/${Uri.encode(targetClassId)}/${Uri.encode(teacherEntry.id)}",
+                                    )
+                                },
+                                onDeleteEntry = onDeleteEntry,
+                                onRestoreEntry = onRestoreEntry,
+                                onSaveEntry = onSaveEntry,
+                                onConsumeEntrySaved = onConsumeEntrySaved,
+                            )
+                        }
                     }
                     composable(ClassHistoryRoute) { entry ->
                         val classId = Uri.decode(entry.arguments?.getString("classId").orEmpty())
@@ -549,6 +632,115 @@ private fun TeacherApp(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ClassEntryPagerRoute(
+    initialClassId: String,
+    teacher: AuthenticatedTeacher,
+    snapshot: TeacherSnapshot,
+    createEnabled: Boolean,
+    editEnabled: Boolean,
+    deleteEnabled: Boolean,
+    savingEntry: Boolean,
+    entrySaved: Boolean,
+    draftStore: EntryDraftStore,
+    todayKey: String,
+    onNavigateToClass: (String) -> Unit,
+    onEditEntry: (classId: String, entry: TeacherEntry) -> Unit,
+    onDuplicateEntry: (classId: String, entry: TeacherEntry) -> Unit,
+    onDeleteEntry: (TeacherEntry, TeacherClass) -> Unit,
+    onRestoreEntry: (TeacherTrashedEntry) -> Unit,
+    onSaveEntry: (TeacherEntryDraft) -> Unit,
+    onConsumeEntrySaved: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val initialPage = snapshot.classes.indexOfFirst { it.id == initialClassId }.coerceAtLeast(0)
+    val pagerState = rememberPagerState(initialPage = initialPage) { snapshot.classes.size }
+
+    LaunchedEffect(initialPage, snapshot.classes.size) {
+        if (pagerState.currentPage != initialPage) pagerState.scrollToPage(initialPage)
+    }
+
+    LaunchedEffect(pagerState, snapshot.classes, initialClassId) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                val targetClassId = snapshot.classes.getOrNull(page)?.id
+                if (targetClassId != null && targetClassId != initialClassId) {
+                    onNavigateToClass(targetClassId)
+                }
+            }
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = modifier.fillMaxSize(),
+        key = { page -> snapshot.classes[page].id },
+        beyondViewportPageCount = 1,
+    ) { page ->
+        val pageClass = snapshot.classes[page]
+        val classEntries = snapshot.entriesForClass(pageClass.id)
+        val classTrashedEntries = snapshot.trashedEntriesForClass(pageClass.id)
+        val draftKeyEntryId: String? = null
+        val baseDraft = remember(pageClass.id) {
+            TeacherEntryDraft(
+                mutationId = "native_${UUID.randomUUID()}",
+                classId = pageClass.id,
+                dateKey = todayKey,
+                status = "",
+                timeStart = pageClass.startTime.orEmpty(),
+                timeEnd = pageClass.endTime.orEmpty(),
+            )
+        }
+        val recovered = remember(teacher.uid, pageClass.id) {
+            draftStore.read(
+                uid = teacher.uid,
+                classId = pageClass.id,
+                entryId = draftKeyEntryId,
+            )
+        }
+        var draft by remember(teacher.uid, pageClass.id) {
+            mutableStateOf(recovered?.draft ?: baseDraft)
+        }
+
+        LaunchedEffect(entrySaved, pageClass.id) {
+            if (entrySaved) {
+                draftStore.clear(
+                    uid = teacher.uid,
+                    classId = pageClass.id,
+                    entryId = draftKeyEntryId,
+                )
+                draft = baseDraft.copy(mutationId = "native_${UUID.randomUUID()}")
+            }
+        }
+
+        ClassEntryScreen(
+            teacherClass = pageClass,
+            entries = classEntries,
+            trashedEntries = classTrashedEntries,
+            draft = draft,
+            saving = savingEntry,
+            recoveredDraft = recovered != null,
+            createEnabled = createEnabled,
+            editEnabled = editEnabled,
+            deleteEnabled = deleteEnabled,
+            onDraftChanged = { updated ->
+                draft = updated
+                draftStore.write(
+                    uid = teacher.uid,
+                    draft = updated,
+                    entryId = draftKeyEntryId,
+                )
+            },
+            onSave = onSaveEntry,
+            onEditEntry = { entry -> onEditEntry(pageClass.id, entry) },
+            onDuplicateEntry = { entry -> onDuplicateEntry(pageClass.id, entry) },
+            onDeleteEntry = { entry -> onDeleteEntry(entry, pageClass) },
+            onRestoreEntry = onRestoreEntry,
+        )
     }
 }
 

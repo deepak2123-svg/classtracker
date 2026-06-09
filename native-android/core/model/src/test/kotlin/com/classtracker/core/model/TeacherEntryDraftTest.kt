@@ -69,7 +69,7 @@ class TeacherEntryDraftTest {
             existingEntries = listOf(existing),
         )
 
-        assertTrue(newOverlap is TeacherEntryValidation.Invalid)
+        assertTrue(newOverlap is TeacherEntryValidation.Overlap)
         assertEquals(TeacherEntryValidation.Valid, sameEntryEdit)
     }
 

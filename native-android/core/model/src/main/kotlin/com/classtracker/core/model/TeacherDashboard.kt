@@ -190,8 +190,9 @@ enum class TeacherEntryStatus(
 
 sealed interface TeacherEntryValidation {
     data object Valid : TeacherEntryValidation
-
     data class Invalid(val message: String) : TeacherEntryValidation
+    /** Soft warning — entry can still be saved by the teacher. */
+    data class Overlap(val message: String) : TeacherEntryValidation
 }
 
 fun validateTeacherEntryDraft(
@@ -228,8 +229,12 @@ fun validateTeacherEntryDraft(
             )
     }
     if (overlappingEntry != null) {
-        return TeacherEntryValidation.Invalid(
-            "Another entry already uses ${overlappingEntry.timeStart.orEmpty()} for this class.",
+        val existingTime = listOfNotNull(
+            overlappingEntry.timeStart,
+            overlappingEntry.timeEnd,
+        ).joinToString(" – ")
+        return TeacherEntryValidation.Overlap(
+            "You already have an entry at $existingTime on this date. Save anyway?",
         )
     }
     return TeacherEntryValidation.Valid
