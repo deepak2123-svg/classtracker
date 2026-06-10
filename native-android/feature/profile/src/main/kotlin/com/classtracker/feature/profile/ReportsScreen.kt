@@ -144,6 +144,7 @@ fun ReportsScreen(
                 onClick = {
                     val pdfUri = createReportPdf(
                         context = context,
+                        snapshot = snapshot,
                         report = report,
                     )
                     val intent = Intent(Intent.ACTION_SEND).apply {
@@ -620,33 +621,44 @@ private fun showReportDatePicker(
 
 private fun createReportPdf(
     context: android.content.Context,
+    snapshot: TeacherSnapshot,
     report: TeacherReportSummary,
 ): android.net.Uri {
     val outputDir = File(context.cacheDir, "reports").apply { mkdirs() }
     val file = File(
         outputDir,
-        "ledgr-${report.period.label.lowercase(Locale.US)}-" +
-            "${report.range.startDateKey}-${report.range.endDateKey}.pdf",
+        "ClassLog_${fileSafePdfPart(snapshot.profile.name)}_" +
+            "${fileSafePdfPart(report.period.label)}_" +
+            "${report.range.startDateKey}_${report.range.endDateKey}.pdf",
     )
     val document = PdfDocument()
     try {
-        val pageWidth = 595
-        val pageHeight = 842
-        val margin = 40f
+        val groups = buildPdfGroups(snapshot = snapshot, report = report)
+        val pageWidth = 595f
+        val pageHeight = 842f
+        val marginX = 40f
+        val marginBottom = 40f
+        val contentWidth = pageWidth - (marginX * 2f)
         var pageNumber = 1
         var page = document.startPage(
-            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create(),
+            PdfDocument.PageInfo.Builder(pageWidth.toInt(), pageHeight.toInt(), pageNumber).create(),
         )
         var canvas = page.canvas
-        var y = margin
+        var y = 44f
+
         val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(15, 23, 42)
-            textSize = 22f
+            color = android.graphics.Color.rgb(16, 24, 40)
+            textSize = 20f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
-        val headingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(15, 23, 42)
+        val sectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(16, 24, 40)
             textSize = 14f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val classPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(16, 24, 40)
+            textSize = 11.5f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -654,65 +666,273 @@ private fun createReportPdf(
             textSize = 11f
         }
         val mutedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(100, 116, 139)
+            color = android.graphics.Color.rgb(102, 112, 133)
             textSize = 10f
+        }
+        val cardLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(102, 112, 133)
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val cardValuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(16, 24, 40)
+            textSize = 18f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val tableHeadPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textSize = 8.8f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val tableBodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(16, 24, 40)
+            textSize = 8.8f
+        }
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+        }
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 0.8f
+            color = android.graphics.Color.rgb(220, 227, 234)
         }
 
         fun ensureSpace(required: Float) {
-            if (y + required <= pageHeight - margin) return
+            if (y + required <= pageHeight - marginBottom) return
             document.finishPage(page)
             pageNumber += 1
             page = document.startPage(
-                PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create(),
+                PdfDocument.PageInfo.Builder(pageWidth.toInt(), pageHeight.toInt(), pageNumber).create(),
             )
             canvas = page.canvas
-            y = margin
+            y = 44f
         }
 
-        fun drawLine(text: String, paint: Paint, advance: Float = 17f) {
-            ensureSpace(advance + 4f)
-            canvas.drawText(text, margin, y, paint)
-            y += advance
+        fun drawRoundedBox(
+            left: Float,
+            top: Float,
+            width: Float,
+            height: Float,
+            fillColor: Int,
+            strokeColor: Int = android.graphics.Color.rgb(220, 227, 234),
+            radius: Float = 12f,
+        ) {
+            fillPaint.color = fillColor
+            canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, fillPaint)
+            strokePaint.color = strokeColor
+            canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, strokePaint)
         }
 
-        drawLine("Ledgr Teacher Report", titlePaint, 28f)
-        drawLine("${report.period.label} · ${report.scopeLabel}", bodyPaint)
-        drawLine(
-            "${report.range.label}: ${report.range.startDateKey} to ${report.range.endDateKey}",
+        fun drawLine(
+            left: Float,
+            top: Float,
+            width: Float,
+            color: Int = android.graphics.Color.rgb(220, 227, 234),
+        ) {
+            strokePaint.color = color
+            canvas.drawLine(left, top, left + width, top, strokePaint)
+        }
+
+        fun wrappedLines(
+            value: String,
+            paint: Paint,
+            width: Float,
+            maxLines: Int = Int.MAX_VALUE,
+        ): List<String> {
+            var remaining = value.replace(Regex("\\s+"), " ").trim().ifBlank { "-" }
+            val lines = mutableListOf<String>()
+            while (remaining.isNotEmpty() && lines.size < maxLines) {
+                var count = paint.breakText(remaining, true, width, null).coerceAtLeast(1)
+                if (count < remaining.length) {
+                    val breakAt = remaining.take(count).lastIndexOf(' ')
+                    if (breakAt > 0) count = breakAt
+                }
+                var line = remaining.take(count).trim()
+                remaining = remaining.drop(count).trimStart()
+                if (lines.size == maxLines - 1 && remaining.isNotEmpty()) {
+                    while (paint.measureText("$line...") > width && line.isNotEmpty()) {
+                        line = line.dropLast(1)
+                    }
+                    lines += "$line..."
+                    remaining = ""
+                } else {
+                    lines += line
+                }
+            }
+            return lines.ifEmpty { listOf("-") }
+        }
+
+        fun drawCellText(
+            text: String,
+            paint: Paint,
+            left: Float,
+            top: Float,
+            width: Float,
+            maxLines: Int = 4,
+            lineHeight: Float = 11f,
+        ) {
+            wrappedLines(text, paint, width, maxLines).forEachIndexed { index, line ->
+                canvas.drawText(line, left, top + (index * lineHeight), paint)
+            }
+        }
+
+        fun drawTableHeader(columnLefts: List<Float>, columnWidths: List<Float>) {
+            ensureSpace(28f)
+            fillPaint.color = android.graphics.Color.rgb(31, 69, 104)
+            canvas.drawRect(marginX, y, pageWidth - marginX, y + 26f, fillPaint)
+            val labels = listOf("Date", "Time", "Status", "Title", "Notes")
+            labels.forEachIndexed { index, label ->
+                canvas.drawText(label, columnLefts[index] + 6f, y + 17f, tableHeadPaint)
+            }
+            y += 26f
+        }
+
+        canvas.drawText("ClassLog", marginX, y, titlePaint)
+        y += 20f
+        canvas.drawText(
+            "${snapshot.profile.name} · ${report.period.label} · ${report.scopeLabel}",
+            marginX,
+            y,
+            bodyPaint,
+        )
+        y += 16f
+        canvas.drawText(
+            "Exported ${exportedDateLabel()}",
+            marginX,
+            y,
+            bodyPaint,
+        )
+        y += 16f
+        canvas.drawText(
+            "${report.range.label}: ${displayDate(report.range.startDateKey)} - " +
+                displayDate(report.range.endDateKey),
+            marginX,
+            y,
             mutedPaint,
         )
-        y += 12f
-        drawLine("Summary", headingPaint, 20f)
-        drawLine("Entries: ${report.totalEntries}", bodyPaint)
-        drawLine("Teaching time: ${formatReportMinutes(report.totalMinutes)}", bodyPaint)
-        drawLine("Active days: ${report.activeDays}", bodyPaint)
-        drawLine("Classes logged: ${report.classCount}", bodyPaint)
-        y += 12f
-        drawLine("Class breakdown", headingPaint, 20f)
+        y += 20f
 
-        val rows = report.classRows.filter { it.entryCount > 0 }
-        if (rows.isEmpty()) {
-            drawLine("No entries in this report window.", bodyPaint)
-        } else {
-            rows.forEach { row ->
-                ensureSpace(54f)
-                canvas.drawText(row.className.take(52), margin, y, headingPaint)
-                y += 15f
+        if (report.totalEntries == 0) {
+            drawRoundedBox(
+                left = marginX,
+                top = y,
+                width = contentWidth,
+                height = 64f,
+                fillColor = android.graphics.Color.rgb(248, 250, 252),
+            )
+            canvas.drawText("No entries found for this period.", marginX + 16f, y + 28f, sectionPaint)
+            canvas.drawText("Try a wider range if you want a larger export.", marginX + 16f, y + 46f, mutedPaint)
+            document.finishPage(page)
+            FileOutputStream(file).use(document::writeTo)
+            return FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file,
+            )
+        }
+
+        val summaryCards = listOf(
+            "Institutes" to groups.size.toString(),
+            "Classes" to report.classCount.toString(),
+            "Entries" to report.totalEntries.toString(),
+        )
+        val cardGap = 10f
+        val cardWidth = (contentWidth - (cardGap * (summaryCards.size - 1))) / summaryCards.size
+        summaryCards.forEachIndexed { index, card ->
+            val left = marginX + (index * (cardWidth + cardGap))
+            drawRoundedBox(
+                left = left,
+                top = y,
+                width = cardWidth,
+                height = 54f,
+                fillColor = android.graphics.Color.rgb(248, 250, 252),
+            )
+            canvas.drawText(card.first.uppercase(Locale.US), left + 12f, y + 18f, cardLabelPaint)
+            canvas.drawText(card.second, left + 12f, y + 40f, cardValuePaint)
+        }
+        y += 72f
+
+        val columnWidths = listOf(72f, 82f, 76f, 110f, contentWidth - 72f - 82f - 76f - 110f)
+        val columnLefts = columnWidths.runningFold(marginX) { acc, width -> acc + width }.dropLast(1)
+
+        groups.forEach { institute ->
+            ensureSpace(44f)
+            canvas.drawText(institute.name, marginX, y, sectionPaint)
+            Paint(mutedPaint).apply { textAlign = Paint.Align.RIGHT }.also { rightPaint ->
                 canvas.drawText(
-                    "${row.instituteName} · ${row.subjectName}",
-                    margin,
+                    "${institute.classes.size} class${if (institute.classes.size == 1) "" else "es"} · " +
+                        "${institute.entryCount} entr${if (institute.entryCount == 1) "y" else "ies"}",
+                    pageWidth - marginX,
                     y,
-                    mutedPaint,
+                    rightPaint,
                 )
-                y += 14f
-                canvas.drawText(
-                    "${row.entryCount} entries · ${formatReportMinutes(row.totalMinutes)} · " +
-                        "${row.timedEntryCount} timed",
-                    margin,
-                    y,
-                    bodyPaint,
+            }
+            y += 12f
+            drawLine(marginX, y, contentWidth)
+            y += 18f
+
+            institute.classes.forEach { classGroup ->
+                ensureSpace(70f)
+                drawRoundedBox(
+                    left = marginX,
+                    top = y,
+                    width = contentWidth,
+                    height = 30f,
+                    fillColor = android.graphics.Color.rgb(248, 250, 252),
+                    radius = 10f,
                 )
-                y += 21f
+                canvas.drawText(classGroup.className, marginX + 12f, y + 19f, classPaint)
+                if (classGroup.subjectName.isNotBlank()) {
+                    Paint(mutedPaint).apply { textAlign = Paint.Align.RIGHT }.also { rightPaint ->
+                        canvas.drawText(classGroup.subjectName, pageWidth - marginX - 12f, y + 19f, rightPaint)
+                    }
+                }
+                y += 38f
+                drawTableHeader(columnLefts, columnWidths)
+
+                classGroup.entries.forEachIndexed { index, row ->
+                    val titleLines = wrappedLines(row.title, tableBodyPaint, columnWidths[3] - 12f, 3)
+                    val notesLines = wrappedLines(row.notes, tableBodyPaint, columnWidths[4] - 12f, 4)
+                    val statusLines = wrappedLines(row.status, tableBodyPaint, columnWidths[2] - 12f, 2)
+                    val maxLines = maxOf(1, titleLines.size, notesLines.size, statusLines.size)
+                    val rowHeight = maxOf(28f, 15f + (maxLines * 11f))
+                    if (y + rowHeight > pageHeight - marginBottom) {
+                        document.finishPage(page)
+                        pageNumber += 1
+                        page = document.startPage(
+                            PdfDocument.PageInfo.Builder(
+                                pageWidth.toInt(),
+                                pageHeight.toInt(),
+                                pageNumber,
+                            ).create(),
+                        )
+                        canvas = page.canvas
+                        y = 44f
+                        drawTableHeader(columnLefts, columnWidths)
+                    }
+
+                    fillPaint.color = if (index % 2 == 0) {
+                        android.graphics.Color.WHITE
+                    } else {
+                        android.graphics.Color.rgb(248, 250, 252)
+                    }
+                    canvas.drawRect(marginX, y, pageWidth - marginX, y + rowHeight, fillPaint)
+                    strokePaint.color = android.graphics.Color.rgb(220, 227, 234)
+                    strokePaint.strokeWidth = 0.4f
+                    var cellLeft = marginX
+                    columnWidths.forEach { width ->
+                        canvas.drawRect(cellLeft, y, cellLeft + width, y + rowHeight, strokePaint)
+                        cellLeft += width
+                    }
+                    val textTop = y + 17f
+                    drawCellText(formatExportPdfDate(row.dateKey), tableBodyPaint, columnLefts[0] + 6f, textTop, columnWidths[0] - 12f, 1)
+                    drawCellText(row.timeLabel, tableBodyPaint, columnLefts[1] + 6f, textTop, columnWidths[1] - 12f, 2)
+                    drawCellText(row.status, tableBodyPaint, columnLefts[2] + 6f, textTop, columnWidths[2] - 12f, 2)
+                    drawCellText(row.title, tableBodyPaint, columnLefts[3] + 6f, textTop, columnWidths[3] - 12f, 3)
+                    drawCellText(row.notes, tableBodyPaint, columnLefts[4] + 6f, textTop, columnWidths[4] - 12f, 4)
+                    y += rowHeight
+                }
+                y += 18f
             }
         }
         document.finishPage(page)
@@ -725,6 +945,88 @@ private fun createReportPdf(
         "${context.packageName}.fileprovider",
         file,
     )
+}
+
+private data class PdfInstituteGroup(
+    val name: String,
+    val classes: List<PdfClassGroup>,
+    val entryCount: Int,
+)
+
+private data class PdfClassGroup(
+    val className: String,
+    val subjectName: String,
+    val entries: List<PdfEntryRow>,
+)
+
+private data class PdfEntryRow(
+    val dateKey: String,
+    val timeLabel: String,
+    val status: String,
+    val title: String,
+    val notes: String,
+)
+
+private fun buildPdfGroups(
+    snapshot: TeacherSnapshot,
+    report: TeacherReportSummary,
+): List<PdfInstituteGroup> {
+    val scopedClasses = snapshot.classes
+        .filter { report.scopeLabel == "All institutes" || it.instituteName == report.scopeLabel }
+    val classById = scopedClasses.associateBy(TeacherClass::id)
+    val entriesByClass = snapshot.entries
+        .filter { it.classId in classById.keys }
+        .filter { it.dateKey in report.range.startDateKey..report.range.endDateKey }
+        .sortedWith(
+            compareBy<TeacherEntry> { it.dateKey }
+                .thenBy { it.timeStart.orEmpty() }
+                .thenBy { it.timeEnd.orEmpty() }
+                .thenBy { it.status.lowercase(Locale.US) }
+                .thenBy { it.title.lowercase(Locale.US) },
+        )
+        .groupBy(TeacherEntry::classId)
+
+    return scopedClasses
+        .mapNotNull { teacherClass ->
+            val entries = entriesByClass[teacherClass.id].orEmpty()
+            if (entries.isEmpty()) {
+                null
+            } else {
+                teacherClass to entries.map { entry ->
+                    PdfEntryRow(
+                        dateKey = entry.dateKey,
+                        timeLabel = formatPdfTime(entry.timeStart, entry.timeEnd),
+                        status = formatPdfStatus(entry.status),
+                        title = entry.title.ifBlank { "-" },
+                        notes = entry.body.ifBlank { "-" },
+                    )
+                }
+            }
+        }
+        .groupBy { it.first.instituteName.ifBlank { "No Institute" } }
+        .toSortedMap(compareBy(String.CASE_INSENSITIVE_ORDER) { it })
+        .map { (instituteName, classPairs) ->
+            val classes = classPairs
+                .sortedWith(
+                    compareBy<Pair<TeacherClass, List<PdfEntryRow>>> {
+                        it.first.sectionName.lowercase(Locale.US)
+                    }.thenBy {
+                        it.first.subjectName.lowercase(Locale.US)
+                    },
+                )
+                .map { (teacherClass, entries) ->
+                    PdfClassGroup(
+                        className = teacherClass.sectionName.ifBlank { "Untitled Class" },
+                        subjectName = teacherClass.subjectName,
+                        entries = entries,
+                    )
+                }
+            PdfInstituteGroup(
+                name = instituteName,
+                classes = classes,
+                entryCount = classes.sumOf { it.entries.size },
+            )
+        }
 }
 
 private fun displayDate(dateKey: String): String = runCatching {
@@ -740,6 +1042,38 @@ private fun parseDateKey(value: String): Calendar? {
     }.getOrNull() ?: return null
     return Calendar.getInstance().apply { time = parsed }
 }
+
+private fun exportedDateLabel(): String =
+    SimpleDateFormat("d MMMM yyyy", Locale.forLanguageTag("en-IN")).format(Date())
+
+private fun formatExportPdfDate(dateKey: String): String = runCatching {
+    val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        isLenient = false
+    }.parse(dateKey)
+    SimpleDateFormat("dd MMM yyyy", Locale.forLanguageTag("en-IN")).format(requireNotNull(parsed))
+}.getOrDefault(dateKey)
+
+private fun formatPdfTime(start: String?, end: String?): String = when {
+    !start.isNullOrBlank() && !end.isNullOrBlank() -> "$start - $end"
+    !start.isNullOrBlank() -> start
+    else -> "-"
+}
+
+private fun formatPdfStatus(status: String): String = when (status.lowercase(Locale.US)) {
+    "started" -> "Started"
+    "inprogress", "in_progress", "in progress" -> "In Progress"
+    "completed" -> "Completed"
+    else -> status.ifBlank { "-" }.replaceFirstChar { char ->
+        if (char.isLowerCase()) char.titlecase(Locale.US) else char.toString()
+    }
+}
+
+private fun fileSafePdfPart(value: String): String =
+    value.trim()
+        .replace(Regex("""[<>:"/\\|?*\u0000-\u001F]"""), "")
+        .replace(Regex("""\s+"""), "_")
+        .trim('_')
+        .ifBlank { "report" }
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable

@@ -114,12 +114,15 @@ mobile web parity, and checkpoint 2 offline create/edit foundation.
 
 ## Phase 5: Teacher reports and exports
 
-Status: checkpoint 2 adds native PDF report generation, cached PDF sharing
-through Android's share sheet, and visible custom report date controls on top
-of checkpoint 1 reusable report summary calculations, daily/weekly/monthly/
-custom period filters, institute scope filtering, a profile-launched reports
-screen, and text summary export. Durable local file saving and background
-export progress remain next.
+Status: checkpoint 3 corrects native PDF report styling and structure to more
+closely follow the teacher web app export, including the `ClassLog` header,
+summary cards, institute/class sections, entry tables, and paginated table
+headers. Checkpoint 2 added native PDF generation, cached PDF sharing through
+Android's share sheet, and visible custom report date controls on top of
+checkpoint 1 reusable report summary calculations, daily/weekly/monthly/custom
+period filters, institute scope filtering, a profile-launched reports screen,
+and text summary export. Durable local file saving and background export
+progress remain next.
 
 ### Deliverables
 

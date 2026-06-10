@@ -51,7 +51,7 @@ Do not commit `firebase.local.properties`.
 
 ## Current scope
 
-Phase 5 checkpoint 2 includes native Firebase authentication, compatibility
+Phase 5 checkpoint 3 includes native Firebase authentication, compatibility
 reads, beta-only entry creation and editing, Room-backed offline browsing, a
 durable WorkManager outbox, and teacher mobile web parity improvements for
 class detail and add-entry screens, a beta duplicate-entry draft flow, and
@@ -63,12 +63,16 @@ with an inline editor and full history, soft overlap warnings, post-save
 feedback, a profile recycle bin entry point, reusable teacher report summaries,
 a reports/export preview screen, institute scope filters, and Android
 share-sheet text export, visible custom report date controls, and native PDF
-report generation shared through Android's share sheet. Production native builds
-remain read-only, and the teacher/admin web applications continue to use the
-existing Firestore model.
+report generation shared through Android's share sheet. Native PDF reports now
+follow the teacher web app export structure more closely with a `ClassLog`
+header, summary cards, institute/class sections, and entry tables. Production
+native builds remain read-only, and the teacher/admin web applications continue
+to use the existing Firestore model.
 
-See `../docs/native-android-phase-5-checkpoint-2.md` for the latest PDF report
-export and custom range behavior, verification, and rollback details. See
+See `../docs/native-android-phase-5-checkpoint-3.md` for the latest web-style
+native PDF report behavior, verification, and rollback details. See
+`../docs/native-android-phase-5-checkpoint-2.md` for PDF report export and
+custom range behavior, see
 `../docs/native-android-phase-5-checkpoint-1.md` for reports and export
 foundation behavior, see
 `../docs/native-android-phase-4-checkpoint-10.md` for combined class entry
