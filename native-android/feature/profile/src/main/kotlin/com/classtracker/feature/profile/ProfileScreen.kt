@@ -59,6 +59,7 @@ fun ProfileScreen(
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
     onOpenStats: () -> Unit,
+    onOpenReports: () -> Unit,
     onOpenRecycleBin: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
@@ -123,9 +124,10 @@ fun ProfileScreen(
         item {
             ProfileActionCard(
                 icon = Icons.Outlined.Download,
-                title = "Export Data",
-                subtitle = "Download your teacher entries from this shared panel.",
+                title = "Reports & Export",
+                subtitle = "Preview teacher reports and share an export summary.",
                 accent = colors.green,
+                onClick = onOpenReports,
             )
         }
         item {
@@ -534,6 +536,7 @@ private fun ProfileScreenPreview() {
             themeMode = LedgrThemeMode.Light,
             onThemeModeChange = {},
             onOpenStats = {},
+            onOpenReports = {},
             onOpenRecycleBin = {},
             onSignOut = {},
         )

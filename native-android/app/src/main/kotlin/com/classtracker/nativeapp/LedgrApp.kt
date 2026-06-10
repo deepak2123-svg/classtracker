@@ -75,6 +75,7 @@ import com.classtracker.feature.classes.StatsScreen
 import com.classtracker.feature.entries.EntryEditorScreen
 import com.classtracker.feature.profile.ProfileScreen
 import com.classtracker.feature.profile.RecycleBinScreen
+import com.classtracker.feature.profile.ReportsScreen
 import com.classtracker.feature.today.HomeScreen
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -86,6 +87,7 @@ import kotlinx.coroutines.launch
 private const val ClassEntryRoute = "class-entry/{classId}"
 private const val ClassHistoryRoute = "class/{classId}"
 private const val RecycleBinRoute = "recycle-bin"
+private const val ReportsRoute = "reports"
 private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
 private const val EditEntryRoute = "entry/edit/{classId}/{entryId}"
 private const val DuplicateEntryRoute = "entry/duplicate/{classId}/{entryId}"
@@ -194,10 +196,11 @@ private fun TeacherApp(
     val isClassEntry = currentRoute == ClassEntryRoute
     val isClassHistory = currentRoute == ClassHistoryRoute
     val isRecycleBin = currentRoute == RecycleBinRoute
+    val isReports = currentRoute == ReportsRoute
     val isEntryEditor = currentRoute == NewEntryRoute ||
         currentRoute == EditEntryRoute ||
         currentRoute == DuplicateEntryRoute
-    val isDetailRoute = isClassEntry || isClassHistory || isRecycleBin || isEntryEditor
+    val isDetailRoute = isClassEntry || isClassHistory || isRecycleBin || isReports || isEntryEditor
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -244,6 +247,11 @@ private fun TeacherApp(
                     } else if (isRecycleBin) {
                         Text(
                             text = "Recycle bin",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    } else if (isReports) {
+                        Text(
+                            text = "Reports & export",
                             style = MaterialTheme.typography.titleLarge,
                         )
                     } else if (isClassEntry) {
@@ -426,6 +434,9 @@ private fun TeacherApp(
                                     restoreState = true
                                 }
                             },
+                            onOpenReports = {
+                                navController.navigate(ReportsRoute)
+                            },
                             onOpenRecycleBin = {
                                 navController.navigate(RecycleBinRoute)
                             },
@@ -436,6 +447,12 @@ private fun TeacherApp(
                         RecycleBinScreen(
                             trashedEntries = snapshot.trashedEntries,
                             onRestoreEntry = onRestoreEntry,
+                        )
+                    }
+                    composable(ReportsRoute) {
+                        ReportsScreen(
+                            snapshot = snapshot,
+                            todayKey = todayKey,
                         )
                     }
                     composable(ClassEntryRoute) { entry ->
