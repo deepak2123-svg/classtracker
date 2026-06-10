@@ -46,6 +46,22 @@ class TeacherReportsTest {
         assertTrue(shareText.contains("Keshav 1"))
     }
 
+    @Test
+    fun reportCanFilterMultipleInstitutes() {
+        val report = reportSnapshot().teacherReport(
+            period = TeacherReportPeriod.Weekly,
+            todayKey = "2026-06-10",
+            instituteNames = setOf("GIS", "KIS"),
+        )
+
+        assertEquals("GIS, KIS", report.scopeLabel)
+        assertEquals(setOf("GIS", "KIS"), report.scopedInstituteNames)
+        assertEquals(3, report.totalEntries)
+        assertEquals(210, report.totalMinutes)
+        assertEquals(2, report.classCount)
+        assertEquals(2, report.instituteCount)
+    }
+
     private fun reportSnapshot(): TeacherSnapshot = TeacherSnapshot(
         profile = TeacherProfile(
             uid = "teacher-1",

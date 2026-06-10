@@ -3,6 +3,7 @@ package com.classtracker.core.model
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TreeSet
 
 enum class TeacherReportPeriod(
     val label: String,
@@ -41,12 +42,14 @@ data class TeacherReportSummary(
     val classCount: Int,
     val instituteCount: Int,
     val classRows: List<TeacherReportClassRow>,
+    val scopedInstituteNames: Set<String>? = null,
 )
 
 fun TeacherSnapshot.teacherReport(
     period: TeacherReportPeriod,
     todayKey: String,
     instituteName: String? = null,
+    instituteNames: Set<String>? = null,
     customStartDateKey: String? = null,
     customEndDateKey: String? = null,
 ): TeacherReportSummary {
@@ -56,8 +59,12 @@ fun TeacherSnapshot.teacherReport(
         customStartDateKey = customStartDateKey,
         customEndDateKey = customEndDateKey,
     )
+    val selectedInstituteNames = selectedInstituteNames(
+        instituteName = instituteName,
+        instituteNames = instituteNames,
+    )
     val scopedClasses = classes
-        .filter { instituteName == null || it.instituteName == instituteName }
+        .filter { selectedInstituteNames == null || it.instituteName in selectedInstituteNames }
         .sortedWith(
             compareBy<TeacherClass> { it.instituteName.lowercase(Locale.US) }
                 .thenBy { it.sectionName.lowercase(Locale.US) },
@@ -91,7 +98,7 @@ fun TeacherSnapshot.teacherReport(
 
     return TeacherReportSummary(
         period = period,
-        scopeLabel = instituteName ?: "All institutes",
+        scopeLabel = reportScopeLabel(selectedInstituteNames),
         range = range,
         totalEntries = scopedEntries.size,
         timedEntryCount = scopedEntries.count { it.durationMinutes() > 0 },
@@ -100,6 +107,7 @@ fun TeacherSnapshot.teacherReport(
         classCount = rows.count { it.entryCount > 0 },
         instituteCount = scopedClasses.map(TeacherClass::instituteName).distinct().size,
         classRows = rows,
+        scopedInstituteNames = selectedInstituteNames,
     )
 }
 
@@ -184,6 +192,29 @@ private fun reportRange(
             )
         }
     }
+}
+
+private fun selectedInstituteNames(
+    instituteName: String?,
+    instituteNames: Set<String>?,
+): Set<String>? {
+    val names = instituteNames
+        ?.takeIf { it.isNotEmpty() }
+        ?: instituteName?.let(::setOf)
+        ?: return null
+    val sorted = TreeSet<String>(String.CASE_INSENSITIVE_ORDER)
+    names
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .forEach(sorted::add)
+    return sorted.takeIf { it.isNotEmpty() }
+}
+
+private fun reportScopeLabel(instituteNames: Set<String>?): String = when {
+    instituteNames == null -> "All institutes"
+    instituteNames.size == 1 -> instituteNames.first()
+    instituteNames.size <= 3 -> instituteNames.joinToString(", ")
+    else -> "${instituteNames.size} institutes"
 }
 
 private fun TeacherEntry.durationMinutes(): Int {

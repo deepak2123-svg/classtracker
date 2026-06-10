@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,10 +68,14 @@ import com.classtracker.core.model.teacherReport
 import com.classtracker.core.model.toShareText
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ReportsScreen(
@@ -77,6 +84,7 @@ fun ReportsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val instituteOptions = remember(snapshot.classes) {
         snapshot.classes.map(TeacherClass::instituteName).distinct().sorted()
     }
@@ -85,21 +93,22 @@ fun ReportsScreen(
         (keys.minOrNull() ?: todayKey) to (keys.maxOrNull() ?: todayKey)
     }
     var period by remember { mutableStateOf(TeacherReportPeriod.Weekly) }
-    var selectedInstitute by remember { mutableStateOf<String?>(null) }
+    var selectedInstitutes by remember(instituteOptions) { mutableStateOf<Set<String>>(emptySet()) }
     var customStartDate by remember(customBounds) { mutableStateOf(customBounds.first) }
     var customEndDate by remember(customBounds) { mutableStateOf(customBounds.second) }
+    var pdfExportState by remember { mutableStateOf<PdfExportState>(PdfExportState.Idle) }
     val report = remember(
         snapshot,
         todayKey,
         period,
-        selectedInstitute,
+        selectedInstitutes,
         customStartDate,
         customEndDate,
     ) {
         snapshot.teacherReport(
             period = period,
             todayKey = todayKey,
-            instituteName = selectedInstitute,
+            instituteNames = selectedInstitutes.takeIf { it.isNotEmpty() },
             customStartDateKey = customStartDate,
             customEndDateKey = customEndDate,
         )
@@ -132,31 +141,65 @@ fun ReportsScreen(
         item {
             ScopeSelector(
                 institutes = instituteOptions,
-                selectedInstitute = selectedInstitute,
-                onSelected = { selectedInstitute = it },
+                selectedInstitutes = selectedInstitutes,
+                onAllSelected = { selectedInstitutes = emptySet() },
+                onInstituteToggled = { institute ->
+                    selectedInstitutes = if (institute in selectedInstitutes) {
+                        selectedInstitutes - institute
+                    } else {
+                        selectedInstitutes + institute
+                    }
+                },
             )
         }
         item {
             ReportMetrics(report = report)
         }
         item {
+            val isExporting = pdfExportState == PdfExportState.InProgress
             Button(
                 onClick = {
-                    val pdfUri = createReportPdf(
-                        context = context,
-                        snapshot = snapshot,
-                        report = report,
-                    )
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "application/pdf"
-                        putExtra(Intent.EXTRA_SUBJECT, "Ledgr ${report.period.label} Report")
-                        putExtra(Intent.EXTRA_STREAM, pdfUri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    pdfExportState = PdfExportState.InProgress
+                    coroutineScope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                createReportPdf(
+                                    context = context,
+                                    snapshot = snapshot,
+                                    report = report,
+                                )
+                            }
+                        }.onSuccess { export ->
+                            val shareResult = runCatching {
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/pdf"
+                                    putExtra(
+                                        Intent.EXTRA_SUBJECT,
+                                        "Ledgr ${report.period.label} Report",
+                                    )
+                                    putExtra(Intent.EXTRA_STREAM, export.uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(
+                                    Intent.createChooser(intent, "Share PDF report"),
+                                )
+                            }
+                            pdfExportState = shareResult.fold(
+                                onSuccess = { PdfExportState.Completed(export.fileName) },
+                                onFailure = { error ->
+                                    PdfExportState.Failed(
+                                        error.localizedMessage ?: "Unable to share PDF.",
+                                    )
+                                },
+                            )
+                        }.onFailure { error ->
+                            pdfExportState = PdfExportState.Failed(
+                                error.localizedMessage ?: "Unable to create PDF.",
+                            )
+                        }
                     }
-                    context.startActivity(
-                        Intent.createChooser(intent, "Share PDF report"),
-                    )
                 },
+                enabled = !isExporting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(
@@ -165,9 +208,14 @@ fun ReportsScreen(
                     modifier = Modifier.size(19.dp),
                 )
                 Text(
-                    text = "Share PDF",
+                    text = if (isExporting) "Preparing PDF..." else "Share PDF",
                     modifier = Modifier.padding(start = 8.dp),
                 )
+            }
+        }
+        if (pdfExportState != PdfExportState.Idle) {
+            item {
+                ExportStatusMessage(state = pdfExportState)
             }
         }
         item {
@@ -221,6 +269,18 @@ fun ReportsScreen(
         }
     }
 }
+
+private sealed class PdfExportState {
+    object Idle : PdfExportState()
+    object InProgress : PdfExportState()
+    data class Completed(val fileName: String) : PdfExportState()
+    data class Failed(val message: String) : PdfExportState()
+}
+
+private data class ReportPdfExport(
+    val uri: Uri,
+    val fileName: String,
+)
 
 @Composable
 private fun ReportsHero(report: TeacherReportSummary) {
@@ -413,8 +473,9 @@ private fun DateField(
 @Composable
 private fun ScopeSelector(
     institutes: List<String>,
-    selectedInstitute: String?,
-    onSelected: (String?) -> Unit,
+    selectedInstitutes: Set<String>,
+    onAllSelected: () -> Unit,
+    onInstituteToggled: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -426,8 +487,8 @@ private fun ScopeSelector(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SelectorChip(
                 label = "All institutes",
-                selected = selectedInstitute == null,
-                onClick = { onSelected(null) },
+                selected = selectedInstitutes.isEmpty(),
+                onClick = onAllSelected,
                 modifier = Modifier.fillMaxWidth(),
             )
             institutes.chunked(2).forEach { row ->
@@ -435,8 +496,8 @@ private fun ScopeSelector(
                     row.forEach { institute ->
                         SelectorChip(
                             label = institute,
-                            selected = selectedInstitute == institute,
-                            onClick = { onSelected(institute) },
+                            selected = institute in selectedInstitutes,
+                            onClick = { onInstituteToggled(institute) },
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -446,6 +507,33 @@ private fun ScopeSelector(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ExportStatusMessage(state: PdfExportState) {
+    when (state) {
+        PdfExportState.Idle -> Unit
+        PdfExportState.InProgress -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Text(
+                text = "Preparing PDF...",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textMuted,
+            )
+        }
+        is PdfExportState.Completed -> Text(
+            text = "Saved ${state.fileName}",
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.green,
+            modifier = Modifier.padding(start = 2.dp),
+        )
+        is PdfExportState.Failed -> Text(
+            text = state.message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(start = 2.dp),
+        )
     }
 }
 
@@ -623,15 +711,29 @@ private fun createReportPdf(
     context: android.content.Context,
     snapshot: TeacherSnapshot,
     report: TeacherReportSummary,
-): android.net.Uri {
-    val outputDir = File(context.cacheDir, "reports").apply { mkdirs() }
-    val file = File(
-        outputDir,
+): ReportPdfExport {
+    val outputDir = File(context.filesDir, "reports")
+    if (!outputDir.exists() && !outputDir.mkdirs()) {
+        throw IOException("Unable to create reports directory.")
+    }
+    val fileName =
         "ClassLog_${fileSafePdfPart(snapshot.profile.name)}_" +
             "${fileSafePdfPart(report.period.label)}_" +
-            "${report.range.startDateKey}_${report.range.endDateKey}.pdf",
-    )
+            "${fileSafePdfPart(report.scopeLabel)}_" +
+            "${report.range.startDateKey}_${report.range.endDateKey}.pdf"
+    val file = File(outputDir, fileName)
     val document = PdfDocument()
+    fun finishExport(): ReportPdfExport {
+        writePdfDocument(document = document, file = file)
+        return ReportPdfExport(
+            uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file,
+            ),
+            fileName = fileName,
+        )
+    }
     try {
         val groups = buildPdfGroups(snapshot = snapshot, report = report)
         val pageWidth = 595f
@@ -823,12 +925,7 @@ private fun createReportPdf(
             canvas.drawText("No entries found for this period.", marginX + 16f, y + 28f, sectionPaint)
             canvas.drawText("Try a wider range if you want a larger export.", marginX + 16f, y + 46f, mutedPaint)
             document.finishPage(page)
-            FileOutputStream(file).use(document::writeTo)
-            return FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file,
-            )
+            return finishExport()
         }
 
         val summaryCards = listOf(
@@ -936,15 +1033,25 @@ private fun createReportPdf(
             }
         }
         document.finishPage(page)
-        FileOutputStream(file).use(document::writeTo)
+        return finishExport()
     } finally {
         document.close()
     }
-    return FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        file,
-    )
+}
+
+private fun writePdfDocument(document: PdfDocument, file: File) {
+    val tempFile = File(file.parentFile, "${file.name}.tmp")
+    FileOutputStream(tempFile).use(document::writeTo)
+    if (file.exists() && !file.delete()) {
+        tempFile.delete()
+        throw IOException("Unable to replace existing report file.")
+    }
+    if (!tempFile.renameTo(file)) {
+        tempFile.copyTo(file, overwrite = true)
+        if (!tempFile.delete()) {
+            throw IOException("Unable to finalize report file.")
+        }
+    }
 }
 
 private data class PdfInstituteGroup(
@@ -971,8 +1078,12 @@ private fun buildPdfGroups(
     snapshot: TeacherSnapshot,
     report: TeacherReportSummary,
 ): List<PdfInstituteGroup> {
+    val scopedInstituteNames = report.scopedInstituteNames
     val scopedClasses = snapshot.classes
-        .filter { report.scopeLabel == "All institutes" || it.instituteName == report.scopeLabel }
+        .filter { teacherClass ->
+            scopedInstituteNames == null ||
+                scopedInstituteNames.any { it.equals(teacherClass.instituteName, ignoreCase = true) }
+        }
     val classById = scopedClasses.associateBy(TeacherClass::id)
     val entriesByClass = snapshot.entries
         .filter { it.classId in classById.keys }
@@ -1071,6 +1182,7 @@ private fun formatPdfStatus(status: String): String = when (status.lowercase(Loc
 private fun fileSafePdfPart(value: String): String =
     value.trim()
         .replace(Regex("""[<>:"/\\|?*\u0000-\u001F]"""), "")
+        .replace(Regex("""[,;]+"""), "_")
         .replace(Regex("""\s+"""), "_")
         .trim('_')
         .ifBlank { "report" }
