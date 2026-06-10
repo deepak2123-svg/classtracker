@@ -114,10 +114,12 @@ mobile web parity, and checkpoint 2 offline create/edit foundation.
 
 ## Phase 5: Teacher reports and exports
 
-Status: checkpoint 1 starts native report/export work with reusable report
-summary calculations, daily/weekly/monthly/custom period filters, institute
-scope filtering, a profile-launched reports screen, and Android share-sheet
-text export. Native PDF generation and local file saving remain next.
+Status: checkpoint 2 adds native PDF report generation, cached PDF sharing
+through Android's share sheet, and visible custom report date controls on top
+of checkpoint 1 reusable report summary calculations, daily/weekly/monthly/
+custom period filters, institute scope filtering, a profile-launched reports
+screen, and text summary export. Durable local file saving and background
+export progress remain next.
 
 ### Deliverables
 

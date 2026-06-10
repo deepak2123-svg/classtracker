@@ -1,6 +1,11 @@
 package com.classtracker.feature.profile
 
+import android.app.DatePickerDialog
 import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -58,7 +63,10 @@ import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.formatReportMinutes
 import com.classtracker.core.model.teacherReport
 import com.classtracker.core.model.toShareText
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -78,13 +86,22 @@ fun ReportsScreen(
     }
     var period by remember { mutableStateOf(TeacherReportPeriod.Weekly) }
     var selectedInstitute by remember { mutableStateOf<String?>(null) }
-    val report = remember(snapshot, todayKey, period, selectedInstitute, customBounds) {
+    var customStartDate by remember(customBounds) { mutableStateOf(customBounds.first) }
+    var customEndDate by remember(customBounds) { mutableStateOf(customBounds.second) }
+    val report = remember(
+        snapshot,
+        todayKey,
+        period,
+        selectedInstitute,
+        customStartDate,
+        customEndDate,
+    ) {
         snapshot.teacherReport(
             period = period,
             todayKey = todayKey,
             instituteName = selectedInstitute,
-            customStartDateKey = customBounds.first,
-            customEndDateKey = customBounds.second,
+            customStartDateKey = customStartDate,
+            customEndDateKey = customEndDate,
         )
     }
 
@@ -102,6 +119,16 @@ fun ReportsScreen(
                 onSelected = { period = it },
             )
         }
+        if (period == TeacherReportPeriod.Custom) {
+            item {
+                CustomRangeCard(
+                    startDateKey = customStartDate,
+                    endDateKey = customEndDate,
+                    onStartSelected = { customStartDate = it },
+                    onEndSelected = { customEndDate = it },
+                )
+            }
+        }
         item {
             ScopeSelector(
                 institutes = instituteOptions,
@@ -111,6 +138,36 @@ fun ReportsScreen(
         }
         item {
             ReportMetrics(report = report)
+        }
+        item {
+            Button(
+                onClick = {
+                    val pdfUri = createReportPdf(
+                        context = context,
+                        report = report,
+                    )
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_SUBJECT, "Ledgr ${report.period.label} Report")
+                        putExtra(Intent.EXTRA_STREAM, pdfUri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(
+                        Intent.createChooser(intent, "Share PDF report"),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Download,
+                    contentDescription = null,
+                    modifier = Modifier.size(19.dp),
+                )
+                Text(
+                    text = "Share PDF",
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
         }
         item {
             Button(
@@ -132,7 +189,7 @@ fun ReportsScreen(
                     modifier = Modifier.size(19.dp),
                 )
                 Text(
-                    text = "Share report",
+                    text = "Share text summary",
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
@@ -215,6 +272,13 @@ private fun ReportsHero(report: TeacherReportSummary) {
                         color = colors.textSecondary,
                         modifier = Modifier.padding(top = 5.dp),
                     )
+                    Text(
+                        text = "${displayDate(report.range.startDateKey)} - " +
+                            displayDate(report.range.endDateKey),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted,
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -250,6 +314,97 @@ private fun PeriodSelector(
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CustomRangeCard(
+    startDateKey: String,
+    endDateKey: String,
+    onStartSelected: (String) -> Unit,
+    onEndSelected: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "CUSTOM DATE RANGE",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textMuted,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                DateField(
+                    label = "From",
+                    dateKey = startDateKey,
+                    onClick = {
+                        showReportDatePicker(
+                            context = context,
+                            initialDateKey = startDateKey,
+                            onSelected = onStartSelected,
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                DateField(
+                    label = "To",
+                    dateKey = endDateKey,
+                    onClick = {
+                        showReportDatePicker(
+                            context = context,
+                            initialDateKey = endDateKey,
+                            onSelected = onEndSelected,
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DateField(
+    label: String,
+    dateKey: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        color = colors.surfaceSoft,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                text = label.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSubtle,
+            )
+            Text(
+                text = displayDate(dateKey),
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = dateKey,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textMuted,
+            )
         }
     }
 }
@@ -438,6 +593,153 @@ private fun SelectorChip(
 
 private fun todayKey(): String =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+private fun showReportDatePicker(
+    context: android.content.Context,
+    initialDateKey: String,
+    onSelected: (String) -> Unit,
+) {
+    val calendar = parseDateKey(initialDateKey) ?: Calendar.getInstance()
+    DatePickerDialog(
+        context,
+        { _, year, month, day ->
+            onSelected(
+                "%04d-%02d-%02d".format(
+                    Locale.US,
+                    year,
+                    month + 1,
+                    day,
+                ),
+            )
+        },
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH),
+        calendar.get(Calendar.DAY_OF_MONTH),
+    ).show()
+}
+
+private fun createReportPdf(
+    context: android.content.Context,
+    report: TeacherReportSummary,
+): android.net.Uri {
+    val outputDir = File(context.cacheDir, "reports").apply { mkdirs() }
+    val file = File(
+        outputDir,
+        "ledgr-${report.period.label.lowercase(Locale.US)}-" +
+            "${report.range.startDateKey}-${report.range.endDateKey}.pdf",
+    )
+    val document = PdfDocument()
+    try {
+        val pageWidth = 595
+        val pageHeight = 842
+        val margin = 40f
+        var pageNumber = 1
+        var page = document.startPage(
+            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create(),
+        )
+        var canvas = page.canvas
+        var y = margin
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(15, 23, 42)
+            textSize = 22f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val headingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(15, 23, 42)
+            textSize = 14f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(71, 85, 105)
+            textSize = 11f
+        }
+        val mutedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(100, 116, 139)
+            textSize = 10f
+        }
+
+        fun ensureSpace(required: Float) {
+            if (y + required <= pageHeight - margin) return
+            document.finishPage(page)
+            pageNumber += 1
+            page = document.startPage(
+                PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create(),
+            )
+            canvas = page.canvas
+            y = margin
+        }
+
+        fun drawLine(text: String, paint: Paint, advance: Float = 17f) {
+            ensureSpace(advance + 4f)
+            canvas.drawText(text, margin, y, paint)
+            y += advance
+        }
+
+        drawLine("Ledgr Teacher Report", titlePaint, 28f)
+        drawLine("${report.period.label} · ${report.scopeLabel}", bodyPaint)
+        drawLine(
+            "${report.range.label}: ${report.range.startDateKey} to ${report.range.endDateKey}",
+            mutedPaint,
+        )
+        y += 12f
+        drawLine("Summary", headingPaint, 20f)
+        drawLine("Entries: ${report.totalEntries}", bodyPaint)
+        drawLine("Teaching time: ${formatReportMinutes(report.totalMinutes)}", bodyPaint)
+        drawLine("Active days: ${report.activeDays}", bodyPaint)
+        drawLine("Classes logged: ${report.classCount}", bodyPaint)
+        y += 12f
+        drawLine("Class breakdown", headingPaint, 20f)
+
+        val rows = report.classRows.filter { it.entryCount > 0 }
+        if (rows.isEmpty()) {
+            drawLine("No entries in this report window.", bodyPaint)
+        } else {
+            rows.forEach { row ->
+                ensureSpace(54f)
+                canvas.drawText(row.className.take(52), margin, y, headingPaint)
+                y += 15f
+                canvas.drawText(
+                    "${row.instituteName} · ${row.subjectName}",
+                    margin,
+                    y,
+                    mutedPaint,
+                )
+                y += 14f
+                canvas.drawText(
+                    "${row.entryCount} entries · ${formatReportMinutes(row.totalMinutes)} · " +
+                        "${row.timedEntryCount} timed",
+                    margin,
+                    y,
+                    bodyPaint,
+                )
+                y += 21f
+            }
+        }
+        document.finishPage(page)
+        FileOutputStream(file).use(document::writeTo)
+    } finally {
+        document.close()
+    }
+    return FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file,
+    )
+}
+
+private fun displayDate(dateKey: String): String = runCatching {
+    val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        isLenient = false
+    }.parse(dateKey)
+    SimpleDateFormat("d MMM yyyy", Locale.US).format(requireNotNull(parsed))
+}.getOrDefault(dateKey)
+
+private fun parseDateKey(value: String): Calendar? {
+    val parsed = runCatching {
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }.parse(value)
+    }.getOrNull() ?: return null
+    return Calendar.getInstance().apply { time = parsed }
+}
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
