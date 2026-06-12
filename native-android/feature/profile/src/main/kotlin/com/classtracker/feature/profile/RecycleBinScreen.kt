@@ -159,7 +159,7 @@ private fun BinSummaryBanner(count: Int) {
                 Text(
                     text = "$count deleted ${if (count == 1) "entry" else "entries"}",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
@@ -221,7 +221,7 @@ fun TrashedEntryCard(
                     Text(
                         text = entry.title.ifBlank { "Untitled entry" },
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     if (entry.body.isNotBlank()) {
@@ -286,7 +286,7 @@ fun TrashedEntryCard(
                     Text(
                         text = if (failed) "Retry restore" else "Restore entry",
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }

@@ -1,6 +1,7 @@
 package com.classtracker.core.firebase
 
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
@@ -15,6 +16,12 @@ interface TeacherRemoteDataSource {
         teacher: AuthenticatedTeacher,
         expectedRevision: Long,
         draft: TeacherEntryDraft,
+    ): TeacherSnapshot
+
+    suspend fun createClass(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        draft: TeacherClassDraft,
     ): TeacherSnapshot
 
     suspend fun deleteEntry(

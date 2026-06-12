@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TeacherTrashedEntryEntity::class,
         EntryMutationEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class LedgrDatabase : RoomDatabase() {
@@ -29,6 +29,7 @@ abstract class LedgrDatabase : RoomDatabase() {
             "ledgr-teacher.db",
         )
             .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_2_3)
             .build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -63,6 +64,17 @@ abstract class LedgrDatabase : RoomDatabase() {
                 )
                 db.execSQL("ALTER TABLE `entry_mutations` ADD COLUMN `teacherName` TEXT")
                 db.execSQL("ALTER TABLE `entry_mutations` ADD COLUMN `deletedAt` INTEGER")
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    ALTER TABLE `teacher_classes`
+                    ADD COLUMN `timeSlots` TEXT NOT NULL DEFAULT ''
+                    """.trimIndent(),
+                )
             }
         }
     }

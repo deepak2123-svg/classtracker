@@ -24,7 +24,9 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -61,6 +63,11 @@ fun ProfileScreen(
     onOpenStats: () -> Unit,
     onOpenReports: () -> Unit,
     onOpenRecycleBin: () -> Unit,
+    reminderEnabled: Boolean,
+    reminderTimeLabel: String,
+    onOpenReminderSettings: () -> Unit,
+    feedbackUnreadCount: Int,
+    onOpenFeedback: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -93,6 +100,19 @@ fun ProfileScreen(
         }
         item {
             ProfileActionCard(
+                icon = Icons.Outlined.Forum,
+                title = "Feedback & Support",
+                subtitle = if (feedbackUnreadCount > 0) {
+                    "$feedbackUnreadCount new ${if (feedbackUnreadCount == 1) "reply" else "replies"} from admin."
+                } else {
+                    "Report an issue, share feedback, or read admin replies."
+                },
+                accent = colors.teal,
+                onClick = onOpenFeedback,
+            )
+        }
+        item {
+            ProfileActionCard(
                 icon = Icons.Outlined.BarChart,
                 title = "View Stats",
                 subtitle = "See teaching hours and class breakdowns.",
@@ -104,8 +124,13 @@ fun ProfileScreen(
             ProfileActionCard(
                 icon = Icons.Outlined.NotificationsNone,
                 title = "Notifications",
-                subtitle = "No unread updates right now.",
+                subtitle = if (reminderEnabled) {
+                    "Daily reminder at $reminderTimeLabel, Monday to Saturday."
+                } else {
+                    "Set one daily reminder, Monday to Saturday."
+                },
                 accent = Color(0xFFD97706),
+                onClick = onOpenReminderSettings,
             )
         }
         item {
@@ -352,10 +377,10 @@ private fun ThemeCard(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = if (themeMode == LedgrThemeMode.Dark) {
-                                Icons.Outlined.DarkMode
-                            } else {
-                                Icons.Outlined.LightMode
+                            imageVector = when (themeMode) {
+                                LedgrThemeMode.Dark -> Icons.Outlined.DarkMode
+                                LedgrThemeMode.System -> Icons.Outlined.Settings
+                                LedgrThemeMode.Light -> Icons.Outlined.LightMode
                             },
                             contentDescription = null,
                         )
@@ -363,11 +388,11 @@ private fun ThemeCard(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Choose your theme",
+                        text = "App theme",
                         style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
                     )
                     Text(
-                        text = "Pick a bright daytime layout or a softer dark mode.",
+                        text = "Light, dark, or device setting.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.textMuted,
                         modifier = Modifier.padding(top = 4.dp),
@@ -379,10 +404,18 @@ private fun ThemeCard(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 ThemePreview(
+                    label = "System",
+                    icon = Icons.Outlined.Settings,
+                    selected = themeMode == LedgrThemeMode.System,
+                    previewMode = LedgrThemeMode.System,
+                    onClick = { onThemeModeChange(LedgrThemeMode.System) },
+                    modifier = Modifier.weight(1f),
+                )
+                ThemePreview(
                     label = "Light",
                     icon = Icons.Outlined.LightMode,
                     selected = themeMode == LedgrThemeMode.Light,
-                    dark = false,
+                    previewMode = LedgrThemeMode.Light,
                     onClick = { onThemeModeChange(LedgrThemeMode.Light) },
                     modifier = Modifier.weight(1f),
                 )
@@ -390,7 +423,7 @@ private fun ThemeCard(
                     label = "Dark",
                     icon = Icons.Outlined.DarkMode,
                     selected = themeMode == LedgrThemeMode.Dark,
-                    dark = true,
+                    previewMode = LedgrThemeMode.Dark,
                     onClick = { onThemeModeChange(LedgrThemeMode.Dark) },
                     modifier = Modifier.weight(1f),
                 )
@@ -404,105 +437,142 @@ private fun ThemePreview(
     label: String,
     icon: ImageVector,
     selected: Boolean,
-    dark: Boolean,
+    previewMode: LedgrThemeMode,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val dark = previewMode == LedgrThemeMode.Dark
     val previewBackground = if (dark) Color(0xFF0A1420) else Color(0xFFF5F7FA)
-    val previewSurface = if (dark) Color.White.copy(alpha = 0.08f) else Color.White
-    val accent = if (dark) Color(0xFF4DB7C8) else colors.teal
+    val previewSurface = if (dark) Color(0xFF202B39) else Color.White
+    val accent = Color(0xFF4DB7C8)
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier
+            .height(150.dp)
+            .clickable(onClick = onClick),
         color = if (selected) colors.teal.copy(alpha = 0.10f) else colors.surfaceSoft,
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(
-            1.dp,
+            if (selected) 2.dp else 1.dp,
             if (selected) colors.teal else MaterialTheme.colorScheme.outline,
         ),
     ) {
-        Column(modifier = Modifier.padding(11.dp)) {
-            Column(
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(84.dp)
-                    .background(previewBackground, RoundedCornerShape(14.dp))
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
+                    .height(94.dp)
+                    .clip(RoundedCornerShape(13.dp)),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .background(accent, RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(14.dp),
+                if (previewMode == LedgrThemeMode.System) {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxSize()
+                                .background(Color(0xFFF5F7FA)),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxSize()
+                                .background(Color(0xFF0A1420)),
                         )
                     }
-                    Surface(
-                        modifier = Modifier.size(18.dp),
-                        shape = CircleShape,
-                        color = Color.Transparent,
-                        border = BorderStroke(2.dp, accent),
-                    ) {
-                        if (selected) {
-                            Icon(
-                                imageVector = Icons.Outlined.Check,
-                                contentDescription = null,
-                                tint = accent,
-                                modifier = Modifier.padding(2.dp),
-                            )
-                        }
-                    }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                } else {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(11.dp)
-                            .background(previewSurface, CircleShape),
+                            .fillMaxSize()
+                            .background(previewBackground),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        repeat(2) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(24.dp)
-                                    .background(previewSurface, RoundedCornerShape(8.dp)),
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(accent, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp),
                             )
+                        }
+                        Surface(
+                            modifier = Modifier.size(20.dp),
+                            shape = CircleShape,
+                            color = if (selected) accent else Color.Transparent,
+                            border = BorderStroke(2.dp, accent),
+                        ) {
+                            if (selected) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.padding(3.dp),
+                                )
+                            }
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .background(
+                                    if (previewMode == LedgrThemeMode.System) {
+                                        Color(0xFFDDE3EA)
+                                    } else {
+                                        previewSurface
+                                    },
+                                    CircleShape,
+                                ),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            repeat(2) { index ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(24.dp)
+                                        .background(
+                                            if (
+                                                previewMode == LedgrThemeMode.System &&
+                                                index == 1
+                                            ) {
+                                                Color(0xFF202B39)
+                                            } else {
+                                                previewSurface
+                                            },
+                                            RoundedCornerShape(8.dp),
+                                        ),
+                                )
+                            }
                         }
                     }
                 }
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                if (selected) {
-                    Text(
-                        text = "ACTIVE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                        modifier = Modifier
-                            .background(colors.teal, CircleShape)
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
-                }
-            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                ),
+                maxLines = 1,
+                modifier = Modifier.padding(start = 2.dp, top = 8.dp),
+            )
         }
     }
 }
@@ -538,6 +608,11 @@ private fun ProfileScreenPreview() {
             onOpenStats = {},
             onOpenReports = {},
             onOpenRecycleBin = {},
+            reminderEnabled = true,
+            reminderTimeLabel = "8:00 PM",
+            onOpenReminderSettings = {},
+            feedbackUnreadCount = 1,
+            onOpenFeedback = {},
             onSignOut = {},
         )
     }

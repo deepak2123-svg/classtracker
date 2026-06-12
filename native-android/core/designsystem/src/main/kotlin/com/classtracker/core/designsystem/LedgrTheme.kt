@@ -104,10 +104,16 @@ private val LocalLedgrExtendedColors = staticCompositionLocalOf {
     LightExtendedColors
 }
 
+private val LocalLedgrIsDark = staticCompositionLocalOf { false }
+
 object LedgrTheme {
     val colors: LedgrExtendedColors
         @Composable
         get() = LocalLedgrExtendedColors.current
+
+    val isDark: Boolean
+        @Composable
+        get() = LocalLedgrIsDark.current
 }
 
 private val LightColors = lightColorScheme(
@@ -152,27 +158,41 @@ private val DarkColors = darkColorScheme(
     onErrorContainer = Color(0xFFFFDAD6),
 )
 
-val LedgrSansFontFamily = FontFamily(
-    Font(R.font.inter_variable, FontWeight.Normal),
-    Font(R.font.inter_variable, FontWeight.Medium),
-    Font(R.font.inter_variable, FontWeight.SemiBold),
-    Font(R.font.inter_variable, FontWeight.Bold),
-    Font(R.font.inter_variable, FontWeight.ExtraBold),
-)
-
 val LedgrDisplayFontFamily = FontFamily(
-    Font(R.font.poppins_regular, FontWeight.Normal),
-    Font(R.font.poppins_semibold, FontWeight.SemiBold),
+    Font(R.font.poppins_bold, FontWeight.Normal),
+    Font(R.font.poppins_bold, FontWeight.Medium),
+    Font(R.font.poppins_bold, FontWeight.SemiBold),
     Font(R.font.poppins_bold, FontWeight.Bold),
     Font(R.font.poppins_extrabold, FontWeight.ExtraBold),
 )
 
 private val LedgrTypography = Typography(
+    displayLarge = TextStyle(
+        fontFamily = LedgrDisplayFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 48.sp,
+        lineHeight = 56.sp,
+        letterSpacing = 0.sp,
+    ),
+    displayMedium = TextStyle(
+        fontFamily = LedgrDisplayFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 40.sp,
+        lineHeight = 48.sp,
+        letterSpacing = 0.sp,
+    ),
     displaySmall = TextStyle(
         fontFamily = LedgrDisplayFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 32.sp,
         lineHeight = 38.sp,
+        letterSpacing = 0.sp,
+    ),
+    headlineLarge = TextStyle(
+        fontFamily = LedgrDisplayFontFamily,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 30.sp,
+        lineHeight = 36.sp,
         letterSpacing = 0.sp,
     ),
     headlineMedium = TextStyle(
@@ -203,43 +223,50 @@ private val LedgrTypography = Typography(
         lineHeight = 22.sp,
         letterSpacing = 0.sp,
     ),
+    titleSmall = TextStyle(
+        fontFamily = LedgrDisplayFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.sp,
+    ),
     bodyLarge = TextStyle(
-        fontFamily = LedgrSansFontFamily,
-        fontWeight = FontWeight.Normal,
+        fontFamily = LedgrDisplayFontFamily,
+        fontWeight = FontWeight.Bold,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.sp,
     ),
     bodyMedium = TextStyle(
-        fontFamily = LedgrSansFontFamily,
-        fontWeight = FontWeight.Normal,
+        fontFamily = LedgrDisplayFontFamily,
+        fontWeight = FontWeight.Bold,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.sp,
     ),
     bodySmall = TextStyle(
-        fontFamily = LedgrSansFontFamily,
-        fontWeight = FontWeight.Normal,
+        fontFamily = LedgrDisplayFontFamily,
+        fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
         lineHeight = 17.sp,
         letterSpacing = 0.sp,
     ),
     labelLarge = TextStyle(
-        fontFamily = LedgrSansFontFamily,
+        fontFamily = LedgrDisplayFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.sp,
     ),
     labelMedium = TextStyle(
-        fontFamily = LedgrSansFontFamily,
+        fontFamily = LedgrDisplayFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
         lineHeight = 17.sp,
         letterSpacing = 0.sp,
     ),
     labelSmall = TextStyle(
-        fontFamily = LedgrSansFontFamily,
+        fontFamily = LedgrDisplayFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 11.sp,
         lineHeight = 16.sp,
@@ -272,6 +299,7 @@ fun LedgrTheme(
         } else {
             LightExtendedColors
         },
+        LocalLedgrIsDark provides useDarkTheme,
     ) {
         MaterialTheme(
             colorScheme = if (useDarkTheme) DarkColors else LightColors,

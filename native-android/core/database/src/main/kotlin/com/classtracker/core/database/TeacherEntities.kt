@@ -33,6 +33,7 @@ data class TeacherClassEntity(
     val startTime: String?,
     val endTime: String?,
     val createdAt: Long,
+    val timeSlots: String,
 )
 
 @Entity(tableName = "teacher_entries", primaryKeys = ["uid", "entryId"])

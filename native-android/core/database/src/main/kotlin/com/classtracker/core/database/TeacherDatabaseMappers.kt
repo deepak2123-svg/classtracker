@@ -7,6 +7,7 @@ import com.classtracker.core.model.TeacherEntrySyncState
 import com.classtracker.core.model.TeacherProfile
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
+import com.classtracker.core.model.TeacherTimeSlot
 import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.toTrashedEntry
 
@@ -111,6 +112,7 @@ internal fun TeacherClass.toEntity(uid: String) = TeacherClassEntity(
     startTime = startTime,
     endTime = endTime,
     createdAt = createdAt,
+    timeSlots = encodeTimeSlots(timeSlots),
 )
 
 internal fun TeacherEntry.toEntity(uid: String) = TeacherEntryEntity(
@@ -227,6 +229,7 @@ internal fun TeacherClassEntity.toTeacherClass() = TeacherClass(
     startTime = startTime,
     endTime = endTime,
     createdAt = createdAt,
+    timeSlots = decodeTimeSlots(timeSlots),
 )
 
 internal fun TeacherEntryEntity.toTeacherEntry() = TeacherEntry(
@@ -325,8 +328,31 @@ private fun EntryMutationEntity.toSyncState(): TeacherEntrySyncState = when (sta
 }
 
 private const val ListSeparator = "\u001F"
+private const val SlotSeparator = "\u001E"
+private const val SlotPartSeparator = "\u001D"
 
 private fun encodeList(values: List<String>): String = values.joinToString(ListSeparator)
 
 private fun decodeList(value: String): List<String> =
     value.split(ListSeparator).filter(String::isNotBlank)
+
+private fun encodeTimeSlots(slots: List<TeacherTimeSlot>): String =
+    slots.joinToString(SlotSeparator) { slot ->
+        listOf(slot.start, slot.end, slot.durationMinutes.toString())
+            .joinToString(SlotPartSeparator)
+    }
+
+private fun decodeTimeSlots(value: String): List<TeacherTimeSlot> =
+    value.split(SlotSeparator)
+        .filter(String::isNotBlank)
+        .mapNotNull { record ->
+            val parts = record.split(SlotPartSeparator)
+            val start = parts.getOrNull(0).orEmpty()
+            val end = parts.getOrNull(1).orEmpty()
+            val duration = parts.getOrNull(2)?.toIntOrNull() ?: 0
+            if (start.isBlank() || end.isBlank() || duration <= 0) {
+                null
+            } else {
+                TeacherTimeSlot(start = start, end = end, durationMinutes = duration)
+            }
+        }

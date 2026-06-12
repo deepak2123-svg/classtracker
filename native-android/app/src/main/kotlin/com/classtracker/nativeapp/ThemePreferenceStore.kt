@@ -11,9 +11,10 @@ class ThemePreferenceStore(context: Context) {
     )
 
     fun read(): LedgrThemeMode = when (preferences.getString(ThemeKey, null)) {
+        LedgrThemeMode.Light.name -> LedgrThemeMode.Light
         LedgrThemeMode.Dark.name -> LedgrThemeMode.Dark
         LedgrThemeMode.System.name -> LedgrThemeMode.System
-        else -> LedgrThemeMode.Light
+        else -> LedgrThemeMode.System
     }
 
     fun write(themeMode: LedgrThemeMode) {

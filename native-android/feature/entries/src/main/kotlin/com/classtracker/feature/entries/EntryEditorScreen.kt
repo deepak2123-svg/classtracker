@@ -1,6 +1,5 @@
 package com.classtracker.feature.entries
 
-import android.app.TimePickerDialog
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -16,20 +15,27 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,20 +45,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.classtracker.core.designsystem.LedgrClassCard
 import com.classtracker.core.designsystem.LedgrSectionHeading
 import com.classtracker.core.designsystem.LedgrTheme
@@ -61,10 +73,60 @@ import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherEntryStatus
 import com.classtracker.core.model.TeacherEntryValidation
+import com.classtracker.core.model.TeacherTimeSlot
 import com.classtracker.core.model.validateTeacherEntryDraft
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlin.math.abs
+
+private val EntryCanvas = Color(0xFFEFEEE8)
+private val EntryInk = Color(0xFF202A55)
+private val EntryMuted = Color(0xFF85837D)
+private val EntryBorder = Color(0xFFD6D2CA)
+private val EntryPlaceholder = Color(0xFFBFBDB8)
+private val EntryGreen = Color(0xFF1AA079)
+
+@Composable
+private fun entryCanvasColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else EntryCanvas
+
+@Composable
+private fun entrySurfaceColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surface else Color.White
+
+@Composable
+private fun entryFieldColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else Color.White
+
+@Composable
+private fun entryInkColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else EntryInk
+
+@Composable
+private fun entryMutedColor() =
+    if (LedgrTheme.isDark) LedgrTheme.colors.textMuted else EntryMuted
+
+@Composable
+private fun entryBorderColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else EntryBorder
+
+@Composable
+private fun entryPlaceholderColor() =
+    if (LedgrTheme.isDark) LedgrTheme.colors.textSubtle else EntryPlaceholder
+
+@Composable
+private fun entryPrimaryControlColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.primaryContainer else EntryInk
+
+@Composable
+private fun entryPrimaryControlContentColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onPrimaryContainer else Color.White
+
+@Composable
+private fun entrySubtleTextColor() =
+    if (LedgrTheme.isDark) LedgrTheme.colors.textMuted else Color(0xFFB1ADA4)
 
 @Composable
 fun EntryEditorScreen(
@@ -83,7 +145,9 @@ fun EntryEditorScreen(
     }
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .background(entryCanvasColor()),
         contentPadding = PaddingValues(
             start = 16.dp,
             top = 14.dp,
@@ -98,11 +162,6 @@ fun EntryEditorScreen(
                     sectionName = teacherClass.sectionName,
                     instituteName = teacherClass.instituteName,
                     subjectName = teacherClass.subjectName,
-                    detail = if (draft.entryId == null) {
-                        "Add a teaching entry"
-                    } else {
-                        "Editing teaching entry"
-                    },
                 )
             }
         }
@@ -142,7 +201,6 @@ fun EntryEditorScreen(
             item {
                 LedgrSectionHeading(
                     title = if (draft.entryId == null) "New entry" else "Entry details",
-                    supportingText = "Saved entries remain compatible with the teacher web app.",
                 )
             }
         }
@@ -151,6 +209,7 @@ fun EntryEditorScreen(
             ScheduleCard(
                 draft = draft,
                 existingEntries = existingEntries,
+                timeSlots = teacherClass.timeSlots,
                 onDraftChanged = onDraftChanged,
             )
         }
@@ -168,8 +227,12 @@ fun EntryEditorScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "STATUS",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = LedgrTheme.colors.textMuted,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = entryInkColor(),
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -305,18 +368,50 @@ fun EntryEditorScreen(
 private fun ScheduleCard(
     draft: TeacherEntryDraft,
     existingEntries: List<TeacherEntry>,
+    timeSlots: List<TeacherTimeSlot>,
     onDraftChanged: (TeacherEntryDraft) -> Unit,
 ) {
-    val context = LocalContext.current
+    var timePickerTarget by remember { mutableStateOf<TimePickerTarget?>(null) }
+    var showCustomTimeFields by rememberSaveable(draft.classId, timeSlots.isEmpty()) {
+        mutableStateOf(timeSlots.isEmpty())
+    }
+    val usedStarts = remember(existingEntries, draft.dateKey, draft.entryId) {
+        existingEntries
+            .filter { entry ->
+                entry.dateKey == draft.dateKey && entry.id != draft.entryId
+            }
+            .mapNotNullTo(linkedSetOf()) { it.timeStart?.takeIf(String::isNotBlank) }
+    }
+
+    timePickerTarget?.let { target ->
+        ScrollDrumTimeDialog(
+            initialValue = when (target) {
+                TimePickerTarget.Start -> draft.timeStart
+                TimePickerTarget.End -> draft.timeEnd.ifBlank { draft.timeStart }
+            },
+            onDismiss = { timePickerTarget = null },
+            onSelected = { selected ->
+                onDraftChanged(
+                    when (target) {
+                        TimePickerTarget.Start -> draft.copy(
+                            timeStart = selected,
+                            timeEnd = draft.timeEnd.ifBlank { addMinutes(selected, 60) },
+                        )
+                        TimePickerTarget.End -> draft.copy(timeEnd = selected)
+                    },
+                )
+                timePickerTarget = null
+            },
+        )
+    }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        colors = CardDefaults.cardColors(containerColor = entryCanvasColor()),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(0.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             EntryDateCalendar(
                 selectedDate = draft.dateKey,
@@ -328,46 +423,182 @@ private fun ScheduleCard(
                 },
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                PickerField(
-                    label = "Start",
-                    value = formatDisplayTime(draft.timeStart),
-                    icon = Icons.Outlined.Schedule,
-                    onClick = {
-                        showTimePicker(
-                            initialValue = draft.timeStart,
-                            onSelected = { selectedStart ->
-                                onDraftChanged(
-                                    draft.copy(
-                                        timeStart = selectedStart,
-                                        timeEnd = draft.timeEnd.ifBlank {
-                                            addMinutes(selectedStart, 60)
-                                        },
-                                    ),
-                                )
-                            },
-                            context = context,
+            if (timeSlots.isNotEmpty()) {
+                TimetableSlots(
+                    slots = timeSlots,
+                    usedStarts = usedStarts,
+                    showCustomTimeFields = showCustomTimeFields,
+                    onCustomTimeClick = { showCustomTimeFields = true },
+                    onSlotSelected = { slot ->
+                        onDraftChanged(
+                            draft.copy(
+                                timeStart = slot.start,
+                                timeEnd = slot.end,
+                            ),
                         )
                     },
-                    modifier = Modifier.weight(1f),
-                )
-                PickerField(
-                    label = "End",
-                    value = formatDisplayTime(draft.timeEnd).ifBlank { "Optional" },
-                    icon = Icons.Outlined.Schedule,
-                    onClick = {
-                        showTimePicker(
-                            initialValue = draft.timeEnd.ifBlank { draft.timeStart },
-                            onSelected = { onDraftChanged(draft.copy(timeEnd = it)) },
-                            context = context,
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
                 )
             }
+
+            if (showCustomTimeFields) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PickerField(
+                        label = "Start",
+                        value = formatDisplayTime(draft.timeStart).ifBlank { "Pick time" },
+                        icon = Icons.Outlined.Schedule,
+                        onClick = {
+                            timePickerTarget = TimePickerTarget.Start
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    PickerField(
+                        label = "End",
+                        value = formatDisplayTime(draft.timeEnd).ifBlank { "Optional" },
+                        icon = Icons.Outlined.Schedule,
+                        onClick = {
+                            timePickerTarget = TimePickerTarget.End
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private enum class TimePickerTarget {
+    Start,
+    End,
+}
+
+@Composable
+private fun TimetableSlots(
+    slots: List<TeacherTimeSlot>,
+    usedStarts: Set<String>,
+    showCustomTimeFields: Boolean,
+    onCustomTimeClick: () -> Unit,
+    onSlotSelected: (TeacherTimeSlot) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "TIMETABLE SLOTS",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = entryMutedColor(),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            slots.chunked(2).forEach { rowSlots ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    rowSlots.forEach { slot ->
+                        val used = slot.start in usedStarts
+                        TimeSlotChip(
+                            slot = slot,
+                            used = used,
+                            onClick = { onSlotSelected(slot) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (rowSlots.size == 1) {
+                        Box(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        if (!showCustomTimeFields) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .clickable(onClick = onCustomTimeClick),
+                color = entrySurfaceColor(),
+                contentColor = entryInkColor(),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, entryBorderColor()),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(21.dp),
+                        tint = entryInkColor(),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            text = "Time slot not listed?",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontSize = 14.sp,
+                                lineHeight = 18.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                        )
+                        Text(
+                            text = "Choose a custom time",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 13.sp,
+                                lineHeight = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = entryMutedColor(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimeSlotChip(
+    slot: TeacherTimeSlot,
+    used: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val background by animateColorAsState(
+        targetValue = entrySurfaceColor(),
+        label = "slot-background",
+    )
+    Surface(
+        modifier = modifier
+            .height(46.dp)
+            .clickable(enabled = !used, onClick = onClick),
+        color = background,
+        contentColor = entryInkColor(),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = entryBorderColor(),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "${formatDisplayTime(slot.start)} – ${formatDisplayTime(slot.end)}",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = entryInkColor(),
+                ),
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -404,13 +635,13 @@ private fun EntryDateCalendar(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),
-        color = LedgrTheme.colors.surfaceSoft,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        color = entrySurfaceColor(),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, entryBorderColor()),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -438,19 +669,23 @@ private fun EntryDateCalendar(
                         Icon(
                             imageVector = Icons.Outlined.CalendarMonth,
                             contentDescription = null,
-                            tint = LedgrTheme.colors.green,
+                            tint = entryInkColor(),
                             modifier = Modifier.size(18.dp),
                         )
                         Text(
                             text = monthTitle(viewYear, viewMonth),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 17.sp,
+                                lineHeight = 20.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = entryInkColor(),
+                            ),
                         )
                     }
                     Text(
                         text = formatDisplayDate(selectedDate),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = LedgrTheme.colors.textMuted,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                        color = entryMutedColor(),
                     )
                 }
                 CalendarNavButton(
@@ -474,7 +709,7 @@ private fun EntryDateCalendar(
                 cells.chunked(7).forEach { week ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         week.forEach { cell ->
                             CalendarDayCell(
@@ -503,16 +738,16 @@ private fun CalendarNavButton(
         modifier = Modifier
             .size(34.dp)
             .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = LedgrTheme.colors.textMuted,
-        shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        color = if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else EntryCanvas,
+        contentColor = entryInkColor(),
+        shape = CircleShape,
+        border = BorderStroke(1.dp, entryBorderColor()),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(19.dp),
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -523,18 +758,14 @@ private fun CalendarWeekLabels() {
     val days = listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa")
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         days.forEach { day ->
             Text(
                 text = day,
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (day == "Su") {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    LedgrTheme.colors.textSubtle
-                },
+                style = MaterialTheme.typography.labelLarge.copy(fontSize = 11.sp),
+                color = entryMutedColor(),
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )
@@ -548,26 +779,29 @@ private fun CalendarDayCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val ink = entryInkColor()
+    val selectedBackground = entryPrimaryControlColor()
+    val disabledColor = if (LedgrTheme.isDark) LedgrTheme.colors.textSubtle else Color(0xFFBDBAB4)
+    val dotColor = if (LedgrTheme.isDark) LedgrTheme.colors.green else EntryGreen
     val background by animateColorAsState(
         targetValue = when {
-            cell.selected || cell.today -> LedgrTheme.colors.forest
-            cell.editable -> LedgrTheme.colors.successSurface
+            cell.selected -> selectedBackground
             else -> Color.Transparent
         },
         label = "calendar-day-bg",
     )
     val contentColor by animateColorAsState(
         targetValue = when {
-            cell.selected || cell.today -> Color.White
-            cell.sunday -> MaterialTheme.colorScheme.error
-            cell.editable || cell.entryCount > 0 -> MaterialTheme.colorScheme.onSurface
-            else -> LedgrTheme.colors.textSubtle
+            cell.selected -> Color.White
+            cell.sunday -> Color(0xFFEF4444)
+            cell.canSelect || cell.entryCount > 0 -> ink
+            else -> disabledColor
         },
         label = "calendar-day-content",
     )
     val borderColor by animateColorAsState(
         targetValue = if (cell.selected) {
-            LedgrTheme.colors.green
+            selectedBackground
         } else {
             Color.Transparent
         },
@@ -584,54 +818,51 @@ private fun CalendarDayCell(
     )
     Surface(
         modifier = modifier
+            .height(38.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
             .clickable(enabled = cell.canSelect, onClick = onClick),
-        color = background,
+        color = Color.Transparent,
         contentColor = contentColor,
-        shape = RoundedCornerShape(9.dp),
-        border = BorderStroke(
-            width = if (cell.selected) 1.5.dp else 0.dp,
-            color = borderColor,
-        ),
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = cell.day.toString(),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (cell.selected || cell.today || cell.editable) {
-                    FontWeight.Bold
-                } else {
-                    FontWeight.Normal
-                },
-                color = contentColor.copy(
-                    alpha = when {
-                        cell.otherMonth -> 0.22f
-                        cell.canSelect -> 1f
-                        else -> 0.42f
-                    },
-                ),
-            )
-            Box(
+            Column(
                 modifier = Modifier
-                    .size(dotSize)
-                    .background(
-                        color = if (cell.selected || cell.today) {
-                            LedgrTheme.colors.green
-                        } else {
-                            LedgrTheme.colors.teal
-                        },
-                        shape = CircleShape,
+                    .size(if (cell.selected) 32.dp else 30.dp)
+                    .background(background, CircleShape),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = cell.day.toString(),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 14.sp,
+                        lineHeight = 16.sp,
                     ),
-            )
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor.copy(
+                        alpha = when {
+                            cell.otherMonth -> 0.35f
+                            cell.canSelect || cell.selected -> 1f
+                            else -> 0.55f
+                        },
+                    ),
+                )
+                Box(
+                    modifier = Modifier
+                        .size(dotSize)
+                        .background(
+                            color = dotColor,
+                            shape = CircleShape,
+                        ),
+                )
+            }
         }
     }
 }
@@ -714,31 +945,45 @@ private fun PickerField(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        color = LedgrTheme.colors.surfaceSoft,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = modifier
+            .height(68.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else EntryCanvas,
+        border = BorderStroke(1.dp, entryBorderColor()),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = entryMutedColor(),
             )
             Column {
                 Text(
                     text = label.uppercase(Locale.US),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LedgrTheme.colors.textMuted,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = entryMutedColor(),
                 )
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 18.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = if (value == "Optional" || value == "Pick time") {
+                        entryPlaceholderColor()
+                    } else {
+                        entryInkColor()
+                    },
                 )
             }
         }
@@ -752,26 +997,29 @@ private fun StatusChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tone = statusTone(status)
+    val tone = statusTone(status, LedgrTheme.isDark)
     Surface(
         modifier = modifier
+            .height(48.dp)
             .clickable(onClick = onClick),
         color = if (selected) tone.background else MaterialTheme.colorScheme.surface,
-        contentColor = if (selected) tone.content else LedgrTheme.colors.textMuted,
+        contentColor = if (selected) tone.content else entryInkColor(),
         shape = RoundedCornerShape(999.dp),
         border = BorderStroke(
-            width = 1.5.dp,
+            width = if (selected) 2.dp else 1.5.dp,
             color = if (selected) tone.dot else MaterialTheme.colorScheme.outline,
         ),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .size(8.dp)
+                    .size(8.5.dp)
                     .background(
                         color = if (selected) tone.dot else LedgrTheme.colors.textSubtle,
                         shape = CircleShape,
@@ -779,9 +1027,197 @@ private fun StatusChip(
             )
             Text(
                 text = tone.label,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+                maxLines = 1,
             )
+        }
+    }
+}
+
+@Composable
+private fun EntryTextAndSavePanel(
+    draft: TeacherEntryDraft,
+    saving: Boolean,
+    validation: TeacherEntryValidation,
+    showInvalid: Boolean,
+    onDraftChanged: (TeacherEntryDraft) -> Unit,
+    onSaveClick: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "TOPIC / TITLE",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = entryInkColor(),
+        )
+        EntryTextBox(
+            value = draft.title,
+            onValueChange = { onDraftChanged(draft.copy(title = it)) },
+            placeholder = "e.g. Quadratic equations",
+            icon = Icons.Outlined.MenuBook,
+            singleLine = true,
+        )
+        Text(
+            text = if (showInvalid) {
+                "* ${(validation as TeacherEntryValidation.Invalid).message}"
+            } else {
+                "* Required"
+            },
+            color = Color(0xFFFF3B3B),
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+        )
+        Text(
+            text = "NOTES",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = entryInkColor(),
+        )
+        EntryTextBox(
+            value = draft.body,
+            onValueChange = { onDraftChanged(draft.copy(body = it)) },
+            placeholder = "Homework, doubts covered,\nobservations...",
+            icon = Icons.Outlined.Notes,
+            singleLine = false,
+        )
+        if (validation is TeacherEntryValidation.Overlap) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = if (LedgrTheme.isDark) LedgrTheme.colors.warningSurface else Color(0xFFFFF4C8),
+                contentColor = if (LedgrTheme.isDark) Color(0xFFFDE68A) else Color(0xFF805E00),
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                Text(
+                    text = validation.message,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        Button(
+            onClick = onSaveClick,
+            enabled = !saving,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            contentPadding = PaddingValues(vertical = 12.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                containerColor = entryPrimaryControlColor(),
+                contentColor = entryPrimaryControlContentColor(),
+                disabledContainerColor = entryPrimaryControlColor().copy(alpha = 0.45f),
+                disabledContentColor = entryPrimaryControlContentColor().copy(alpha = 0.75f),
+            ),
+        ) {
+            if (saving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = entryPrimaryControlContentColor(),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(19.dp),
+                )
+                Text(
+                    text = if (draft.entryId == null) "Save entry" else "Save changes",
+                    modifier = Modifier.padding(start = 8.dp),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EntryTextBox(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    singleLine: Boolean,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = entrySurfaceColor(),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, entryBorderColor()),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = entryPlaceholderColor(),
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .size(19.dp),
+            )
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(if (singleLine) 46.dp else 96.dp),
+                color = entryFieldColor(),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, entryBorderColor()),
+            ) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 14.dp, vertical = if (singleLine) 0.dp else 12.dp),
+                    textStyle = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 18.sp,
+                        lineHeight = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = entryInkColor(),
+                    ),
+                    singleLine = singleLine,
+                    maxLines = if (singleLine) 1 else 4,
+                    cursorBrush = SolidColor(entryInkColor()),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
+                        ) {
+                            if (value.isBlank()) {
+                                Text(
+                                    text = placeholder,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 18.sp,
+                                        lineHeight = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = entryPlaceholderColor(),
+                                    ),
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                )
+            }
         }
     }
 }
@@ -861,26 +1297,230 @@ private fun monthTitle(year: Int, month: Int): String =
         }.time,
     )
 
-private fun showTimePicker(
+@Composable
+private fun ScrollDrumTimeDialog(
     initialValue: String,
+    onDismiss: () -> Unit,
     onSelected: (String) -> Unit,
-    context: android.content.Context,
 ) {
-    val initialParts = initialValue.split(":")
-    val now = Calendar.getInstance()
-    val initialHour = initialParts.getOrNull(0)?.toIntOrNull()
-        ?: now.get(Calendar.HOUR_OF_DAY)
-    val initialMinute = initialParts.getOrNull(1)?.toIntOrNull()
-        ?: now.get(Calendar.MINUTE)
-    TimePickerDialog(
-        context,
-        { _, hour, minute ->
-            onSelected("%02d:%02d".format(Locale.US, hour, minute))
-        },
-        initialHour,
-        initialMinute,
-        false,
-    ).show()
+    val initial = remember(initialValue) { parseTimePickerInitial(initialValue) }
+    val hours = remember { (1..12).map { "%02d".format(Locale.US, it) } }
+    val minutes = remember { (0..59).map { "%02d".format(Locale.US, it) } }
+    val periods = remember { listOf("AM", "PM") }
+    val hourState = rememberLazyListState(initialFirstVisibleItemIndex = initial.hour12 - 1)
+    val minuteState = rememberLazyListState(initialFirstVisibleItemIndex = initial.minute)
+    val periodState = rememberLazyListState(initialFirstVisibleItemIndex = initial.periodIndex)
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            color = Color(0xFF151925),
+            contentColor = Color.White,
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, Color(0xFF30364A)),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                Text(
+                    text = "Pick time",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 20.sp,
+                        lineHeight = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DrumWheel(
+                        items = hours,
+                        state = hourState,
+                        label = "HOUR",
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = ":",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
+                        color = Color.White.copy(alpha = 0.76f),
+                    )
+                    DrumWheel(
+                        items = minutes,
+                        state = minuteState,
+                        label = "MIN",
+                        modifier = Modifier.weight(1f),
+                    )
+                    DrumWheel(
+                        items = periods,
+                        state = periodState,
+                        label = "PERIOD",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            val hour12 = hours[hourState.centeredItemIndex(hours.size)].toInt()
+                            val minute = minutes[minuteState.centeredItemIndex(minutes.size)].toInt()
+                            val period = periods[periodState.centeredItemIndex(periods.size)]
+                            val hour24 = if (period == "PM") {
+                                (hour12 % 12) + 12
+                            } else {
+                                if (hour12 == 12) 0 else hour12
+                            }
+                            onSelected("%02d:%02d".format(Locale.US, hour24, minute))
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text("Set time")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrumWheel(
+    items: List<String>,
+    state: LazyListState,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    LaunchedEffect(state, items.size) {
+        snapshotFlow { state.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { scrolling ->
+                if (!scrolling) {
+                    val selected = state.centeredItemIndex(items.size)
+                    if (state.firstVisibleItemIndex != selected || state.firstVisibleItemScrollOffset != 0) {
+                        state.animateScrollToItem(selected)
+                    }
+                }
+            }
+    }
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(164.dp),
+            color = Color.White,
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, Color(0xFFD4D4D8)),
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .padding(horizontal = 8.dp)
+                        .background(
+                            Color(0xFFF1F1F1).copy(alpha = 0.9f),
+                            RoundedCornerShape(7.dp),
+                        ),
+                )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = state,
+                    contentPadding = PaddingValues(vertical = 56.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    items.indices.forEach { index ->
+                        item(key = "$label-$index") {
+                            val selectedIndex = state.centeredItemIndex(items.size)
+                            val distance = abs(index - selectedIndex)
+                            Text(
+                                text = items[index],
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.headlineSmall.copy(
+                                    fontSize = 26.sp,
+                                    lineHeight = 52.sp,
+                                    fontWeight = if (distance == 0) {
+                                        FontWeight.ExtraBold
+                                    } else {
+                                        FontWeight.Bold
+                                    },
+                                ),
+                                color = Color.Black.copy(
+                                    alpha = when (distance) {
+                                        0 -> 1f
+                                        1 -> 0.38f
+                                        else -> 0.14f
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = Color.White.copy(alpha = 0.72f),
+        )
+    }
+}
+
+private data class TimePickerInitial(
+    val hour12: Int,
+    val minute: Int,
+    val periodIndex: Int,
+)
+
+private fun parseTimePickerInitial(value: String): TimePickerInitial {
+    val minutes = timeMinutes(value)
+    val calendar = Calendar.getInstance()
+    val hour24 = minutes?.div(60) ?: calendar.get(Calendar.HOUR_OF_DAY)
+    val minute = minutes?.rem(60) ?: calendar.get(Calendar.MINUTE)
+    val hour12 = (hour24 % 12).let { if (it == 0) 12 else it }
+    return TimePickerInitial(
+        hour12 = hour12,
+        minute = minute.coerceIn(0, 59),
+        periodIndex = if (hour24 >= 12) 1 else 0,
+    )
+}
+
+private fun LazyListState.centeredItemIndex(itemCount: Int): Int {
+    val visibleItems = layoutInfo.visibleItemsInfo
+    if (visibleItems.isEmpty()) {
+        return firstVisibleItemIndex.coerceIn(0, itemCount - 1)
+    }
+    val viewportCenter = layoutInfo.viewportStartOffset +
+        ((layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset) / 2)
+    return visibleItems
+        .minByOrNull { item -> abs((item.offset + (item.size / 2)) - viewportCenter) }
+        ?.index
+        ?.coerceIn(0, itemCount - 1)
+        ?: firstVisibleItemIndex.coerceIn(0, itemCount - 1)
 }
 
 private fun parseDateKey(value: String): Calendar? {
@@ -925,31 +1565,27 @@ private data class StatusTone(
     val label: String,
 )
 
-private fun statusTone(status: TeacherEntryStatus): StatusTone = when (status) {
-    TeacherEntryStatus.Started -> StatusTone(
-        background = Color(0xFFDBEAFE),
-        content = Color(0xFF1D4ED8),
-        dot = Color(0xFF3B82F6),
-        label = "Started",
-    )
-    TeacherEntryStatus.InProgress -> StatusTone(
-        background = Color(0xFFFEF3C7),
-        content = Color(0xFFB45309),
-        dot = Color(0xFFF59E0B),
-        label = "In Progress",
-    )
-    TeacherEntryStatus.Completed -> StatusTone(
-        background = Color(0xFFD1FAE5),
-        content = Color(0xFF065F46),
-        dot = Color(0xFF10B981),
-        label = "Completed",
-    )
-    TeacherEntryStatus.Doubts -> StatusTone(
-        background = Color(0xFFFFEDD5),
-        content = Color(0xFF9A3412),
-        dot = Color(0xFFF97316),
-        label = "Doubts",
-    )
+private fun statusTone(status: TeacherEntryStatus, dark: Boolean): StatusTone = when (status) {
+    TeacherEntryStatus.Started -> if (dark) {
+        StatusTone(Color(0xFF102A4F), Color(0xFFBFDBFE), Color(0xFF60A5FA), "Started")
+    } else {
+        StatusTone(Color(0xFFDBEAFE), Color(0xFF1D4ED8), Color(0xFF3B82F6), "Started")
+    }
+    TeacherEntryStatus.InProgress -> if (dark) {
+        StatusTone(Color(0xFF3A2A11), Color(0xFFFDE68A), Color(0xFFF59E0B), "In Progress")
+    } else {
+        StatusTone(Color(0xFFFEF3C7), Color(0xFFB45309), Color(0xFFF59E0B), "In Progress")
+    }
+    TeacherEntryStatus.Completed -> if (dark) {
+        StatusTone(Color(0xFF123528), Color(0xFFA7F3D0), Color(0xFF34D399), "Completed")
+    } else {
+        StatusTone(Color(0xFFD1FAE5), Color(0xFF065F46), Color(0xFF10B981), "Completed")
+    }
+    TeacherEntryStatus.Doubts -> if (dark) {
+        StatusTone(Color(0xFF3B2112), Color(0xFFFED7AA), Color(0xFFFB923C), "Doubts")
+    } else {
+        StatusTone(Color(0xFFFFEDD5), Color(0xFF9A3412), Color(0xFFF97316), "Doubts")
+    }
 }
 
 private fun durationMinutes(start: String, end: String): Int? {
@@ -993,6 +1629,7 @@ private fun durationLabel(minutes: Int): String {
 fun EntryEditorColumn(
     draft: TeacherEntryDraft,
     existingEntries: List<TeacherEntry>,
+    timeSlots: List<TeacherTimeSlot> = emptyList(),
     saving: Boolean,
     validation: TeacherEntryValidation,
     onDraftChanged: (TeacherEntryDraft) -> Unit,
@@ -1009,6 +1646,7 @@ fun EntryEditorColumn(
         ScheduleCard(
             draft = draft,
             existingEntries = existingEntries,
+            timeSlots = timeSlots,
             onDraftChanged = onDraftChanged,
         )
 
@@ -1022,8 +1660,12 @@ fun EntryEditorColumn(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "STATUS",
-                style = MaterialTheme.typography.labelLarge,
-                color = LedgrTheme.colors.textMuted,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+                color = entryInkColor(),
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1065,86 +1707,18 @@ fun EntryEditorColumn(
             }
         }
 
-        OutlinedTextField(
-            value = draft.title,
-            onValueChange = { onDraftChanged(draft.copy(title = it)) },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Topic / title") },
-            supportingText = { Text("Required") },
-            singleLine = true,
-        )
-
-        OutlinedTextField(
-            value = draft.body,
-            onValueChange = { onDraftChanged(draft.copy(body = it)) },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Notes") },
-            minLines = 4,
-            maxLines = 8,
-        )
-
-        if (saveAttempted && validation is TeacherEntryValidation.Invalid) {
-            Text(
-                text = validation.message,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-
-        // Soft overlap warning — shown proactively, allows saving anyway
-        if (validation is TeacherEntryValidation.Overlap) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = LedgrTheme.colors.warningSurface,
-                contentColor = LedgrTheme.colors.textSecondary,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = validation.message,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f),
-                        color = LedgrTheme.colors.textSecondary,
-                    )
-                }
-            }
-        }
-
-        Button(
-            onClick = {
+        EntryTextAndSavePanel(
+            draft = draft,
+            saving = saving,
+            validation = validation,
+            showInvalid = saveAttempted && validation is TeacherEntryValidation.Invalid,
+            onDraftChanged = onDraftChanged,
+            onSaveClick = {
                 saveAttempted = true
                 if (validation == TeacherEntryValidation.Valid ||
                     validation is TeacherEntryValidation.Overlap
                 ) onSave(draft)
             },
-            enabled = !saving,
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(vertical = 15.dp),
-            shape = RoundedCornerShape(14.dp),
-        ) {
-            if (saving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Outlined.Save,
-                    contentDescription = null,
-                )
-                Text(
-                    text = if (draft.entryId == null) "Save entry" else "Save changes",
-                    modifier = Modifier.padding(start = 10.dp),
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
+        )
     }
 }

@@ -4,6 +4,7 @@ import com.classtracker.core.database.PendingEntryMutation
 import com.classtracker.core.database.TeacherLocalDataSource
 import com.classtracker.core.firebase.TeacherRemoteDataSource
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherProfile
 import com.classtracker.core.model.TeacherSnapshot
@@ -116,6 +117,12 @@ private class FakeRemoteDataSource(
         saveFailure?.let { throw it }
         return returnedSnapshot
     }
+
+    override suspend fun createClass(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        draft: TeacherClassDraft,
+    ): TeacherSnapshot = returnedSnapshot
 
     override suspend fun deleteEntry(
         teacher: AuthenticatedTeacher,

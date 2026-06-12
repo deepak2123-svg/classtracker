@@ -84,18 +84,21 @@ Status: completed as part of
 
 ## Phase 4: Core teacher workflows
 
-Status: checkpoint 10 adds the combined class entry screen, inline entry
-editor, soft overlap warnings, post-save feedback, and the profile recycle bin
-entry point on top of checkpoint 9 web-style native entry calendar and smoother
-animated date/filter controls, checkpoint 8 sliding class pager, checkpoint 7
-sticky banner/newest-first history/class swiping, checkpoint 6 entry
-search/status filters, checkpoint 5 beta-only recoverable entry
-delete/restore, checkpoint 4 duplicate workflow support, checkpoint 3 teacher
-mobile web parity, and checkpoint 2 offline create/edit foundation.
+Status: checkpoint 11 adds beta-gated native class creation from Home using the
+existing web-compatible teacher data model. Checkpoint 10 adds the combined
+class entry screen, inline entry editor, soft overlap warnings, post-save
+feedback, and the profile recycle bin entry point on top of checkpoint 9
+web-style native entry calendar and smoother animated date/filter controls,
+checkpoint 8 sliding class pager, checkpoint 7 sticky banner/newest-first
+history/class swiping, checkpoint 6 entry search/status filters, checkpoint 5
+beta-only recoverable entry delete/restore, checkpoint 4 duplicate workflow
+support, checkpoint 3 teacher mobile web parity, and checkpoint 2 offline
+create/edit foundation.
 
 ### Deliverables
 
 - Create, edit, duplicate, and delete daily entries.
+- Create classes in native beta using the existing compatibility data model.
 - Institute, class, section, subject, date, and time selection.
 - Draft recovery and form validation.
 - History, search, trash, restore, and web-style native date selection.
@@ -142,6 +145,21 @@ filters, a profile-launched reports screen, and text summary export.
 - Generated files open and share correctly on representative devices.
 
 ## Phase 6: Notifications and reminders
+
+Status: checkpoint 6 adds realtime teacher-to-admin feedback conversations
+across the native profile and admin web profile, with replies, separate unread
+counts, resolve/reopen state, and scoped Firestore rules. Rules and admin web
+deployment plus live cross-client acceptance remain required. Checkpoint 5
+replaces the mixed Inter/Poppins presentation with one
+bold Poppins typography system across the native app. Checkpoint 4 adds
+Firebase Cloud Messaging reception for broadcast admin notices, with
+environment-specific topics and a dedicated Android notification channel.
+Checkpoint 3 clarifies the Add Entry custom-time action and corrects Profile
+theme previews for system, light, and dark modes. Checkpoint 2 polishes the
+local daily reminder setup with a drum-style time picker. Checkpoint 1 adds
+local daily entry reminders with one reminder per day, Monday through Saturday,
+at a teacher-selected time. Notification deep links and separate notice
+preferences remain pending.
 
 ### Deliverables
 

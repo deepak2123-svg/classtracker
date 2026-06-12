@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, collection,
-  getDocs, query, where, deleteDoc, runTransaction,
+  getDocs, query, where, deleteDoc, runTransaction, onSnapshot, orderBy, writeBatch, increment,
   collectionGroup, documentId,
 } from "firebase/firestore";
 import {
@@ -104,6 +104,76 @@ export async function logout() {
   }
 }
 export function onAuth(cb) { return onAuthStateChanged(auth, cb); }
+
+// ── Teacher feedback and admin replies ───────────────────────────────────────
+export function subscribeFeedbackThreads(onChange, onError = console.error) {
+  const threadsQuery = query(collection(db, "feedbackThreads"), orderBy("updatedAt", "desc"));
+  return onSnapshot(
+    threadsQuery,
+    snapshot => {
+      onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+    },
+    onError,
+  );
+}
+
+export function subscribeFeedbackMessages(uid, onChange, onError = console.error) {
+  const messagesQuery = query(
+    collection(db, "feedbackThreads", uid, "messages"),
+    orderBy("createdAt", "asc"),
+  );
+  return onSnapshot(
+    messagesQuery,
+    snapshot => {
+      onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+    },
+    onError,
+  );
+}
+
+export async function sendAdminFeedbackReply(uid, admin, body) {
+  const message = String(body || "").trim();
+  if (!message) throw new Error("Write a reply before sending.");
+  if (message.length > 2000) throw new Error("Replies must be 2000 characters or fewer.");
+
+  const now = Date.now();
+  const threadRef = doc(db, "feedbackThreads", uid);
+  const messageRef = doc(collection(db, "feedbackThreads", uid, "messages"));
+  const batch = writeBatch(db);
+  batch.set(messageRef, {
+    senderUid: admin?.uid || "",
+    senderRole: "admin",
+    senderName: admin?.displayName || admin?.email || "Admin",
+    body: message,
+    createdAt: now,
+  });
+  batch.set(threadRef, {
+    status: "open",
+    lastMessage: message.slice(0, 160),
+    lastSenderRole: "admin",
+    updatedAt: now,
+    unreadByAdmin: 0,
+    unreadByTeacher: increment(1),
+  }, { merge: true });
+  await batch.commit();
+}
+
+export async function markFeedbackThreadRead(uid) {
+  await setDoc(
+    doc(db, "feedbackThreads", uid),
+    { unreadByAdmin: 0 },
+    { merge: true },
+  );
+}
+
+export async function setFeedbackThreadStatus(uid, status) {
+  const nextStatus = status === "resolved" ? "resolved" : "open";
+  await setDoc(
+    doc(db, "feedbackThreads", uid),
+    { status: nextStatus, updatedAt: Date.now() },
+    { merge: true },
+  );
+}
 
 // ── User data — split architecture ───────────────────────────────────────────
 // Main doc  : users/{uid}/appdata/main         → metadata (classes, profile, trash etc.)

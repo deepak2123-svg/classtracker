@@ -1,6 +1,5 @@
 package com.classtracker.feature.classes
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,35 +17,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.classtracker.core.designsystem.LedgrPill
-import com.classtracker.core.designsystem.LedgrTheme.colors
-import com.classtracker.core.designsystem.ledgrSectionTone
 import com.classtracker.core.model.TeacherClass
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private val HeroInk = Color(0xFF202A55)
+private val HeroStatSurface = Color(0xFF3E486F)
+private val HeroMint = Color(0xFF63D9B5)
+private val HeroWarning = Color(0xFFFFF4C8)
 
 @Composable
 internal fun ClassDetailHero(
     teacherClass: TeacherClass,
     metrics: ClassDetailMetrics,
 ) {
-    val tone = ledgrSectionTone(teacherClass.sectionName)
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.5.dp, Color(0xFF0F172A).copy(alpha = 0.92f)),
-        shadowElevation = 4.dp,
+        color = HeroInk,
+        shape = RoundedCornerShape(22.dp),
+        shadowElevation = 0.dp,
     ) {
-        Column {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(13.dp),
+        ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(tone.surface)
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -55,12 +58,16 @@ internal fun ClassDetailHero(
                 ) {
                     Column(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
                             text = teacherClass.sectionName,
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = tone.text,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontSize = 23.sp,
+                                lineHeight = 27.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                            color = Color.White,
                         )
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -69,18 +76,18 @@ internal fun ClassDetailHero(
                             LedgrPill(
                                 text = teacherClass.instituteName.ifBlank { "No institute" },
                                 modifier = Modifier.weight(1f, fill = false),
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                contentColor = colors.textSecondary,
-                                borderColor = tone.border,
-                                leadingColor = tone.accent,
+                                containerColor = Color.White.copy(alpha = 0.14f),
+                                contentColor = Color.White,
+                                borderColor = Color.Transparent,
+                                leadingColor = HeroMint,
                             )
                             if (teacherClass.subjectName.isNotBlank()) {
                                 LedgrPill(
                                     text = teacherClass.subjectName,
                                     modifier = Modifier.weight(1f, fill = false),
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    contentColor = colors.textSecondary,
-                                    borderColor = tone.border,
+                                    containerColor = Color.White.copy(alpha = 0.14f),
+                                    contentColor = Color.White,
+                                    borderColor = Color.Transparent,
                                 )
                             }
                         }
@@ -91,8 +98,7 @@ internal fun ClassDetailHero(
 
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 HeroStat("Today", metrics.todayEntries.toString(), Modifier.weight(1f))
@@ -108,24 +114,23 @@ internal fun ClassDetailHero(
 private fun TodayStatusPill(todayEntries: Int) {
     val logged = todayEntries > 0
     Surface(
-        color = if (logged) colors.successSurface else colors.warningSurface,
-        contentColor = if (logged) colors.green else Color(0xFFB45309),
+        color = if (logged) Color(0xFFDFF8E8) else HeroWarning,
+        contentColor = if (logged) Color(0xFF176B3D) else Color(0xFF805E00),
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, if (logged) Color(0xFFBBF7D0) else Color(0xFFFED7AA)),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
                     .size(7.dp)
-                    .background(color = if (logged) colors.green else Color(0xFFB45309), shape = CircleShape),
+                    .background(color = if (logged) Color(0xFF18A05A) else Color(0xFFF59E0B), shape = CircleShape),
             )
             Text(
                 text = if (logged) "Logged today" else "Not logged today",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
             )
         }
     }
@@ -139,24 +144,27 @@ private fun HeroStat(
 ) {
     Surface(
         modifier = modifier,
-        color = colors.surfaceSoft,
+        color = HeroStatSurface,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 21.sp,
+                    lineHeight = 23.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+                color = Color.White,
             )
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.textSubtle,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.72f),
                 maxLines = 1,
             )
         }

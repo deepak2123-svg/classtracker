@@ -47,6 +47,19 @@ data class TeacherClass(
     val startTime: String?,
     val endTime: String?,
     val createdAt: Long = 0L,
+    val timeSlots: List<TeacherTimeSlot> = emptyList(),
+)
+
+data class TeacherTimeSlot(
+    val start: String,
+    val end: String,
+    val durationMinutes: Int,
+)
+
+data class TeacherClassDraft(
+    val instituteName: String,
+    val sectionName: String,
+    val subjectName: String = "",
 )
 
 data class TeacherProfile(
@@ -195,6 +208,21 @@ sealed interface TeacherEntryValidation {
     data class Overlap(val message: String) : TeacherEntryValidation
 }
 
+sealed interface TeacherClassValidation {
+    data object Valid : TeacherClassValidation
+    data class Invalid(val message: String) : TeacherClassValidation
+}
+
+fun validateTeacherClassDraft(draft: TeacherClassDraft): TeacherClassValidation {
+    if (draft.instituteName.trim().isBlank()) {
+        return TeacherClassValidation.Invalid("Select an institute before adding a class.")
+    }
+    if (draft.sectionName.trim().isBlank()) {
+        return TeacherClassValidation.Invalid("Enter the class or section name.")
+    }
+    return TeacherClassValidation.Valid
+}
+
 fun validateTeacherEntryDraft(
     draft: TeacherEntryDraft,
     existingEntries: List<TeacherEntry> = emptyList(),
@@ -278,6 +306,7 @@ data class TeacherSnapshot(
     val revision: Long,
     val isFromCache: Boolean = false,
     val loadedAtMillis: Long = 0L,
+    val availableSectionsByInstitute: Map<String, List<String>> = emptyMap(),
 ) {
     fun entriesForClass(classId: String): List<TeacherEntry> =
         entries.filter { it.classId == classId }

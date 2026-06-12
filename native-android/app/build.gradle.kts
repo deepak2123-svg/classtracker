@@ -38,8 +38,8 @@ android {
         applicationId = "com.classtracker.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.5.2"
+        versionCode = 11
+        versionName = "0.5.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -91,6 +91,7 @@ android {
             buildConfigField("boolean", "NATIVE_ENTRY_CREATE_ENABLED", "true")
             buildConfigField("boolean", "NATIVE_ENTRY_EDIT_ENABLED", "true")
             buildConfigField("boolean", "NATIVE_ENTRY_DELETE_ENABLED", "true")
+            buildConfigField("boolean", "NATIVE_CLASS_CREATE_ENABLED", "true")
             resValue("string", "app_name", "Ledgr Teacher Beta")
         }
         create("production") {
@@ -100,6 +101,7 @@ android {
             buildConfigField("boolean", "NATIVE_ENTRY_CREATE_ENABLED", "false")
             buildConfigField("boolean", "NATIVE_ENTRY_EDIT_ENABLED", "false")
             buildConfigField("boolean", "NATIVE_ENTRY_DELETE_ENABLED", "false")
+            buildConfigField("boolean", "NATIVE_CLASS_CREATE_ENABLED", "false")
             resValue("string", "app_name", "Ledgr Teacher")
         }
     }
@@ -175,6 +177,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.messaging)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material.icons.extended)

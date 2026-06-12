@@ -27,6 +27,53 @@ service cloud.firestore {
       allow write: if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
+    match /feedbackThreads/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        (
+          request.auth.uid == uid &&
+          request.resource.data.teacherUid == uid &&
+          request.resource.data.lastSenderRole == "teacher" &&
+          request.resource.data.status == "open"
+        )
+      );
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (
+          request.auth.uid == uid &&
+          request.resource.data.teacherUid == resource.data.teacherUid &&
+          request.resource.data.teacherUid == uid &&
+          request.resource.data.lastSenderRole == "teacher" &&
+          request.resource.data.status == "open" &&
+          request.resource.data.unreadByTeacher == resource.data.unreadByTeacher
+        ) ||
+        (
+          request.auth.uid == uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["unreadByTeacher"]) &&
+          request.resource.data.unreadByTeacher == 0
+        )
+      );
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+        allow create: if isSignedIn() && (
+          isAdmin() ||
+          (
+            request.auth.uid == uid &&
+            request.resource.data.senderUid == uid &&
+            request.resource.data.senderRole == "teacher" &&
+            request.resource.data.body is string &&
+            request.resource.data.body.size() > 0 &&
+            request.resource.data.body.size() <= 2000
+          )
+        );
+        allow update, delete: if false;
+      }
+    }
+
     match /config/{doc} {
       allow read:  if isSignedIn();
       allow write: if isAdmin();

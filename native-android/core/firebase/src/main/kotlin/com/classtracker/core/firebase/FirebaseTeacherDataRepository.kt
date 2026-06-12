@@ -1,6 +1,7 @@
 package com.classtracker.core.firebase
 
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherTrashedEntry
@@ -72,6 +73,17 @@ class FirebaseTeacherDataRepository(
         expectedRevision: Long,
         draft: TeacherEntryDraft,
     ): TeacherSnapshot = entryWriter.saveEntry(
+        teacher = teacher,
+        expectedRevision = expectedRevision,
+        draft = draft,
+        reload = { loadTeacherSnapshot(teacher) },
+    )
+
+    override suspend fun createClass(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        draft: TeacherClassDraft,
+    ): TeacherSnapshot = entryWriter.createClass(
         teacher = teacher,
         expectedRevision = expectedRevision,
         draft = draft,

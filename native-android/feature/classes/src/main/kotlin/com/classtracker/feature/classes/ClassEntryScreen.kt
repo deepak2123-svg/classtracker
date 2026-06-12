@@ -5,8 +5,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,9 +44,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrSectionHeading
+import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
@@ -116,7 +121,9 @@ fun ClassEntryScreen(
     val historyFilterActive = historyQuery.isNotBlank() || selectedStatusFilter.isNotBlank()
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .background(classEntryCanvasColor()),
         contentPadding = PaddingValues(
             start = 16.dp,
             top = 14.dp,
@@ -133,15 +140,6 @@ fun ClassEntryScreen(
             )
         }
 
-        // ── New entry section heading ─────────────────────────────────────────
-        item(key = "entry-heading") {
-            LedgrSectionHeading(
-                title = if (draft.entryId == null) "New entry" else "Edit entry",
-                supportingText = "Saved entries remain compatible with the teacher web app.",
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-
         // ── Recovered draft banner ────────────────────────────────────────────
         if (recoveredDraft) {
             item(key = "recovered-draft-banner") {
@@ -154,11 +152,21 @@ fun ClassEntryScreen(
             EntryEditorColumn(
                 draft = draft,
                 existingEntries = entries,
+                timeSlots = teacherClass.timeSlots,
                 saving = saving,
                 validation = validation,
                 onDraftChanged = onDraftChanged,
                 onSave = onSave,
             )
+        }
+
+        if (entries.isNotEmpty()) {
+            item(key = "history-section-break") {
+                ClassHistorySectionBreak(
+                    count = entries.size,
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+            }
         }
 
         // ── History filter card ───────────────────────────────────────────────
@@ -182,11 +190,11 @@ fun ClassEntryScreen(
         // ── All history heading ───────────────────────────────────────────────
         item(key = "history-heading") {
             LedgrSectionHeading(
-                title = "All history",
+                title = "Entries",
                 supportingText = if (historyFilterActive) {
                     "${filteredHistoryEntries.size} of ${entries.size} shown"
                 } else {
-                    "Newest entries first"
+                    "Newest first"
                 },
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -343,7 +351,7 @@ private fun ClassEntryHistoryFilterCard(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
-                        text = "HISTORY FILTERS",
+                        text = "FILTERS",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.textSubtle,
                     )
@@ -468,3 +476,40 @@ private val ClassEntryHistoryStatusFilters = listOf(
         TeacherEntryStatus.Doubts.label,
     ),
 )
+
+@Composable
+private fun ClassHistorySectionBreak(
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "CLASS HISTORY",
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+                color = colors.textMuted,
+            )
+            Text(
+                text = "$count ${if (count == 1) "entry" else "entries"} saved",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun classEntryCanvasColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else Color(0xFFEFEEE8)

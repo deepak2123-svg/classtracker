@@ -11,10 +11,12 @@ import {
   IconDownload,
   IconFileText,
   IconLogout,
+  IconMessageCircle,
   IconPhoto,
   IconPlus,
   IconSchool,
   IconSettings,
+  IconSend,
   IconTrash,
   IconUser,
   IconUsersGroup,
@@ -32,6 +34,8 @@ import {
   deleteInstituteCompletely, deleteInstituteAndMigrate,
   getAdminBin, saveAdminBin,
   getLedgrReportSchedule, saveLedgrReportSchedule,
+  subscribeFeedbackThreads, subscribeFeedbackMessages,
+  sendAdminFeedbackReply, markFeedbackThreadRead, setFeedbackThreadStatus,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
 
@@ -5210,6 +5214,111 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
   );
 }
 
+function FeedbackInboxModal({
+  threads,
+  selectedUid,
+  messages,
+  reply,
+  busy,
+  onSelect,
+  onReplyChange,
+  onSend,
+  onToggleResolved,
+  onClose,
+}){
+  const selected = threads.find(item=>item.id===selectedUid) || null;
+  const fmt = value => value
+    ? new Intl.DateTimeFormat("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(value))
+    : "";
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:750,background:"rgba(5,12,27,0.72)",display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(5px)"}}>
+      <style>{`
+        @media (max-width: 700px) {
+          .feedback-inbox-grid { grid-template-columns: 1fr !important; grid-template-rows: minmax(150px, 34%) minmax(0, 66%); }
+          .feedback-thread-list { border-right: 0 !important; border-bottom: 1px solid ${G.border}; }
+        }
+      `}</style>
+      <div style={{width:"min(980px,100%)",height:"min(720px,calc(100vh - 32px))",background:G.surface,borderRadius:20,border:`1px solid ${G.border}`,boxShadow:"0 28px 80px rgba(0,0,0,0.34)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"16px 18px",borderBottom:`1px solid ${G.border}`}}>
+          <div>
+            <div style={{fontFamily:G.display,fontSize:20,fontWeight:800,color:G.text}}>Teacher feedback</div>
+            <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Issues, feedback, and replies in one conversation per teacher.</div>
+          </div>
+          <button onClick={onClose} aria-label="Close feedback inbox" style={{width:38,height:38,borderRadius:12,border:`1px solid ${G.border}`,background:G.bg,color:G.text,fontSize:22,cursor:"pointer"}}>×</button>
+        </div>
+        <div className="feedback-inbox-grid" style={{display:"grid",gridTemplateColumns:"minmax(240px,34%) minmax(0,1fr)",flex:1,minHeight:0}}>
+          <div className="feedback-thread-list" style={{borderRight:`1px solid ${G.border}`,overflowY:"auto",background:G.bg,padding:10}}>
+            {threads.length===0&&(
+              <div style={{padding:"38px 18px",textAlign:"center",color:G.textM,fontSize:13,lineHeight:1.6}}>No teacher feedback has arrived yet.</div>
+            )}
+            {threads.map(thread=>{
+              const active=thread.id===selectedUid;
+              const unread=Number(thread.unreadByAdmin||0);
+              return (
+                <button key={thread.id} onClick={()=>onSelect(thread.id)} style={{width:"100%",border:active?`1px solid ${G.blueV}`:`1px solid ${G.border}`,background:active?G.blueL:G.surface,borderRadius:14,padding:"12px 13px",marginBottom:8,textAlign:"left",cursor:"pointer",fontFamily:G.sans}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{fontWeight:800,fontSize:13.5,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{thread.teacherName||"Teacher"}</div>
+                    {unread>0&&<span style={{minWidth:22,height:22,borderRadius:999,background:G.blue,color:"#fff",fontSize:10.5,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 6px"}}>{unread>9?"9+":unread}</span>}
+                  </div>
+                  <div style={{fontSize:11.5,color:G.textM,marginTop:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{thread.teacherEmail||thread.institutes?.join(", ")||"Teacher account"}</div>
+                  <div style={{fontSize:12,color:G.textS,marginTop:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{thread.lastMessage||"Conversation started"}</div>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:8,marginTop:8,fontSize:10.5,color:G.textL}}>
+                    <span>{fmt(thread.updatedAt)}</span>
+                    <span style={{fontWeight:700,color:thread.status==="resolved"?"#15803D":G.amber}}>{thread.status==="resolved"?"Resolved":"Open"}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",minWidth:0,minHeight:0}}>
+            {!selected?(
+              <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:30,textAlign:"center",color:G.textM}}>
+                Select a teacher conversation.
+              </div>
+            ):(
+              <>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"13px 16px",borderBottom:`1px solid ${G.border}`}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontWeight:800,color:G.text,fontSize:14.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selected.teacherName||"Teacher"}</div>
+                    <div style={{fontSize:11.5,color:G.textM,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selected.institutes?.join(", ")||selected.teacherEmail||""}</div>
+                  </div>
+                  <button disabled={busy} onClick={()=>onToggleResolved(selected)} style={{border:`1px solid ${selected.status==="resolved"?"#86EFAC":G.border}`,background:selected.status==="resolved"?"#F0FDF4":G.bg,color:selected.status==="resolved"?"#15803D":G.textS,borderRadius:10,padding:"7px 10px",fontSize:11.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                    {selected.status==="resolved"?"Reopen":"Mark resolved"}
+                  </button>
+                </div>
+                <div style={{flex:1,overflowY:"auto",padding:16,background:"#F8FAFC"}}>
+                  {messages.length===0&&<div style={{textAlign:"center",color:G.textM,fontSize:13,padding:30}}>Loading conversation…</div>}
+                  {messages.map(message=>{
+                    const admin=message.senderRole==="admin";
+                    return (
+                      <div key={message.id} style={{display:"flex",justifyContent:admin?"flex-end":"flex-start",marginBottom:10}}>
+                        <div style={{maxWidth:"78%",background:admin?G.navy:"#FFFFFF",color:admin?"#FFFFFF":G.text,border:admin?"none":`1px solid ${G.border}`,borderRadius:admin?"17px 17px 5px 17px":"17px 17px 17px 5px",padding:"10px 12px"}}>
+                          <div style={{fontSize:10.5,fontWeight:700,opacity:0.68,marginBottom:4}}>{admin?"You":message.senderName||selected.teacherName||"Teacher"}</div>
+                          <div style={{fontSize:13,lineHeight:1.55,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{message.body}</div>
+                          <div style={{fontSize:10,opacity:0.58,marginTop:6}}>{fmt(message.createdAt)}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <form onSubmit={event=>{event.preventDefault();onSend();}} style={{padding:13,borderTop:`1px solid ${G.border}`,background:G.surface}}>
+                  <textarea value={reply} onChange={event=>onReplyChange(event.target.value.slice(0,2000))} rows={3} placeholder="Reply to this teacher…" style={{width:"100%",resize:"none",border:`1px solid ${G.borderM}`,borderRadius:12,padding:"10px 12px",fontFamily:G.sans,fontSize:13,color:G.text,outline:"none",boxSizing:"border-box"}}/>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:8}}>
+                    <span style={{fontSize:10.5,color:G.textL}}>{reply.length}/2000</span>
+                    <button type="submit" disabled={busy||!reply.trim()} style={{display:"inline-flex",alignItems:"center",gap:7,border:0,borderRadius:10,padding:"9px 14px",background:busy||!reply.trim()?G.borderM:G.blue,color:"#fff",fontWeight:800,fontSize:12.5,cursor:busy?"wait":"pointer"}}>
+                      <AppIcon icon={IconSend} size={15} color="#fff"/>{busy?"Sending…":"Send reply"}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminPanelInner({user}){
   const PANEL_LIMITS = React.useMemo(()=>({
     p1:{ min:112, max:340, collapsed:76, default:175 },
@@ -5279,6 +5388,12 @@ function AdminPanelInner({user}){
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute"|"section", ...data, deletedAt}]
   const [binView,      setBinView]      = useState(false);
   const [profileOpen,  setProfileOpen]  = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackThreads, setFeedbackThreads] = useState([]);
+  const [feedbackSelectedUid, setFeedbackSelectedUid] = useState(null);
+  const [feedbackMessages, setFeedbackMessages] = useState([]);
+  const [feedbackReply, setFeedbackReply] = useState("");
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
   const [selTeacher,   setSelTeacher]   = useState(null); // uid of teacher in detail modal
   const [newInstName,  setNewInstName]  = useState(""); // new institute input
   const [renamingInst,  setRenamingInst]  = useState(null);
@@ -5395,6 +5510,63 @@ function AdminPanelInner({user}){
       getAllInstituteSections().then(s=>setInstSectionsAll(s||{})).catch(()=>{});
     }
   },[view]);
+
+  React.useEffect(()=>{
+    return subscribeFeedbackThreads(
+      items=>{
+        setFeedbackThreads(items);
+        setFeedbackSelectedUid(current=>current && items.some(item=>item.id===current)
+          ? current
+          : items[0]?.id || null);
+      },
+      error=>console.error("feedback threads",error),
+    );
+  },[]);
+
+  React.useEffect(()=>{
+    if(!feedbackSelectedUid){
+      setFeedbackMessages([]);
+      return undefined;
+    }
+    markFeedbackThreadRead(feedbackSelectedUid).catch(()=>{});
+    return subscribeFeedbackMessages(
+      feedbackSelectedUid,
+      setFeedbackMessages,
+      error=>console.error("feedback messages",error),
+    );
+  },[feedbackSelectedUid]);
+
+  const feedbackUnreadCount = useMemo(
+    ()=>feedbackThreads.reduce((sum,item)=>sum+Number(item.unreadByAdmin||0),0),
+    [feedbackThreads],
+  );
+  const openFeedbackInbox = React.useCallback(()=>{
+    setProfileOpen(false);
+    setFeedbackOpen(true);
+  },[]);
+  const sendFeedbackReply = React.useCallback(async()=>{
+    if(!feedbackSelectedUid || !feedbackReply.trim() || feedbackBusy) return;
+    setFeedbackBusy(true);
+    try{
+      await sendAdminFeedbackReply(feedbackSelectedUid,user,feedbackReply);
+      setFeedbackReply("");
+    }catch(error){
+      showAdminToast(error?.message||"Reply could not be sent.");
+    }finally{
+      setFeedbackBusy(false);
+    }
+  },[feedbackSelectedUid,feedbackReply,feedbackBusy,user]);
+  const toggleFeedbackResolved = React.useCallback(async thread=>{
+    if(!thread || feedbackBusy) return;
+    setFeedbackBusy(true);
+    try{
+      await setFeedbackThreadStatus(thread.id,thread.status==="resolved"?"open":"resolved");
+    }catch(error){
+      showAdminToast(error?.message||"Conversation status could not be changed.");
+    }finally{
+      setFeedbackBusy(false);
+    }
+  },[feedbackBusy]);
 
   React.useEffect(()=>{
     panelWRef.current = panelW;
@@ -11308,6 +11480,20 @@ function AdminPanelInner({user}){
     const MobileProfileScreen = () => (
       <div style={mobilePageShellStyle}>
         <MobileMotionStyles />
+        {feedbackOpen&&(
+          <FeedbackInboxModal
+            threads={feedbackThreads}
+            selectedUid={feedbackSelectedUid}
+            messages={feedbackMessages}
+            reply={feedbackReply}
+            busy={feedbackBusy}
+            onSelect={uid=>{setFeedbackSelectedUid(uid);markFeedbackThreadRead(uid).catch(()=>{});}}
+            onReplyChange={setFeedbackReply}
+            onSend={sendFeedbackReply}
+            onToggleResolved={toggleFeedbackResolved}
+            onClose={()=>setFeedbackOpen(false)}
+          />
+        )}
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
         <AdminToastBanner message={adminToast} />
@@ -11404,6 +11590,13 @@ function AdminPanelInner({user}){
           </div>
 
           <div style={{display:"grid",gap:10}}>
+            <MobileProfileAction
+              icon={IconMessageCircle}
+              title="Teacher Feedback"
+              subtitle="Read issues and reply directly to teachers."
+              badge={feedbackUnreadCount>0 ? feedbackUnreadCount : null}
+              onClick={openFeedbackInbox}
+            />
             <MobileProfileAction
               icon={IconTrash}
               title="Recycle Bin"
@@ -12275,6 +12468,20 @@ function AdminPanelInner({user}){
   // ── DESKTOP: original 4-panel layout ─────────────────────────────────────
   return(
     <div style={{minHeight:"100svh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
+      {feedbackOpen&&(
+        <FeedbackInboxModal
+          threads={feedbackThreads}
+          selectedUid={feedbackSelectedUid}
+          messages={feedbackMessages}
+          reply={feedbackReply}
+          busy={feedbackBusy}
+          onSelect={uid=>{setFeedbackSelectedUid(uid);markFeedbackThreadRead(uid).catch(()=>{});}}
+          onReplyChange={setFeedbackReply}
+          onSend={sendFeedbackReply}
+          onToggleResolved={toggleFeedbackResolved}
+          onClose={()=>setFeedbackOpen(false)}
+        />
+      )}
       {binView&&<AdminBinModal/>}
       {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
       {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
@@ -12440,6 +12647,18 @@ function AdminPanelInner({user}){
                     </div>
                   </button>
                   </div>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.36)",fontFamily:G.mono,margin:"2px 4px 8px"}}>Communication</div>
+                  <button onClick={openFeedbackInbox}
+                    style={{width:"100%",marginBottom:10,padding:"10px 12px",background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left"}}>
+                    <div style={{width:30,height:30,borderRadius:8,background:"rgba(59,130,246,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <AppIcon icon={IconMessageCircle} size={16} color="#93C5FD" />
+                    </div>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.9)"}}>Teacher Feedback</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>Read issues and send replies</div>
+                    </div>
+                    {feedbackUnreadCount>0&&<span style={{background:"#3B82F6",color:"#fff",borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:800}}>{feedbackUnreadCount>9?"9+":feedbackUnreadCount}</span>}
+                  </button>
                   <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.36)",fontFamily:G.mono,margin:"2px 4px 8px"}}>Recovery</div>
                   <button onClick={()=>{setProfileOpen(false);setBinView(true);}}
                     style={{width:"100%",marginBottom:5,padding:"10px 12px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:"rgba(255,255,255,0.75)",fontSize:13,fontFamily:G.sans,fontWeight:600,textAlign:"left",transition:"background 0.15s"}}

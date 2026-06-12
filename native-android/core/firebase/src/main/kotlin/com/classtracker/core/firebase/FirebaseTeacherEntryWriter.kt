@@ -1,12 +1,15 @@
 package com.classtracker.core.firebase
 
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClassDraft
+import com.classtracker.core.model.TeacherClassValidation
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherEntryValidation
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.resolvedEntryId
+import com.classtracker.core.model.validateTeacherClassDraft
 import com.classtracker.core.model.validateTeacherEntryDraft
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -101,6 +104,90 @@ internal class FirebaseTeacherEntryWriter(
             )
 
             transaction.set(notesReference, updatedNotes)
+            transaction.set(mainReference, updatedMain)
+            transaction.set(
+                teacherReference,
+                buildTeacherIndexPatch(
+                    teacher = teacher,
+                    main = updatedMain,
+                    revision = nextRevision,
+                    savedAt = now,
+                ),
+                SetOptions.merge(),
+            )
+            transaction.set(backupReference, backupPayload)
+            transaction.set(historyReference, backupPayload)
+        }.await()
+
+        runCatching { pruneBackupHistory(teacher.uid) }
+        return reload()
+    }
+
+    suspend fun createClass(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        draft: TeacherClassDraft,
+        reload: suspend () -> TeacherSnapshot,
+    ): TeacherSnapshot {
+        when (val validation = validateTeacherClassDraft(draft)) {
+            TeacherClassValidation.Valid -> Unit
+            is TeacherClassValidation.Invalid -> {
+                throw TeacherEntryConflictException(validation.message)
+            }
+        }
+
+        val mainReference = firestore.document("users/${teacher.uid}/appdata/main")
+        val teacherReference = firestore.document("teachers/${teacher.uid}")
+        val backupReference = firestore.document(
+            "users/${teacher.uid}/appdata/main_backup_latest",
+        )
+        val now = System.currentTimeMillis()
+        val classId = now.toString()
+        val notesReference = firestore.document(
+            "users/${teacher.uid}/appdata/notes_$classId",
+        )
+
+        firestore.runTransaction { transaction ->
+            val mainSnapshot = transaction.get(mainReference)
+            if (!mainSnapshot.exists()) throw TeacherDataMissingException()
+
+            val main = mainSnapshot.data.orEmpty()
+            val actualRevision = main.nestedMap("_meta").longValue("revision")
+            if (actualRevision != expectedRevision) {
+                throw TeacherRevisionConflictException(
+                    expectedRevision = expectedRevision,
+                    actualRevision = actualRevision,
+                )
+            }
+
+            val nextRevision = actualRevision + 1
+            val source = "nativeCreateClass"
+            val updatedMain = addLegacyClass(
+                main = main,
+                classMap = buildLegacyClassMap(
+                    draft = draft,
+                    classId = classId,
+                    createdAt = now,
+                ),
+            ).withRevision(
+                revision = nextRevision,
+                previousRevision = actualRevision,
+                updatedAt = now,
+                source = source,
+            )
+            val backupId = "${nextRevision.toString().padStart(6, '0')}_$now"
+            val backupPayload = buildBackupPayload(
+                main = updatedMain,
+                revision = nextRevision,
+                savedAt = now,
+                source = source,
+                backupId = backupId,
+            )
+            val historyReference = firestore.document(
+                "users/${teacher.uid}/appdata/main_backup_$backupId",
+            )
+
+            transaction.set(notesReference, emptyMap<String, Any?>())
             transaction.set(mainReference, updatedMain)
             transaction.set(
                 teacherReference,
@@ -348,6 +435,45 @@ private fun mapLegacyEntriesForMutation(
             timeEnd = map.string("timeEnd").ifBlank { null },
             teacherName = map.string("teacherName").ifBlank { null },
             createdAt = map.longValue("created"),
+        )
+    }
+}
+
+internal fun buildLegacyClassMap(
+    draft: TeacherClassDraft,
+    classId: String,
+    createdAt: Long,
+): Map<String, Any?> = linkedMapOf(
+    "id" to classId,
+    "institute" to draft.instituteName.trim(),
+    "section" to draft.sectionName.trim(),
+    "subject" to draft.subjectName.trim(),
+    "created" to createdAt,
+)
+
+internal fun addLegacyClass(
+    main: Map<String, Any?>,
+    classMap: Map<String, Any?>,
+): Map<String, Any?> {
+    val institute = classMap.string("institute")
+    val section = classMap.string("section")
+    val subject = classMap.string("subject")
+    val profile = main.nestedMap("profile")
+    return main.toMutableMap().apply {
+        put("classes", legacyClassMaps(main) + classMap)
+        put("institutes", uniqueLabels(stringListValue("institutes") + institute))
+        put("sections", uniqueLabels(stringListValue("sections") + section))
+        put("subjects", uniqueLabels(stringListValue("subjects") + subject))
+        put(
+            "profile",
+            profile.toMutableMap().apply {
+                put("institutes", uniqueLabels(stringListValue("institutes") + institute))
+                if (subject.isNotBlank()) {
+                    put("subjects", uniqueLabels(stringListValue("subjects") + subject))
+                } else {
+                    putIfAbsent("subjects", stringListValue("subjects"))
+                }
+            },
         )
     }
 }

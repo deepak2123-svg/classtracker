@@ -4,6 +4,7 @@ import com.classtracker.core.database.TeacherLocalDataSource
 import com.classtracker.core.firebase.TeacherDataRepository
 import com.classtracker.core.firebase.TeacherRemoteDataSource
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
@@ -59,6 +60,21 @@ class OfflineTeacherDataRepository @Inject constructor(
             expectedRevision = expectedRevision,
             draft = draft,
         )
+        scheduler.enqueue(teacher.uid)
+        return snapshot
+    }
+
+    override suspend fun createClass(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        draft: TeacherClassDraft,
+    ): TeacherSnapshot {
+        val snapshot = remote.createClass(
+            teacher = teacher,
+            expectedRevision = expectedRevision,
+            draft = draft,
+        )
+        local.replaceSnapshot(teacher.uid, snapshot)
         scheduler.enqueue(teacher.uid)
         return snapshot
     }
