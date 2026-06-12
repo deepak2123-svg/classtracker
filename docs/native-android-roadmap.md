@@ -146,7 +146,9 @@ filters, a profile-launched reports screen, and text summary export.
 
 ## Phase 6: Notifications and reminders
 
-Status: checkpoint 6 adds realtime teacher-to-admin feedback conversations
+Status: checkpoint 7 prevents unavailable feedback permissions from closing
+the signed-in beta app, contains the failure inside the feedback screen, and
+adds regression and live-device startup coverage. Checkpoint 6 adds realtime teacher-to-admin feedback conversations
 across the native profile and admin web profile, with replies, separate unread
 counts, resolve/reopen state, and scoped Firestore rules. Rules and admin web
 deployment plus live cross-client acceptance remain required. Checkpoint 5

@@ -199,6 +199,7 @@ fun LedgrApp(
             classSaved = state.classSaved,
             syncSummary = state.syncSummary,
             feedbackConversation = state.feedbackConversation,
+            feedbackErrorMessage = state.feedbackErrorMessage,
             sendingFeedback = state.sendingFeedback,
             feedbackSent = state.feedbackSent,
             themeMode = themeMode,
@@ -234,6 +235,7 @@ private fun TeacherApp(
     classSaved: Boolean,
     syncSummary: TeacherSyncSummary,
     feedbackConversation: com.classtracker.core.model.TeacherFeedbackConversation,
+    feedbackErrorMessage: String?,
     sendingFeedback: Boolean,
     feedbackSent: Boolean,
     themeMode: LedgrThemeMode,
@@ -652,6 +654,7 @@ private fun TeacherApp(
                         }
                         FeedbackScreen(
                             conversation = feedbackConversation,
+                            unavailableMessage = feedbackErrorMessage,
                             sending = sendingFeedback,
                             sent = feedbackSent,
                             onSend = onSendFeedback,

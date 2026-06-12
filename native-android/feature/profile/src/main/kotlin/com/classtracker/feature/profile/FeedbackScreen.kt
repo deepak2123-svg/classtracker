@@ -47,6 +47,7 @@ import java.util.Locale
 @Composable
 fun FeedbackScreen(
     conversation: TeacherFeedbackConversation,
+    unavailableMessage: String?,
     sending: Boolean,
     sent: Boolean,
     onSend: (String) -> Unit,
@@ -107,7 +108,11 @@ fun FeedbackScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (conversation.messages.isEmpty()) {
+            if (unavailableMessage != null) {
+                item {
+                    UnavailableFeedback(unavailableMessage)
+                }
+            } else if (conversation.messages.isEmpty()) {
                 item {
                     EmptyFeedback()
                 }
@@ -148,10 +153,11 @@ fun FeedbackScreen(
                         )
                     },
                     shape = RoundedCornerShape(16.dp),
+                    enabled = unavailableMessage == null,
                 )
                 Button(
                     onClick = { onSend(draft) },
-                    enabled = draft.isNotBlank() && !sending,
+                    enabled = unavailableMessage == null && draft.isNotBlank() && !sending,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = colors.teal,
@@ -170,6 +176,23 @@ fun FeedbackScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun UnavailableFeedback(message: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -182,6 +183,32 @@ class MainViewModelTest {
         viewModel.consumeFeedbackSent()
         assertFalse(viewModel.state.value.feedbackSent)
     }
+
+    @Test
+    fun feedbackListenerFailureDoesNotCrashSignedInWorkspace() = runTest(dispatcher) {
+        val teacher = AuthenticatedTeacher(
+            uid = "teacher-1",
+            displayName = "Teacher",
+            email = "teacher@example.com",
+            photoUrl = null,
+        )
+        val authRepository = FakeAuthRepository()
+        val viewModel = MainViewModel(
+            authRepository,
+            FakeDataRepository(snapshotFor(teacher)),
+            FailingFeedbackRepository(),
+        )
+
+        authRepository.sessions.value = AuthSession.SignedIn(teacher)
+        advanceUntilIdle()
+
+        assertEquals("teacher-1", viewModel.state.value.snapshot?.profile?.uid)
+        assertEquals(
+            "Feedback is temporarily unavailable.",
+            viewModel.state.value.feedbackErrorMessage,
+        )
+        assertEquals(null, viewModel.state.value.errorMessage)
+    }
 }
 
 private class RevisionConflictRepository(
@@ -253,6 +280,20 @@ private class FakeFeedbackRepository : TeacherFeedbackRepository {
     ) {
         sentBodies += body
     }
+
+    override suspend fun markTeacherRead(uid: String) = Unit
+}
+
+private class FailingFeedbackRepository : TeacherFeedbackRepository {
+    override fun observeConversation(uid: String): Flow<TeacherFeedbackConversation> = flow {
+        error("Missing or insufficient permissions.")
+    }
+
+    override suspend fun sendMessage(
+        teacher: AuthenticatedTeacher,
+        profile: TeacherProfile,
+        body: String,
+    ) = Unit
 
     override suspend fun markTeacherRead(uid: String) = Unit
 }

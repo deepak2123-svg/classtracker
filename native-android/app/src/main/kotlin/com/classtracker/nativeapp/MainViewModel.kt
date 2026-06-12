@@ -33,6 +33,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -51,6 +52,7 @@ data class MainUiState(
     val classSaved: Boolean = false,
     val syncSummary: TeacherSyncSummary = TeacherSyncSummary.Idle,
     val feedbackConversation: TeacherFeedbackConversation = TeacherFeedbackConversation(),
+    val feedbackErrorMessage: String? = null,
     val sendingFeedback: Boolean = false,
     val feedbackSent: Boolean = false,
     val errorMessage: String? = null,
@@ -549,9 +551,23 @@ class MainViewModel @Inject constructor(
     private fun observeFeedback(uid: String) {
         feedbackJob?.cancel()
         feedbackJob = viewModelScope.launch {
-            feedbackRepository.observeConversation(uid).collectLatest { conversation ->
-                mutableState.update { it.copy(feedbackConversation = conversation) }
-            }
+            feedbackRepository.observeConversation(uid)
+                .catch {
+                    mutableState.update {
+                        it.copy(
+                            feedbackConversation = TeacherFeedbackConversation(),
+                            feedbackErrorMessage = "Feedback is temporarily unavailable.",
+                        )
+                    }
+                }
+                .collectLatest { conversation ->
+                    mutableState.update {
+                        it.copy(
+                            feedbackConversation = conversation,
+                            feedbackErrorMessage = null,
+                        )
+                    }
+                }
         }
     }
 
