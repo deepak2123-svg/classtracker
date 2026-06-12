@@ -39,18 +39,27 @@ Device acceptance:
 - Feedback opened with `Feedback is temporarily unavailable.`
 - Feedback input and send action were disabled.
 
-## Remaining Deployment Gate
+## Firestore Rules Deployment
 
-The crash is fixed independently of backend deployment. Feedback messaging
-will remain unavailable until an authenticated Firebase CLI deploys the rules:
+Completed on 2026-06-12 using the authenticated Firebase account
+`deepakkarnal321@gmail.com`:
 
 ```powershell
-firebase login
 firebase deploy --only firestore:rules --project classtracker-84920
 ```
 
-After deployment, restart the beta app and complete teacher-to-admin reply
-acceptance from checkpoint 6.
+Firebase compiled and released `firestore.rules` successfully.
+
+Post-deployment device verification:
+
+- restarted the beta app;
+- feedback unavailable state was absent;
+- feedback message field was enabled;
+- no `PERMISSION_DENIED`, `FirebaseFirestoreException`, or fatal exception
+  appeared in logcat.
+
+Full teacher-send, admin-reply, resolve, and reopen acceptance from checkpoint
+6 remains pending.
 
 ## Safety Boundary
 

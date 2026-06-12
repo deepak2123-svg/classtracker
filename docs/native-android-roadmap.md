@@ -148,10 +148,12 @@ filters, a profile-launched reports screen, and text summary export.
 
 Status: checkpoint 7 prevents unavailable feedback permissions from closing
 the signed-in beta app, contains the failure inside the feedback screen, and
-adds regression and live-device startup coverage. Checkpoint 6 adds realtime teacher-to-admin feedback conversations
+adds regression and live-device startup coverage. The required Firestore rules
+are now deployed and the feedback composer reconnects successfully on device.
+Checkpoint 6 adds realtime teacher-to-admin feedback conversations
 across the native profile and admin web profile, with replies, separate unread
-counts, resolve/reopen state, and scoped Firestore rules. Rules and admin web
-deployment plus live cross-client acceptance remain required. Checkpoint 5
+counts, resolve/reopen state, and scoped Firestore rules. Admin web deployment
+plus live cross-client acceptance remain required. Checkpoint 5
 replaces the mixed Inter/Poppins presentation with one
 bold Poppins typography system across the native app. Checkpoint 4 adds
 Firebase Cloud Messaging reception for broadcast admin notices, with
