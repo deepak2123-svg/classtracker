@@ -101,6 +101,9 @@ Checkpoint 22 returns the teacher to Home immediately after a successful inline
 entry save. It also reduces accidental class changes by raising both class
 pagers' positional swipe threshold from the framework default to 72% and
 limiting a gesture to one class.
+Checkpoint 23 makes entry typing keyboard-aware. Topic and Notes now
+automatically move fully above the soft keyboard when focused, while both
+standalone and inline entry lists reserve IME space for comfortable editing.
 Checkpoint 18 adds beta-only Profile class management and recoverable class
 deletion using the existing web/admin `trash.classes` shape. It also returns
 Home immediately when a valid class submission begins while the protected

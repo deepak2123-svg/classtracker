@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +26,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -52,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
@@ -60,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -79,6 +84,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 private val EntryCanvas = Color(0xFFEFEEE8)
@@ -162,7 +169,8 @@ fun EntryEditorScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(entryCanvasColor()),
+            .background(entryCanvasColor())
+            .imePadding(),
         contentPadding = PaddingValues(
             start = 16.dp,
             top = 14.dp,
@@ -1198,8 +1206,13 @@ private fun EntryTextBox(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     singleLine: Boolean,
 ) {
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester),
         color = entrySurfaceColor(),
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, entryBorderColor()),
@@ -1230,7 +1243,15 @@ private fun EntryTextBox(
                     onValueChange = onValueChange,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 14.dp, vertical = if (singleLine) 0.dp else 12.dp),
+                        .padding(horizontal = 14.dp, vertical = if (singleLine) 0.dp else 12.dp)
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused) {
+                                scope.launch {
+                                    delay(180)
+                                    bringIntoViewRequester.bringIntoView()
+                                }
+                            }
+                        },
                     textStyle = MaterialTheme.typography.titleLarge.copy(
                         fontSize = 18.sp,
                         lineHeight = 24.sp,

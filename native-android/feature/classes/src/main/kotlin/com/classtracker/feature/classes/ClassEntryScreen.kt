@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -136,7 +137,8 @@ fun ClassEntryScreen(
         state = listState,
         modifier = modifier
             .fillMaxSize()
-            .background(classEntryCanvasColor()),
+            .background(classEntryCanvasColor())
+            .imePadding(),
         contentPadding = PaddingValues(
             start = 16.dp,
             top = 14.dp,
