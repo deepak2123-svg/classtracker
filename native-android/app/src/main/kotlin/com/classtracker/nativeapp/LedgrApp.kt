@@ -198,6 +198,7 @@ fun LedgrApp(
             savingEntry = state.savingEntry,
             savingClass = state.savingClass,
             deletingClassId = state.deletingClassId,
+            deletingAllTrashedEntries = state.deletingAllTrashedEntries,
             entrySaved = state.entrySaved,
             classSaved = state.classSaved,
             syncSummary = state.syncSummary,
@@ -215,6 +216,7 @@ fun LedgrApp(
             onDeleteClass = viewModel::deleteClass,
             onDeleteEntry = viewModel::deleteEntry,
             onRestoreEntry = viewModel::restoreEntry,
+            onDeleteAllTrashedEntries = viewModel::deleteAllTrashedEntries,
             onConsumeEntrySaved = viewModel::consumeEntrySaved,
             onConsumeClassSaved = viewModel::consumeClassSaved,
             onRetrySync = viewModel::retrySync,
@@ -236,6 +238,7 @@ private fun TeacherApp(
     savingEntry: Boolean,
     savingClass: Boolean,
     deletingClassId: String?,
+    deletingAllTrashedEntries: Boolean,
     entrySaved: Boolean,
     classSaved: Boolean,
     syncSummary: TeacherSyncSummary,
@@ -253,6 +256,7 @@ private fun TeacherApp(
     onDeleteClass: (TeacherClass) -> Unit,
     onDeleteEntry: (TeacherEntry, TeacherClass) -> Unit,
     onRestoreEntry: (TeacherTrashedEntry) -> Unit,
+    onDeleteAllTrashedEntries: () -> Unit,
     onConsumeEntrySaved: () -> Unit,
     onConsumeClassSaved: () -> Unit,
     onRetrySync: () -> Unit,
@@ -671,13 +675,30 @@ private fun TeacherApp(
                             entries = snapshot.entries,
                             deletingClassId = deletingClassId,
                             deleteEnabled = BuildConfig.NATIVE_CLASS_DELETE_ENABLED,
-                            onDeleteClass = onDeleteClass,
+                            onDeleteClass = { teacherClass ->
+                                onDeleteClass(teacherClass)
+                                navController.navigate(AppDestination.Home.route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        inclusive = false
+                                    }
+                                    launchSingleTop = true
+                                }
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Moving class to recycle bin...",
+                                        duration = androidx.compose.material3.SnackbarDuration.Short,
+                                    )
+                                }
+                            },
                         )
                     }
                     composable(RecycleBinRoute) {
                         RecycleBinScreen(
                             trashedEntries = snapshot.trashedEntries,
                             onRestoreEntry = onRestoreEntry,
+                            deletingAll = deletingAllTrashedEntries,
+                            deleteAllEnabled = BuildConfig.NATIVE_ENTRY_DELETE_ENABLED,
+                            onDeleteAll = onDeleteAllTrashedEntries,
                         )
                     }
                     composable(ReportsRoute) {

@@ -42,6 +42,13 @@ interface TeacherRemoteDataSource {
         expectedRevision: Long,
         entry: TeacherTrashedEntry,
     ): TeacherSnapshot
+
+    suspend fun deleteAllTrashedEntries(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+    ): TeacherSnapshot = throw UnsupportedOperationException(
+        "Permanent recycle-bin deletion is unavailable.",
+    )
 }
 
 interface TeacherDataRepository : TeacherRemoteDataSource {

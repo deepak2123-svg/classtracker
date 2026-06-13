@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.RestoreFromTrash
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,9 +29,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -55,8 +59,52 @@ import java.util.Locale
 fun RecycleBinScreen(
     trashedEntries: List<TeacherTrashedEntry>,
     onRestoreEntry: (TeacherTrashedEntry) -> Unit,
+    deletingAll: Boolean,
+    deleteAllEnabled: Boolean,
+    onDeleteAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showDeleteAllConfirmation by remember { mutableStateOf(false) }
+
+    if (showDeleteAllConfirmation && trashedEntries.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllConfirmation = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.DeleteForever,
+                    contentDescription = null,
+                )
+            },
+            title = { Text("Delete all entries permanently?") },
+            text = {
+                Text(
+                    "This permanently deletes all ${trashedEntries.size} recycle-bin " +
+                        "${if (trashedEntries.size == 1) "entry" else "entries"}. " +
+                        "This cannot be undone. Deleted classes are not affected.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAllConfirmation = false
+                        onDeleteAll()
+                    },
+                    enabled = !deletingAll,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = colors.red,
+                    ),
+                ) {
+                    Text("Delete all permanently", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAllConfirmation = false }) {
+                    Text("Cancel", fontWeight = FontWeight.Bold)
+                }
+            },
+        )
+    }
+
     if (trashedEntries.isEmpty()) {
         Box(
             modifier = modifier.fillMaxSize(),
@@ -91,7 +139,12 @@ fun RecycleBinScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "bin-summary") {
-            BinSummaryBanner(count = trashedEntries.size)
+            BinSummaryBanner(
+                count = trashedEntries.size,
+                deletingAll = deletingAll,
+                deleteAllEnabled = deleteAllEnabled,
+                onDeleteAll = { showDeleteAllConfirmation = true },
+            )
         }
 
         grouped.forEach { (groupKey, groupEntries) ->
@@ -137,37 +190,74 @@ fun RecycleBinScreen(
 // ── Summary banner ────────────────────────────────────────────────────────────
 
 @Composable
-private fun BinSummaryBanner(count: Int) {
+private fun BinSummaryBanner(
+    count: Int,
+    deletingAll: Boolean,
+    deleteAllEnabled: Boolean,
+    onDeleteAll: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = colors.warningSurface,
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, colors.textMuted.copy(alpha = 0.18f)),
     ) {
-        Row(
+        Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(
-                imageVector = Icons.Outlined.DeleteForever,
-                contentDescription = null,
-                tint = colors.textSecondary,
-                modifier = Modifier.size(24.dp),
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "$count deleted ${if (count == 1) "entry" else "entries"}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DeleteForever,
+                    contentDescription = null,
+                    tint = colors.textSecondary,
+                    modifier = Modifier.size(24.dp),
                 )
-                Text(
-                    text = "Restore entries to move them back to their class.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textMuted,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "$count deleted ${if (count == 1) "entry" else "entries"}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Restore entries or permanently clear the recycle bin.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+            if (deleteAllEnabled) {
+                Button(
+                    onClick = onDeleteAll,
+                    enabled = !deletingAll,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.red,
+                        contentColor = androidx.compose.ui.graphics.Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    if (deletingAll) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = androidx.compose.ui.graphics.Color.White,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.DeleteForever,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Delete all entries", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

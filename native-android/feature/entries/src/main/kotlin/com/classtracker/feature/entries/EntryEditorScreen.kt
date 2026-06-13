@@ -143,6 +143,21 @@ fun EntryEditorScreen(
     val validation = remember(draft, existingEntries) {
         validateTeacherEntryDraft(draft, existingEntries)
     }
+    var showCustomTimeFields by rememberSaveable(
+        teacherClass.id,
+        draft.entryId,
+        teacherClass.timeSlots,
+    ) {
+        mutableStateOf(
+            teacherClass.timeSlots.isEmpty() ||
+                (
+                    draft.timeStart.isNotBlank() &&
+                        teacherClass.timeSlots.none { slot ->
+                            slot.start == draft.timeStart && slot.end == draft.timeEnd
+                        }
+                    ),
+        )
+    }
 
     LazyColumn(
         modifier = modifier
@@ -210,11 +225,13 @@ fun EntryEditorScreen(
                 draft = draft,
                 existingEntries = existingEntries,
                 timeSlots = teacherClass.timeSlots,
+                showCustomTimeFields = showCustomTimeFields,
+                onShowCustomTimeFields = { showCustomTimeFields = it },
                 onDraftChanged = onDraftChanged,
             )
         }
 
-        if (draft.timeStart.isNotBlank()) {
+        if (showCustomTimeFields && draft.timeStart.isNotBlank()) {
             item {
                 DurationCard(
                     draft = draft,
@@ -369,12 +386,11 @@ private fun ScheduleCard(
     draft: TeacherEntryDraft,
     existingEntries: List<TeacherEntry>,
     timeSlots: List<TeacherTimeSlot>,
+    showCustomTimeFields: Boolean,
+    onShowCustomTimeFields: (Boolean) -> Unit,
     onDraftChanged: (TeacherEntryDraft) -> Unit,
 ) {
     var timePickerTarget by remember { mutableStateOf<TimePickerTarget?>(null) }
-    var showCustomTimeFields by rememberSaveable(draft.classId, timeSlots.isEmpty()) {
-        mutableStateOf(timeSlots.isEmpty())
-    }
     val usedStarts = remember(existingEntries, draft.dateKey, draft.entryId) {
         existingEntries
             .filter { entry ->
@@ -430,8 +446,9 @@ private fun ScheduleCard(
                     selectedStart = draft.timeStart,
                     selectedEnd = draft.timeEnd,
                     showCustomTimeFields = showCustomTimeFields,
-                    onCustomTimeClick = { showCustomTimeFields = true },
+                    onCustomTimeClick = { onShowCustomTimeFields(true) },
                     onSlotSelected = { slot ->
+                        onShowCustomTimeFields(false)
                         onDraftChanged(
                             draft.copy(
                                 timeStart = slot.start,
@@ -1665,6 +1682,17 @@ fun EntryEditorColumn(
     // Only show validation errors after the user has tapped Save at least once.
     // Resets whenever the draft's mutationId changes (i.e. after a successful save).
     var saveAttempted by remember(draft.mutationId) { mutableStateOf(false) }
+    var showCustomTimeFields by rememberSaveable(draft.classId, draft.entryId, timeSlots) {
+        mutableStateOf(
+            timeSlots.isEmpty() ||
+                (
+                    draft.timeStart.isNotBlank() &&
+                        timeSlots.none { slot ->
+                            slot.start == draft.timeStart && slot.end == draft.timeEnd
+                        }
+                    ),
+        )
+    }
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -1673,10 +1701,12 @@ fun EntryEditorColumn(
             draft = draft,
             existingEntries = existingEntries,
             timeSlots = timeSlots,
+            showCustomTimeFields = showCustomTimeFields,
+            onShowCustomTimeFields = { showCustomTimeFields = it },
             onDraftChanged = onDraftChanged,
         )
 
-        if (draft.timeStart.isNotBlank()) {
+        if (showCustomTimeFields && draft.timeStart.isNotBlank()) {
             DurationCard(
                 draft = draft,
                 onDraftChanged = onDraftChanged,

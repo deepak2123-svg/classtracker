@@ -237,11 +237,58 @@ class MainViewModelTest {
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
         advanceUntilIdle()
         viewModel.deleteClass(teacherClass)
+
+        assertEquals(emptyList<TeacherClass>(), viewModel.state.value.snapshot?.classes)
+        assertEquals("class-1", viewModel.state.value.deletingClassId)
+
         advanceUntilIdle()
 
         assertEquals(1, dataRepository.deleteClassCount)
         assertEquals(emptyList<TeacherClass>(), viewModel.state.value.snapshot?.classes)
         assertEquals(null, viewModel.state.value.deletingClassId)
+    }
+
+    @Test
+    fun deletingAllTrashedEntriesClearsBinOptimistically() = runTest(dispatcher) {
+        val teacher = AuthenticatedTeacher(
+            uid = "teacher-1",
+            displayName = "Teacher",
+            email = "teacher@example.com",
+            photoUrl = null,
+        )
+        val trashedEntry = TeacherTrashedEntry(
+            id = "entry-1",
+            classId = "class-1",
+            className = "11th",
+            instituteName = "Institute",
+            dateKey = "2026-06-07",
+            title = "Motion",
+            body = "",
+            tag = "note",
+            status = "completed",
+            timeStart = "09:00",
+            timeEnd = "10:00",
+            teacherName = "Teacher",
+            createdAt = 1L,
+            deletedAt = 2L,
+        )
+        val original = snapshotFor(teacher).copy(trashedEntries = listOf(trashedEntry))
+        val updated = original.copy(trashedEntries = emptyList(), revision = 2L)
+        val authRepository = FakeAuthRepository()
+        val dataRepository = FakeDataRepository(original, updated)
+        val viewModel = MainViewModel(authRepository, dataRepository, FakeFeedbackRepository())
+
+        authRepository.sessions.value = AuthSession.SignedIn(teacher)
+        advanceUntilIdle()
+        viewModel.deleteAllTrashedEntries()
+
+        assertEquals(emptyList<TeacherTrashedEntry>(), viewModel.state.value.snapshot?.trashedEntries)
+        assertEquals(true, viewModel.state.value.deletingAllTrashedEntries)
+
+        advanceUntilIdle()
+
+        assertEquals(1, dataRepository.deleteAllTrashedEntriesCount)
+        assertFalse(viewModel.state.value.deletingAllTrashedEntries)
     }
 }
 
@@ -342,6 +389,8 @@ private class FakeDataRepository(
         private set
     var deleteClassCount: Int = 0
         private set
+    var deleteAllTrashedEntriesCount: Int = 0
+        private set
 
     override suspend fun loadTeacherSnapshot(
         teacher: AuthenticatedTeacher,
@@ -385,6 +434,14 @@ private class FakeDataRepository(
         expectedRevision: Long,
         entry: TeacherTrashedEntry,
     ): TeacherSnapshot = savedSnapshot
+
+    override suspend fun deleteAllTrashedEntries(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+    ): TeacherSnapshot {
+        deleteAllTrashedEntriesCount += 1
+        return savedSnapshot
+    }
 }
 
 private fun snapshotFor(teacher: AuthenticatedTeacher): TeacherSnapshot =

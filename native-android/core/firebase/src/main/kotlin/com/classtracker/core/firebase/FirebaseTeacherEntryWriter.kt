@@ -474,6 +474,70 @@ internal class FirebaseTeacherEntryWriter(
         return reload()
     }
 
+    suspend fun deleteAllTrashedEntries(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        reload: suspend () -> TeacherSnapshot,
+    ): TeacherSnapshot {
+        val mainReference = firestore.document("users/${teacher.uid}/appdata/main")
+        val teacherReference = firestore.document("teachers/${teacher.uid}")
+        val backupReference = firestore.document(
+            "users/${teacher.uid}/appdata/main_backup_latest",
+        )
+
+        firestore.runTransaction { transaction ->
+            val mainSnapshot = transaction.get(mainReference)
+            if (!mainSnapshot.exists()) throw TeacherDataMissingException()
+
+            val main = mainSnapshot.data.orEmpty()
+            val actualRevision = main.nestedMap("_meta").longValue("revision")
+            if (actualRevision != expectedRevision) {
+                throw TeacherRevisionConflictException(
+                    expectedRevision = expectedRevision,
+                    actualRevision = actualRevision,
+                )
+            }
+
+            val now = System.currentTimeMillis()
+            val nextRevision = actualRevision + 1
+            val source = "nativeDeleteAllTrashEntries"
+            val updatedMain = clearLegacyTrashNotes(main).withRevision(
+                revision = nextRevision,
+                previousRevision = actualRevision,
+                updatedAt = now,
+                source = source,
+            )
+            val backupId = "${nextRevision.toString().padStart(6, '0')}_$now"
+            val backupPayload = buildBackupPayload(
+                main = updatedMain,
+                revision = nextRevision,
+                savedAt = now,
+                source = source,
+                backupId = backupId,
+            )
+            val historyReference = firestore.document(
+                "users/${teacher.uid}/appdata/main_backup_$backupId",
+            )
+
+            transaction.set(mainReference, updatedMain)
+            transaction.set(
+                teacherReference,
+                buildTeacherIndexPatch(
+                    teacher = teacher,
+                    main = updatedMain,
+                    revision = nextRevision,
+                    savedAt = now,
+                ),
+                SetOptions.merge(),
+            )
+            transaction.set(backupReference, backupPayload)
+            transaction.set(historyReference, backupPayload)
+        }.await()
+
+        runCatching { pruneBackupHistory(teacher.uid) }
+        return reload()
+    }
+
     private suspend fun pruneBackupHistory(uid: String) {
         val appData = firestore.collection("users/$uid/appdata").get().await()
         appData.documents
@@ -678,6 +742,21 @@ internal fun addLegacyTrashNote(
             "trash",
             trash.toMutableMap().apply {
                 put("notes", existingNotes + trashEntry)
+                putIfAbsent("classes", (trash["classes"] as? List<*>).orEmpty())
+            },
+        )
+    }
+}
+
+internal fun clearLegacyTrashNotes(
+    main: Map<String, Any?>,
+): Map<String, Any?> {
+    val trash = main.nestedMap("trash")
+    return main.toMutableMap().apply {
+        put(
+            "trash",
+            trash.toMutableMap().apply {
+                put("notes", emptyList<Map<String, Any?>>())
                 putIfAbsent("classes", (trash["classes"] as? List<*>).orEmpty())
             },
         )

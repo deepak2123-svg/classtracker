@@ -123,4 +123,13 @@ class FirebaseTeacherDataRepository(
         entry = entry,
         reload = { loadTeacherSnapshot(teacher) },
     )
+
+    override suspend fun deleteAllTrashedEntries(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+    ): TeacherSnapshot = entryWriter.deleteAllTrashedEntries(
+        teacher = teacher,
+        expectedRevision = expectedRevision,
+        reload = { loadTeacherSnapshot(teacher) },
+    )
 }

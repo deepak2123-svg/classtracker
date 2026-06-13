@@ -84,10 +84,15 @@ Status: completed as part of
 
 ## Phase 4: Core teacher workflows
 
-Status: checkpoint 18 adds beta-only Profile class management and recoverable
-class deletion using the existing web/admin `trash.classes` shape. It also
-returns Home immediately when a valid class submission begins while the
-protected remote transaction completes. Phase 5 checkpoint 5 adds follow-up
+Status: checkpoint 19 makes class deletion optimistic so the class disappears
+and navigation returns immediately while the recoverable remote transaction
+continues. It also hides entry Duration unless the teacher opens custom time
+and adds beta-only permanent clearing of recycle-bin entries with explicit
+confirmation while preserving deleted classes.
+Checkpoint 18 adds beta-only Profile class management and recoverable class
+deletion using the existing web/admin `trash.classes` shape. It also returns
+Home immediately when a valid class submission begins while the protected
+remote transaction completes. Phase 5 checkpoint 5 adds follow-up
 interaction polish by returning to Home after successful class creation and
 making the selected timetable slot visually explicit. Checkpoint 11 adds
 beta-gated native class creation from Home using the existing web-compatible

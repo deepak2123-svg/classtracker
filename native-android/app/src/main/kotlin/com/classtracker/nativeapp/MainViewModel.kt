@@ -48,6 +48,7 @@ data class MainUiState(
     val savingEntry: Boolean = false,
     val savingClass: Boolean = false,
     val deletingClassId: String? = null,
+    val deletingAllTrashedEntries: Boolean = false,
     val mutatingEntry: Boolean = false,
     val entrySaved: Boolean = false,
     val classSaved: Boolean = false,
@@ -354,13 +355,17 @@ class MainViewModel @Inject constructor(
         val snapshot = current.snapshot ?: return
         if (current.deletingClassId != null) return
 
+        mutableState.update {
+            it.copy(
+                snapshot = snapshot.copy(
+                    classes = snapshot.classes.filterNot { item -> item.id == teacherClass.id },
+                    entries = snapshot.entries.filterNot { entry -> entry.classId == teacherClass.id },
+                ),
+                deletingClassId = teacherClass.id,
+                errorMessage = null,
+            )
+        }
         viewModelScope.launch {
-            mutableState.update {
-                it.copy(
-                    deletingClassId = teacherClass.id,
-                    errorMessage = null,
-                )
-            }
             runCatching {
                 dataRepository.deleteClass(
                     teacher = teacher,
@@ -398,6 +403,7 @@ class MainViewModel @Inject constructor(
                 } else {
                     mutableState.update {
                         it.copy(
+                            snapshot = snapshot,
                             deletingClassId = null,
                             errorMessage = error.toFriendlyMessage(),
                         )
@@ -462,6 +468,67 @@ class MainViewModel @Inject constructor(
                 expectedRevision = snapshot.revision,
                 entry = entry,
             )
+        }
+    }
+
+    fun deleteAllTrashedEntries() {
+        val current = mutableState.value
+        val teacher = current.teacher ?: return
+        val snapshot = current.snapshot ?: return
+        if (current.deletingAllTrashedEntries || snapshot.trashedEntries.isEmpty()) return
+
+        mutableState.update {
+            it.copy(
+                snapshot = snapshot.copy(trashedEntries = emptyList()),
+                deletingAllTrashedEntries = true,
+                errorMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            runCatching {
+                dataRepository.deleteAllTrashedEntries(
+                    teacher = teacher,
+                    expectedRevision = snapshot.revision,
+                )
+            }.onSuccess { updatedSnapshot ->
+                mutableState.update {
+                    it.copy(
+                        snapshot = updatedSnapshot.withAvailableSections(),
+                        deletingAllTrashedEntries = false,
+                        errorMessage = null,
+                    )
+                }
+            }.onFailure { error ->
+                if (error is TeacherRevisionConflictException) {
+                    runCatching { dataRepository.loadTeacherSnapshot(teacher) }
+                        .onSuccess { latestSnapshot ->
+                            mutableState.update {
+                                it.copy(
+                                    snapshot = latestSnapshot.withAvailableSections(),
+                                    deletingAllTrashedEntries = false,
+                                    errorMessage = "Newer web changes were loaded. Review the recycle bin and try again.",
+                                )
+                            }
+                        }
+                        .onFailure { refreshError ->
+                            mutableState.update {
+                                it.copy(
+                                    snapshot = snapshot,
+                                    deletingAllTrashedEntries = false,
+                                    errorMessage = refreshError.toFriendlyMessage(),
+                                )
+                            }
+                        }
+                } else {
+                    mutableState.update {
+                        it.copy(
+                            snapshot = snapshot,
+                            deletingAllTrashedEntries = false,
+                            errorMessage = error.toFriendlyMessage(),
+                        )
+                    }
+                }
+            }
         }
     }
 

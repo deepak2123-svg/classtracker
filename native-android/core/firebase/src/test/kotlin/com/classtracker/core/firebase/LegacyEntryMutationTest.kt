@@ -204,4 +204,24 @@ class LegacyEntryMutationTest {
         assertEquals(savedNotes, trashedClass["savedNotes"])
         assertEquals(1, (trash["notes"] as List<*>).size)
     }
+
+    @Test
+    fun clearingTrashNotesPreservesTrashedClasses() {
+        val trashedClass = mapOf("id" to "class-1", "section" to "11th")
+        val main = mapOf(
+            "trash" to mapOf(
+                "classes" to listOf(trashedClass),
+                "notes" to listOf(
+                    mapOf("id" to "entry-1"),
+                    mapOf("id" to "entry-2"),
+                ),
+            ),
+        )
+
+        val updated = clearLegacyTrashNotes(main)
+        val trash = updated["trash"] as Map<*, *>
+
+        assertEquals(emptyList<Any>(), trash["notes"])
+        assertEquals(listOf(trashedClass), trash["classes"])
+    }
 }
