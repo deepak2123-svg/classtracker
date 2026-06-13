@@ -318,8 +318,8 @@ private fun TeacherApp(
         }
     }
 
-    LaunchedEffect(entrySaved) {
-        if (entrySaved) {
+    LaunchedEffect(entrySaved, isClassEntry, isEntryEditor) {
+        if (entrySaved && !isClassEntry && !isEntryEditor) {
             snackbarHostState.showSnackbar(
                 message = "✓ Entry saved successfully",
                 duration = androidx.compose.material3.SnackbarDuration.Short,
@@ -1230,15 +1230,28 @@ private fun ClassEntryPagerRoute(
             var draft by remember(teacher.uid, pageClass.id) {
                 mutableStateOf(recovered?.draft ?: baseDraft)
             }
+            var editorVisible by rememberSaveable(teacher.uid, pageClass.id) {
+                mutableStateOf(true)
+            }
+            var recoveredDraftVisible by rememberSaveable(teacher.uid, pageClass.id) {
+                mutableStateOf(recovered != null)
+            }
+            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+            val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
-            LaunchedEffect(entrySaved, pageClass.id) {
-                if (entrySaved) {
+            LaunchedEffect(entrySaved, pageClass.id, pagerState.currentPage) {
+                if (entrySaved && pagerState.currentPage == page) {
                     draftStore.clear(
                         uid = teacher.uid,
                         classId = pageClass.id,
                         entryId = draftKeyEntryId,
                     )
                     draft = baseDraft.copy(mutationId = "native_${UUID.randomUUID()}")
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                    recoveredDraftVisible = false
+                    editorVisible = false
+                    onConsumeEntrySaved()
                 }
             }
 
@@ -1248,10 +1261,11 @@ private fun ClassEntryPagerRoute(
                 trashedEntries = classTrashedEntries,
                 draft = draft,
                 saving = savingEntry,
-                recoveredDraft = recovered != null,
+                recoveredDraft = recoveredDraftVisible,
                 createEnabled = createEnabled,
                 editEnabled = editEnabled,
                 deleteEnabled = deleteEnabled,
+                editorVisible = editorVisible,
                 onDraftChanged = { updated ->
                     draft = updated
                     draftStore.write(
@@ -1261,6 +1275,7 @@ private fun ClassEntryPagerRoute(
                     )
                 },
                 onSave = onSaveEntry,
+                onAddAnotherEntry = { editorVisible = true },
                 onEditEntry = { entry -> onEditEntry(pageClass.id, entry) },
                 onDuplicateEntry = { entry -> onDuplicateEntry(pageClass.id, entry) },
                 onDeleteEntry = { entry -> onDeleteEntry(entry, pageClass) },

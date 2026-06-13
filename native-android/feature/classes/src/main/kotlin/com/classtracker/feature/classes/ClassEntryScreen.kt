@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -27,6 +28,8 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -81,8 +84,10 @@ fun ClassEntryScreen(
     createEnabled: Boolean = false,
     editEnabled: Boolean = false,
     deleteEnabled: Boolean = false,
+    editorVisible: Boolean = true,
     onDraftChanged: (TeacherEntryDraft) -> Unit,
     onSave: (TeacherEntryDraft) -> Unit,
+    onAddAnotherEntry: () -> Unit = {},
     onEditEntry: (TeacherEntry) -> Unit = {},
     onDuplicateEntry: (TeacherEntry) -> Unit = {},
     onDeleteEntry: (TeacherEntry) -> Unit = {},
@@ -119,8 +124,16 @@ fun ClassEntryScreen(
         )
     }
     val historyFilterActive = historyQuery.isNotBlank() || selectedStatusFilter.isNotBlank()
+    val listState = rememberLazyListState()
+
+    androidx.compose.runtime.LaunchedEffect(editorVisible, entries.size) {
+        if (!editorVisible && entries.isNotEmpty()) {
+            listState.animateScrollToItem(1)
+        }
+    }
 
     LazyColumn(
+        state = listState,
         modifier = modifier
             .fillMaxSize()
             .background(classEntryCanvasColor()),
@@ -148,16 +161,18 @@ fun ClassEntryScreen(
         }
 
         // ── Inline entry editor ───────────────────────────────────────────────
-        item(key = "entry-editor") {
-            EntryEditorColumn(
-                draft = draft,
-                existingEntries = entries,
-                timeSlots = teacherClass.timeSlots,
-                saving = saving,
-                validation = validation,
-                onDraftChanged = onDraftChanged,
-                onSave = onSave,
-            )
+        if (editorVisible) {
+            item(key = "entry-editor") {
+                EntryEditorColumn(
+                    draft = draft,
+                    existingEntries = entries,
+                    timeSlots = teacherClass.timeSlots,
+                    saving = saving,
+                    validation = validation,
+                    onDraftChanged = onDraftChanged,
+                    onSave = onSave,
+                )
+            }
         }
 
         if (entries.isNotEmpty()) {
@@ -166,6 +181,26 @@ fun ClassEntryScreen(
                     count = entries.size,
                     modifier = Modifier.padding(top = 14.dp),
                 )
+            }
+        }
+
+        if (!editorVisible) {
+            item(key = "add-another-entry") {
+                Button(
+                    onClick = onAddAnotherEntry,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.teal,
+                        contentColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(vertical = 13.dp),
+                ) {
+                    Text(
+                        text = "Add another entry",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
 

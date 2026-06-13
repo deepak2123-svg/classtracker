@@ -93,6 +93,10 @@ Checkpoint 20 adds beta-only permanent deletion for individual recycle-bin
 entries and twice-confirmed teacher account deletion. Account deletion removes
 Firebase sign-in access while preserving all organisation-owned classes and
 entries; Admin Manage Teachers marks the teacher as having left the workspace.
+Checkpoint 21 closes the inline entry editor after a successful save, dismisses
+the keyboard, and moves the teacher directly to the newly updated class history.
+It also makes both per-entry recycle-bin actions explicit with `Restore entry`
+and `Delete entry` labels alongside the existing bulk delete action.
 Checkpoint 18 adds beta-only Profile class management and recoverable class
 deletion using the existing web/admin `trash.classes` shape. It also returns
 Home immediately when a valid class submission begins while the protected

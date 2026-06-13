@@ -422,7 +422,7 @@ fun TrashedEntryCard(
                         )
                         Spacer(modifier = Modifier.width(7.dp))
                         Text(
-                            text = if (failed) "Retry" else "Restore",
+                            text = if (failed) "Retry restore" else "Restore entry",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                         )
@@ -446,7 +446,11 @@ fun TrashedEntryCard(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(modifier = Modifier.width(7.dp))
-                        Text("Delete", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Delete entry",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
                     }
                 }
             }
