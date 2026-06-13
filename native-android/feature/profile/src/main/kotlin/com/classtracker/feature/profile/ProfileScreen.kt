@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +62,7 @@ fun ProfileScreen(
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
     onOpenStats: () -> Unit,
+    onOpenManageClasses: () -> Unit,
     onOpenReports: () -> Unit,
     onOpenRecycleBin: () -> Unit,
     reminderEnabled: Boolean,
@@ -118,6 +120,15 @@ fun ProfileScreen(
                 subtitle = "See teaching hours and class breakdowns.",
                 accent = Color(0xFF1455B3),
                 onClick = onOpenStats,
+            )
+        }
+        item {
+            ProfileActionCard(
+                icon = Icons.Outlined.School,
+                title = "Manage Classes",
+                subtitle = "Review active classes or move a class to the recycle bin.",
+                accent = Color(0xFF0F766E),
+                onClick = onOpenManageClasses,
             )
         }
         item {
@@ -606,6 +617,7 @@ private fun ProfileScreenPreview() {
             themeMode = LedgrThemeMode.Light,
             onThemeModeChange = {},
             onOpenStats = {},
+            onOpenManageClasses = {},
             onOpenReports = {},
             onOpenRecycleBin = {},
             reminderEnabled = true,

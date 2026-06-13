@@ -1,6 +1,7 @@
 package com.classtracker.core.firebase
 
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherClassValidation
 import com.classtracker.core.model.TeacherEntry
@@ -194,6 +195,83 @@ internal class FirebaseTeacherEntryWriter(
                 buildTeacherIndexPatch(
                     teacher = teacher,
                     main = updatedMain,
+                    revision = nextRevision,
+                    savedAt = now,
+                ),
+                SetOptions.merge(),
+            )
+            transaction.set(backupReference, backupPayload)
+            transaction.set(historyReference, backupPayload)
+        }.await()
+
+        runCatching { pruneBackupHistory(teacher.uid) }
+        return reload()
+    }
+
+    suspend fun deleteClass(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        teacherClass: TeacherClass,
+        reload: suspend () -> TeacherSnapshot,
+    ): TeacherSnapshot {
+        val mainReference = firestore.document("users/${teacher.uid}/appdata/main")
+        val notesReference = firestore.document(
+            "users/${teacher.uid}/appdata/notes_${teacherClass.id}",
+        )
+        val teacherReference = firestore.document("teachers/${teacher.uid}")
+        val backupReference = firestore.document(
+            "users/${teacher.uid}/appdata/main_backup_latest",
+        )
+        val now = System.currentTimeMillis()
+
+        firestore.runTransaction { transaction ->
+            val mainSnapshot = transaction.get(mainReference)
+            if (!mainSnapshot.exists()) throw TeacherDataMissingException()
+            val notesSnapshot = transaction.get(notesReference)
+
+            val main = mainSnapshot.data.orEmpty()
+            val actualRevision = main.nestedMap("_meta").longValue("revision")
+            if (actualRevision != expectedRevision) {
+                throw TeacherRevisionConflictException(
+                    expectedRevision = expectedRevision,
+                    actualRevision = actualRevision,
+                )
+            }
+
+            val updatedMain = trashLegacyClass(
+                main = main,
+                classId = teacherClass.id,
+                savedNotes = notesSnapshot.data.orEmpty(),
+                deletedAt = now,
+                deletedByName = teacher.displayName.orEmpty(),
+            ) ?: throw TeacherEntryConflictException("This class is no longer available.")
+            val nextRevision = actualRevision + 1
+            val source = "nativeDeleteClass"
+            val revisionedMain = updatedMain.withRevision(
+                revision = nextRevision,
+                previousRevision = actualRevision,
+                updatedAt = now,
+                source = source,
+            )
+            val backupId = "${nextRevision.toString().padStart(6, '0')}_$now"
+            val backupPayload = buildBackupPayload(
+                main = revisionedMain,
+                revision = nextRevision,
+                savedAt = now,
+                source = source,
+                backupId = backupId,
+            )
+            val historyReference = firestore.document(
+                "users/${teacher.uid}/appdata/main_backup_$backupId",
+            )
+
+            transaction.set(mainReference, revisionedMain)
+            transaction.delete(notesReference)
+            transaction.set(
+                teacherReference,
+                buildTeacherIndexPatch(
+                    teacher = teacher,
+                    main = revisionedMain,
                     revision = nextRevision,
                     savedAt = now,
                 ),
@@ -473,6 +551,37 @@ internal fun addLegacyClass(
                 } else {
                     putIfAbsent("subjects", stringListValue("subjects"))
                 }
+            },
+        )
+    }
+}
+
+internal fun trashLegacyClass(
+    main: Map<String, Any?>,
+    classId: String,
+    savedNotes: Map<String, Any?>,
+    deletedAt: Long,
+    deletedByName: String,
+): Map<String, Any?>? {
+    val classes = legacyClassMaps(main)
+    val classMap = classes.firstOrNull { it.string("id") == classId } ?: return null
+    val trash = main.nestedMap("trash")
+    val trashClasses = (trash["classes"] as? List<*>)
+        .orEmpty()
+        .mapNotNull(Any?::asStringMap)
+        .filterNot { it.string("id") == classId }
+    val trashedClass = classMap.toMutableMap().apply {
+        put("deletedAt", deletedAt)
+        put("savedNotes", savedNotes)
+        if (deletedByName.isNotBlank()) put("deletedByName", deletedByName)
+    }
+    return main.toMutableMap().apply {
+        put("classes", classes.filterNot { it.string("id") == classId })
+        put(
+            "trash",
+            trash.toMutableMap().apply {
+                put("classes", trashClasses + trashedClass)
+                putIfAbsent("notes", (trash["notes"] as? List<*>).orEmpty())
             },
         )
     }

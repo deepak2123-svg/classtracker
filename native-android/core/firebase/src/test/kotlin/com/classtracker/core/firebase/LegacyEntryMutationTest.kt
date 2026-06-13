@@ -161,4 +161,47 @@ class LegacyEntryMutationTest {
         assertEquals(emptyList<Any>(), ((restored?.main?.get("trash") as Map<*, *>)["notes"]))
         assertEquals("Motion", restored.trashEntry["title"])
     }
+
+    @Test
+    fun classTrashPreservesClassAndNotesInWebCompatibleShape() {
+        val main = mapOf(
+            "classes" to listOf(
+                mapOf(
+                    "id" to "class-1",
+                    "section" to "11th",
+                    "institute" to "Institute",
+                    "subject" to "GS",
+                    "created" to 100L,
+                ),
+                mapOf("id" to "class-2", "section" to "12th"),
+            ),
+            "trash" to mapOf(
+                "classes" to emptyList<Map<String, Any?>>(),
+                "notes" to listOf(mapOf("id" to "entry-trash")),
+            ),
+        )
+        val savedNotes = mapOf(
+            "2026-06-13" to listOf(mapOf("id" to "entry-1", "title" to "Motion")),
+        )
+
+        val updated = requireNotNull(
+            trashLegacyClass(
+                main = main,
+                classId = "class-1",
+                savedNotes = savedNotes,
+                deletedAt = 500L,
+                deletedByName = "Deepak",
+            ),
+        )
+        val activeClasses = updated["classes"] as List<*>
+        val trash = updated["trash"] as Map<*, *>
+        val trashedClass = (trash["classes"] as List<*>).single() as Map<*, *>
+
+        assertEquals("class-2", (activeClasses.single() as Map<*, *>)["id"])
+        assertEquals("class-1", trashedClass["id"])
+        assertEquals(500L, trashedClass["deletedAt"])
+        assertEquals("Deepak", trashedClass["deletedByName"])
+        assertEquals(savedNotes, trashedClass["savedNotes"])
+        assertEquals(1, (trash["notes"] as List<*>).size)
+    }
 }

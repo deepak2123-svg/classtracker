@@ -89,6 +89,7 @@ import com.classtracker.feature.classes.ClassHistoryScreen
 import com.classtracker.feature.classes.StatsScreen
 import com.classtracker.feature.entries.EntryEditorScreen
 import com.classtracker.feature.profile.ProfileScreen
+import com.classtracker.feature.profile.ManageClassesScreen
 import com.classtracker.feature.profile.FeedbackScreen
 import com.classtracker.feature.profile.RecycleBinScreen
 import com.classtracker.feature.profile.ReportsScreen
@@ -109,6 +110,7 @@ private const val ReportsRoute = "reports"
 private const val FeedbackRoute = "feedback"
 private const val ClassPagerSnapMillis = 170
 private const val AddClassRoute = "add-class"
+private const val ManageClassesRoute = "manage-classes"
 private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
 private const val EditEntryRoute = "entry/edit/{classId}/{entryId}"
 private const val DuplicateEntryRoute = "entry/duplicate/{classId}/{entryId}"
@@ -195,6 +197,7 @@ fun LedgrApp(
             errorMessage = state.errorMessage,
             savingEntry = state.savingEntry,
             savingClass = state.savingClass,
+            deletingClassId = state.deletingClassId,
             entrySaved = state.entrySaved,
             classSaved = state.classSaved,
             syncSummary = state.syncSummary,
@@ -209,6 +212,7 @@ fun LedgrApp(
             onClearError = viewModel::clearError,
             onSaveEntry = viewModel::saveEntry,
             onCreateClass = viewModel::createClass,
+            onDeleteClass = viewModel::deleteClass,
             onDeleteEntry = viewModel::deleteEntry,
             onRestoreEntry = viewModel::restoreEntry,
             onConsumeEntrySaved = viewModel::consumeEntrySaved,
@@ -231,6 +235,7 @@ private fun TeacherApp(
     errorMessage: String?,
     savingEntry: Boolean,
     savingClass: Boolean,
+    deletingClassId: String?,
     entrySaved: Boolean,
     classSaved: Boolean,
     syncSummary: TeacherSyncSummary,
@@ -245,6 +250,7 @@ private fun TeacherApp(
     onClearError: () -> Unit,
     onSaveEntry: (TeacherEntryDraft) -> Unit,
     onCreateClass: (TeacherClassDraft) -> Unit,
+    onDeleteClass: (TeacherClass) -> Unit,
     onDeleteEntry: (TeacherEntry, TeacherClass) -> Unit,
     onRestoreEntry: (TeacherTrashedEntry) -> Unit,
     onConsumeEntrySaved: () -> Unit,
@@ -266,11 +272,12 @@ private fun TeacherApp(
     val isReports = currentRoute == ReportsRoute
     val isFeedback = currentRoute == FeedbackRoute
     val isAddClass = currentRoute == AddClassRoute
+    val isManageClasses = currentRoute == ManageClassesRoute
     val isEntryEditor = currentRoute == NewEntryRoute ||
         currentRoute == EditEntryRoute ||
         currentRoute == DuplicateEntryRoute
     val isDetailRoute = isClassEntry || isClassHistory || isRecycleBin ||
-        isReports || isFeedback || isAddClass || isEntryEditor
+        isReports || isFeedback || isAddClass || isManageClasses || isEntryEditor
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -379,6 +386,11 @@ private fun TeacherApp(
                     } else if (isAddClass) {
                         Text(
                             text = "Add class",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    } else if (isManageClasses) {
+                        Text(
+                            text = "Manage classes",
                             style = MaterialTheme.typography.titleLarge,
                         )
                     } else if (isClassEntry) {
@@ -586,7 +598,21 @@ private fun TeacherApp(
                             availableSectionsByInstitute = snapshot.availableSectionsByInstitute,
                             subjectOptions = snapshot.profile.subjects,
                             saving = savingClass,
-                            onSaveClass = onCreateClass,
+                            onSaveClass = { draft ->
+                                onCreateClass(draft)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Adding class...",
+                                        duration = androidx.compose.material3.SnackbarDuration.Short,
+                                    )
+                                }
+                                navController.navigate(AppDestination.Home.route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        inclusive = false
+                                    }
+                                    launchSingleTop = true
+                                }
+                            },
                         )
                     }
                     composable(AppDestination.Stats.route) {
@@ -617,6 +643,9 @@ private fun TeacherApp(
                                     restoreState = true
                                 }
                             },
+                            onOpenManageClasses = {
+                                navController.navigate(ManageClassesRoute)
+                            },
                             onOpenReports = {
                                 navController.navigate(ReportsRoute)
                             },
@@ -634,6 +663,15 @@ private fun TeacherApp(
                                 navController.navigate(FeedbackRoute)
                             },
                             onSignOut = onSignOut,
+                        )
+                    }
+                    composable(ManageClassesRoute) {
+                        ManageClassesScreen(
+                            classes = snapshot.classes,
+                            entries = snapshot.entries,
+                            deletingClassId = deletingClassId,
+                            deleteEnabled = BuildConfig.NATIVE_CLASS_DELETE_ENABLED,
+                            onDeleteClass = onDeleteClass,
                         )
                     }
                     composable(RecycleBinRoute) {

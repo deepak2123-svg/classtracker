@@ -47,6 +47,7 @@ data class MainUiState(
     val refreshing: Boolean = false,
     val savingEntry: Boolean = false,
     val savingClass: Boolean = false,
+    val deletingClassId: String? = null,
     val mutatingEntry: Boolean = false,
     val entrySaved: Boolean = false,
     val classSaved: Boolean = false,
@@ -339,6 +340,65 @@ class MainViewModel @Inject constructor(
                     mutableState.update {
                         it.copy(
                             savingClass = false,
+                            errorMessage = error.toFriendlyMessage(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun deleteClass(teacherClass: TeacherClass) {
+        val current = mutableState.value
+        val teacher = current.teacher ?: return
+        val snapshot = current.snapshot ?: return
+        if (current.deletingClassId != null) return
+
+        viewModelScope.launch {
+            mutableState.update {
+                it.copy(
+                    deletingClassId = teacherClass.id,
+                    errorMessage = null,
+                )
+            }
+            runCatching {
+                dataRepository.deleteClass(
+                    teacher = teacher,
+                    expectedRevision = snapshot.revision,
+                    teacherClass = teacherClass,
+                )
+            }.onSuccess { updatedSnapshot ->
+                mutableState.update {
+                    it.copy(
+                        snapshot = updatedSnapshot.withAvailableSections(),
+                        deletingClassId = null,
+                        errorMessage = null,
+                    )
+                }
+            }.onFailure { error ->
+                if (error is TeacherRevisionConflictException) {
+                    runCatching { dataRepository.loadTeacherSnapshot(teacher) }
+                        .onSuccess { latestSnapshot ->
+                            mutableState.update {
+                                it.copy(
+                                    snapshot = latestSnapshot.withAvailableSections(),
+                                    deletingClassId = null,
+                                    errorMessage = "Newer web changes were loaded. Review and delete the class again.",
+                                )
+                            }
+                        }
+                        .onFailure { refreshError ->
+                            mutableState.update {
+                                it.copy(
+                                    deletingClassId = null,
+                                    errorMessage = refreshError.toFriendlyMessage(),
+                                )
+                            }
+                        }
+                } else {
+                    mutableState.update {
+                        it.copy(
+                            deletingClassId = null,
                             errorMessage = error.toFriendlyMessage(),
                         )
                     }

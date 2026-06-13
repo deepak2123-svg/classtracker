@@ -6,6 +6,7 @@ import com.classtracker.core.firebase.TeacherDataRepository
 import com.classtracker.core.firebase.TeacherFeedbackRepository
 import com.classtracker.core.firebase.TeacherRevisionConflictException
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
@@ -209,6 +210,39 @@ class MainViewModelTest {
         )
         assertEquals(null, viewModel.state.value.errorMessage)
     }
+
+    @Test
+    fun deletingClassReplacesSnapshotAndClearsProgress() = runTest(dispatcher) {
+        val teacher = AuthenticatedTeacher(
+            uid = "teacher-1",
+            displayName = "Teacher",
+            email = "teacher@example.com",
+            photoUrl = null,
+        )
+        val teacherClass = TeacherClass(
+            id = "class-1",
+            sectionName = "11th",
+            instituteName = "Institute",
+            subjectName = "GS",
+            startTime = null,
+            endTime = null,
+            createdAt = 1L,
+        )
+        val original = snapshotFor(teacher).copy(classes = listOf(teacherClass))
+        val updated = original.copy(classes = emptyList(), revision = 2L)
+        val authRepository = FakeAuthRepository()
+        val dataRepository = FakeDataRepository(original, updated)
+        val viewModel = MainViewModel(authRepository, dataRepository, FakeFeedbackRepository())
+
+        authRepository.sessions.value = AuthSession.SignedIn(teacher)
+        advanceUntilIdle()
+        viewModel.deleteClass(teacherClass)
+        advanceUntilIdle()
+
+        assertEquals(1, dataRepository.deleteClassCount)
+        assertEquals(emptyList<TeacherClass>(), viewModel.state.value.snapshot?.classes)
+        assertEquals(null, viewModel.state.value.deletingClassId)
+    }
 }
 
 private class RevisionConflictRepository(
@@ -306,6 +340,8 @@ private class FakeDataRepository(
         private set
     var saveCount: Int = 0
         private set
+    var deleteClassCount: Int = 0
+        private set
 
     override suspend fun loadTeacherSnapshot(
         teacher: AuthenticatedTeacher,
@@ -328,6 +364,15 @@ private class FakeDataRepository(
         expectedRevision: Long,
         draft: TeacherClassDraft,
     ): TeacherSnapshot = savedSnapshot
+
+    override suspend fun deleteClass(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        teacherClass: TeacherClass,
+    ): TeacherSnapshot {
+        deleteClassCount += 1
+        return savedSnapshot
+    }
 
     override suspend fun deleteEntry(
         teacher: AuthenticatedTeacher,

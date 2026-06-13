@@ -92,6 +92,7 @@ android {
             buildConfigField("boolean", "NATIVE_ENTRY_EDIT_ENABLED", "true")
             buildConfigField("boolean", "NATIVE_ENTRY_DELETE_ENABLED", "true")
             buildConfigField("boolean", "NATIVE_CLASS_CREATE_ENABLED", "true")
+            buildConfigField("boolean", "NATIVE_CLASS_DELETE_ENABLED", "true")
             resValue("string", "app_name", "Ledgr Teacher Beta")
         }
         create("production") {
@@ -102,6 +103,7 @@ android {
             buildConfigField("boolean", "NATIVE_ENTRY_EDIT_ENABLED", "false")
             buildConfigField("boolean", "NATIVE_ENTRY_DELETE_ENABLED", "false")
             buildConfigField("boolean", "NATIVE_CLASS_CREATE_ENABLED", "false")
+            buildConfigField("boolean", "NATIVE_CLASS_DELETE_ENABLED", "false")
             resValue("string", "app_name", "Ledgr Teacher")
         }
     }

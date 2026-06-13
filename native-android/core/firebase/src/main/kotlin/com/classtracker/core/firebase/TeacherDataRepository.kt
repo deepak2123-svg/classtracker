@@ -1,6 +1,7 @@
 package com.classtracker.core.firebase
 
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
@@ -23,6 +24,12 @@ interface TeacherRemoteDataSource {
         expectedRevision: Long,
         draft: TeacherClassDraft,
     ): TeacherSnapshot
+
+    suspend fun deleteClass(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        teacherClass: TeacherClass,
+    ): TeacherSnapshot = throw UnsupportedOperationException("Class deletion is unavailable.")
 
     suspend fun deleteEntry(
         teacher: AuthenticatedTeacher,

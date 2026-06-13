@@ -84,10 +84,14 @@ Status: completed as part of
 
 ## Phase 4: Core teacher workflows
 
-Status: Phase 5 checkpoint 5 adds follow-up interaction polish by returning to
-Home immediately after successful class creation and making the selected
-timetable slot visually explicit. Checkpoint 11 adds beta-gated native class
-creation from Home using the existing web-compatible teacher data model.
+Status: checkpoint 18 adds beta-only Profile class management and recoverable
+class deletion using the existing web/admin `trash.classes` shape. It also
+returns Home immediately when a valid class submission begins while the
+protected remote transaction completes. Phase 5 checkpoint 5 adds follow-up
+interaction polish by returning to Home after successful class creation and
+making the selected timetable slot visually explicit. Checkpoint 11 adds
+beta-gated native class creation from Home using the existing web-compatible
+teacher data model.
 Checkpoint 10 adds the combined class entry screen, inline entry editor, soft
 overlap warnings, post-save feedback, and the profile recycle bin entry point
 on top of checkpoint 9 web-style native entry calendar and smoother animated
