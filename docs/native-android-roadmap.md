@@ -84,16 +84,18 @@ Status: completed as part of
 
 ## Phase 4: Core teacher workflows
 
-Status: checkpoint 11 adds beta-gated native class creation from Home using the
-existing web-compatible teacher data model. Checkpoint 10 adds the combined
-class entry screen, inline entry editor, soft overlap warnings, post-save
-feedback, and the profile recycle bin entry point on top of checkpoint 9
-web-style native entry calendar and smoother animated date/filter controls,
-checkpoint 8 sliding class pager, checkpoint 7 sticky banner/newest-first
-history/class swiping, checkpoint 6 entry search/status filters, checkpoint 5
-beta-only recoverable entry delete/restore, checkpoint 4 duplicate workflow
-support, checkpoint 3 teacher mobile web parity, and checkpoint 2 offline
-create/edit foundation.
+Status: Phase 5 checkpoint 5 adds follow-up interaction polish by returning to
+Home immediately after successful class creation and making the selected
+timetable slot visually explicit. Checkpoint 11 adds beta-gated native class
+creation from Home using the existing web-compatible teacher data model.
+Checkpoint 10 adds the combined class entry screen, inline entry editor, soft
+overlap warnings, post-save feedback, and the profile recycle bin entry point
+on top of checkpoint 9 web-style native entry calendar and smoother animated
+date/filter controls, checkpoint 8 sliding class pager, checkpoint 7 sticky
+banner/newest-first history/class swiping, checkpoint 6 entry search/status
+filters, checkpoint 5 beta-only recoverable entry delete/restore, checkpoint 4
+duplicate workflow support, checkpoint 3 teacher mobile web parity, and
+checkpoint 2 offline create/edit foundation.
 
 ### Deliverables
 
@@ -117,8 +119,10 @@ create/edit foundation.
 
 ## Phase 5: Teacher reports and exports
 
-Status: checkpoint 4 adds durable app-file PDF saving with stable filenames,
-FileProvider sharing for persisted reports, non-blocking export
+Status: checkpoint 5 adds explicit monthly report selection, a clearer report
+scope hierarchy, separate Save PDF and Share PDF actions, and removes the text
+summary action. Checkpoint 4 adds durable app-file PDF saving with stable
+filenames, FileProvider sharing for persisted reports, non-blocking export
 progress/completion/failure states, and multi-select institute report scope.
 Checkpoint 3 corrected native PDF report styling and structure to more closely
 follow the teacher web app export, including the `ClassLog` header, summary
@@ -126,7 +130,7 @@ cards, institute/class sections, entry tables, and paginated table headers.
 Checkpoint 2 added native PDF generation, cached PDF sharing through Android's
 share sheet, and visible custom report date controls on top of checkpoint 1
 reusable report summary calculations, daily/weekly/monthly/custom period
-filters, a profile-launched reports screen, and text summary export.
+filters, and a profile-launched reports screen.
 
 ### Deliverables
 

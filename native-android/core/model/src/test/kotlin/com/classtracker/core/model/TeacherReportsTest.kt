@@ -62,6 +62,20 @@ class TeacherReportsTest {
         assertEquals(2, report.instituteCount)
     }
 
+    @Test
+    fun monthlyReportUsesSelectedMonthInsteadOfCurrentMonth() {
+        val report = reportSnapshot().teacherReport(
+            period = TeacherReportPeriod.Monthly,
+            todayKey = "2026-06-10",
+            monthlyDateKey = "2026-05-18",
+        )
+
+        assertEquals("May 2026", report.range.label)
+        assertEquals("2026-05-01", report.range.startDateKey)
+        assertEquals("2026-05-31", report.range.endDateKey)
+        assertEquals(0, report.totalEntries)
+    }
+
     private fun reportSnapshot(): TeacherSnapshot = TeacherSnapshot(
         profile = TeacherProfile(
             uid = "teacher-1",

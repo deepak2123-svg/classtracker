@@ -6,6 +6,8 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -27,15 +29,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.ChevronLeft
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material.icons.outlined.Summarize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,7 +75,6 @@ import com.classtracker.core.model.TeacherReportSummary
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.formatReportMinutes
 import com.classtracker.core.model.teacherReport
-import com.classtracker.core.model.toShareText
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -93,6 +102,8 @@ fun ReportsScreen(
         (keys.minOrNull() ?: todayKey) to (keys.maxOrNull() ?: todayKey)
     }
     var period by remember { mutableStateOf(TeacherReportPeriod.Weekly) }
+    var selectedMonthDate by remember(todayKey) { mutableStateOf(monthStartKey(todayKey)) }
+    var showMonthPicker by remember { mutableStateOf(false) }
     var selectedInstitutes by remember(instituteOptions) { mutableStateOf<Set<String>>(emptySet()) }
     var customStartDate by remember(customBounds) { mutableStateOf(customBounds.first) }
     var customEndDate by remember(customBounds) { mutableStateOf(customBounds.second) }
@@ -101,6 +112,7 @@ fun ReportsScreen(
         snapshot,
         todayKey,
         period,
+        selectedMonthDate,
         selectedInstitutes,
         customStartDate,
         customEndDate,
@@ -109,9 +121,39 @@ fun ReportsScreen(
             period = period,
             todayKey = todayKey,
             instituteNames = selectedInstitutes.takeIf { it.isNotEmpty() },
+            monthlyDateKey = selectedMonthDate,
             customStartDateKey = customStartDate,
             customEndDateKey = customEndDate,
         )
+    }
+    val savePdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf"),
+    ) { destination ->
+        if (destination == null) return@rememberLauncherForActivityResult
+        pdfExportState = PdfExportState.InProgress
+        coroutineScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val export = createReportPdf(
+                        context = context,
+                        snapshot = snapshot,
+                        report = report,
+                    )
+                    context.contentResolver.openOutputStream(destination)?.use { output ->
+                        export.file.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    } ?: throw IOException("Unable to open the selected location.")
+                    export
+                }
+            }.onSuccess { export ->
+                pdfExportState = PdfExportState.Completed("Saved ${export.fileName}")
+            }.onFailure { error ->
+                pdfExportState = PdfExportState.Failed(
+                    error.localizedMessage ?: "Unable to save PDF.",
+                )
+            }
+        }
     }
 
     LazyColumn(
@@ -127,6 +169,20 @@ fun ReportsScreen(
                 selected = period,
                 onSelected = { period = it },
             )
+        }
+        if (period == TeacherReportPeriod.Monthly) {
+            item {
+                MonthSelectionCard(
+                    selectedMonthDate = selectedMonthDate,
+                    onPreviousMonth = {
+                        selectedMonthDate = shiftReportMonth(selectedMonthDate, -1)
+                    },
+                    onChooseMonth = { showMonthPicker = true },
+                    onNextMonth = {
+                        selectedMonthDate = shiftReportMonth(selectedMonthDate, 1)
+                    },
+                )
+            }
         }
         if (period == TeacherReportPeriod.Custom) {
             item {
@@ -157,90 +213,89 @@ fun ReportsScreen(
         }
         item {
             val isExporting = pdfExportState == PdfExportState.InProgress
-            Button(
-                onClick = {
-                    pdfExportState = PdfExportState.InProgress
-                    coroutineScope.launch {
-                        runCatching {
-                            withContext(Dispatchers.IO) {
-                                createReportPdf(
-                                    context = context,
-                                    snapshot = snapshot,
-                                    report = report,
-                                )
-                            }
-                        }.onSuccess { export ->
-                            val shareResult = runCatching {
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "application/pdf"
-                                    putExtra(
-                                        Intent.EXTRA_SUBJECT,
-                                        "Ledgr ${report.period.label} Report",
-                                    )
-                                    putExtra(Intent.EXTRA_STREAM, export.uri)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                context.startActivity(
-                                    Intent.createChooser(intent, "Share PDF report"),
-                                )
-                            }
-                            pdfExportState = shareResult.fold(
-                                onSuccess = { PdfExportState.Completed(export.fileName) },
-                                onFailure = { error ->
-                                    PdfExportState.Failed(
-                                        error.localizedMessage ?: "Unable to share PDF.",
-                                    )
-                                },
-                            )
-                        }.onFailure { error ->
-                            pdfExportState = PdfExportState.Failed(
-                                error.localizedMessage ?: "Unable to create PDF.",
-                            )
-                        }
-                    }
-                },
-                enabled = !isExporting,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Download,
-                    contentDescription = null,
-                    modifier = Modifier.size(19.dp),
-                )
-                Text(
-                    text = if (isExporting) "Preparing PDF..." else "Share PDF",
-                    modifier = Modifier.padding(start = 8.dp),
-                )
+                OutlinedButton(
+                    onClick = {
+                        savePdfLauncher.launch(reportPdfFileName(snapshot, report))
+                    },
+                    enabled = !isExporting,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.SaveAlt,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                    )
+                    Text(
+                        text = "Save PDF",
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
+                }
+                Button(
+                    onClick = {
+                        pdfExportState = PdfExportState.InProgress
+                        coroutineScope.launch {
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    createReportPdf(
+                                        context = context,
+                                        snapshot = snapshot,
+                                        report = report,
+                                    )
+                                }
+                            }.onSuccess { export ->
+                                val shareResult = runCatching {
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "application/pdf"
+                                        putExtra(
+                                            Intent.EXTRA_SUBJECT,
+                                            "Ledgr ${report.period.label} Report",
+                                        )
+                                        putExtra(Intent.EXTRA_STREAM, export.uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(
+                                        Intent.createChooser(intent, "Share PDF report"),
+                                    )
+                                }
+                                pdfExportState = shareResult.fold(
+                                    onSuccess = {
+                                        PdfExportState.Completed("PDF ready to share")
+                                    },
+                                    onFailure = { error ->
+                                        PdfExportState.Failed(
+                                            error.localizedMessage ?: "Unable to share PDF.",
+                                        )
+                                    },
+                                )
+                            }.onFailure { error ->
+                                pdfExportState = PdfExportState.Failed(
+                                    error.localizedMessage ?: "Unable to create PDF.",
+                                )
+                            }
+                        }
+                    },
+                    enabled = !isExporting,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.IosShare,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                    )
+                    Text(
+                        text = if (isExporting) "Preparing..." else "Share PDF",
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
+                }
             }
         }
         if (pdfExportState != PdfExportState.Idle) {
             item {
                 ExportStatusMessage(state = pdfExportState)
-            }
-        }
-        item {
-            Button(
-                onClick = {
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, "Ledgr ${report.period.label} Report")
-                        putExtra(Intent.EXTRA_TEXT, report.toShareText())
-                    }
-                    context.startActivity(
-                        Intent.createChooser(intent, "Share teacher report"),
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.IosShare,
-                    contentDescription = null,
-                    modifier = Modifier.size(19.dp),
-                )
-                Text(
-                    text = "Share text summary",
-                    modifier = Modifier.padding(start = 8.dp),
-                )
             }
         }
         item {
@@ -268,18 +323,30 @@ fun ReportsScreen(
             }
         }
     }
+
+    if (showMonthPicker) {
+        MonthPickerDialog(
+            selectedMonthDate = selectedMonthDate,
+            onDismiss = { showMonthPicker = false },
+            onSelected = {
+                selectedMonthDate = it
+                showMonthPicker = false
+            },
+        )
+    }
 }
 
 private sealed class PdfExportState {
     object Idle : PdfExportState()
     object InProgress : PdfExportState()
-    data class Completed(val fileName: String) : PdfExportState()
+    data class Completed(val message: String) : PdfExportState()
     data class Failed(val message: String) : PdfExportState()
 }
 
 private data class ReportPdfExport(
     val uri: Uri,
     val fileName: String,
+    val file: File,
 )
 
 @Composable
@@ -380,6 +447,142 @@ private fun PeriodSelector(
 }
 
 @Composable
+private fun MonthSelectionCard(
+    selectedMonthDate: String,
+    onPreviousMonth: () -> Unit,
+    onChooseMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            IconButton(onClick = onPreviousMonth) {
+                Icon(
+                    imageVector = Icons.Outlined.ChevronLeft,
+                    contentDescription = "Previous month",
+                )
+            }
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onChooseMonth),
+                color = colors.surfaceSoft,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CalendarMonth,
+                        contentDescription = null,
+                        tint = colors.teal,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column(
+                        modifier = Modifier.padding(start = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = "REPORT MONTH",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textMuted,
+                        )
+                        Text(
+                            text = reportMonthLabel(selectedMonthDate),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+            IconButton(onClick = onNextMonth) {
+                Icon(
+                    imageVector = Icons.Outlined.ChevronRight,
+                    contentDescription = "Next month",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthPickerDialog(
+    selectedMonthDate: String,
+    onDismiss: () -> Unit,
+    onSelected: (String) -> Unit,
+) {
+    val selected = remember(selectedMonthDate) {
+        parseDateKey(selectedMonthDate) ?: Calendar.getInstance()
+    }
+    var displayedYear by remember(selectedMonthDate) {
+        mutableStateOf(selected.get(Calendar.YEAR))
+    }
+    val selectedYear = selected.get(Calendar.YEAR)
+    val selectedMonth = selected.get(Calendar.MONTH)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose report month") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    IconButton(onClick = { displayedYear -= 1 }) {
+                        Icon(Icons.Outlined.ChevronLeft, contentDescription = "Previous year")
+                    }
+                    Text(
+                        text = displayedYear.toString(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    IconButton(onClick = { displayedYear += 1 }) {
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = "Next year")
+                    }
+                }
+                monthNames.chunked(3).forEachIndexed { rowIndex, months ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        months.forEachIndexed { columnIndex, monthName ->
+                            val monthIndex = (rowIndex * 3) + columnIndex
+                            SelectorChip(
+                                label = monthName,
+                                selected = displayedYear == selectedYear &&
+                                    monthIndex == selectedMonth,
+                                onClick = {
+                                    onSelected(monthDateKey(displayedYear, monthIndex))
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+    )
+}
+
+@Composable
 private fun CustomRangeCard(
     startDateKey: String,
     endDateKey: String,
@@ -477,19 +680,46 @@ private fun ScopeSelector(
     onAllSelected: () -> Unit,
     onInstituteToggled: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "SCOPE",
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.textMuted,
-            modifier = Modifier.padding(start = 2.dp),
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "REPORT SCOPE",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textMuted,
+            )
+            Text(
+                text = if (selectedInstitutes.isEmpty()) {
+                    "Currently including every institute"
+                } else {
+                    "Currently including ${selectedInstitutes.size} of ${institutes.size} institutes"
+                },
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Use all institutes, or select one or more specific institutes below.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textSecondary,
+            )
             SelectorChip(
-                label = "All institutes",
+                label = "Use all institutes",
                 selected = selectedInstitutes.isEmpty(),
                 onClick = onAllSelected,
                 modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = "CHOOSE SPECIFIC INSTITUTES",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textMuted,
+                modifier = Modifier.padding(top = 2.dp),
             )
             institutes.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -523,7 +753,7 @@ private fun ExportStatusMessage(state: PdfExportState) {
             )
         }
         is PdfExportState.Completed -> Text(
-            text = "Saved ${state.fileName}",
+            text = state.message,
             style = MaterialTheme.typography.bodySmall,
             color = colors.green,
             modifier = Modifier.padding(start = 2.dp),
@@ -683,6 +913,32 @@ private fun SelectorChip(
 private fun todayKey(): String =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
+private val monthNames = listOf(
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+private fun monthStartKey(dateKey: String): String {
+    val calendar = parseDateKey(dateKey) ?: Calendar.getInstance()
+    calendar.set(Calendar.DAY_OF_MONTH, 1)
+    return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(calendar.time)
+}
+
+private fun shiftReportMonth(dateKey: String, amount: Int): String {
+    val calendar = parseDateKey(dateKey) ?: Calendar.getInstance()
+    calendar.set(Calendar.DAY_OF_MONTH, 1)
+    calendar.add(Calendar.MONTH, amount)
+    return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(calendar.time)
+}
+
+private fun monthDateKey(year: Int, month: Int): String =
+    "%04d-%02d-01".format(Locale.US, year, month + 1)
+
+private fun reportMonthLabel(dateKey: String): String {
+    val calendar = parseDateKey(dateKey) ?: Calendar.getInstance()
+    return SimpleDateFormat("MMMM yyyy", Locale.US).format(calendar.time)
+}
+
 private fun showReportDatePicker(
     context: android.content.Context,
     initialDateKey: String,
@@ -707,6 +963,15 @@ private fun showReportDatePicker(
     ).show()
 }
 
+private fun reportPdfFileName(
+    snapshot: TeacherSnapshot,
+    report: TeacherReportSummary,
+): String =
+    "ClassLog_${fileSafePdfPart(snapshot.profile.name)}_" +
+        "${fileSafePdfPart(report.period.label)}_" +
+        "${fileSafePdfPart(report.scopeLabel)}_" +
+        "${report.range.startDateKey}_${report.range.endDateKey}.pdf"
+
 private fun createReportPdf(
     context: android.content.Context,
     snapshot: TeacherSnapshot,
@@ -716,11 +981,7 @@ private fun createReportPdf(
     if (!outputDir.exists() && !outputDir.mkdirs()) {
         throw IOException("Unable to create reports directory.")
     }
-    val fileName =
-        "ClassLog_${fileSafePdfPart(snapshot.profile.name)}_" +
-            "${fileSafePdfPart(report.period.label)}_" +
-            "${fileSafePdfPart(report.scopeLabel)}_" +
-            "${report.range.startDateKey}_${report.range.endDateKey}.pdf"
+    val fileName = reportPdfFileName(snapshot, report)
     val file = File(outputDir, fileName)
     val document = PdfDocument()
     fun finishExport(): ReportPdfExport {
@@ -732,6 +993,7 @@ private fun createReportPdf(
                 file,
             ),
             fileName = fileName,
+            file = file,
         )
     }
     try {

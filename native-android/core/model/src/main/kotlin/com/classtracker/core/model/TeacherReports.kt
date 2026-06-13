@@ -50,12 +50,14 @@ fun TeacherSnapshot.teacherReport(
     todayKey: String,
     instituteName: String? = null,
     instituteNames: Set<String>? = null,
+    monthlyDateKey: String? = null,
     customStartDateKey: String? = null,
     customEndDateKey: String? = null,
 ): TeacherReportSummary {
     val range = reportRange(
         period = period,
         todayKey = todayKey,
+        monthlyDateKey = monthlyDateKey,
         customStartDateKey = customStartDateKey,
         customEndDateKey = customEndDateKey,
     )
@@ -149,6 +151,7 @@ fun formatReportMinutes(total: Int): String {
 private fun reportRange(
     period: TeacherReportPeriod,
     todayKey: String,
+    monthlyDateKey: String?,
     customStartDateKey: String?,
     customEndDateKey: String?,
 ): TeacherReportRange {
@@ -172,14 +175,18 @@ private fun reportRange(
             )
         }
         TeacherReportPeriod.Monthly -> {
-            val start = today.clone() as Calendar
+            val selectedMonth = monthlyDateKey
+                ?.takeIf(::isDateKey)
+                ?.let(::parseDateKey)
+                ?: today
+            val start = selectedMonth.clone() as Calendar
             start.set(Calendar.DAY_OF_MONTH, 1)
             val end = start.clone() as Calendar
             end.set(Calendar.DAY_OF_MONTH, end.getActualMaximum(Calendar.DAY_OF_MONTH))
             TeacherReportRange(
                 startDateKey = dateKey(start),
                 endDateKey = dateKey(end),
-                label = monthLabel(today),
+                label = monthLabel(start),
             )
         }
         TeacherReportPeriod.Custom -> {

@@ -312,11 +312,6 @@ private fun TeacherApp(
 
     LaunchedEffect(classSaved) {
         if (classSaved) {
-            snackbarHostState.showSnackbar(
-                message = "✓ Class added successfully",
-                duration = androidx.compose.material3.SnackbarDuration.Short,
-                withDismissAction = true,
-            )
             onConsumeClassSaved()
             navController.navigate(AppDestination.Home.route) {
                 popUpTo(navController.graph.startDestinationId) {
@@ -325,6 +320,11 @@ private fun TeacherApp(
                 }
                 launchSingleTop = true
             }
+            snackbarHostState.showSnackbar(
+                message = "✓ Class added successfully",
+                duration = androidx.compose.material3.SnackbarDuration.Short,
+                withDismissAction = true,
+            )
         }
     }
 

@@ -427,6 +427,8 @@ private fun ScheduleCard(
                 TimetableSlots(
                     slots = timeSlots,
                     usedStarts = usedStarts,
+                    selectedStart = draft.timeStart,
+                    selectedEnd = draft.timeEnd,
                     showCustomTimeFields = showCustomTimeFields,
                     onCustomTimeClick = { showCustomTimeFields = true },
                     onSlotSelected = { slot ->
@@ -478,6 +480,8 @@ private enum class TimePickerTarget {
 private fun TimetableSlots(
     slots: List<TeacherTimeSlot>,
     usedStarts: Set<String>,
+    selectedStart: String,
+    selectedEnd: String,
     showCustomTimeFields: Boolean,
     onCustomTimeClick: () -> Unit,
     onSlotSelected: (TeacherTimeSlot) -> Unit,
@@ -500,9 +504,11 @@ private fun TimetableSlots(
                 ) {
                     rowSlots.forEach { slot ->
                         val used = slot.start in usedStarts
+                        val selected = slot.start == selectedStart && slot.end == selectedEnd
                         TimeSlotChip(
                             slot = slot,
                             used = used,
+                            selected = selected,
                             onClick = { onSlotSelected(slot) },
                             modifier = Modifier.weight(1f),
                         )
@@ -564,12 +570,32 @@ private fun TimetableSlots(
 private fun TimeSlotChip(
     slot: TeacherTimeSlot,
     used: Boolean,
+    selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val background by animateColorAsState(
-        targetValue = entrySurfaceColor(),
+        targetValue = when {
+            selected -> MaterialTheme.colorScheme.primary
+            else -> entrySurfaceColor()
+        },
         label = "slot-background",
+    )
+    val foreground by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            entryInkColor()
+        },
+        label = "slot-foreground",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            entryBorderColor()
+        },
+        label = "slot-border",
     )
     Surface(
         modifier = modifier
@@ -579,8 +605,8 @@ private fun TimeSlotChip(
         contentColor = entryInkColor(),
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(
-            width = 1.dp,
-            color = entryBorderColor(),
+            width = if (selected) 2.dp else 1.dp,
+            color = borderColor,
         ),
     ) {
         Row(
@@ -594,7 +620,7 @@ private fun TimeSlotChip(
                     fontSize = 14.sp,
                     lineHeight = 18.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = entryInkColor(),
+                    color = foreground,
                 ),
                 maxLines = 1,
                 textAlign = TextAlign.Center,
