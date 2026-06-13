@@ -89,6 +89,10 @@ and navigation returns immediately while the recoverable remote transaction
 continues. It also hides entry Duration unless the teacher opens custom time
 and adds beta-only permanent clearing of recycle-bin entries with explicit
 confirmation while preserving deleted classes.
+Checkpoint 20 adds beta-only permanent deletion for individual recycle-bin
+entries and twice-confirmed teacher account deletion. Account deletion removes
+Firebase sign-in access while preserving all organisation-owned classes and
+entries; Admin Manage Teachers marks the teacher as having left the workspace.
 Checkpoint 18 adds beta-only Profile class management and recoverable class
 deletion using the existing web/admin `trash.classes` shape. It also returns
 Home immediately when a valid class submission begins while the protected

@@ -7,6 +7,8 @@ import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherTrashedEntry
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -132,4 +134,39 @@ class FirebaseTeacherDataRepository(
         expectedRevision = expectedRevision,
         reload = { loadTeacherSnapshot(teacher) },
     )
+
+    override suspend fun deleteTrashedEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot = entryWriter.deleteTrashedEntry(
+        teacher = teacher,
+        expectedRevision = expectedRevision,
+        entry = entry,
+        reload = { loadTeacherSnapshot(teacher) },
+    )
+
+    override suspend fun setTeacherDeparted(
+        teacher: AuthenticatedTeacher,
+        departed: Boolean,
+    ) {
+        val patch = if (departed) {
+            mapOf(
+                "accountStatus" to "departed",
+                "active" to false,
+                "departedAt" to System.currentTimeMillis(),
+                "departedBy" to "teacher",
+            )
+        } else {
+            mapOf(
+                "accountStatus" to "active",
+                "active" to true,
+                "departedAt" to FieldValue.delete(),
+                "departedBy" to FieldValue.delete(),
+            )
+        }
+        firestore.document("teachers/${teacher.uid}")
+            .set(patch, SetOptions.merge())
+            .await()
+    }
 }

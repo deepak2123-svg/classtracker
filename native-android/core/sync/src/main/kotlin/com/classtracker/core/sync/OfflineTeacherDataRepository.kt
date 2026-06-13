@@ -136,6 +136,28 @@ class OfflineTeacherDataRepository @Inject constructor(
         return snapshot
     }
 
+    override suspend fun deleteTrashedEntry(
+        teacher: AuthenticatedTeacher,
+        expectedRevision: Long,
+        entry: TeacherTrashedEntry,
+    ): TeacherSnapshot {
+        val snapshot = remote.deleteTrashedEntry(
+            teacher = teacher,
+            expectedRevision = expectedRevision,
+            entry = entry,
+        )
+        local.replaceSnapshot(teacher.uid, snapshot)
+        scheduler.enqueue(teacher.uid)
+        return snapshot
+    }
+
+    override suspend fun setTeacherDeparted(
+        teacher: AuthenticatedTeacher,
+        departed: Boolean,
+    ) {
+        remote.setTeacherDeparted(teacher, departed)
+    }
+
     override suspend fun retryFailed(uid: String) {
         local.retryFailed(uid)
         scheduler.enqueue(uid)

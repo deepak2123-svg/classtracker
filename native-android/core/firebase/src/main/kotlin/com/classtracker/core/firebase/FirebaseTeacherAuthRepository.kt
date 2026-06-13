@@ -32,6 +32,12 @@ class FirebaseTeacherAuthRepository(
     override suspend fun signOut() {
         auth.signOut()
     }
+
+    override suspend fun deleteAccount() {
+        requireNotNull(auth.currentUser) { "No signed-in account is available." }
+            .delete()
+            .await()
+    }
 }
 
 private fun com.google.firebase.auth.FirebaseUser?.toSession(): AuthSession =

@@ -199,6 +199,8 @@ fun LedgrApp(
             savingClass = state.savingClass,
             deletingClassId = state.deletingClassId,
             deletingAllTrashedEntries = state.deletingAllTrashedEntries,
+            deletingTrashedEntryId = state.deletingTrashedEntryId,
+            deletingAccount = state.deletingAccount,
             entrySaved = state.entrySaved,
             classSaved = state.classSaved,
             syncSummary = state.syncSummary,
@@ -217,6 +219,8 @@ fun LedgrApp(
             onDeleteEntry = viewModel::deleteEntry,
             onRestoreEntry = viewModel::restoreEntry,
             onDeleteAllTrashedEntries = viewModel::deleteAllTrashedEntries,
+            onDeleteTrashedEntry = viewModel::deleteTrashedEntry,
+            onDeleteAccount = viewModel::deleteAccount,
             onConsumeEntrySaved = viewModel::consumeEntrySaved,
             onConsumeClassSaved = viewModel::consumeClassSaved,
             onRetrySync = viewModel::retrySync,
@@ -239,6 +243,8 @@ private fun TeacherApp(
     savingClass: Boolean,
     deletingClassId: String?,
     deletingAllTrashedEntries: Boolean,
+    deletingTrashedEntryId: String?,
+    deletingAccount: Boolean,
     entrySaved: Boolean,
     classSaved: Boolean,
     syncSummary: TeacherSyncSummary,
@@ -257,6 +263,8 @@ private fun TeacherApp(
     onDeleteEntry: (TeacherEntry, TeacherClass) -> Unit,
     onRestoreEntry: (TeacherTrashedEntry) -> Unit,
     onDeleteAllTrashedEntries: () -> Unit,
+    onDeleteTrashedEntry: (TeacherTrashedEntry) -> Unit,
+    onDeleteAccount: () -> Unit,
     onConsumeEntrySaved: () -> Unit,
     onConsumeClassSaved: () -> Unit,
     onRetrySync: () -> Unit,
@@ -667,6 +675,8 @@ private fun TeacherApp(
                                 navController.navigate(FeedbackRoute)
                             },
                             onSignOut = onSignOut,
+                            deletingAccount = deletingAccount,
+                            onDeleteAccount = onDeleteAccount,
                         )
                     }
                     composable(ManageClassesRoute) {
@@ -697,8 +707,10 @@ private fun TeacherApp(
                             trashedEntries = snapshot.trashedEntries,
                             onRestoreEntry = onRestoreEntry,
                             deletingAll = deletingAllTrashedEntries,
+                            deletingEntryId = deletingTrashedEntryId,
                             deleteAllEnabled = BuildConfig.NATIVE_ENTRY_DELETE_ENABLED,
                             onDeleteAll = onDeleteAllTrashedEntries,
+                            onDeleteEntry = onDeleteTrashedEntry,
                         )
                     }
                     composable(ReportsRoute) {

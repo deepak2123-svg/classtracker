@@ -27,6 +27,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -60,11 +61,14 @@ fun RecycleBinScreen(
     trashedEntries: List<TeacherTrashedEntry>,
     onRestoreEntry: (TeacherTrashedEntry) -> Unit,
     deletingAll: Boolean,
+    deletingEntryId: String?,
     deleteAllEnabled: Boolean,
     onDeleteAll: () -> Unit,
+    onDeleteEntry: (TeacherTrashedEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showDeleteAllConfirmation by remember { mutableStateOf(false) }
+    var entryPendingDelete by remember { mutableStateOf<TeacherTrashedEntry?>(null) }
 
     if (showDeleteAllConfirmation && trashedEntries.isNotEmpty()) {
         AlertDialog(
@@ -99,6 +103,41 @@ fun RecycleBinScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteAllConfirmation = false }) {
+                    Text("Cancel", fontWeight = FontWeight.Bold)
+                }
+            },
+        )
+    }
+
+    entryPendingDelete?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { entryPendingDelete = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.DeleteForever,
+                    contentDescription = null,
+                )
+            },
+            title = { Text("Delete this entry permanently?") },
+            text = {
+                Text(
+                    "\"${entry.title.ifBlank { "Untitled entry" }}\" will be permanently " +
+                        "deleted and cannot be restored.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        entryPendingDelete = null
+                        onDeleteEntry(entry)
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = colors.red),
+                ) {
+                    Text("Delete permanently", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { entryPendingDelete = null }) {
                     Text("Cancel", fontWeight = FontWeight.Bold)
                 }
             },
@@ -181,6 +220,9 @@ fun RecycleBinScreen(
                 TrashedEntryCard(
                     entry = entry,
                     onRestore = { onRestoreEntry(entry) },
+                    deleteEnabled = deleteAllEnabled,
+                    deleting = deletingEntryId == entry.id,
+                    onDelete = { entryPendingDelete = entry },
                 )
             }
         }
@@ -269,6 +311,9 @@ private fun BinSummaryBanner(
 fun TrashedEntryCard(
     entry: TeacherTrashedEntry,
     onRestore: () -> Unit,
+    deleteEnabled: Boolean,
+    deleting: Boolean,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val restoring = entry.syncState == TeacherEntrySyncState.Syncing
@@ -348,36 +393,61 @@ fun TrashedEntryCard(
                 )
             }
 
-            // Restore button
-            Button(
-                onClick = onRestore,
-                enabled = !restoring,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.forest,
-                    contentColor = androidx.compose.ui.graphics.Color.White,
-                ),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (restoring) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = androidx.compose.ui.graphics.Color.White,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.RestoreFromTrash,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (failed) "Retry restore" else "Restore entry",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
+                Button(
+                    onClick = onRestore,
+                    enabled = !restoring && !deleting,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.forest,
+                        contentColor = androidx.compose.ui.graphics.Color.White,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp),
+                ) {
+                    if (restoring) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = androidx.compose.ui.graphics.Color.White,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.RestoreFromTrash,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(7.dp))
+                        Text(
+                            text = if (failed) "Retry" else "Restore",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                if (deleteEnabled) {
+                    OutlinedButton(
+                        onClick = onDelete,
+                        enabled = !restoring && !deleting,
+                        modifier = Modifier.weight(1f),
+                        border = BorderStroke(1.dp, colors.red),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = colors.red,
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.DeleteForever,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(7.dp))
+                        Text("Delete", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 

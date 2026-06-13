@@ -26,13 +26,23 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,10 +50,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
 import com.classtracker.core.designsystem.LedgrForest
 import com.classtracker.core.designsystem.LedgrTeal
 import com.classtracker.core.designsystem.LedgrTheme
@@ -71,8 +83,98 @@ fun ProfileScreen(
     feedbackUnreadCount: Int,
     onOpenFeedback: () -> Unit,
     onSignOut: () -> Unit,
+    deletingAccount: Boolean,
+    onDeleteAccount: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var deleteAccountStep by remember { mutableIntStateOf(0) }
+    var deleteAccountConfirmation by remember { mutableStateOf("") }
+
+    if (deleteAccountStep == 1) {
+        AlertDialog(
+            onDismissRequest = { deleteAccountStep = 0 },
+            icon = { Icon(Icons.Outlined.PersonOff, contentDescription = null) },
+            title = { Text("Delete your teacher account?") },
+            text = {
+                Text(
+                    "Your sign-in account will be deleted and the admin will see that you " +
+                        "left the workspace. All classes and entries will remain available " +
+                        "to the organisation.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleteAccountConfirmation = ""
+                        deleteAccountStep = 2
+                    },
+                ) {
+                    Text("Continue", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteAccountStep = 0 }) {
+                    Text("Cancel", fontWeight = FontWeight.Bold)
+                }
+            },
+        )
+    }
+    if (deleteAccountStep == 2) {
+        AlertDialog(
+            onDismissRequest = { if (!deletingAccount) deleteAccountStep = 0 },
+            icon = { Icon(Icons.Outlined.PersonOff, contentDescription = null) },
+            title = { Text("Final confirmation") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        "This removes your Ledgr sign-in account. You cannot delete the " +
+                            "organisation's teaching records.",
+                    )
+                    Text(
+                        "Type DELETE MY ACCOUNT to confirm.",
+                        fontWeight = FontWeight.Bold,
+                    )
+                    OutlinedTextField(
+                        value = deleteAccountConfirmation,
+                        onValueChange = { deleteAccountConfirmation = it },
+                        enabled = !deletingAccount,
+                        singleLine = true,
+                        label = { Text("Confirmation") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onDeleteAccount,
+                    enabled = !deletingAccount &&
+                        deleteAccountConfirmation.trim() == "DELETE MY ACCOUNT",
+                ) {
+                    if (deletingAccount) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text("Delete account", fontWeight = FontWeight.Bold, color = colors.red)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        deleteAccountConfirmation = ""
+                        deleteAccountStep = 0
+                    },
+                    enabled = !deletingAccount,
+                ) {
+                    Text("Keep account", fontWeight = FontWeight.Bold)
+                }
+            },
+        )
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -180,6 +282,16 @@ fun ProfileScreen(
                 accent = colors.red,
                 danger = true,
                 onClick = onSignOut,
+            )
+        }
+        item {
+            ProfileActionCard(
+                icon = Icons.Outlined.PersonOff,
+                title = "Delete Account",
+                subtitle = "Leave the workspace. Your classes and entries will remain with the organisation.",
+                accent = colors.red,
+                danger = true,
+                onClick = { deleteAccountStep = 1 },
             )
         }
     }
@@ -626,6 +738,8 @@ private fun ProfileScreenPreview() {
             feedbackUnreadCount = 1,
             onOpenFeedback = {},
             onSignOut = {},
+            deletingAccount = false,
+            onDeleteAccount = {},
         )
     }
 }

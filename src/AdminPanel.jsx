@@ -11107,9 +11107,13 @@ function AdminPanelInner({user}){
               ? allTeacherInstitutes.filter(value=>!sameInstituteName(value, currentInstitute))
               : allTeacherInstitutes;
             const classCount = fullData[t.uid] ? (d.classes||[]).length : (t.classCount||0);
+            const hasLeftWorkspace = t.accountStatus === "departed" || t.active === false;
+            const departedLabel = t.departedAt
+              ? `Left ${new Date(Number(t.departedAt)).toLocaleDateString()}`
+              : "Left workspace";
 
             return(
-              <div style={{background:G.surface,borderRadius:12,border:`2px solid ${isSel?G.blue:G.border}`,overflow:"hidden",boxShadow:isSel?`0 0 0 3px ${G.blueL}`:G.shadowSm,transition:"all 0.15s"}}>
+              <div style={{background:G.surface,borderRadius:12,border:`2px solid ${isSel?G.blue:hasLeftWorkspace?"#F5CACA":G.border}`,overflow:"hidden",boxShadow:isSel?`0 0 0 3px ${G.blueL}`:G.shadowSm,transition:"all 0.15s"}}>
                 <div onClick={()=>{ensureFullData(t.uid);setSelTeacher(isSel?null:t.uid);}}
                   style={{padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
                   <div style={{width:42,height:42,borderRadius:11,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
@@ -11119,6 +11123,7 @@ function AdminPanelInner({user}){
                     <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                       {name}
                       {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
+                      {hasLeftWorkspace&&<span style={{fontSize:11,color:G.red,background:G.redL,border:"1px solid #F5CACA",borderRadius:999,padding:"2px 7px",fontFamily:G.sans,fontWeight:800}}>Left workspace</span>}
                     </div>
                     <div style={{fontSize:13,color:G.textM,marginTop:3,fontFamily:G.mono}}>
                       {email || "Email not available"}
@@ -11126,10 +11131,10 @@ function AdminPanelInner({user}){
                     {otherInstitutes.length>0&&<AlsoAtInstitutes institutes={otherInstitutes} />}
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
-                    <span style={{background:G.blueL,color:G.blue,fontSize:12,fontWeight:700,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
-                      👤 Teacher
+                    <span style={{background:hasLeftWorkspace?G.redL:G.blueL,color:hasLeftWorkspace?G.red:G.blue,fontSize:12,fontWeight:700,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
+                      {hasLeftWorkspace ? "Departed" : "👤 Teacher"}
                     </span>
-                    <span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>{classCount} classes · tap to manage</span>
+                    <span style={{fontSize:11,color:hasLeftWorkspace?G.red:G.textL,fontFamily:G.mono}}>{hasLeftWorkspace ? departedLabel : `${classCount} classes · tap to manage`}</span>
                   </div>
                 </div>
 

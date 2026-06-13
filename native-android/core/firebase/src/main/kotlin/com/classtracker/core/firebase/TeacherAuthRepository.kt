@@ -17,4 +17,6 @@ interface TeacherAuthRepository {
     suspend fun signInWithEmail(email: String, password: String)
 
     suspend fun signOut()
+
+    suspend fun deleteAccount()
 }

@@ -26,6 +26,7 @@ import com.classtracker.core.model.validateTeacherClassDraft
 import com.classtracker.core.model.validateTeacherEntryDraft
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.firestore.FirebaseFirestoreException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -49,6 +50,8 @@ data class MainUiState(
     val savingClass: Boolean = false,
     val deletingClassId: String? = null,
     val deletingAllTrashedEntries: Boolean = false,
+    val deletingTrashedEntryId: String? = null,
+    val deletingAccount: Boolean = false,
     val mutatingEntry: Boolean = false,
     val entrySaved: Boolean = false,
     val classSaved: Boolean = false,
@@ -532,6 +535,102 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun deleteTrashedEntry(entry: TeacherTrashedEntry) {
+        val current = mutableState.value
+        val teacher = current.teacher ?: return
+        val snapshot = current.snapshot ?: return
+        if (current.deletingTrashedEntryId != null) return
+
+        mutableState.update {
+            it.copy(
+                snapshot = snapshot.copy(
+                    trashedEntries = snapshot.trashedEntries.filterNot { item ->
+                        item.id == entry.id
+                    },
+                ),
+                deletingTrashedEntryId = entry.id,
+                errorMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            runCatching {
+                dataRepository.deleteTrashedEntry(
+                    teacher = teacher,
+                    expectedRevision = snapshot.revision,
+                    entry = entry,
+                )
+            }.onSuccess { updatedSnapshot ->
+                mutableState.update {
+                    it.copy(
+                        snapshot = updatedSnapshot.withAvailableSections(),
+                        deletingTrashedEntryId = null,
+                        errorMessage = null,
+                    )
+                }
+            }.onFailure { error ->
+                if (error is TeacherRevisionConflictException) {
+                    runCatching { dataRepository.loadTeacherSnapshot(teacher) }
+                        .onSuccess { latestSnapshot ->
+                            mutableState.update {
+                                it.copy(
+                                    snapshot = latestSnapshot.withAvailableSections(),
+                                    deletingTrashedEntryId = null,
+                                    errorMessage = "Newer web changes were loaded. Review the recycle bin and try again.",
+                                )
+                            }
+                        }
+                        .onFailure { refreshError ->
+                            mutableState.update {
+                                it.copy(
+                                    snapshot = snapshot,
+                                    deletingTrashedEntryId = null,
+                                    errorMessage = refreshError.toFriendlyMessage(),
+                                )
+                            }
+                        }
+                } else {
+                    mutableState.update {
+                        it.copy(
+                            snapshot = snapshot,
+                            deletingTrashedEntryId = null,
+                            errorMessage = error.toFriendlyMessage(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun deleteAccount() {
+        val current = mutableState.value
+        val teacher = current.teacher ?: return
+        if (current.deletingAccount) return
+
+        viewModelScope.launch {
+            mutableState.update {
+                it.copy(deletingAccount = true, errorMessage = null)
+            }
+            runCatching {
+                dataRepository.setTeacherDeparted(teacher, departed = true)
+                try {
+                    authRepository.deleteAccount()
+                } catch (error: Throwable) {
+                    runCatching {
+                        dataRepository.setTeacherDeparted(teacher, departed = false)
+                    }
+                    throw error
+                }
+            }.onFailure { error ->
+                mutableState.update {
+                    it.copy(
+                        deletingAccount = false,
+                        errorMessage = error.toFriendlyMessage(),
+                    )
+                }
+            }
+        }
+    }
+
     fun clearError() {
         mutableState.update { it.copy(errorMessage = null) }
     }
@@ -721,6 +820,8 @@ private fun Throwable.toFriendlyMessage(): String = when (this) {
         "Newer web changes are available. Review and save again."
     is TeacherEntryConflictException -> message.orEmpty()
     is FirebaseNetworkException -> "Unable to reach the server. Check your connection."
+    is FirebaseAuthRecentLoginRequiredException ->
+        "For security, sign out, sign in again, then retry account deletion."
     is FirebaseAuthException -> when (errorCode) {
         "ERROR_INVALID_CREDENTIAL",
         "ERROR_WRONG_PASSWORD",
