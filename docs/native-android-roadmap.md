@@ -97,6 +97,10 @@ Checkpoint 21 closes the inline entry editor after a successful save, dismisses
 the keyboard, and moves the teacher directly to the newly updated class history.
 It also makes both per-entry recycle-bin actions explicit with `Restore entry`
 and `Delete entry` labels alongside the existing bulk delete action.
+Checkpoint 22 returns the teacher to Home immediately after a successful inline
+entry save. It also reduces accidental class changes by raising both class
+pagers' positional swipe threshold from the framework default to 72% and
+limiting a gesture to one class.
 Checkpoint 18 adds beta-only Profile class management and recoverable class
 deletion using the existing web/admin `trash.classes` shape. It also returns
 Home immediately when a valid class submission begins while the protected

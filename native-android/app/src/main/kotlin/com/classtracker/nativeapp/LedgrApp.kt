@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -109,6 +110,7 @@ private const val RecycleBinRoute = "recycle-bin"
 private const val ReportsRoute = "reports"
 private const val FeedbackRoute = "feedback"
 private const val ClassPagerSnapMillis = 170
+private const val ClassPagerPositionalThreshold = 0.72f
 private const val AddClassRoute = "add-class"
 private const val ManageClassesRoute = "manage-classes"
 private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
@@ -777,6 +779,20 @@ private fun TeacherApp(
                                 onRestoreEntry = onRestoreEntry,
                                 onSaveEntry = onSaveEntry,
                                 onConsumeEntrySaved = onConsumeEntrySaved,
+                                onSaved = {
+                                    navController.navigate(AppDestination.Home.route) {
+                                        popUpTo(navController.graph.startDestinationId) {
+                                            inclusive = false
+                                        }
+                                        launchSingleTop = true
+                                    }
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = "✓ Entry saved successfully",
+                                            duration = androidx.compose.material3.SnackbarDuration.Short,
+                                        )
+                                    }
+                                },
                             )
                         }
                     }
@@ -1175,6 +1191,7 @@ private fun ClassEntryPagerRoute(
     onRestoreEntry: (TeacherTrashedEntry) -> Unit,
     onSaveEntry: (TeacherEntryDraft) -> Unit,
     onConsumeEntrySaved: () -> Unit,
+    onSaved: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val initialPage = snapshot.classes.indexOfFirst { it.id == initialClassId }.coerceAtLeast(0)
@@ -1203,6 +1220,8 @@ private fun ClassEntryPagerRoute(
         beyondViewportPageCount = 1,
         flingBehavior = PagerDefaults.flingBehavior(
             state = pagerState,
+            pagerSnapDistance = PagerSnapDistance.atMost(1),
+            snapPositionalThreshold = ClassPagerPositionalThreshold,
             snapAnimationSpec = tween(
                 durationMillis = ClassPagerSnapMillis,
                 easing = FastOutSlowInEasing,
@@ -1252,6 +1271,7 @@ private fun ClassEntryPagerRoute(
                     recoveredDraftVisible = false
                     editorVisible = false
                     onConsumeEntrySaved()
+                    onSaved()
                 }
             }
 
@@ -1323,6 +1343,8 @@ private fun ClassHistoryPagerRoute(
         beyondViewportPageCount = 1,
         flingBehavior = PagerDefaults.flingBehavior(
             state = pagerState,
+            pagerSnapDistance = PagerSnapDistance.atMost(1),
+            snapPositionalThreshold = ClassPagerPositionalThreshold,
             snapAnimationSpec = tween(
                 durationMillis = ClassPagerSnapMillis,
                 easing = FastOutSlowInEasing,
