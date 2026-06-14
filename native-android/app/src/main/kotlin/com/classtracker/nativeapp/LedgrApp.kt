@@ -2,9 +2,19 @@ package com.classtracker.nativeapp
 
 import android.app.Activity
 import android.net.Uri
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,6 +58,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +70,17 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -71,7 +92,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.classtracker.core.designsystem.LedgrEmptyState
-import com.classtracker.core.designsystem.LedgrLoadingState
 import com.classtracker.core.designsystem.LedgrOfflineBanner
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrThemeMode
@@ -101,6 +121,9 @@ import kotlin.math.abs
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -177,14 +200,12 @@ fun LedgrApp(
                 }
             },
             onEmailSignIn = viewModel::signInWithEmail,
+            onCreateAccount = viewModel::createAccount,
             onClearError = viewModel::clearError,
             modifier = modifier,
         )
 
-        state.snapshot == null && state.loadingData -> FullScreenLoading(
-            label = "Loading teacher workspace",
-            modifier = modifier,
-        )
+        state.snapshot == null && state.loadingData -> FullScreenLoading(modifier = modifier)
 
         state.snapshot == null -> FullScreenError(
             message = state.errorMessage ?: "Teacher data could not be loaded.",
@@ -1576,13 +1597,141 @@ private fun MissingClassScreen(
 @Composable
 private fun FullScreenLoading(
     modifier: Modifier = Modifier,
-    label: String = "Starting Ledgr",
 ) {
+    val loadingBackground = Color(0xFFDCE6F2)
+    val loadingInk = Color(0xFF1A2A52)
+    val infiniteTransition = rememberInfiniteTransition(label = "ledgr-loading")
+    val wheelRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 24_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "moon-wheel",
+    )
+    val phaseProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 7_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "moon-phases",
+    )
+    var appeared by remember { mutableStateOf(false) }
+    val opacity by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = tween(durationMillis = 1_200, easing = FastOutSlowInEasing),
+        label = "loading-fade",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0.96f,
+        animationSpec = tween(durationMillis = 1_200, easing = FastOutSlowInEasing),
+        label = "loading-scale",
+    )
+    val view = LocalView.current
+    val restoreDarkBars = LedgrTheme.isDark
+
+    LaunchedEffect(Unit) {
+        appeared = true
+    }
+    DisposableEffect(view, restoreDarkBars) {
+        val activity = view.context as? ComponentActivity
+        activity?.enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(loadingBackground.toArgb(), loadingBackground.toArgb()),
+            navigationBarStyle = SystemBarStyle.light(loadingBackground.toArgb(), loadingBackground.toArgb()),
+        )
+        onDispose {
+            val restored = if (restoreDarkBars) Color(0xFF08111B) else Color(0xFFEFEEE8)
+            val restoredStyle = if (restoreDarkBars) {
+                SystemBarStyle.dark(restored.toArgb())
+            } else {
+                SystemBarStyle.light(restored.toArgb(), restored.toArgb())
+            }
+            activity?.enableEdgeToEdge(
+                statusBarStyle = restoredStyle,
+                navigationBarStyle = restoredStyle,
+            )
+        }
+    }
+
     Box(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .background(loadingBackground)
+            .semantics { contentDescription = "Loading Ledgr" },
         contentAlignment = Alignment.Center,
     ) {
-        LedgrLoadingState(label = label)
+        Box(
+            modifier = Modifier
+                .size(320.dp)
+                .graphicsLayer {
+                    alpha = opacity
+                    scaleX = scale
+                    scaleY = scale
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val center = center
+                val orbitRadius = size.minDimension * 0.375f
+                val moonRadius = size.minDimension / 30f
+                rotate(degrees = wheelRotation, pivot = center) {
+                    repeat(8) { index ->
+                        val angle = Math.toRadians(index * 45.0 - 90.0)
+                        val moonCenter = androidx.compose.ui.geometry.Offset(
+                            x = center.x + orbitRadius * cos(angle).toFloat(),
+                            y = center.y + orbitRadius * sin(angle).toFloat(),
+                        )
+                        val phase = (phaseProgress + index / 8f) % 1f
+                        val pulse = sin(PI.toFloat() * phase).coerceAtLeast(0f)
+                        drawCircle(
+                            color = loadingInk.copy(alpha = 0.22f * pulse),
+                            radius = moonRadius * (1f + 0.6f * pulse),
+                            center = moonCenter,
+                        )
+                        drawCircle(
+                            color = loadingInk,
+                            radius = moonRadius,
+                            center = moonCenter,
+                        )
+                        val clip = Path().apply {
+                            addOval(
+                                androidx.compose.ui.geometry.Rect(
+                                    center = moonCenter,
+                                    radius = moonRadius,
+                                ),
+                            )
+                        }
+                        clipPath(clip) {
+                            drawCircle(
+                                color = loadingBackground,
+                                radius = moonRadius,
+                                center = moonCenter.copy(
+                                    x = moonCenter.x + ((phase * 2f) - 1f) * moonRadius * 2f,
+                                ),
+                            )
+                        }
+                        drawCircle(
+                            color = loadingInk,
+                            radius = moonRadius,
+                            center = moonCenter,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                width = size.minDimension / 240f,
+                            ),
+                        )
+                    }
+                }
+            }
+            Text(
+                text = "ledgr",
+                color = loadingInk,
+                fontFamily = FontFamily(Font(R.font.sacramento_regular)),
+                fontSize = 43.sp,
+                fontWeight = FontWeight.Normal,
+            )
+        }
     }
 }
 

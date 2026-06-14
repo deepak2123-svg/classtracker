@@ -124,6 +124,14 @@ class MainViewModel @Inject constructor(
         runAuthAction { authRepository.signInWithEmail(email, password) }
     }
 
+    fun createAccount(
+        name: String,
+        email: String,
+        password: String,
+    ) {
+        runAuthAction { authRepository.createAccount(name, email, password) }
+    }
+
     fun refresh() {
         val teacher = mutableState.value.teacher ?: return
         loadTeacherData(teacher, refresh = true)

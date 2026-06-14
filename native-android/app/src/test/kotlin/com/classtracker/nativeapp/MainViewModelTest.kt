@@ -401,6 +401,8 @@ private class FakeAuthRepository : TeacherAuthRepository {
 
     override suspend fun signInWithEmail(email: String, password: String) = Unit
 
+    override suspend fun createAccount(name: String, email: String, password: String) = Unit
+
     override suspend fun signOut() {
         sessions.value = AuthSession.SignedOut
     }

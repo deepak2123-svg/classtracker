@@ -52,14 +52,22 @@ fun AuthScreen(
     googleSignInConfigured: Boolean,
     onGoogleSignIn: () -> Unit,
     onEmailSignIn: (email: String, password: String) -> Unit,
+    onCreateAccount: (name: String, email: String, password: String) -> Unit,
     onClearError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var createMode by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
     fun submit() {
-        if (email.isNotBlank() && password.isNotBlank() && !loading) {
+        if (email.isBlank() || password.isBlank() || loading) return
+        if (createMode) {
+            if (name.isNotBlank() && password.length >= 6) {
+                onCreateAccount(name.trim(), email.trim(), password)
+            }
+        } else {
             onEmailSignIn(email.trim(), password)
         }
     }
@@ -110,6 +118,35 @@ fun AuthScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(false to "Sign in", true to "Create account").forEach { (mode, label) ->
+                            if (createMode == mode) {
+                                Button(
+                                    onClick = {
+                                        createMode = mode
+                                        onClearError()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(label)
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = {
+                                        createMode = mode
+                                        onClearError()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(label)
+                                }
+                            }
+                        }
+                    }
+
                     OutlinedButton(
                         onClick = onGoogleSignIn,
                         enabled = googleSignInConfigured && !loading,
@@ -143,6 +180,25 @@ fun AuthScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         HorizontalDivider(modifier = Modifier.weight(1f))
+                    }
+
+                    if (createMode) {
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = {
+                                name = it
+                                onClearError()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Your name") },
+                            singleLine = true,
+                            enabled = !loading,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            colors = TextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            ),
+                        )
                     }
 
                     OutlinedTextField(
@@ -214,9 +270,20 @@ fun AuthScreen(
                         }
                     }
 
+                    if (createMode && password.isNotEmpty() && password.length < 6) {
+                        Text(
+                            text = "Use at least 6 characters for the password.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+
                     Button(
                         onClick = ::submit,
-                        enabled = email.isNotBlank() && password.isNotBlank() && !loading,
+                        enabled = email.isNotBlank() &&
+                            password.isNotBlank() &&
+                            (!createMode || (name.isNotBlank() && password.length >= 6)) &&
+                            !loading,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (loading) {
@@ -226,7 +293,7 @@ fun AuthScreen(
                                 color = MaterialTheme.colorScheme.onPrimary,
                             )
                         } else {
-                            Text("Sign in")
+                            Text(if (createMode) "Create account" else "Sign in")
                         }
                     }
 
@@ -246,6 +313,7 @@ private fun AuthScreenPreview() {
             googleSignInConfigured = false,
             onGoogleSignIn = {},
             onEmailSignIn = { _, _ -> },
+            onCreateAccount = { _, _, _ -> },
             onClearError = {},
         )
     }

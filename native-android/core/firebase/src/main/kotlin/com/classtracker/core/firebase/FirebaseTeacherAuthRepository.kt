@@ -3,6 +3,7 @@ package com.classtracker.core.firebase
 import com.classtracker.core.model.AuthenticatedTeacher
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.userProfileChangeRequest
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -27,6 +28,19 @@ class FirebaseTeacherAuthRepository(
 
     override suspend fun signInWithEmail(email: String, password: String) {
         auth.signInWithEmailAndPassword(email.trim(), password).await()
+    }
+
+    override suspend fun createAccount(
+        name: String,
+        email: String,
+        password: String,
+    ) {
+        val result = auth.createUserWithEmailAndPassword(email.trim(), password).await()
+        result.user?.updateProfile(
+            userProfileChangeRequest {
+                displayName = name.trim()
+            },
+        )?.await()
     }
 
     override suspend fun signOut() {

@@ -104,6 +104,10 @@ limiting a gesture to one class.
 Checkpoint 23 makes entry typing keyboard-aware. Topic and Notes now
 automatically move fully above the soft keyboard when focused, while both
 standalone and inline entry lists reserve IME space for comfortable editing.
+Checkpoint 24 opens native beta onboarding to completely new teachers. Email
+users can create an account, first-time Google or email users receive an empty
+web-compatible teacher workspace without replacing existing data, and startup
+uses the supplied Ledgr moon-orbit loading treatment.
 Checkpoint 18 adds beta-only Profile class management and recoverable class
 deletion using the existing web/admin `trash.classes` shape. It also returns
 Home immediately when a valid class submission begins while the protected
