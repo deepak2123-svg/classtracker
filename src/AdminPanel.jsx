@@ -25,6 +25,7 @@ import {
   IconTrash,
   IconUser,
   IconUsersGroup,
+  IconX,
 } from "@tabler/icons-react";
 import {
   logout, getAllTeachers, getTeacherFullData,
@@ -5346,6 +5347,7 @@ function emptySyllabusDraft(subject){
     status:"draft",
     currentVersion:0,
     draft:{
+      name:"",
       instituteName:"",
       sectionName:"",
       academicYear:currentAcademicYearLabel(),
@@ -5378,7 +5380,8 @@ function SyllabusBuilder({
   const initialTemplate = subjectTemplates[0] || emptySyllabusDraft(subject);
   const [working,setWorking] = useState(initialTemplate);
   const [selectedId,setSelectedId] = useState(initialTemplate.id || "__new");
-  const [expandedChapter,setExpandedChapter] = useState(initialTemplate.draft?.chapters?.[0]?.id || null);
+  const [chapterInput,setChapterInput] = useState("");
+  const [topicInputs,setTopicInputs] = useState({});
 
   const draft = working.draft || emptySyllabusDraft(subject).draft;
   const selectedInstituteConfig = getInstituteSectionConfig(instituteSections,draft.instituteName) || {};
@@ -5413,19 +5416,19 @@ function SyllabusBuilder({
       ? emptySyllabusDraft(subject)
       : subjectTemplates.find(item=>item.id===value) || emptySyllabusDraft(subject);
     setWorking(next);
-    setExpandedChapter(next.draft?.chapters?.[0]?.id || null);
+    setChapterInput("");
+    setTopicInputs({});
   };
   const addChapter = () => {
+    const title = chapterInput.trim();
+    if(!title) return;
     const chapter = {
       id:makeSyllabusLocalId("chapter"),
-      title:"",
-      targetSessions:0,
-      targetDate:"",
-      adminNotes:"",
+      title,
       topics:[],
     };
     updateDraft({chapters:[...draft.chapters,chapter]});
-    setExpandedChapter(chapter.id);
+    setChapterInput("");
   };
   const moveChapter = (index,direction) => {
     const nextIndex = index + direction;
@@ -5437,13 +5440,16 @@ function SyllabusBuilder({
   const removeChapter = chapterId => {
     if(!window.confirm("Remove this chapter from the draft?")) return;
     updateDraft({chapters:draft.chapters.filter(chapter=>chapter.id!==chapterId)});
-    if(expandedChapter===chapterId) setExpandedChapter(null);
   };
-  const addTopic = chapter => updateChapter(chapter.id,{
-    topics:[...(chapter.topics||[]),{id:makeSyllabusLocalId("topic"),title:""}],
-  });
+  const addTopic = chapter => {
+    const title = String(topicInputs[chapter.id]||"").trim();
+    if(!title) return;
+    updateChapter(chapter.id,{
+      topics:[...(chapter.topics||[]),{id:makeSyllabusLocalId("topic"),title}],
+    });
+    setTopicInputs(current=>({...current,[chapter.id]:""}));
+  };
   const totalTopics = draft.chapters.reduce((sum,chapter)=>sum+(chapter.topics||[]).filter(topic=>topic.title.trim()).length,0);
-  const totalSessions = draft.chapters.reduce((sum,chapter)=>sum+Number(chapter.targetSessions||0),0);
   const save = async () => {
     const saved = await onSave(working);
     if(saved){
@@ -5483,17 +5489,21 @@ function SyllabusBuilder({
       </div>
 
       <div style={{padding:isMobile?"16px":"22px"}}>
-        <div style={{display:"grid",gridTemplateColumns:"minmax(220px,520px)",gap:12,alignItems:"end"}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(220px,360px) minmax(280px,1fr)",gap:12,alignItems:"end"}}>
           <div>
-            <div style={labelStyle}>Template</div>
+            <div style={labelStyle}>Existing syllabus</div>
             <select value={selectedId} onChange={event=>chooseTemplate(event.target.value)} style={fieldStyle}>
-              <option value="__new">New syllabus template</option>
+              <option value="__new">Create a new syllabus</option>
               {subjectTemplates.map(item=>(
                 <option key={item.id} value={item.id}>
-                  {[item.draft.instituteName,item.draft.sectionName,item.draft.gradeLabel||item.gradeLabel].filter(Boolean).join(" · ") || "Unscoped draft"}
+                  {item.draft.name || item.name || [item.draft.instituteName,item.draft.sectionName,item.draft.gradeLabel||item.gradeLabel].filter(Boolean).join(" · ") || "Unnamed syllabus"}
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <div style={labelStyle}>Syllabus name</div>
+            <input value={draft.name||""} onChange={event=>updateDraft({name:event.target.value})} placeholder="e.g. NDA General Studies 2026-27" style={fieldStyle}/>
           </div>
         </div>
 
@@ -5568,10 +5578,25 @@ function SyllabusBuilder({
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginTop:24,marginBottom:12}}>
           <div>
             <div style={{fontSize:19,fontWeight:850,color:G.text,fontFamily:G.display}}>Chapters</div>
-            <div style={{fontSize:13,color:G.textM,marginTop:3}}>{totalSessions} planned sessions across this draft</div>
+            <div style={{fontSize:13,color:G.textM,marginTop:3}}>Type a chapter name and press Enter. Add topics only where needed.</div>
           </div>
-          <button onClick={addChapter} style={{...pill(G.navy,"#FFFFFF",G.navy),padding:"9px 13px",fontWeight:750}}>
-            <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={16}/> Add chapter</span>
+        </div>
+
+        <div style={{display:"flex",gap:9,alignItems:"stretch",marginBottom:12}}>
+          <input
+            value={chapterInput}
+            onChange={event=>setChapterInput(event.target.value)}
+            onKeyDown={event=>{
+              if(event.key==="Enter"){
+                event.preventDefault();
+                addChapter();
+              }
+            }}
+            placeholder="Write a chapter name"
+            style={{...fieldStyle,flex:1}}
+          />
+          <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"9px 13px",fontWeight:750,whiteSpace:"nowrap"}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={16}/> Add</span>
           </button>
         </div>
 
@@ -5582,61 +5607,44 @@ function SyllabusBuilder({
         ) : (
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {draft.chapters.map((chapter,index)=>{
-              const expanded=expandedChapter===chapter.id;
               return (
-                <div key={chapter.id} style={{border:`1.5px solid ${expanded?G.blue:G.border}`,borderRadius:12,background:expanded?"#F8FBFF":"#FFFFFF",overflow:"hidden"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 13px"}}>
+                <div key={chapter.id} style={{border:`1.5px solid ${G.border}`,borderRadius:12,background:"#FFFFFF",padding:"12px 13px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:isMobile?"wrap":"nowrap"}}>
                     <div style={{width:34,height:34,borderRadius:10,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:850,flexShrink:0}}>{index+1}</div>
-                    <button onClick={()=>setExpandedChapter(expanded?null:chapter.id)} style={{flex:1,minWidth:0,textAlign:"left",border:"none",background:"transparent",cursor:"pointer",padding:0}}>
-                      <div style={{fontSize:15.5,fontWeight:800,color:chapter.title.trim()?G.text:G.textL,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {chapter.title.trim() || "Untitled chapter"}
-                      </div>
-                      <div style={{fontSize:12,color:G.textM,marginTop:3}}>
-                        {(chapter.topics||[]).filter(topic=>topic.title.trim()).length} topics · {Number(chapter.targetSessions||0)} sessions
-                      </div>
-                    </button>
-                    <button title="Move up" onClick={()=>moveChapter(index,-1)} disabled={index===0} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:index===0?0.4:1}}><AppIcon icon={IconArrowUp} size={15}/></button>
-                    <button title="Move down" onClick={()=>moveChapter(index,1)} disabled={index===draft.chapters.length-1} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:index===draft.chapters.length-1?0.4:1}}><AppIcon icon={IconArrowDown} size={15}/></button>
-                    <button title="Delete chapter" onClick={()=>removeChapter(chapter.id)} style={{...pill(G.redL,G.red,"#F5CACA"),padding:7}}><AppIcon icon={IconTrash} size={15}/></button>
-                  </div>
-                  {expanded&&(
-                    <div style={{padding:"14px",borderTop:`1px solid ${G.border}`,display:"flex",flexDirection:"column",gap:13}}>
-                      <div>
-                        <div style={labelStyle}>Chapter title</div>
-                        <input value={chapter.title} onChange={event=>updateChapter(chapter.id,{title:event.target.value})} placeholder="e.g. Structure of Atom" style={fieldStyle}/>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"180px 220px",gap:12}}>
-                        <div>
-                          <div style={labelStyle}>Planned sessions</div>
-                          <input type="number" min="0" value={chapter.targetSessions||""} onChange={event=>updateChapter(chapter.id,{targetSessions:Number(event.target.value||0)})} placeholder="8" style={fieldStyle}/>
-                        </div>
-                        <div>
-                          <div style={labelStyle}>Target date (optional)</div>
-                          <input type="date" value={chapter.targetDate||""} onChange={event=>updateChapter(chapter.id,{targetDate:event.target.value})} style={fieldStyle}/>
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:7}}>
-                          <div style={labelStyle}>Topics</div>
-                          <button onClick={()=>addTopic(chapter)} style={{...pill("#EEF4FF",G.blue,"#C7D7F5"),padding:"6px 10px",fontSize:12,fontWeight:750}}>+ Add topic</button>
-                        </div>
-                        <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                          {(chapter.topics||[]).map((topic,topicIndex)=>(
-                            <div key={topic.id} style={{display:"flex",alignItems:"center",gap:8}}>
-                              <span style={{width:25,textAlign:"center",fontSize:12,fontWeight:800,color:G.textL}}>{topicIndex+1}</span>
-                              <input value={topic.title} onChange={event=>updateChapter(chapter.id,{topics:chapter.topics.map(item=>item.id===topic.id?{...item,title:event.target.value}:item)})} placeholder="Topic name" style={{...fieldStyle,padding:"9px 11px"}}/>
-                              <button title="Remove topic" onClick={()=>updateChapter(chapter.id,{topics:chapter.topics.filter(item=>item.id!==topic.id)})} style={{...pill("#FFFFFF",G.red,"#F5CACA"),padding:8}}><AppIcon icon={IconTrash} size={14}/></button>
-                            </div>
-                          ))}
-                          {(chapter.topics||[]).length===0&&<div style={{fontSize:13,color:G.textL}}>No topics added yet.</div>}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>Admin notes (optional)</div>
-                        <textarea value={chapter.adminNotes||""} onChange={event=>updateChapter(chapter.id,{adminNotes:event.target.value})} placeholder="Coverage guidance, exclusions, or teaching notes" rows={3} style={{...fieldStyle,resize:"vertical"}}/>
-                      </div>
+                    <input value={chapter.title} onChange={event=>updateChapter(chapter.id,{title:event.target.value})} aria-label={`Chapter ${index+1} title`} style={{...fieldStyle,flex:1,minWidth:isMobile?"calc(100% - 44px)":0,padding:"9px 11px"}}/>
+                    <div style={{display:"flex",gap:7,marginLeft:isMobile?44:0}}>
+                      <button title="Move up" onClick={()=>moveChapter(index,-1)} disabled={index===0} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:index===0?0.4:1}}><AppIcon icon={IconArrowUp} size={15}/></button>
+                      <button title="Move down" onClick={()=>moveChapter(index,1)} disabled={index===draft.chapters.length-1} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:index===draft.chapters.length-1?0.4:1}}><AppIcon icon={IconArrowDown} size={15}/></button>
+                      <button title="Delete chapter" onClick={()=>removeChapter(chapter.id)} style={{...pill(G.redL,G.red,"#F5CACA"),padding:7}}><AppIcon icon={IconTrash} size={15}/></button>
                     </div>
-                  )}
+                  </div>
+                  <div style={{marginLeft:isMobile?0:44,marginTop:10,paddingTop:10,borderTop:`1px solid ${G.border}`}}>
+                    {(chapter.topics||[]).length>0&&(
+                      <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:9}}>
+                        {chapter.topics.map((topic,topicIndex)=>(
+                          <span key={topic.id} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 7px 5px 10px",fontSize:12.5,fontWeight:700,color:G.textS}}>
+                            {topicIndex+1}. {topic.title}
+                            <button title="Remove topic" onClick={()=>updateChapter(chapter.id,{topics:chapter.topics.filter(item=>item.id!==topic.id)})} style={{border:"none",background:"transparent",color:G.red,cursor:"pointer",padding:1,display:"inline-flex"}}><AppIcon icon={IconX} size={13}/></button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{display:"flex",gap:8}}>
+                      <input
+                        value={topicInputs[chapter.id]||""}
+                        onChange={event=>setTopicInputs(current=>({...current,[chapter.id]:event.target.value}))}
+                        onKeyDown={event=>{
+                          if(event.key==="Enter"){
+                            event.preventDefault();
+                            addTopic(chapter);
+                          }
+                        }}
+                        placeholder="Add a topic (optional)"
+                        style={{...fieldStyle,flex:1,padding:"8px 10px",fontSize:13}}
+                      />
+                      <button onClick={()=>addTopic(chapter)} disabled={!String(topicInputs[chapter.id]||"").trim()} style={{...pill("#EEF4FF",G.blue,"#C7D7F5"),padding:"7px 10px",fontSize:12,fontWeight:750}}>Add topic</button>
+                    </div>
+                  </div>
                 </div>
               );
             })}

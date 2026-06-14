@@ -38,11 +38,12 @@ Status: implementation complete; live admin assignment acceptance remains.
 
 ## Milestone 2: Admin Syllabus Builder
 
-Status: first functional checkpoint implemented; live acceptance remains.
+Status: builder and quick-authoring checkpoints implemented; live acceptance remains.
 
 - Draft and published syllabus versions.
-- Curriculum, academic year, grade, and subject scope.
-- Ordered chapters, topics, target dates, and admin notes.
+- Admin-defined syllabus names.
+- Institute, section, curriculum, academic year, grade, and subject scope.
+- Fast ordered chapter and optional topic entry.
 - Stable chapter/topic IDs across revisions.
 
 ## Milestone 3: Canonical Class Offerings

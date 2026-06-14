@@ -1174,9 +1174,6 @@ function normaliseSyllabusChapters(chapters) {
         id: String(chapter?.id || syllabusNodeId("chapter")),
         title,
         order: index + 1,
-        targetSessions: Math.max(0, Number(chapter?.targetSessions || 0)),
-        targetDate: String(chapter?.targetDate || ""),
-        adminNotes: String(chapter?.adminNotes || "").trim(),
         topics: normaliseSyllabusTopics(chapter?.topics),
       };
     })
@@ -1189,6 +1186,7 @@ function normaliseSyllabusTemplate(source = {}) {
     id: String(source.id || ""),
     subjectId: String(source.subjectId || ""),
     subjectName: String(source.subjectName || ""),
+    name: String(source.name || draft.name || ""),
     instituteName: String(source.instituteName || draft.instituteName || ""),
     sectionName: String(source.sectionName || draft.sectionName || ""),
     academicYear: String(source.academicYear || draft.academicYear || ""),
@@ -1201,6 +1199,7 @@ function normaliseSyllabusTemplate(source = {}) {
     updatedAt: Number(source.updatedAt || 0),
     updatedBy: String(source.updatedBy || ""),
     draft: {
+      name: String(draft.name || source.name || ""),
       instituteName: String(draft.instituteName || source.instituteName || ""),
       sectionName: String(draft.sectionName || source.sectionName || ""),
       academicYear: String(draft.academicYear || source.academicYear || ""),
@@ -1216,8 +1215,8 @@ function normaliseSyllabusTemplate(source = {}) {
   };
 }
 
-function syllabusTemplateId({ subjectId, instituteName, sectionName, academicYear, curriculum, gradeLabel }) {
-  const scope = [subjectId, instituteName, sectionName, academicYear, curriculum, gradeLabel]
+function syllabusTemplateId({ subjectId, name, instituteName, sectionName, academicYear, curriculum, gradeLabel }) {
+  const scope = [subjectId, name, instituteName, sectionName, academicYear, curriculum, gradeLabel]
     .map(subjectIdFromName)
     .filter(Boolean)
     .join("--");
@@ -1243,6 +1242,7 @@ export async function getSyllabusTemplates() {
 export async function saveSyllabusDraft(template, adminUid = "") {
   const clean = normaliseSyllabusTemplate(template);
   if (!clean.subjectId || !clean.subjectName) throw new Error("Choose an official subject.");
+  if (!clean.draft.name.trim()) throw new Error("Enter a syllabus name.");
   if (!clean.draft.instituteName.trim()) throw new Error("Select an institute.");
   if (!clean.draft.sectionName.trim()) throw new Error("Select a section.");
   if (!clean.draft.academicYear.trim()) throw new Error("Enter the academic year.");
@@ -1251,6 +1251,7 @@ export async function saveSyllabusDraft(template, adminUid = "") {
 
   const id = clean.id || syllabusTemplateId({
     subjectId: clean.subjectId,
+    name: clean.draft.name,
     instituteName: clean.draft.instituteName,
     sectionName: clean.draft.sectionName,
     academicYear: clean.draft.academicYear,
@@ -1266,6 +1267,7 @@ export async function saveSyllabusDraft(template, adminUid = "") {
     tx.set(ref, {
       subjectId: clean.subjectId,
       subjectName: clean.subjectName,
+      name: clean.draft.name,
       instituteName: clean.draft.instituteName,
       sectionName: clean.draft.sectionName,
       academicYear: clean.draft.academicYear,
