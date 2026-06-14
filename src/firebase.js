@@ -1140,6 +1140,181 @@ export async function updateTeacherSubjectAssignments(uid, subjects, adminUid = 
   });
 }
 
+// ── Admin syllabus templates ─────────────────────────────────────────────────
+// syllabusTemplates/{templateId} keeps the editable draft and current
+// published snapshot. Every publish also writes an immutable version document
+// under syllabusTemplates/{templateId}/versions/{version}.
+
+function syllabusNodeId(prefix = "node") {
+  const random = globalThis.crypto?.randomUUID?.()
+    || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${random}`;
+}
+
+function normaliseSyllabusTopics(topics) {
+  return (Array.isArray(topics) ? topics : [])
+    .map((topic, index) => {
+      const title = String(topic?.title || "").trim();
+      if (!title) return null;
+      return {
+        id: String(topic?.id || syllabusNodeId("topic")),
+        title,
+        order: index + 1,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normaliseSyllabusChapters(chapters) {
+  return (Array.isArray(chapters) ? chapters : [])
+    .map((chapter, index) => {
+      const title = String(chapter?.title || "").trim();
+      if (!title) return null;
+      return {
+        id: String(chapter?.id || syllabusNodeId("chapter")),
+        title,
+        order: index + 1,
+        targetSessions: Math.max(0, Number(chapter?.targetSessions || 0)),
+        targetDate: String(chapter?.targetDate || ""),
+        adminNotes: String(chapter?.adminNotes || "").trim(),
+        topics: normaliseSyllabusTopics(chapter?.topics),
+      };
+    })
+    .filter(Boolean);
+}
+
+function normaliseSyllabusTemplate(source = {}) {
+  const draft = source.draft || {};
+  return {
+    id: String(source.id || ""),
+    subjectId: String(source.subjectId || ""),
+    subjectName: String(source.subjectName || ""),
+    academicYear: String(source.academicYear || draft.academicYear || ""),
+    curriculum: String(source.curriculum || draft.curriculum || ""),
+    gradeLabel: String(source.gradeLabel || draft.gradeLabel || ""),
+    status: source.status === "published" ? "published" : "draft",
+    currentVersion: Number(source.currentVersion || 0),
+    createdAt: Number(source.createdAt || 0),
+    createdBy: String(source.createdBy || ""),
+    updatedAt: Number(source.updatedAt || 0),
+    updatedBy: String(source.updatedBy || ""),
+    draft: {
+      academicYear: String(draft.academicYear || source.academicYear || ""),
+      curriculum: String(draft.curriculum || source.curriculum || ""),
+      gradeLabel: String(draft.gradeLabel || source.gradeLabel || ""),
+      chapters: normaliseSyllabusChapters(draft.chapters),
+    },
+    published: source.published ? {
+      ...source.published,
+      version: Number(source.published.version || source.currentVersion || 0),
+      chapters: normaliseSyllabusChapters(source.published.chapters),
+    } : null,
+  };
+}
+
+function syllabusTemplateId({ subjectId, academicYear, curriculum, gradeLabel }) {
+  const scope = [subjectId, academicYear, curriculum, gradeLabel]
+    .map(subjectIdFromName)
+    .filter(Boolean)
+    .join("--");
+  return scope || syllabusNodeId("syllabus");
+}
+
+export async function getSyllabusTemplates() {
+  try {
+    const snap = await getDocs(collection(db, "syllabusTemplates"));
+    return snap.docs
+      .map(item => normaliseSyllabusTemplate({ id: item.id, ...item.data() }))
+      .sort((a, b) => {
+        const subjectOrder = a.subjectName.localeCompare(b.subjectName, undefined, { sensitivity: "base" });
+        if (subjectOrder) return subjectOrder;
+        return b.updatedAt - a.updatedAt;
+      });
+  } catch (error) {
+    console.error("getSyllabusTemplates", error);
+    return [];
+  }
+}
+
+export async function saveSyllabusDraft(template, adminUid = "") {
+  const clean = normaliseSyllabusTemplate(template);
+  if (!clean.subjectId || !clean.subjectName) throw new Error("Choose an official subject.");
+  if (!clean.draft.academicYear.trim()) throw new Error("Enter the academic year.");
+  if (!clean.draft.curriculum.trim()) throw new Error("Enter the curriculum or board.");
+  if (!clean.draft.gradeLabel.trim()) throw new Error("Enter the grade, course, or programme.");
+
+  const id = clean.id || syllabusTemplateId({
+    subjectId: clean.subjectId,
+    academicYear: clean.draft.academicYear,
+    curriculum: clean.draft.curriculum,
+    gradeLabel: clean.draft.gradeLabel,
+  });
+  const ref = doc(db, "syllabusTemplates", id);
+  const now = Date.now();
+
+  await runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    const current = snap.exists() ? snap.data() : {};
+    tx.set(ref, {
+      subjectId: clean.subjectId,
+      subjectName: clean.subjectName,
+      academicYear: clean.draft.academicYear,
+      curriculum: clean.draft.curriculum,
+      gradeLabel: clean.draft.gradeLabel,
+      status: current.status === "published" ? "published" : "draft",
+      currentVersion: Number(current.currentVersion || 0),
+      createdAt: Number(current.createdAt || now),
+      createdBy: String(current.createdBy || adminUid || "admin"),
+      updatedAt: now,
+      updatedBy: adminUid || "admin",
+      draft: clean.draft,
+      published: current.published || null,
+    }, { merge: true });
+  });
+
+  const saved = await getDoc(ref);
+  return normaliseSyllabusTemplate({ id, ...saved.data() });
+}
+
+export async function publishSyllabusTemplate(templateId, adminUid = "") {
+  if (!templateId) throw new Error("Save the syllabus draft before publishing.");
+  const ref = doc(db, "syllabusTemplates", templateId);
+  let publishedResult = null;
+
+  await runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error("Syllabus draft was not found.");
+    const current = normaliseSyllabusTemplate({ id: snap.id, ...snap.data() });
+    if (!current.draft.chapters.length) throw new Error("Add at least one chapter before publishing.");
+    const nextVersion = current.currentVersion + 1;
+    const now = Date.now();
+    const published = {
+      ...current.draft,
+      subjectId: current.subjectId,
+      subjectName: current.subjectName,
+      version: nextVersion,
+      publishedAt: now,
+      publishedBy: adminUid || "admin",
+    };
+    tx.set(doc(db, "syllabusTemplates", templateId, "versions", String(nextVersion)), published);
+    tx.set(doc(db, "publishedSyllabi", templateId), {
+      ...published,
+      templateId,
+      updatedAt: now,
+    });
+    tx.set(ref, {
+      status: "published",
+      currentVersion: nextVersion,
+      published,
+      updatedAt: now,
+      updatedBy: adminUid || "admin",
+    }, { merge: true });
+    publishedResult = { ...current, status: "published", currentVersion: nextVersion, published, updatedAt: now };
+  });
+
+  return publishedResult;
+}
+
 // ── Ledgr report automation ───────────────────────────────────────────────────
 // config/ledgrReportSchedule stores the admin's desired schedule. A trusted
 // backend runner can read this document and write execution metadata alongside

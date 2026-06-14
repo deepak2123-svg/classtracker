@@ -36,19 +36,21 @@ Status: implementation complete; live admin assignment acceptance remains.
 - Existing classes, entries, reports, and Teacher web behavior remain intact.
 - Offline restart retains the assignment version and subject choices.
 
-## Milestone 2: Canonical Class Offerings
+## Milestone 2: Admin Syllabus Builder
 
-- Define an offering by academic year, institute, section, and subject ID.
-- Map one or more teachers to an offering.
-- Preserve teacher changes without losing class or entry history.
-- Add migration reporting for unmatched legacy class subjects.
-
-## Milestone 3: Admin Syllabus Builder
+Status: first functional checkpoint implemented; live acceptance remains.
 
 - Draft and published syllabus versions.
 - Curriculum, academic year, grade, and subject scope.
 - Ordered chapters, topics, target dates, and admin notes.
 - Stable chapter/topic IDs across revisions.
+
+## Milestone 3: Canonical Class Offerings
+
+- Define an offering by academic year, institute, section, and subject ID.
+- Map one or more teachers to an offering.
+- Preserve teacher changes without losing class or entry history.
+- Add migration reporting for unmatched legacy class subjects.
 
 ## Milestone 4: Teacher Syllabus View
 
@@ -70,4 +72,3 @@ Status: implementation complete; live admin assignment acceptance remains.
 - Planned versus completed chapters.
 - Delays, upcoming targets, and class comparisons.
 - Exportable progress summaries.
-

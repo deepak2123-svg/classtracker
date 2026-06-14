@@ -3,11 +3,15 @@ import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import {
   IconBuilding,
+  IconArrowDown,
+  IconArrowUp,
   IconCalendar,
   IconChartBar,
+  IconCheck,
   IconChevronLeft,
   IconChevronRight,
   IconClock,
+  IconDeviceFloppy,
   IconDownload,
   IconFileText,
   IconLogout,
@@ -31,6 +35,7 @@ import {
   trashClassInTeacherData, restoreClassFromTeacherTrash,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute, renameGlobalInstitute, saveInstituteExtraSections,
   getGlobalSubjects, saveGlobalSubject, setGlobalSubjectActive, updateTeacherSubjectAssignments,
+  getSyllabusTemplates, saveSyllabusDraft, publishSyllabusTemplate,
   getDeletedInstitutesList, addToDeletedInstitutesList, removeFromDeletedInstitutesList,
   repairTeacherIndex, saveProfileName, saveUserData,
   deleteInstituteCompletely, deleteInstituteAndMigrate,
@@ -5321,6 +5326,290 @@ function FeedbackInboxModal({
   );
 }
 
+function makeSyllabusLocalId(prefix){
+  const random = globalThis.crypto?.randomUUID?.()
+    || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,9)}`;
+  return `${prefix}-${random}`;
+}
+
+function currentAcademicYearLabel(){
+  const now = new Date();
+  const start = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${start}-${String(start + 1).slice(-2)}`;
+}
+
+function emptySyllabusDraft(subject){
+  return {
+    id:"",
+    subjectId:subject.id,
+    subjectName:subject.name,
+    status:"draft",
+    currentVersion:0,
+    draft:{
+      academicYear:currentAcademicYearLabel(),
+      curriculum:"",
+      gradeLabel:"",
+      chapters:[],
+    },
+    published:null,
+  };
+}
+
+function SyllabusBuilder({
+  subject,
+  templates,
+  affectedSummary,
+  busy,
+  isMobile,
+  onClose,
+  onSave,
+  onPublish,
+}){
+  const subjectTemplates = useMemo(
+    ()=>templates
+      .filter(item=>item.subjectId===subject.id)
+      .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)),
+    [templates,subject.id],
+  );
+  const initialTemplate = subjectTemplates[0] || emptySyllabusDraft(subject);
+  const [working,setWorking] = useState(initialTemplate);
+  const [selectedId,setSelectedId] = useState(initialTemplate.id || "__new");
+  const [expandedChapter,setExpandedChapter] = useState(initialTemplate.draft?.chapters?.[0]?.id || null);
+
+  const draft = working.draft || emptySyllabusDraft(subject).draft;
+  const fieldStyle = {
+    width:"100%",boxSizing:"border-box",border:`1.5px solid ${G.borderM}`,borderRadius:10,
+    padding:"11px 13px",fontSize:14,fontFamily:G.sans,fontWeight:650,color:G.text,
+    background:"#FFFFFF",outline:"none",
+  };
+  const labelStyle = {fontSize:11.5,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6};
+  const updateDraft = patch => setWorking(current=>({
+    ...current,
+    subjectId:subject.id,
+    subjectName:subject.name,
+    draft:{...current.draft,...patch},
+  }));
+  const updateChapter = (chapterId,patch) => updateDraft({
+    chapters:draft.chapters.map(chapter=>chapter.id===chapterId?{...chapter,...patch}:chapter),
+  });
+  const chooseTemplate = value => {
+    setSelectedId(value);
+    const next = value==="__new"
+      ? emptySyllabusDraft(subject)
+      : subjectTemplates.find(item=>item.id===value) || emptySyllabusDraft(subject);
+    setWorking(next);
+    setExpandedChapter(next.draft?.chapters?.[0]?.id || null);
+  };
+  const addChapter = () => {
+    const chapter = {
+      id:makeSyllabusLocalId("chapter"),
+      title:"",
+      targetSessions:0,
+      targetDate:"",
+      adminNotes:"",
+      topics:[],
+    };
+    updateDraft({chapters:[...draft.chapters,chapter]});
+    setExpandedChapter(chapter.id);
+  };
+  const moveChapter = (index,direction) => {
+    const nextIndex = index + direction;
+    if(nextIndex<0 || nextIndex>=draft.chapters.length) return;
+    const next=[...draft.chapters];
+    [next[index],next[nextIndex]]=[next[nextIndex],next[index]];
+    updateDraft({chapters:next});
+  };
+  const removeChapter = chapterId => {
+    if(!window.confirm("Remove this chapter from the draft?")) return;
+    updateDraft({chapters:draft.chapters.filter(chapter=>chapter.id!==chapterId)});
+    if(expandedChapter===chapterId) setExpandedChapter(null);
+  };
+  const addTopic = chapter => updateChapter(chapter.id,{
+    topics:[...(chapter.topics||[]),{id:makeSyllabusLocalId("topic"),title:""}],
+  });
+  const totalTopics = draft.chapters.reduce((sum,chapter)=>sum+(chapter.topics||[]).filter(topic=>topic.title.trim()).length,0);
+  const totalSessions = draft.chapters.reduce((sum,chapter)=>sum+Number(chapter.targetSessions||0),0);
+  const save = async () => {
+    const saved = await onSave(working);
+    if(saved){
+      setWorking(saved);
+      setSelectedId(saved.id);
+    }
+    return saved;
+  };
+  const publish = async () => {
+    if(!window.confirm("Publish this syllabus version? The published history will remain permanent.")) return;
+    const saved = await save();
+    if(!saved) return;
+    const published = await onPublish(saved.id);
+    if(published) setWorking(published);
+  };
+
+  return (
+    <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden",marginBottom:24}}>
+      <div style={{padding:isMobile?"16px":"20px 22px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+          <div style={{minWidth:0}}>
+            <button onClick={onClose} style={{...pill("#FFFFFF",G.textS,G.border),padding:"7px 11px",marginBottom:13}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconChevronLeft} size={15}/> Subjects</span>
+            </button>
+            <div style={{fontSize:isMobile?23:28,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.15}}>Syllabus builder</div>
+            <div style={{fontSize:16,fontWeight:750,color:G.blue,marginTop:5}}>{subject.name}</div>
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <span style={{...pill(working.currentVersion?"#E8F7EF":"#FFF7E6",working.currentVersion?"#137A45":"#9A5A00",working.currentVersion?"#B9E5CA":"#F1D49A"),cursor:"default",fontWeight:750}}>
+              {working.currentVersion?`Published v${working.currentVersion}`:"Draft only"}
+            </span>
+            <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:750}}>
+              {draft.chapters.length} chapters · {totalTopics} topics
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{padding:isMobile?"16px":"22px"}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(220px,0.8fr) repeat(3,minmax(150px,1fr))",gap:12,alignItems:"end"}}>
+          <div>
+            <div style={labelStyle}>Template</div>
+            <select value={selectedId} onChange={event=>chooseTemplate(event.target.value)} style={fieldStyle}>
+              <option value="__new">New syllabus template</option>
+              {subjectTemplates.map(item=>(
+                <option key={item.id} value={item.id}>
+                  {item.draft.gradeLabel || item.gradeLabel} · {item.draft.academicYear || item.academicYear}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div style={labelStyle}>Academic year</div>
+            <input value={draft.academicYear} onChange={event=>updateDraft({academicYear:event.target.value})} placeholder="2026-27" style={fieldStyle}/>
+          </div>
+          <div>
+            <div style={labelStyle}>Curriculum / board</div>
+            <input value={draft.curriculum} onChange={event=>updateDraft({curriculum:event.target.value})} placeholder="CBSE, UPSC, State Board" style={fieldStyle}/>
+          </div>
+          <div>
+            <div style={labelStyle}>Grade / course / programme</div>
+            <input value={draft.gradeLabel} onChange={event=>updateDraft({gradeLabel:event.target.value})} placeholder="Class 11, NDA, Foundation" style={fieldStyle}/>
+          </div>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10,marginTop:16,padding:"13px 15px",background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:11}}>
+          <div><div style={labelStyle}>Affected classes</div><div style={{fontSize:20,fontWeight:850,color:G.text}}>{affectedSummary.classCount}</div></div>
+          <div><div style={labelStyle}>Institutes</div><div style={{fontSize:20,fontWeight:850,color:G.text}}>{affectedSummary.instituteCount}</div></div>
+          <div><div style={labelStyle}>Teachers</div><div style={{fontSize:20,fontWeight:850,color:G.text}}>{affectedSummary.teacherCount}</div></div>
+        </div>
+        {affectedSummary.classes.length>0&&(
+          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:9}}>
+            {affectedSummary.classes.slice(0,8).map(item=>(
+              <span key={item} title={item} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,color:G.textS}}>
+                {item}
+              </span>
+            ))}
+            {affectedSummary.classes.length>8&&(
+              <span style={{background:"#EEF4FF",border:"1px solid #C7D7F5",borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:800,color:G.blue}}>
+                +{affectedSummary.classes.length-8} more
+              </span>
+            )}
+          </div>
+        )}
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginTop:24,marginBottom:12}}>
+          <div>
+            <div style={{fontSize:19,fontWeight:850,color:G.text,fontFamily:G.display}}>Chapters</div>
+            <div style={{fontSize:13,color:G.textM,marginTop:3}}>{totalSessions} planned sessions across this draft</div>
+          </div>
+          <button onClick={addChapter} style={{...pill(G.navy,"#FFFFFF",G.navy),padding:"9px 13px",fontWeight:750}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={16}/> Add chapter</span>
+          </button>
+        </div>
+
+        {draft.chapters.length===0 ? (
+          <div style={{border:`2px dashed ${G.borderM}`,borderRadius:12,padding:"30px 18px",textAlign:"center",color:G.textM}}>
+            Add the first chapter to begin this syllabus.
+          </div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {draft.chapters.map((chapter,index)=>{
+              const expanded=expandedChapter===chapter.id;
+              return (
+                <div key={chapter.id} style={{border:`1.5px solid ${expanded?G.blue:G.border}`,borderRadius:12,background:expanded?"#F8FBFF":"#FFFFFF",overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 13px"}}>
+                    <div style={{width:34,height:34,borderRadius:10,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:850,flexShrink:0}}>{index+1}</div>
+                    <button onClick={()=>setExpandedChapter(expanded?null:chapter.id)} style={{flex:1,minWidth:0,textAlign:"left",border:"none",background:"transparent",cursor:"pointer",padding:0}}>
+                      <div style={{fontSize:15.5,fontWeight:800,color:chapter.title.trim()?G.text:G.textL,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {chapter.title.trim() || "Untitled chapter"}
+                      </div>
+                      <div style={{fontSize:12,color:G.textM,marginTop:3}}>
+                        {(chapter.topics||[]).filter(topic=>topic.title.trim()).length} topics · {Number(chapter.targetSessions||0)} sessions
+                      </div>
+                    </button>
+                    <button title="Move up" onClick={()=>moveChapter(index,-1)} disabled={index===0} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:index===0?0.4:1}}><AppIcon icon={IconArrowUp} size={15}/></button>
+                    <button title="Move down" onClick={()=>moveChapter(index,1)} disabled={index===draft.chapters.length-1} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:index===draft.chapters.length-1?0.4:1}}><AppIcon icon={IconArrowDown} size={15}/></button>
+                    <button title="Delete chapter" onClick={()=>removeChapter(chapter.id)} style={{...pill(G.redL,G.red,"#F5CACA"),padding:7}}><AppIcon icon={IconTrash} size={15}/></button>
+                  </div>
+                  {expanded&&(
+                    <div style={{padding:"14px",borderTop:`1px solid ${G.border}`,display:"flex",flexDirection:"column",gap:13}}>
+                      <div>
+                        <div style={labelStyle}>Chapter title</div>
+                        <input value={chapter.title} onChange={event=>updateChapter(chapter.id,{title:event.target.value})} placeholder="e.g. Structure of Atom" style={fieldStyle}/>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"180px 220px",gap:12}}>
+                        <div>
+                          <div style={labelStyle}>Planned sessions</div>
+                          <input type="number" min="0" value={chapter.targetSessions||""} onChange={event=>updateChapter(chapter.id,{targetSessions:Number(event.target.value||0)})} placeholder="8" style={fieldStyle}/>
+                        </div>
+                        <div>
+                          <div style={labelStyle}>Target date (optional)</div>
+                          <input type="date" value={chapter.targetDate||""} onChange={event=>updateChapter(chapter.id,{targetDate:event.target.value})} style={fieldStyle}/>
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:7}}>
+                          <div style={labelStyle}>Topics</div>
+                          <button onClick={()=>addTopic(chapter)} style={{...pill("#EEF4FF",G.blue,"#C7D7F5"),padding:"6px 10px",fontSize:12,fontWeight:750}}>+ Add topic</button>
+                        </div>
+                        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                          {(chapter.topics||[]).map((topic,topicIndex)=>(
+                            <div key={topic.id} style={{display:"flex",alignItems:"center",gap:8}}>
+                              <span style={{width:25,textAlign:"center",fontSize:12,fontWeight:800,color:G.textL}}>{topicIndex+1}</span>
+                              <input value={topic.title} onChange={event=>updateChapter(chapter.id,{topics:chapter.topics.map(item=>item.id===topic.id?{...item,title:event.target.value}:item)})} placeholder="Topic name" style={{...fieldStyle,padding:"9px 11px"}}/>
+                              <button title="Remove topic" onClick={()=>updateChapter(chapter.id,{topics:chapter.topics.filter(item=>item.id!==topic.id)})} style={{...pill("#FFFFFF",G.red,"#F5CACA"),padding:8}}><AppIcon icon={IconTrash} size={14}/></button>
+                            </div>
+                          ))}
+                          {(chapter.topics||[]).length===0&&<div style={{fontSize:13,color:G.textL}}>No topics added yet.</div>}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>Admin notes (optional)</div>
+                        <textarea value={chapter.adminNotes||""} onChange={event=>updateChapter(chapter.id,{adminNotes:event.target.value})} placeholder="Coverage guidance, exclusions, or teaching notes" rows={3} style={{...fieldStyle,resize:"vertical"}}/>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginTop:20,paddingTop:18,borderTop:`1px solid ${G.border}`}}>
+          <div style={{fontSize:12.5,color:G.textM,maxWidth:520,lineHeight:1.5}}>
+            Saving updates the private draft. Publishing creates a permanent version and makes it available for future teacher syllabus views.
+          </div>
+          <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+            <button onClick={save} disabled={busy} style={{...pill("#FFFFFF",G.navy,G.borderM),padding:"10px 15px",fontWeight:800}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconDeviceFloppy} size={16}/>{busy?"Saving...":"Save draft"}</span>
+            </button>
+            <button onClick={publish} disabled={busy||!draft.chapters.length} style={{...pill(draft.chapters.length?"#16845B":G.bg,"#FFFFFF",draft.chapters.length?"#16845B":G.border),padding:"10px 15px",fontWeight:800}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconCheck} size={16}/> Publish version</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminPanelInner({user}){
   const PANEL_LIMITS = React.useMemo(()=>({
     p1:{ min:112, max:340, collapsed:76, default:175 },
@@ -5417,6 +5706,9 @@ function AdminPanelInner({user}){
   const [newSubjectName, setNewSubjectName] = useState("");
   const [subjectBusy, setSubjectBusy] = useState(false);
   const [subjectAssignmentBusy, setSubjectAssignmentBusy] = useState(null);
+  const [syllabusTemplates, setSyllabusTemplates] = useState([]);
+  const [syllabusBuilderSubject, setSyllabusBuilderSubject] = useState(null);
+  const [syllabusBusy, setSyllabusBusy] = useState(false);
   const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
   const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
@@ -5589,17 +5881,19 @@ function AdminPanelInner({user}){
   useEffect(()=>{
     (async()=>{
       // Load index + roles + global institutes list in parallel
-      const [t,r,gInst,gSubjects,gDeleted,savedBin,savedLedgrSchedule]=await Promise.all([
+      const [t,r,gInst,gSubjects,gSyllabi,gDeleted,savedBin,savedLedgrSchedule]=await Promise.all([
         getAllTeachers(),
         getAllRoles(),
         getGlobalInstitutes(),
         getGlobalSubjects(),
+        getSyllabusTemplates(),
         getDeletedInstitutesList(),
         getAdminBin(),
         getLedgrReportSchedule(),
       ]);
       setTeachers(t); setRoles(r);
       setGlobalSubjects(gSubjects);
+      setSyllabusTemplates(gSyllabi);
       setLedgrReportSchedule(savedLedgrSchedule);
       setLedgrReportScheduleLoading(false);
       // Restore persisted deleted-institutes set so page refresh doesn't un-hide them
@@ -8172,6 +8466,56 @@ function AdminPanelInner({user}){
     }
   };
 
+  const openSyllabusBuilder = subject => {
+    setSyllabusBuilderSubject(subject);
+    const subjectKey = subject.name.trim().toLowerCase();
+    teachers
+      .filter(teacher => {
+        const assignedIds = teacher.assignedSubjectIds || [];
+        const names = (teacher.subjects || []).map(value=>String(value).trim().toLowerCase());
+        return assignedIds.includes(subject.id) || names.includes(subjectKey);
+      })
+      .forEach(teacher=>ensureFullData(teacher.uid).catch(()=>{}));
+  };
+
+  const handleSaveSyllabusDraft = async template => {
+    if(syllabusBusy) return null;
+    setSyllabusBusy(true);
+    try{
+      const saved=await saveSyllabusDraft(template,user.uid);
+      setSyllabusTemplates(current=>[
+        ...current.filter(item=>item.id!==saved.id),
+        saved,
+      ]);
+      showAdminToast("Syllabus draft saved.");
+      return saved;
+    }catch(error){
+      showAdminToast(error?.message||"Syllabus draft could not be saved.");
+      return null;
+    }finally{
+      setSyllabusBusy(false);
+    }
+  };
+
+  const handlePublishSyllabus = async templateId => {
+    if(syllabusBusy) return null;
+    setSyllabusBusy(true);
+    try{
+      const published=await publishSyllabusTemplate(templateId,user.uid);
+      setSyllabusTemplates(current=>[
+        ...current.filter(item=>item.id!==published.id),
+        published,
+      ]);
+      showAdminToast(`Syllabus version ${published.currentVersion} published.`);
+      return published;
+    }catch(error){
+      showAdminToast(error?.message||"Syllabus could not be published.");
+      return null;
+    }finally{
+      setSyllabusBusy(false);
+    }
+  };
+
   const teacherAssignedSubjectIds = teacher => {
     const explicit = Array.isArray(teacher.assignedSubjectIds) ? teacher.assignedSubjectIds : [];
     if (explicit.length || Number(teacher.subjectAssignmentVersion || 0) > 0) return explicit;
@@ -10458,6 +10802,24 @@ function AdminPanelInner({user}){
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
     ];
     const manageTitle = manageTabItems.find(item=>item.key===manageTab)?.label || "Control Centre";
+    const syllabusAffectedSummary = (() => {
+      if(!syllabusBuilderSubject) return {classCount:0,instituteCount:0,teacherCount:0,classes:[]};
+      const subjectKey=syllabusBuilderSubject.name.trim().toLowerCase();
+      let classCount=0;
+      const instituteNames=new Set();
+      const teacherUids=new Set();
+      const classLabels=new Set();
+      Object.entries(fullData).forEach(([uid,data])=>{
+        (data?.classes||[]).forEach(cls=>{
+          if(String(cls?.subject||"").trim().toLowerCase()!==subjectKey) return;
+          classCount+=1;
+          teacherUids.add(uid);
+          if(cls.institute) instituteNames.add(String(cls.institute).trim());
+          classLabels.add([cls.institute,cls.name||cls.section].filter(Boolean).join(" · "));
+        });
+      });
+      return {classCount,instituteCount:instituteNames.size,teacherCount:teacherUids.size,classes:[...classLabels].filter(Boolean).sort()};
+    })();
     const mobileManageBack = () => {
       if(instDetailView){
         setInstDetailView(null);
@@ -10839,12 +11201,26 @@ function AdminPanelInner({user}){
           ))}
         </div>
 
-        {manageTab==="subjects"&&(
+        {manageTab==="subjects"&&syllabusBuilderSubject&&(
+          <SyllabusBuilder
+            key={syllabusBuilderSubject.id}
+            subject={syllabusBuilderSubject}
+            templates={syllabusTemplates}
+            affectedSummary={syllabusAffectedSummary}
+            busy={syllabusBusy}
+            isMobile={isMobile}
+            onClose={()=>setSyllabusBuilderSubject(null)}
+            onSave={handleSaveSyllabusDraft}
+            onPublish={handlePublishSyllabus}
+          />
+        )}
+
+        {manageTab==="subjects"&&!syllabusBuilderSubject&&(
           <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
               <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display}}>Subject catalog</div>
               <div style={{fontSize:14,color:G.textM,lineHeight:1.55,marginTop:4,marginBottom:14}}>
-                Official subjects used for teacher assignments and future syllabus templates.
+                Official subjects used for teacher assignments and published syllabus templates.
               </div>
               <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
                 <input
@@ -10869,21 +11245,35 @@ function AdminPanelInner({user}){
                 <div style={{padding:"28px 12px",textAlign:"center",color:G.textM}}>No canonical subjects yet.</div>
               ) : (
                 <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
-                  {globalSubjects.map(subject=>(
-                    <div key={subject.id} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",borderRadius:12,border:`1px solid ${subject.active?G.border:"#F5CACA"}`,background:subject.active?G.bg:G.redL}}>
+                  {globalSubjects.map(subject=>{
+                    const subjectSyllabi=syllabusTemplates.filter(item=>item.subjectId===subject.id);
+                    const publishedCount=subjectSyllabi.filter(item=>item.currentVersion>0).length;
+                    return (
+                    <div key={subject.id} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",borderRadius:12,border:`1px solid ${subject.active?G.border:"#F5CACA"}`,background:subject.active?G.bg:G.redL,flexWrap:"wrap"}}>
                       <div style={{width:38,height:38,borderRadius:11,background:subject.active?G.blueL:"#FDE2E2",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <AppIcon icon={IconBooks} size={18} color={subject.active?G.blue:G.red}/>
                       </div>
                       <div style={{minWidth:0,flex:1}}>
                         <div style={{fontSize:15,fontWeight:800,color:G.text}}>{subject.name}</div>
                         <div style={{fontSize:11.5,color:G.textL,fontFamily:G.mono,marginTop:2}}>{subject.id}</div>
+                        <div style={{fontSize:11.5,color:G.textM,marginTop:4}}>
+                          {subjectSyllabi.length} template{subjectSyllabi.length===1?"":"s"} · {publishedCount} published
+                        </div>
                       </div>
-                      <button onClick={()=>handleToggleSubjectActive(subject)} disabled={subjectBusy}
-                        style={{...pill(subject.active?G.surface:G.blueL,subject.active?G.red:G.blue,subject.active?"#F5CACA":"#C7D7F5"),fontSize:12}}>
-                        {subject.active?"Archive":"Restore"}
-                      </button>
+                      <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                        {subject.active&&(
+                          <button onClick={()=>openSyllabusBuilder(subject)}
+                            style={{...pill(G.navy,"#FFFFFF",G.navy),fontSize:12,fontWeight:800}}>
+                            Build syllabus
+                          </button>
+                        )}
+                        <button onClick={()=>handleToggleSubjectActive(subject)} disabled={subjectBusy}
+                          style={{...pill(subject.active?G.surface:G.blueL,subject.active?G.red:G.blue,subject.active?"#F5CACA":"#C7D7F5"),fontSize:12}}>
+                          {subject.active?"Archive":"Restore"}
+                        </button>
+                      </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>

@@ -79,6 +79,22 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /syllabusTemplates/{templateId} {
+      allow read:  if isAdmin();
+      allow write: if isAdmin();
+
+      match /versions/{versionId} {
+        allow read:  if isAdmin();
+        allow create: if isAdmin();
+        allow update, delete: if false;
+      }
+    }
+
+    match /publishedSyllabi/{templateId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     match /invites/{token} {
       allow read:   if isSignedIn();
       allow create: if isAdmin();
