@@ -95,17 +95,6 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /classOfferings/{offeringId} {
-      allow read:  if isSignedIn();
-      allow write: if isAdmin();
-
-      match /assignmentHistory/{versionId} {
-        allow read:  if isAdmin();
-        allow create: if isAdmin();
-        allow update, delete: if false;
-      }
-    }
-
     match /invites/{token} {
       allow read:   if isSignedIn();
       allow create: if isAdmin();

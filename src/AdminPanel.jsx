@@ -37,7 +37,6 @@ import {
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute, renameGlobalInstitute, saveInstituteExtraSections,
   getGlobalSubjects, saveGlobalSubject, setGlobalSubjectActive, updateTeacherSubjectAssignments,
   getSyllabusTemplates, saveSyllabusDraft, publishSyllabusTemplate,
-  getClassOfferings, saveClassOffering,
   getDeletedInstitutesList, addToDeletedInstitutesList, removeFromDeletedInstitutesList,
   repairTeacherIndex, saveProfileName, saveUserData,
   deleteInstituteCompletely, deleteInstituteAndMigrate,
@@ -5671,258 +5670,6 @@ function SyllabusBuilder({
   );
 }
 
-function emptyClassOffering(){
-  return {
-    id:"",
-    academicYear:currentAcademicYearLabel(),
-    instituteName:"",
-    sectionName:"",
-    subjectId:"",
-    subjectName:"",
-    teacherUids:[],
-    syllabusTemplateId:"",
-    syllabusVersion:0,
-    active:true,
-    assignmentVersion:0,
-  };
-}
-
-function buildLegacyOfferingReport({offerings,fullData,subjects,instituteSections}){
-  const activeOfferings=(offerings||[]).filter(item=>item.active!==false);
-  const offeringById=new Map(activeOfferings.map(item=>[item.id,item]));
-  const subjectByName=new Map((subjects||[]).map(item=>[String(item.name||"").trim().toLowerCase(),item.id]));
-  const rows=[];
-  Object.entries(fullData||{}).forEach(([uid,data])=>{
-    (data?.classes||[]).forEach(cls=>{
-      const canonical=offeringById.get(String(cls?.offeringId||""));
-      const subjectId=String(cls?.subjectId||subjectByName.get(String(cls?.subject||"").trim().toLowerCase())||"");
-      const resolvedSection=resolveAdminSectionName(cls?.section,cls?.institute,instituteSections)
-        || String(cls?.section||cls?.name||"").trim();
-      const matched=canonical || activeOfferings.find(item=>
-        item.subjectId===subjectId
-        && sameInstituteName(item.instituteName,cls?.institute)
-        && normaliseSectionKey(item.sectionName)===normaliseSectionKey(resolvedSection)
-      );
-      rows.push({
-        uid,
-        classId:String(cls?.id||""),
-        className:String(cls?.section||cls?.name||"Untitled class"),
-        instituteName:String(cls?.institute||""),
-        sectionName:resolvedSection,
-        subjectName:String(cls?.subject||""),
-        subjectId,
-        offeringId:matched?.id||"",
-        matched:!!matched,
-        reason:matched
-          ? "Matched"
-          : !subjectId
-            ? "Subject is not in the canonical catalog"
-            : "No active offering for this institute and section",
-      });
-    });
-  });
-  return {
-    total:rows.length,
-    matched:rows.filter(item=>item.matched).length,
-    unmatched:rows.filter(item=>!item.matched),
-  };
-}
-
-function ClassOfferingsManager({
-  offerings,
-  institutes,
-  instituteSections,
-  subjects,
-  syllabusTemplates,
-  teachers,
-  fullData,
-  busy,
-  isMobile,
-  onSave,
-}){
-  const [editing,setEditing]=useState(null);
-  const [showUnmatched,setShowUnmatched]=useState(true);
-  const report=useMemo(
-    ()=>buildLegacyOfferingReport({offerings,fullData,subjects,instituteSections}),
-    [offerings,fullData,subjects,instituteSections],
-  );
-  const fieldStyle={
-    width:"100%",boxSizing:"border-box",border:`1.5px solid ${G.borderM}`,borderRadius:10,
-    padding:"11px 13px",fontSize:14,fontFamily:G.sans,fontWeight:650,color:G.text,
-    background:"#FFFFFF",outline:"none",
-  };
-  const labelStyle={fontSize:11.5,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6};
-  const draft=editing||emptyClassOffering();
-  const subject=subjects.find(item=>item.id===draft.subjectId);
-  const instConfig=getInstituteSectionConfig(instituteSections,draft.instituteName)||{};
-  const sectionOptions=uniqueSectionNames([
-    ...(instConfig.gradeGroups||[]).flatMap(group=>group.sections||[]),
-    ...(instConfig.extraSections||[]),
-  ]);
-  const matchingSyllabi=syllabusTemplates.filter(item=>
-    item.currentVersion>0
-    && item.subjectId===draft.subjectId
-    && sameInstituteName(item.instituteName||item.draft?.instituteName,draft.instituteName)
-    && normaliseSectionKey(item.sectionName||item.draft?.sectionName)===normaliseSectionKey(draft.sectionName)
-    && String(item.academicYear||item.draft?.academicYear||"")===String(draft.academicYear||"")
-  );
-  const eligibleTeachers=teachers
-    .filter(teacher=>{
-      const ids=Array.isArray(teacher.assignedSubjectIds)?teacher.assignedSubjectIds:[];
-      const legacy=(teacher.subjects||[]).map(value=>String(value).trim().toLowerCase());
-      return ids.includes(draft.subjectId) || (!!subject&&legacy.includes(subject.name.toLowerCase()));
-    })
-    .sort((a,b)=>{
-      const aName=fullData[a.uid]?.profile?.name||a.name||a.email||"";
-      const bName=fullData[b.uid]?.profile?.name||b.name||b.email||"";
-      return aName.localeCompare(bName,undefined,{sensitivity:"base"});
-    });
-  const update=patch=>setEditing(current=>({...current,...patch}));
-  const selectSubject=subjectId=>{
-    const next=subjects.find(item=>item.id===subjectId);
-    update({subjectId,subjectName:next?.name||"",teacherUids:[],syllabusTemplateId:"",syllabusVersion:0});
-  };
-  const selectSyllabus=templateId=>{
-    const template=matchingSyllabi.find(item=>item.id===templateId);
-    update({syllabusTemplateId:templateId,syllabusVersion:template?.currentVersion||0});
-  };
-  const toggleTeacher=uid=>update({
-    teacherUids:draft.teacherUids.includes(uid)
-      ? draft.teacherUids.filter(item=>item!==uid)
-      : [...draft.teacherUids,uid],
-  });
-  const save=async()=>{
-    const saved=await onSave(draft);
-    if(saved) setEditing(null);
-  };
-
-  return (
-    <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
-      <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
-        <div>
-          <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>Canonical class offerings</div>
-          <div style={{fontSize:13.5,color:G.textM,lineHeight:1.55,marginTop:4}}>
-            One official subject, institute section, and academic year. Teacher changes never rewrite class history.
-          </div>
-        </div>
-        <button onClick={()=>setEditing(emptyClassOffering())} style={{...pill(G.navy,"#FFFFFF",G.navy),padding:"10px 15px",fontWeight:800}}>
-          <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={16}/> New offering</span>
-        </button>
-      </div>
-
-      {editing&&(
-        <div style={{background:G.surface,border:`1.5px solid ${G.blue}`,borderRadius:13,padding:isMobile?14:18}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:16}}>
-            <div>
-              <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display}}>{draft.id?"Edit offering":"Create offering"}</div>
-              <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>{draft.id?"Scope is fixed; create a new offering to change it.":"Choose the canonical scope, then map teachers."}</div>
-            </div>
-            <button onClick={()=>setEditing(null)} title="Close" style={{...pill("#FFFFFF",G.textM,G.border),padding:7}}><AppIcon icon={IconX} size={16}/></button>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(210px,1fr))",gap:12}}>
-            <div><div style={labelStyle}>Academic year</div><input value={draft.academicYear} disabled={!!draft.id} onChange={event=>update({academicYear:event.target.value})} style={{...fieldStyle,opacity:draft.id?0.65:1}}/></div>
-            <div><div style={labelStyle}>Institute</div><select value={draft.instituteName} disabled={!!draft.id} onChange={event=>update({instituteName:event.target.value,sectionName:"",teacherUids:[],syllabusTemplateId:"",syllabusVersion:0})} style={{...fieldStyle,opacity:draft.id?0.65:1}}><option value="">Select institute</option>{institutes.map(item=><option key={item} value={item}>{item}</option>)}</select></div>
-            <div><div style={labelStyle}>Section</div><select value={draft.sectionName} disabled={!!draft.id||!draft.instituteName} onChange={event=>update({sectionName:event.target.value,syllabusTemplateId:"",syllabusVersion:0})} style={{...fieldStyle,opacity:draft.id||!draft.instituteName?0.65:1}}><option value="">{draft.instituteName?"Select section":"Select institute first"}</option>{sectionOptions.map(item=><option key={item} value={item}>{item}</option>)}</select></div>
-            <div><div style={labelStyle}>Official subject</div><select value={draft.subjectId} disabled={!!draft.id} onChange={event=>selectSubject(event.target.value)} style={{...fieldStyle,opacity:draft.id?0.65:1}}><option value="">Select subject</option>{subjects.filter(item=>item.active!==false).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
-          </div>
-
-          <div style={{marginTop:16}}>
-            <div style={labelStyle}>Published syllabus</div>
-            <select value={draft.syllabusTemplateId} onChange={event=>selectSyllabus(event.target.value)} disabled={!draft.subjectId||!draft.sectionName} style={{...fieldStyle,opacity:!draft.subjectId||!draft.sectionName?0.65:1}}>
-              <option value="">No syllabus linked yet</option>
-              {matchingSyllabi.map(item=><option key={item.id} value={item.id}>{item.name||item.draft?.name||"Unnamed syllabus"} · v{item.currentVersion}</option>)}
-            </select>
-            {draft.subjectId&&draft.sectionName&&matchingSyllabi.length===0&&(
-              <div style={{fontSize:12,color:G.amber,marginTop:6}}>No published syllabus matches this exact year, institute, section, and subject.</div>
-            )}
-          </div>
-
-          <div style={{marginTop:17}}>
-            <div style={labelStyle}>Assigned teachers</div>
-            {eligibleTeachers.length===0?(
-              <div style={{border:`1px dashed ${G.borderM}`,borderRadius:10,padding:"15px",fontSize:13,color:G.textM}}>Assign this official subject to teachers first.</div>
-            ):(
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(220px,1fr))",gap:8}}>
-                {eligibleTeachers.map(teacher=>{
-                  const name=fullData[teacher.uid]?.profile?.name||teacher.name||teacher.email||"Teacher";
-                  const selected=draft.teacherUids.includes(teacher.uid);
-                  const sameInstitute=(teacher.institutes||[]).some(item=>sameInstituteName(item,draft.instituteName));
-                  return (
-                    <label key={teacher.uid} style={{display:"flex",alignItems:"center",gap:10,border:`1px solid ${selected?"#9DBCF5":G.border}`,background:selected?"#EEF4FF":"#FFFFFF",borderRadius:10,padding:"10px 11px",cursor:"pointer"}}>
-                      <input type="checkbox" checked={selected} onChange={()=>toggleTeacher(teacher.uid)}/>
-                      <span style={{minWidth:0}}>
-                        <span style={{display:"block",fontSize:13.5,fontWeight:800,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{name}</span>
-                        <span style={{display:"block",fontSize:11.5,color:sameInstitute?G.textM:G.amber,marginTop:2}}>{sameInstitute?"Institute matched":"Not currently indexed to this institute"}</span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div style={{display:"flex",justifyContent:"flex-end",gap:9,marginTop:18,paddingTop:16,borderTop:`1px solid ${G.border}`}}>
-            <button onClick={()=>setEditing(null)} style={{...pill("#FFFFFF",G.textM,G.border),padding:"9px 14px"}}>Cancel</button>
-            <button onClick={save} disabled={busy} style={{...pill(G.navy,"#FFFFFF",G.navy),padding:"9px 15px",fontWeight:800}}>{busy?"Saving...":"Save offering"}</button>
-          </div>
-        </div>
-      )}
-
-      <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
-        <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display,marginBottom:12}}>Offerings</div>
-        {offerings.length===0?(
-          <div style={{padding:"28px 12px",textAlign:"center",color:G.textM}}>No canonical offerings yet.</div>
-        ):(
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(290px,1fr))",gap:10}}>
-            {offerings.map(item=>{
-              const teacherNames=item.teacherUids.map(uid=>fullData[uid]?.profile?.name||teachers.find(teacher=>teacher.uid===uid)?.name||"Teacher");
-              const syllabus=syllabusTemplates.find(template=>template.id===item.syllabusTemplateId);
-              return (
-                <div key={item.id} style={{border:`1px solid ${item.active!==false?G.border:"#F5CACA"}`,background:item.active!==false?G.bg:G.redL,borderRadius:12,padding:"13px 14px"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-                    <div>
-                      <div style={{fontSize:15,fontWeight:850,color:G.text}}>{item.sectionName} · {item.subjectName}</div>
-                      <div style={{fontSize:12,color:G.textM,marginTop:4}}>{item.instituteName} · {item.academicYear}</div>
-                    </div>
-                    <span style={{...pill(item.active!==false?"#E8F7EF":"#FDE2E2",item.active!==false?"#137A45":G.red,item.active!==false?"#B9E5CA":"#F5CACA"),cursor:"default",fontSize:10.5}}>{item.active!==false?"Active":"Archived"}</span>
-                  </div>
-                  <div style={{fontSize:12,color:G.textS,marginTop:10,lineHeight:1.55}}>
-                    <strong>{teacherNames.length}</strong> teacher{teacherNames.length===1?"":"s"}{teacherNames.length?`: ${teacherNames.join(", ")}`:""}
-                  </div>
-                  <div style={{fontSize:12,color:syllabus?G.textS:G.amber,marginTop:5}}>{syllabus?`Syllabus: ${syllabus.name||syllabus.draft?.name} · v${item.syllabusVersion}`:"No published syllabus linked"}</div>
-                  <div style={{display:"flex",gap:7,marginTop:12,flexWrap:"wrap"}}>
-                    <button onClick={()=>setEditing({...item})} style={{...pill("#FFFFFF",G.blue,G.borderM),fontSize:12,fontWeight:750}}>Edit mapping</button>
-                    <button onClick={async()=>{if(!window.confirm(`${item.active!==false?"Archive":"Restore"} this offering?`))return;await onSave({...item,active:item.active===false});}} style={{...pill(item.active!==false?G.redL:"#E8F7EF",item.active!==false?G.red:"#137A45",item.active!==false?"#F5CACA":"#B9E5CA"),fontSize:12}}>{item.active!==false?"Archive":"Restore"}</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-          <div>
-            <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display}}>Legacy class readiness</div>
-            <div style={{fontSize:13,color:G.textM,marginTop:4}}>Read-only matching; no teacher classes or entries are changed.</div>
-          </div>
-          <button onClick={()=>setShowUnmatched(value=>!value)} style={{...pill("#EEF4FF",G.blue,"#C7D7F5"),fontSize:12}}>{showUnmatched?"Hide details":"Show unmatched"}</button>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:9,marginTop:14}}>
-          {[["Loaded classes",report.total],["Matched",report.matched],["Unmatched",report.unmatched.length]].map(([label,value])=><div key={label} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:10,padding:"11px 12px"}}><div style={labelStyle}>{label}</div><div style={{fontSize:21,fontWeight:850,color:label==="Unmatched"&&value?G.red:G.text}}>{value}</div></div>)}
-        </div>
-        {showUnmatched&&report.unmatched.length>0&&(
-          <div style={{display:"flex",flexDirection:"column",gap:7,marginTop:12}}>
-            {report.unmatched.slice(0,30).map(item=><div key={`${item.uid}-${item.classId}`} style={{display:"flex",justifyContent:"space-between",gap:12,border:`1px solid ${G.border}`,borderRadius:9,padding:"9px 11px",flexWrap:"wrap"}}><span style={{fontSize:12.5,fontWeight:750,color:G.text}}>{item.instituteName} · {item.sectionName} · {item.subjectName||"No subject"}</span><span style={{fontSize:11.5,color:G.red}}>{item.reason}</span></div>)}
-            {report.unmatched.length>30&&<div style={{fontSize:12,color:G.textM}}>+ {report.unmatched.length-30} more unmatched classes</div>}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function AdminPanelInner({user}){
   const PANEL_LIMITS = React.useMemo(()=>({
     p1:{ min:112, max:340, collapsed:76, default:175 },
@@ -5983,7 +5730,7 @@ function AdminPanelInner({user}){
   const [reduceEffects,setReduceEffects]= useState(false);
   const [mobileLiteMode,setMobileLiteMode] = useState(false);
   const [coarsePointer, setCoarsePointer] = useState(false);
-  const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | offerings | admins | institutes | sections
+  const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [manageSectionSearch, setManageSectionSearch] = useState("");
@@ -6022,8 +5769,6 @@ function AdminPanelInner({user}){
   const [syllabusTemplates, setSyllabusTemplates] = useState([]);
   const [syllabusBuilderSubject, setSyllabusBuilderSubject] = useState(null);
   const [syllabusBusy, setSyllabusBusy] = useState(false);
-  const [classOfferings, setClassOfferings] = useState([]);
-  const [offeringBusy, setOfferingBusy] = useState(false);
   const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
   const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
@@ -6196,13 +5941,12 @@ function AdminPanelInner({user}){
   useEffect(()=>{
     (async()=>{
       // Load index + roles + global institutes list in parallel
-      const [t,r,gInst,gSubjects,gSyllabi,gOfferings,gDeleted,savedBin,savedLedgrSchedule]=await Promise.all([
+      const [t,r,gInst,gSubjects,gSyllabi,gDeleted,savedBin,savedLedgrSchedule]=await Promise.all([
         getAllTeachers(),
         getAllRoles(),
         getGlobalInstitutes(),
         getGlobalSubjects(),
         getSyllabusTemplates(),
-        getClassOfferings(),
         getDeletedInstitutesList(),
         getAdminBin(),
         getLedgrReportSchedule(),
@@ -6210,7 +5954,6 @@ function AdminPanelInner({user}){
       setTeachers(t); setRoles(r);
       setGlobalSubjects(gSubjects);
       setSyllabusTemplates(gSyllabi);
-      setClassOfferings(gOfferings);
       setLedgrReportSchedule(savedLedgrSchedule);
       setLedgrReportScheduleLoading(false);
       // Restore persisted deleted-institutes set so page refresh doesn't un-hide them
@@ -8833,25 +8576,6 @@ function AdminPanelInner({user}){
     }
   };
 
-  const handleSaveClassOffering = async offering => {
-    if(offeringBusy) return null;
-    setOfferingBusy(true);
-    try{
-      const saved=await saveClassOffering(offering,user.uid);
-      setClassOfferings(current=>[
-        ...current.filter(item=>item.id!==saved.id),
-        saved,
-      ]);
-      showAdminToast(saved.active===false?"Class offering archived.":"Class offering saved.");
-      return saved;
-    }catch(error){
-      showAdminToast(error?.message||"Class offering could not be saved.");
-      return null;
-    }finally{
-      setOfferingBusy(false);
-    }
-  };
-
   const teacherAssignedSubjectIds = teacher => {
     const explicit = Array.isArray(teacher.assignedSubjectIds) ? teacher.assignedSubjectIds : [];
     if (explicit.length || Number(teacher.subjectAssignmentVersion || 0) > 0) return explicit;
@@ -11133,7 +10857,6 @@ function AdminPanelInner({user}){
     const manageTabItems = [
       { key:"teachers", label:"Teachers", icon:IconUsersGroup, count:teacherOnlyList.length, hint:"Accounts & classes" },
       { key:"subjects", label:"Subjects", icon:IconBooks, count:globalSubjects.filter(item=>item.active).length, hint:"Canonical catalog" },
-      { key:"offerings", label:"Offerings", icon:IconSchool, count:classOfferings.filter(item=>item.active!==false).length, hint:"Sections & syllabus" },
       { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
       { key:"institutes", label:"Institutes", icon:IconBuilding, count:institutes.length, hint:"Names & structure" },
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
@@ -11504,11 +11227,7 @@ function AdminPanelInner({user}){
           ? {display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:18}
           : {display:"flex",background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:4,marginBottom:22,gap:4}}>
           {manageTabItems.map(item=>(
-            <button key={item.key} onClick={()=>{
-              setManageTab(item.key);
-              if(item.key!=="sections") setInstDetailView(null);
-              if(item.key==="offerings") teachers.forEach(teacher=>ensureFullData(teacher.uid).catch(()=>{}));
-            }}
+            <button key={item.key} onClick={()=>{setManageTab(item.key); if(item.key!=="sections") setInstDetailView(null);}}
               className={isMobile?"admin-mobile-touch":undefined}
               style={isMobile
                 ? {
@@ -11624,21 +11343,6 @@ function AdminPanelInner({user}){
               )}
             </div>
           </div>
-        )}
-
-        {manageTab==="offerings"&&(
-          <ClassOfferingsManager
-            offerings={classOfferings}
-            institutes={institutes}
-            instituteSections={instSectionsAll}
-            subjects={globalSubjects}
-            syllabusTemplates={syllabusTemplates}
-            teachers={teacherOnlyList}
-            fullData={fullData}
-            busy={offeringBusy}
-            isMobile={isMobile}
-            onSave={handleSaveClassOffering}
-          />
         )}
 
         {manageTab==="sections"&&(

@@ -38,8 +38,7 @@ Status: implementation complete; live admin assignment acceptance remains.
 
 ## Milestone 2: Admin Syllabus Builder
 
-Status: implementation complete; authenticated creation and publishing
-acceptance remains blocked by the unavailable Admin deployment.
+Status: builder and quick-authoring checkpoints implemented; live acceptance remains.
 
 - Draft and published syllabus versions.
 - Admin-defined syllabus names.
@@ -47,14 +46,13 @@ acceptance remains blocked by the unavailable Admin deployment.
 - Fast ordered chapter and optional topic entry.
 - Stable chapter/topic IDs across revisions.
 
-## Milestone 3: Canonical Class Offerings
+## Milestone 3: Simple Syllabus Management
 
-Status: checkpoint 1 implemented; live Admin acceptance remains.
-
-- Define an offering by academic year, institute, section, and subject ID.
-- Map one or more teachers to an offering.
-- Preserve teacher changes without losing class or entry history.
-- Add migration reporting for unmatched legacy class subjects.
+- Select one or more institutes.
+- Select one or more sections from those institutes.
+- Show the official subjects available for the selected sections.
+- Select a subject and add its ordered chapters and optional topics.
+- Keep all technical relationships invisible to the Admin user.
 
 ## Milestone 4: Teacher Syllabus View
 
