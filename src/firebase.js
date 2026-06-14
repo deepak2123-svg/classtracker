@@ -1327,6 +1327,137 @@ export async function publishSyllabusTemplate(templateId, adminUid = "") {
   return publishedResult;
 }
 
+// ── Canonical class offerings ────────────────────────────────────────────────
+// classOfferings/{offeringId} defines one subject taught to one institute
+// section in one academic year. It is deliberately separate from teacher-owned
+// class history so assignments can change without rewriting existing entries.
+
+function normaliseStringList(values) {
+  return [...new Set((Array.isArray(values) ? values : [])
+    .map(value => String(value || "").trim())
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function normaliseClassOffering(source = {}) {
+  return {
+    id: String(source.id || ""),
+    academicYear: String(source.academicYear || ""),
+    instituteName: String(source.instituteName || ""),
+    sectionName: String(source.sectionName || ""),
+    subjectId: String(source.subjectId || ""),
+    subjectName: String(source.subjectName || ""),
+    teacherUids: normaliseStringList(source.teacherUids),
+    syllabusTemplateId: String(source.syllabusTemplateId || ""),
+    syllabusVersion: Number(source.syllabusVersion || 0),
+    active: source.active !== false,
+    assignmentVersion: Number(source.assignmentVersion || 0),
+    createdAt: Number(source.createdAt || 0),
+    createdBy: String(source.createdBy || ""),
+    updatedAt: Number(source.updatedAt || 0),
+    updatedBy: String(source.updatedBy || ""),
+  };
+}
+
+function classOfferingId({ academicYear, instituteName, sectionName, subjectId }) {
+  return [academicYear, instituteName, sectionName, subjectId]
+    .map(subjectIdFromName)
+    .filter(Boolean)
+    .join("--");
+}
+
+export async function getClassOfferings() {
+  try {
+    const snap = await getDocs(collection(db, "classOfferings"));
+    return snap.docs
+      .map(item => normaliseClassOffering({ id: item.id, ...item.data() }))
+      .sort((a, b) => {
+        const yearOrder = b.academicYear.localeCompare(a.academicYear);
+        if (yearOrder) return yearOrder;
+        const instituteOrder = a.instituteName.localeCompare(b.instituteName, undefined, { sensitivity: "base" });
+        if (instituteOrder) return instituteOrder;
+        const sectionOrder = a.sectionName.localeCompare(b.sectionName, undefined, { sensitivity: "base" });
+        if (sectionOrder) return sectionOrder;
+        return a.subjectName.localeCompare(b.subjectName, undefined, { sensitivity: "base" });
+      });
+  } catch (error) {
+    console.error("getClassOfferings", error);
+    return [];
+  }
+}
+
+export async function saveClassOffering(offering, adminUid = "") {
+  const clean = normaliseClassOffering(offering);
+  if (!clean.academicYear.trim()) throw new Error("Enter the academic year.");
+  if (!clean.instituteName.trim()) throw new Error("Select an institute.");
+  if (!clean.sectionName.trim()) throw new Error("Select a section.");
+  if (!clean.subjectId.trim() || !clean.subjectName.trim()) throw new Error("Select an official subject.");
+
+  const id = clean.id || classOfferingId(clean);
+  if (!id) throw new Error("This offering scope is incomplete.");
+  const ref = doc(db, "classOfferings", id);
+  let savedResult = null;
+
+  await runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    const current = snap.exists()
+      ? normaliseClassOffering({ id: snap.id, ...snap.data() })
+      : normaliseClassOffering({ id });
+    if (
+      snap.exists() &&
+      (
+        current.academicYear !== clean.academicYear.trim() ||
+        current.instituteName !== clean.instituteName.trim() ||
+        current.sectionName !== clean.sectionName.trim() ||
+        current.subjectId !== clean.subjectId.trim()
+      )
+    ) {
+      throw new Error("Offering scope cannot be changed after creation.");
+    }
+    const now = Date.now();
+    const assignmentsChanged =
+      !snap.exists() ||
+      JSON.stringify(current.teacherUids) !== JSON.stringify(clean.teacherUids);
+    const nextAssignmentVersion = assignmentsChanged
+      ? current.assignmentVersion + 1
+      : current.assignmentVersion;
+    const payload = {
+      academicYear: clean.academicYear.trim(),
+      instituteName: clean.instituteName.trim(),
+      sectionName: clean.sectionName.trim(),
+      subjectId: clean.subjectId.trim(),
+      subjectName: clean.subjectName.trim(),
+      teacherUids: clean.teacherUids,
+      syllabusTemplateId: clean.syllabusTemplateId.trim(),
+      syllabusVersion: clean.syllabusTemplateId ? clean.syllabusVersion : 0,
+      active: clean.active,
+      assignmentVersion: nextAssignmentVersion,
+      createdAt: current.createdAt || now,
+      createdBy: current.createdBy || adminUid || "admin",
+      updatedAt: now,
+      updatedBy: adminUid || "admin",
+    };
+
+    tx.set(ref, payload, { merge: true });
+    if (assignmentsChanged) {
+      tx.set(
+        doc(db, "classOfferings", id, "assignmentHistory", String(nextAssignmentVersion)),
+        {
+          offeringId: id,
+          version: nextAssignmentVersion,
+          previousTeacherUids: current.teacherUids,
+          teacherUids: clean.teacherUids,
+          changedAt: now,
+          changedBy: adminUid || "admin",
+        },
+      );
+    }
+    savedResult = normaliseClassOffering({ id, ...payload });
+  });
+
+  return savedResult;
+}
+
 // ── Ledgr report automation ───────────────────────────────────────────────────
 // config/ledgrReportSchedule stores the admin's desired schedule. A trusted
 // backend runner can read this document and write execution metadata alongside
