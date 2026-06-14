@@ -1189,6 +1189,8 @@ function normaliseSyllabusTemplate(source = {}) {
     id: String(source.id || ""),
     subjectId: String(source.subjectId || ""),
     subjectName: String(source.subjectName || ""),
+    instituteName: String(source.instituteName || draft.instituteName || ""),
+    sectionName: String(source.sectionName || draft.sectionName || ""),
     academicYear: String(source.academicYear || draft.academicYear || ""),
     curriculum: String(source.curriculum || draft.curriculum || ""),
     gradeLabel: String(source.gradeLabel || draft.gradeLabel || ""),
@@ -1199,6 +1201,8 @@ function normaliseSyllabusTemplate(source = {}) {
     updatedAt: Number(source.updatedAt || 0),
     updatedBy: String(source.updatedBy || ""),
     draft: {
+      instituteName: String(draft.instituteName || source.instituteName || ""),
+      sectionName: String(draft.sectionName || source.sectionName || ""),
       academicYear: String(draft.academicYear || source.academicYear || ""),
       curriculum: String(draft.curriculum || source.curriculum || ""),
       gradeLabel: String(draft.gradeLabel || source.gradeLabel || ""),
@@ -1212,8 +1216,8 @@ function normaliseSyllabusTemplate(source = {}) {
   };
 }
 
-function syllabusTemplateId({ subjectId, academicYear, curriculum, gradeLabel }) {
-  const scope = [subjectId, academicYear, curriculum, gradeLabel]
+function syllabusTemplateId({ subjectId, instituteName, sectionName, academicYear, curriculum, gradeLabel }) {
+  const scope = [subjectId, instituteName, sectionName, academicYear, curriculum, gradeLabel]
     .map(subjectIdFromName)
     .filter(Boolean)
     .join("--");
@@ -1239,12 +1243,16 @@ export async function getSyllabusTemplates() {
 export async function saveSyllabusDraft(template, adminUid = "") {
   const clean = normaliseSyllabusTemplate(template);
   if (!clean.subjectId || !clean.subjectName) throw new Error("Choose an official subject.");
+  if (!clean.draft.instituteName.trim()) throw new Error("Select an institute.");
+  if (!clean.draft.sectionName.trim()) throw new Error("Select a section.");
   if (!clean.draft.academicYear.trim()) throw new Error("Enter the academic year.");
   if (!clean.draft.curriculum.trim()) throw new Error("Enter the curriculum or board.");
   if (!clean.draft.gradeLabel.trim()) throw new Error("Enter the grade, course, or programme.");
 
   const id = clean.id || syllabusTemplateId({
     subjectId: clean.subjectId,
+    instituteName: clean.draft.instituteName,
+    sectionName: clean.draft.sectionName,
     academicYear: clean.draft.academicYear,
     curriculum: clean.draft.curriculum,
     gradeLabel: clean.draft.gradeLabel,
@@ -1258,6 +1266,8 @@ export async function saveSyllabusDraft(template, adminUid = "") {
     tx.set(ref, {
       subjectId: clean.subjectId,
       subjectName: clean.subjectName,
+      instituteName: clean.draft.instituteName,
+      sectionName: clean.draft.sectionName,
       academicYear: clean.draft.academicYear,
       curriculum: clean.draft.curriculum,
       gradeLabel: clean.draft.gradeLabel,

@@ -17,12 +17,19 @@ changing the Teacher web app or prematurely exposing unfinished drafts.
 
 Each template records:
 
+- institute;
+- section;
 - academic year;
 - curriculum or board;
 - grade, course, or programme;
 - canonical subject ID and display name.
 
-The scope supports school classes as well as programmes such as NDA.
+Institute and section are fetched from the existing Admin-managed structure.
+The section selector remains unavailable until an institute is chosen. Syllabus
+details and chapter controls remain hidden until both values are selected.
+
+The scope supports school classes as well as programmes such as NDA while
+keeping each institute-section syllabus independent.
 
 ### Chapter Builder
 
@@ -44,7 +51,8 @@ The scope supports school classes as well as programmes such as NDA.
 ### Affected-Class Preview
 
 - The builder loads teacher data associated with the subject.
-- It shows matching class, institute, and teacher counts.
+- It shows matching class, institute, and teacher counts for the selected
+  institute and section only.
 - Matching class labels are displayed before publication.
 - Matching currently uses the existing class subject text until canonical class
   offerings are introduced.

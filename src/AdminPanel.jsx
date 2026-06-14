@@ -5346,6 +5346,8 @@ function emptySyllabusDraft(subject){
     status:"draft",
     currentVersion:0,
     draft:{
+      instituteName:"",
+      sectionName:"",
       academicYear:currentAcademicYearLabel(),
       curriculum:"",
       gradeLabel:"",
@@ -5358,7 +5360,9 @@ function emptySyllabusDraft(subject){
 function SyllabusBuilder({
   subject,
   templates,
-  affectedSummary,
+  institutes,
+  instituteSections,
+  getAffectedSummary,
   busy,
   isMobile,
   onClose,
@@ -5377,6 +5381,13 @@ function SyllabusBuilder({
   const [expandedChapter,setExpandedChapter] = useState(initialTemplate.draft?.chapters?.[0]?.id || null);
 
   const draft = working.draft || emptySyllabusDraft(subject).draft;
+  const selectedInstituteConfig = getInstituteSectionConfig(instituteSections,draft.instituteName) || {};
+  const sectionOptions = uniqueSectionNames([
+    ...(selectedInstituteConfig.gradeGroups||[]).flatMap(group=>group.sections||[]),
+    ...(selectedInstituteConfig.extraSections||[]),
+  ]);
+  const scopeReady = !!draft.instituteName && !!draft.sectionName;
+  const affectedSummary = getAffectedSummary(draft.instituteName,draft.sectionName);
   const fieldStyle = {
     width:"100%",boxSizing:"border-box",border:`1.5px solid ${G.borderM}`,borderRadius:10,
     padding:"11px 13px",fontSize:14,fontFamily:G.sans,fontWeight:650,color:G.text,
@@ -5389,6 +5400,10 @@ function SyllabusBuilder({
     subjectName:subject.name,
     draft:{...current.draft,...patch},
   }));
+  const chooseInstitute = instituteName => updateDraft({
+    instituteName,
+    sectionName:"",
+  });
   const updateChapter = (chapterId,patch) => updateDraft({
     chapters:draft.chapters.map(chapter=>chapter.id===chapterId?{...chapter,...patch}:chapter),
   });
@@ -5468,18 +5483,54 @@ function SyllabusBuilder({
       </div>
 
       <div style={{padding:isMobile?"16px":"22px"}}>
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(220px,0.8fr) repeat(3,minmax(150px,1fr))",gap:12,alignItems:"end"}}>
+        <div style={{display:"grid",gridTemplateColumns:"minmax(220px,520px)",gap:12,alignItems:"end"}}>
           <div>
             <div style={labelStyle}>Template</div>
             <select value={selectedId} onChange={event=>chooseTemplate(event.target.value)} style={fieldStyle}>
               <option value="__new">New syllabus template</option>
               {subjectTemplates.map(item=>(
                 <option key={item.id} value={item.id}>
-                  {item.draft.gradeLabel || item.gradeLabel} · {item.draft.academicYear || item.academicYear}
+                  {[item.draft.instituteName,item.draft.sectionName,item.draft.gradeLabel||item.gradeLabel].filter(Boolean).join(" · ") || "Unscoped draft"}
                 </option>
               ))}
             </select>
           </div>
+        </div>
+
+        <div style={{marginTop:16,padding:isMobile?"14px":"16px",background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:12}}>
+          <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display}}>Choose where this syllabus applies</div>
+          <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:3,marginBottom:13}}>
+            Select an existing institute first, then one of its admin-defined sections.
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(220px,1fr))",gap:12}}>
+            <div>
+              <div style={labelStyle}>Institute</div>
+              <select value={draft.instituteName||""} onChange={event=>chooseInstitute(event.target.value)} style={fieldStyle}>
+                <option value="">Select institute</option>
+                {institutes.map(institute=><option key={institute} value={institute}>{institute}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={labelStyle}>Section</div>
+              <select value={draft.sectionName||""} onChange={event=>updateDraft({sectionName:event.target.value})} disabled={!draft.instituteName||sectionOptions.length===0} style={{...fieldStyle,opacity:!draft.instituteName||sectionOptions.length===0?0.55:1}}>
+                <option value="">{!draft.instituteName?"Select institute first":sectionOptions.length?"Select section":"No configured sections"}</option>
+                {sectionOptions.map(section=><option key={section} value={section}>{section}</option>)}
+              </select>
+              {draft.instituteName&&sectionOptions.length===0&&(
+                <div style={{fontSize:12,color:G.red,marginTop:6}}>Create sections for this institute in Control Centre → Sections first.</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {!scopeReady ? (
+          <div style={{marginTop:16,border:`2px dashed ${G.borderM}`,borderRadius:12,padding:"28px 18px",textAlign:"center"}}>
+            <div style={{fontSize:16,fontWeight:800,color:G.text}}>Select an institute and section to add the syllabus.</div>
+            <div style={{fontSize:13,color:G.textM,marginTop:5}}>Syllabus details and chapters will appear after the scope is selected.</div>
+          </div>
+        ) : (<>
+        <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display,marginTop:18,marginBottom:10}}>Add syllabus details</div>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(150px,1fr))",gap:12,alignItems:"end",marginTop:16}}>
           <div>
             <div style={labelStyle}>Academic year</div>
             <input value={draft.academicYear} onChange={event=>updateDraft({academicYear:event.target.value})} placeholder="2026-27" style={fieldStyle}/>
@@ -5494,7 +5545,7 @@ function SyllabusBuilder({
           </div>
         </div>
 
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10,marginTop:16,padding:"13px 15px",background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:11}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10,marginTop:16,padding:"13px 15px",background:"#F8FAFD",border:`1px solid ${G.border}`,borderRadius:11}}>
           <div><div style={labelStyle}>Affected classes</div><div style={{fontSize:20,fontWeight:850,color:G.text}}>{affectedSummary.classCount}</div></div>
           <div><div style={labelStyle}>Institutes</div><div style={{fontSize:20,fontWeight:850,color:G.text}}>{affectedSummary.instituteCount}</div></div>
           <div><div style={labelStyle}>Teachers</div><div style={{fontSize:20,fontWeight:850,color:G.text}}>{affectedSummary.teacherCount}</div></div>
@@ -5605,6 +5656,7 @@ function SyllabusBuilder({
             </button>
           </div>
         </div>
+        </>)}
       </div>
     </div>
   );
@@ -10802,9 +10854,10 @@ function AdminPanelInner({user}){
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
     ];
     const manageTitle = manageTabItems.find(item=>item.key===manageTab)?.label || "Control Centre";
-    const syllabusAffectedSummary = (() => {
-      if(!syllabusBuilderSubject) return {classCount:0,instituteCount:0,teacherCount:0,classes:[]};
+    const getSyllabusAffectedSummary = (instituteName,sectionName) => {
+      if(!syllabusBuilderSubject||!instituteName||!sectionName) return {classCount:0,instituteCount:0,teacherCount:0,classes:[]};
       const subjectKey=syllabusBuilderSubject.name.trim().toLowerCase();
+      const sectionKey=sectionName.trim().toLowerCase();
       let classCount=0;
       const instituteNames=new Set();
       const teacherUids=new Set();
@@ -10812,14 +10865,16 @@ function AdminPanelInner({user}){
       Object.entries(fullData).forEach(([uid,data])=>{
         (data?.classes||[]).forEach(cls=>{
           if(String(cls?.subject||"").trim().toLowerCase()!==subjectKey) return;
+          if(!sameInstituteName(cls?.institute,instituteName)) return;
+          if(String(cls?.section||cls?.name||"").trim().toLowerCase()!==sectionKey) return;
           classCount+=1;
           teacherUids.add(uid);
           if(cls.institute) instituteNames.add(String(cls.institute).trim());
-          classLabels.add([cls.institute,cls.name||cls.section].filter(Boolean).join(" · "));
+          classLabels.add([cls.institute,cls.section||cls.name].filter(Boolean).join(" · "));
         });
       });
       return {classCount,instituteCount:instituteNames.size,teacherCount:teacherUids.size,classes:[...classLabels].filter(Boolean).sort()};
-    })();
+    };
     const mobileManageBack = () => {
       if(instDetailView){
         setInstDetailView(null);
@@ -11206,7 +11261,9 @@ function AdminPanelInner({user}){
             key={syllabusBuilderSubject.id}
             subject={syllabusBuilderSubject}
             templates={syllabusTemplates}
-            affectedSummary={syllabusAffectedSummary}
+            institutes={institutes}
+            instituteSections={instSectionsAll}
+            getAffectedSummary={getSyllabusAffectedSummary}
             busy={syllabusBusy}
             isMobile={isMobile}
             onClose={()=>setSyllabusBuilderSubject(null)}
