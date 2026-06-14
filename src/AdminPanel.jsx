@@ -5364,6 +5364,9 @@ function SyllabusBuilder({
   templates,
   institutes,
   instituteSections,
+  initialInstitute = "",
+  initialSection = "",
+  simpleScope = false,
   getAffectedSummary,
   busy,
   isMobile,
@@ -5373,11 +5376,36 @@ function SyllabusBuilder({
 }){
   const subjectTemplates = useMemo(
     ()=>templates
-      .filter(item=>item.subjectId===subject.id)
+      .filter(item=>
+        item.subjectId===subject.id
+        && (
+          !simpleScope
+          || (
+            sameInstituteName(item.draft?.instituteName,initialInstitute)
+            && String(item.draft?.sectionName||"").trim().toLowerCase()===String(initialSection||"").trim().toLowerCase()
+          )
+        )
+      )
       .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)),
-    [templates,subject.id],
+    [templates,subject.id,simpleScope,initialInstitute,initialSection],
   );
-  const initialTemplate = subjectTemplates[0] || emptySyllabusDraft(subject);
+  const scopedTemplate = subjectTemplates.find(item=>
+    sameInstituteName(item.draft?.instituteName,initialInstitute)
+    && String(item.draft?.sectionName||"").trim().toLowerCase()===String(initialSection||"").trim().toLowerCase()
+  );
+  const newScopedTemplate = {
+    ...emptySyllabusDraft(subject),
+    draft:{
+      ...emptySyllabusDraft(subject).draft,
+      instituteName:initialInstitute,
+      sectionName:initialSection,
+      curriculum:"General",
+      gradeLabel:initialSection,
+    },
+  };
+  const initialTemplate = scopedTemplate
+    || (initialInstitute&&initialSection ? newScopedTemplate : subjectTemplates[0])
+    || newScopedTemplate;
   const [working,setWorking] = useState(initialTemplate);
   const [selectedId,setSelectedId] = useState(initialTemplate.id || "__new");
   const [chapterInput,setChapterInput] = useState("");
@@ -5390,7 +5418,7 @@ function SyllabusBuilder({
     ...(selectedInstituteConfig.extraSections||[]),
   ]);
   const scopeReady = !!draft.instituteName && !!draft.sectionName;
-  const affectedSummary = getAffectedSummary(draft.instituteName,draft.sectionName);
+  const affectedSummary = getAffectedSummary(draft.instituteName,draft.sectionName,subject);
   const fieldStyle = {
     width:"100%",boxSizing:"border-box",border:`1.5px solid ${G.borderM}`,borderRadius:10,
     padding:"11px 13px",fontSize:14,fontFamily:G.sans,fontWeight:650,color:G.text,
@@ -5413,7 +5441,16 @@ function SyllabusBuilder({
   const chooseTemplate = value => {
     setSelectedId(value);
     const next = value==="__new"
-      ? emptySyllabusDraft(subject)
+      ? {
+          ...emptySyllabusDraft(subject),
+          draft:{
+            ...emptySyllabusDraft(subject).draft,
+            instituteName:initialInstitute,
+            sectionName:initialSection,
+            curriculum:"General",
+            gradeLabel:initialSection,
+          },
+        }
       : subjectTemplates.find(item=>item.id===value) || emptySyllabusDraft(subject);
     setWorking(next);
     setChapterInput("");
@@ -5507,7 +5544,7 @@ function SyllabusBuilder({
           </div>
         </div>
 
-        <div style={{marginTop:16,padding:isMobile?"14px":"16px",background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:12}}>
+        {!simpleScope&&<div style={{marginTop:16,padding:isMobile?"14px":"16px",background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:12}}>
           <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display}}>Choose where this syllabus applies</div>
           <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:3,marginBottom:13}}>
             Select an existing institute first, then one of its admin-defined sections.
@@ -5531,7 +5568,18 @@ function SyllabusBuilder({
               )}
             </div>
           </div>
-        </div>
+        </div>}
+
+        {simpleScope&&(
+          <div style={{marginTop:16,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"12px 14px",background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:12}}>
+            <span style={{fontSize:11,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.7}}>Applies to</span>
+            <span style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:800}}>{draft.instituteName}</span>
+            <AppIcon icon={IconChevronRight} size={15} color={G.textL}/>
+            <span style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:800}}>{draft.sectionName}</span>
+            <AppIcon icon={IconChevronRight} size={15} color={G.textL}/>
+            <span style={{...pill(G.blueL,G.blue,"#B8CCF7"),cursor:"default",fontWeight:800}}>{subject.name}</span>
+          </div>
+        )}
 
         {!scopeReady ? (
           <div style={{marginTop:16,border:`2px dashed ${G.borderM}`,borderRadius:12,padding:"28px 18px",textAlign:"center"}}>
@@ -5539,6 +5587,7 @@ function SyllabusBuilder({
             <div style={{fontSize:13,color:G.textM,marginTop:5}}>Syllabus details and chapters will appear after the scope is selected.</div>
           </div>
         ) : (<>
+        {!simpleScope&&<>
         <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display,marginTop:18,marginBottom:10}}>Add syllabus details</div>
         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(150px,1fr))",gap:12,alignItems:"end",marginTop:16}}>
           <div>
@@ -5574,6 +5623,7 @@ function SyllabusBuilder({
             )}
           </div>
         )}
+        </>}
 
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginTop:24,marginBottom:12}}>
           <div>
@@ -5670,6 +5720,175 @@ function SyllabusBuilder({
   );
 }
 
+function SimpleSyllabusFlow({
+  institutes,
+  instituteSections,
+  subjects,
+  templates,
+  defaultInstitute = "",
+  getAffectedSummary,
+  busy,
+  isMobile,
+  onSelectSubject,
+  onSave,
+  onPublish,
+}){
+  const [instituteSearch,setInstituteSearch] = useState("");
+  const [selectedInstitute,setSelectedInstitute] = useState(defaultInstitute);
+  const [selectedSection,setSelectedSection] = useState("");
+  const [selectedSubject,setSelectedSubject] = useState(null);
+  const visibleInstitutes = institutes.filter(item=>
+    !instituteSearch.trim() || item.toLowerCase().includes(instituteSearch.trim().toLowerCase())
+  );
+  const config = getInstituteSectionConfig(instituteSections,selectedInstitute) || {};
+  const groups = config.gradeGroups || [];
+  const groupedSections = groups.flatMap(group=>uniqueSectionNames(group.sections||[]));
+  const standaloneSections = uniqueSectionNames(config.extraSections||[]);
+  const allSections = uniqueSectionNames([...groupedSections,...standaloneSections]);
+  const activeSubjects = subjects.filter(item=>item.active);
+  const stepCard = active => ({
+    background:"#FFFFFF",
+    border:`1px solid ${active?"#AFC5F0":G.border}`,
+    borderRadius:14,
+    boxShadow:active?G.shadowSm:"none",
+    overflow:"hidden",
+  });
+  const stepHeader = (number,title,detail,active) => (
+    <div style={{display:"flex",alignItems:"center",gap:10,padding:"13px 14px",background:active?"#EEF4FF":"#F8FAFD",borderBottom:`1px solid ${G.border}`}}>
+      <div style={{width:28,height:28,borderRadius:9,background:active?G.navy:"#E8EDF5",color:active?"#FFFFFF":G.textM,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:850,flexShrink:0}}>{number}</div>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:14,fontWeight:850,color:G.text}}>{title}</div>
+        <div style={{fontSize:11.5,color:G.textM,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{detail}</div>
+      </div>
+    </div>
+  );
+  const chooseInstitute = institute => {
+    setSelectedInstitute(institute);
+    setSelectedSection("");
+    setSelectedSubject(null);
+  };
+  const chooseSection = section => {
+    setSelectedSection(section);
+    setSelectedSubject(null);
+  };
+
+  if(selectedSubject){
+    return (
+      <div>
+        <button onClick={()=>setSelectedSubject(null)} style={{...pill("#FFFFFF",G.textS,G.border),padding:"8px 12px",marginBottom:12}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconChevronLeft} size={15}/> Change subject</span>
+        </button>
+        <SyllabusBuilder
+          key={`${selectedInstitute}::${selectedSection}::${selectedSubject.id}`}
+          subject={selectedSubject}
+          templates={templates}
+          institutes={institutes}
+          instituteSections={instituteSections}
+          initialInstitute={selectedInstitute}
+          initialSection={selectedSection}
+          simpleScope
+          getAffectedSummary={getAffectedSummary}
+          busy={busy}
+          isMobile={isMobile}
+          onClose={()=>setSelectedSubject(null)}
+          onSave={onSave}
+          onPublish={onPublish}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
+      <div>
+        <div style={{fontSize:isMobile?23:28,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.15}}>Syllabus</div>
+        <div style={{fontSize:14,color:G.textM,lineHeight:1.55,marginTop:5}}>Choose where the syllabus applies, select its subject, then add chapters and topics.</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":`repeat(${defaultInstitute?2:3},minmax(0,1fr))`,gap:12,alignItems:"start"}}>
+        {!defaultInstitute&&<div style={stepCard(true)}>
+          {stepHeader(1,"Institute",selectedInstitute||"Choose an institute",true)}
+          <div style={{padding:12}}>
+            <input value={instituteSearch} onChange={event=>setInstituteSearch(event.target.value)} placeholder="Filter institutes" style={{width:"100%",boxSizing:"border-box",border:`1px solid ${G.borderM}`,borderRadius:10,padding:"9px 11px",fontFamily:G.sans,fontSize:13,color:G.text,outline:"none",marginBottom:9}}/>
+            <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:isMobile?250:330,overflowY:"auto"}}>
+              {visibleInstitutes.map(institute=>(
+                <button key={institute} onClick={()=>chooseInstitute(institute)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,border:`1px solid ${selectedInstitute===institute?"#B8CCF7":G.border}`,background:selectedInstitute===institute?"#E8F0FF":"#FFFFFF",color:G.text,borderRadius:10,padding:"9px 10px",fontFamily:G.sans,fontSize:12.5,fontWeight:750,textAlign:"left",cursor:"pointer"}}>
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{institute}</span>
+                  {selectedInstitute===institute&&<AppIcon icon={IconCheck} size={15} color={G.blue}/>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>}
+
+        <div style={stepCard(!!selectedInstitute)}>
+          {stepHeader(defaultInstitute?1:2,"Section",selectedSection||"Choose a section",!!selectedInstitute)}
+          <div style={{padding:12}}>
+            {!selectedInstitute ? (
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.5,padding:"12px 2px"}}>Select an institute first.</div>
+            ) : allSections.length===0 ? (
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.5,padding:"12px 2px"}}>No sections are configured for this institute.</div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:10,maxHeight:isMobile?280:360,overflowY:"auto"}}>
+                {groups.map(group=>{
+                  const sectionNames=uniqueSectionNames(group.sections||[]);
+                  if(!sectionNames.length) return null;
+                  return (
+                    <div key={group.id||group.label}>
+                      <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.7,margin:"0 2px 6px"}}>{group.label||"Section group"}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {sectionNames.map(section=>(
+                          <button key={section} onClick={()=>chooseSection(section)} style={{...pill(selectedSection===section?G.navy:"#FFFFFF",selectedSection===section?"#FFFFFF":G.textS,selectedSection===section?G.navy:G.borderM),fontSize:12,fontWeight:800,padding:"7px 10px"}}>{section}</button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {standaloneSections.length>0&&(
+                  <div>
+                    <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.7,margin:"0 2px 6px"}}>Other sections</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {standaloneSections.map(section=>(
+                        <button key={section} onClick={()=>chooseSection(section)} style={{...pill(selectedSection===section?G.navy:"#FFFFFF",selectedSection===section?"#FFFFFF":G.textS,selectedSection===section?G.navy:G.borderM),fontSize:12,fontWeight:800,padding:"7px 10px"}}>{section}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={stepCard(!!selectedSection)}>
+          {stepHeader(defaultInstitute?2:3,"Subject","Select the syllabus subject",!!selectedSection)}
+          <div style={{padding:12}}>
+            {!selectedSection ? (
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.5,padding:"12px 2px"}}>Select a section first.</div>
+            ) : activeSubjects.length===0 ? (
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.5,padding:"12px 2px"}}>Add an official subject before creating a syllabus.</div>
+            ) : (
+              <div style={{display:"grid",gridTemplateColumns:"1fr",gap:7,maxHeight:isMobile?280:360,overflowY:"auto"}}>
+                {activeSubjects.map(subject=>{
+                  const matching=templates.filter(item=>item.subjectId===subject.id&&sameInstituteName(item.draft?.instituteName,selectedInstitute)&&String(item.draft?.sectionName||"").trim().toLowerCase()===selectedSection.trim().toLowerCase());
+                  const published=matching.some(item=>item.currentVersion>0);
+                  return (
+                    <button key={subject.id} onClick={()=>{onSelectSubject?.(subject);setSelectedSubject(subject);}} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:9,border:`1px solid ${G.border}`,background:"#FFFFFF",borderRadius:11,padding:"10px 11px",fontFamily:G.sans,textAlign:"left",cursor:"pointer"}}>
+                      <span style={{minWidth:0}}>
+                        <span style={{display:"block",fontSize:13.5,fontWeight:850,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{subject.name}</span>
+                        <span style={{display:"block",fontSize:10.5,color:published?"#137A45":G.textL,fontWeight:750,marginTop:3}}>{published?"Published syllabus":"Create syllabus"}</span>
+                      </span>
+                      <AppIcon icon={IconChevronRight} size={16} color={G.textL}/>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminPanelInner({user}){
   const PANEL_LIMITS = React.useMemo(()=>({
     p1:{ min:112, max:340, collapsed:76, default:175 },
@@ -5734,6 +5953,8 @@ function AdminPanelInner({user}){
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [manageSectionSearch, setManageSectionSearch] = useState("");
+  const [manageInstituteFilter, setManageInstituteFilter] = useState("");
+  const [manageScopeInstitute, setManageScopeInstitute] = useState("");
   const [openTeacherInstitute, setOpenTeacherInstitute] = useState(null);
   const [openAdminInstitute, setOpenAdminInstitute] = useState(null);
   const [adminBin,     setAdminBin]     = useState([]); // [{type:"class"|"institute"|"section", ...data, deletedAt}]
@@ -5767,7 +5988,6 @@ function AdminPanelInner({user}){
   const [subjectBusy, setSubjectBusy] = useState(false);
   const [subjectAssignmentBusy, setSubjectAssignmentBusy] = useState(null);
   const [syllabusTemplates, setSyllabusTemplates] = useState([]);
-  const [syllabusBuilderSubject, setSyllabusBuilderSubject] = useState(null);
   const [syllabusBusy, setSyllabusBusy] = useState(false);
   const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
   const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
@@ -8526,8 +8746,7 @@ function AdminPanelInner({user}){
     }
   };
 
-  const openSyllabusBuilder = subject => {
-    setSyllabusBuilderSubject(subject);
+  const prepareSyllabusSubject = subject => {
     const subjectKey = subject.name.trim().toLowerCase();
     teachers
       .filter(teacher => {
@@ -10856,15 +11075,17 @@ function AdminPanelInner({user}){
     const teacherOnlyList = teachers.filter(t=>roles[t.uid]!=="admin");
     const manageTabItems = [
       { key:"teachers", label:"Teachers", icon:IconUsersGroup, count:teacherOnlyList.length, hint:"Accounts & classes" },
-      { key:"subjects", label:"Subjects", icon:IconBooks, count:globalSubjects.filter(item=>item.active).length, hint:"Canonical catalog" },
+      { key:"subjects", label:"Syllabus", icon:IconBooks, count:syllabusTemplates.length, hint:"Chapters & topics" },
+      { key:"catalog", label:"Subjects", icon:IconBooks, count:globalSubjects.filter(item=>item.active).length, hint:"Official catalog" },
       { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
       { key:"institutes", label:"Institutes", icon:IconBuilding, count:institutes.length, hint:"Names & structure" },
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
     ];
     const manageTitle = manageTabItems.find(item=>item.key===manageTab)?.label || "Control Centre";
-    const getSyllabusAffectedSummary = (instituteName,sectionName) => {
-      if(!syllabusBuilderSubject||!instituteName||!sectionName) return {classCount:0,instituteCount:0,teacherCount:0,classes:[]};
-      const subjectKey=syllabusBuilderSubject.name.trim().toLowerCase();
+    const getSyllabusAffectedSummary = (instituteName,sectionName,subjectOverride) => {
+      const activeSubject=subjectOverride;
+      if(!activeSubject||!instituteName||!sectionName) return {classCount:0,instituteCount:0,teacherCount:0,classes:[]};
+      const subjectKey=activeSubject.name.trim().toLowerCase();
       const sectionKey=sectionName.trim().toLowerCase();
       let classCount=0;
       const instituteNames=new Set();
@@ -10913,6 +11134,24 @@ function AdminPanelInner({user}){
           };
         });
     })();
+    const sidebarInstitutes = institutes.filter(institute=>
+      !manageInstituteFilter.trim()
+      || institute.toLowerCase().includes(manageInstituteFilter.trim().toLowerCase())
+    );
+    const openInstituteArea = (institute, area) => {
+      setManageScopeInstitute(institute);
+      setInstDetailView(null);
+      if(area==="teachers"){
+        setManageTab("teachers");
+        setOpenTeacherInstitute(institute);
+        setManageTeacherSearch("");
+      } else if(area==="sections"){
+        setManageTab("sections");
+        setInstDetailView(institute);
+      } else {
+        setManageTab("subjects");
+      }
+    };
     return(
     <div style={{minHeight:"100svh",background:G.bg,fontFamily:G.sans,overflowX:"hidden"}}>
       {binView&&<AdminBinModal/>}
@@ -10956,7 +11195,9 @@ function AdminPanelInner({user}){
           </>
         )}
       </div>
-      <div style={{maxWidth:860,margin:"0 auto",padding:isMobile ? mobileManageOuterPad : "20px 16px 72px"}}>
+      <div style={isMobile
+        ? {maxWidth:860,margin:"0 auto",padding:mobileManageOuterPad}
+        : {maxWidth:1480,margin:"0 auto",padding:"22px 22px 72px",display:"grid",gridTemplateColumns:"292px minmax(0,1fr)",gap:24,alignItems:"start"}}>
 
         {/* Copy group to institutes modal */}
         {copyGroupModal&&(
@@ -11013,6 +11254,65 @@ function AdminPanelInner({user}){
             onClose={()=>setGrpModal(null)}
           />
         )}
+
+        {!isMobile&&(
+          <aside style={{position:"sticky",top:20,alignSelf:"start",maxHeight:"calc(100vh - 96px)",display:"flex",flexDirection:"column",background:"#F8FAFD",border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden"}}>
+            <div style={{padding:"15px 15px 12px",borderBottom:`1px solid ${G.border}`,background:"#FFFFFF"}}>
+              <input value={manageInstituteFilter} onChange={event=>setManageInstituteFilter(event.target.value)} placeholder="Filter institutes" style={{width:"100%",boxSizing:"border-box",border:`1px solid ${G.borderM}`,borderRadius:11,padding:"10px 12px",fontFamily:G.sans,fontSize:13,color:G.text,outline:"none"}}/>
+            </div>
+            <div style={{padding:"12px 10px 10px",overflowY:"auto",minHeight:0}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 7px 8px"}}>
+                <span style={{fontSize:11,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9}}>Institutes</span>
+                <span style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:800,color:G.textM}}>{institutes.length}</span>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {sidebarInstitutes.map((institute,index)=>{
+                  const selected=manageScopeInstitute===institute;
+                  const teacherCount=instituteStats[institute]?.teacherCount||teachers.filter(teacher=>teacherBelongsToInstitute(teacher,institute)).length;
+                  const tones=["#2563EB","#0F9F78","#7C3AED","#DB2777","#C45A07"];
+                  const tone=tones[index%tones.length];
+                  return (
+                    <div key={institute}>
+                      <button onClick={()=>openInstituteArea(institute,"teachers")} style={{width:"100%",display:"grid",gridTemplateColumns:"12px minmax(0,1fr) auto",alignItems:"center",gap:9,border:"none",borderRadius:10,padding:"9px 9px",background:selected?"#DCE9FF":"transparent",color:G.text,fontFamily:G.sans,cursor:"pointer",textAlign:"left"}}>
+                        <span style={{width:9,height:9,borderRadius:"50%",background:tone}}/>
+                        <span style={{fontSize:12.5,fontWeight:selected?850:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{institute}</span>
+                        <span style={{fontSize:11.5,fontWeight:800,color:G.textL}}>{teacherCount}</span>
+                      </button>
+                      {selected&&(
+                        <div style={{margin:"3px 0 6px 20px",paddingLeft:9,borderLeft:`2px solid #B8CCF7`,display:"flex",flexDirection:"column",gap:3}}>
+                          {[
+                            {key:"teachers",label:"Teachers",icon:IconUsersGroup},
+                            {key:"sections",label:"Sections",icon:IconSchool},
+                            {key:"subjects",label:"Syllabus",icon:IconBooks},
+                          ].map(item=>(
+                            <button key={item.key} onClick={()=>openInstituteArea(institute,item.key)} style={{display:"flex",alignItems:"center",gap:8,border:"none",borderRadius:8,padding:"7px 9px",background:manageTab===item.key?"#FFFFFF":"transparent",color:manageTab===item.key?G.navy:G.textM,fontFamily:G.sans,fontSize:12,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
+                              <AppIcon icon={item.icon} size={14} color={manageTab===item.key?G.blue:G.textL}/>{item.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {sidebarInstitutes.length===0&&<div style={{padding:"18px 10px",fontSize:12.5,color:G.textM,textAlign:"center"}}>No institutes match.</div>}
+              </div>
+            </div>
+            <div style={{padding:"11px 10px 12px",borderTop:`1px solid ${G.border}`,background:"#FFFFFF"}}>
+              <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"0 8px 7px"}}>Workspace</div>
+              {[
+                {key:"catalog",label:"Official subjects",icon:IconBooks},
+                {key:"institutes",label:"Manage institutes",icon:IconBuilding},
+                {key:"admins",label:"Admins",icon:IconSettings},
+              ].map(item=>(
+                <button key={item.key} onClick={()=>{setManageScopeInstitute("");setInstDetailView(null);setManageTab(item.key);}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:!manageScopeInstitute&&manageTab===item.key?"#EEF4FF":"transparent",color:!manageScopeInstitute&&manageTab===item.key?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
+                  <AppIcon icon={item.icon} size={15} color={!manageScopeInstitute&&manageTab===item.key?G.blue:G.textL}/>{item.label}
+                </button>
+              ))}
+            </div>
+          </aside>
+        )}
+
+        <main style={{minWidth:0}}>
 
         {/* Institute detail drill-down (replaces tab content when active) */}
         {instDetailView?(()=>{
@@ -11220,12 +11520,20 @@ function AdminPanelInner({user}){
           );
         })():(<>
 
-        <h2 style={{fontSize:isMobile?22:24,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:isMobile?12:16}}>Control Centre</h2>
+        <div style={{marginBottom:isMobile?12:20}}>
+          <div style={{fontSize:11,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1}}>Control centre</div>
+          <h2 style={{fontSize:isMobile?22:28,fontWeight:850,color:G.text,fontFamily:G.display,margin:"5px 0 0",lineHeight:1.15}}>
+            {manageScopeInstitute||manageTitle}
+          </h2>
+          {!isMobile&&manageScopeInstitute&&(
+            <div style={{fontSize:13.5,color:G.textM,marginTop:6}}>
+              Manage this institute's {manageTab==="subjects"?"syllabus":manageTab}.
+            </div>
+          )}
+        </div>
 
         {/* Tab switcher */}
-        <div style={isMobile
-          ? {display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:18}
-          : {display:"flex",background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:4,marginBottom:22,gap:4}}>
+        {isMobile&&<div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:18}}>
           {manageTabItems.map(item=>(
             <button key={item.key} onClick={()=>{setManageTab(item.key); if(item.key!=="sections") setInstDetailView(null);}}
               className={isMobile?"admin-mobile-touch":undefined}
@@ -11262,25 +11570,26 @@ function AdminPanelInner({user}){
               )}
             </button>
           ))}
-        </div>
+        </div>}
 
-        {manageTab==="subjects"&&syllabusBuilderSubject&&(
-          <SyllabusBuilder
-            key={syllabusBuilderSubject.id}
-            subject={syllabusBuilderSubject}
-            templates={syllabusTemplates}
-            institutes={institutes}
+        {manageTab==="subjects"&&(
+          <SimpleSyllabusFlow
+            key={manageScopeInstitute||"all-institutes"}
+            institutes={manageScopeInstitute?[manageScopeInstitute]:institutes}
+            defaultInstitute={manageScopeInstitute}
             instituteSections={instSectionsAll}
+            subjects={globalSubjects}
+            templates={syllabusTemplates}
             getAffectedSummary={getSyllabusAffectedSummary}
             busy={syllabusBusy}
             isMobile={isMobile}
-            onClose={()=>setSyllabusBuilderSubject(null)}
+            onSelectSubject={prepareSyllabusSubject}
             onSave={handleSaveSyllabusDraft}
             onPublish={handlePublishSyllabus}
           />
         )}
 
-        {manageTab==="subjects"&&!syllabusBuilderSubject&&(
+        {manageTab==="catalog"&&(
           <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
               <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display}}>Subject catalog</div>
@@ -11327,9 +11636,9 @@ function AdminPanelInner({user}){
                       </div>
                       <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                         {subject.active&&(
-                          <button onClick={()=>openSyllabusBuilder(subject)}
+                          <button onClick={()=>{setManageScopeInstitute("");setManageTab("subjects");}}
                             style={{...pill(G.navy,"#FFFFFF",G.navy),fontSize:12,fontWeight:800}}>
-                            Build syllabus
+                            Open syllabus
                           </button>
                         )}
                         <button onClick={()=>handleToggleSubjectActive(subject)} disabled={subjectBusy}
@@ -11893,6 +12202,7 @@ function AdminPanelInner({user}){
           );
         })()}
       </>)}
+      </main>
       </div>
     </div>
   );

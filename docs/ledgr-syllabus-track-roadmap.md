@@ -48,6 +48,8 @@ Status: builder and quick-authoring checkpoints implemented; live acceptance rem
 
 ## Milestone 3: Simple Syllabus Management
 
+Status: checkpoint 1 implemented; authenticated visual acceptance remains.
+
 - Select one or more institutes.
 - Select one or more sections from those institutes.
 - Show the official subjects available for the selected sections.
