@@ -50,7 +50,18 @@ internal fun mapLegacyTeacherSnapshot(
     val profileSubjects = profileMap.stringList("subjects")
     val indexInstitutes = teacherIndex.stringList("institutes")
     val indexSubjects = teacherIndex.stringList("subjects")
+    val subjectAssignmentVersion = teacherIndex.long("subjectAssignmentVersion")
+    val assignedSubjects = teacherIndex.mapList("assignedSubjects")
+    val assignedSubjectNames = uniqueLabels(assignedSubjects.map { it.string("name") })
+    val assignedSubjectIds = uniqueLabels(
+        teacherIndex.stringList("assignedSubjectIds") + assignedSubjects.map { it.string("id") },
+    )
     val availableInstitutes = instituteConfig.stringList("list")
+    val resolvedSubjects = if (subjectAssignmentVersion > 0L) {
+        assignedSubjectNames
+    } else {
+        uniqueLabels(profileSubjects + indexSubjects + classSubjects)
+    }
 
     return TeacherSnapshot(
         profile = TeacherProfile(
@@ -65,8 +76,10 @@ internal fun mapLegacyTeacherSnapshot(
                 teacherIndex.string("email"),
             ),
             photoUrl = teacher.photoUrl ?: teacherIndex.string("photoURL").ifBlank { null },
-            subjects = uniqueLabels(profileSubjects + indexSubjects + classSubjects),
+            subjects = resolvedSubjects,
             institutes = uniqueLabels(profileInstitutes + indexInstitutes + classInstitutes),
+            subjectIds = assignedSubjectIds,
+            subjectAssignmentVersion = subjectAssignmentVersion,
         ),
         classes = classes,
         entries = entries,

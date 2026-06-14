@@ -266,6 +266,7 @@ fun NewClassScreen(
     var subjectName by rememberSaveable { mutableStateOf(subjectOptions.firstOrNull().orEmpty()) }
     var instituteExpanded by rememberSaveable { mutableStateOf(false) }
     var sectionExpanded by rememberSaveable { mutableStateOf(false) }
+    var subjectExpanded by rememberSaveable { mutableStateOf(false) }
     val availableSections = remember(instituteName, availableSectionsByInstitute) {
         availableSectionsByInstitute.sectionsForInstitute(instituteName)
     }
@@ -273,6 +274,12 @@ fun NewClassScreen(
     LaunchedEffect(instituteName, availableSections) {
         if (availableSections.isNotEmpty() && sectionName !in availableSections) {
             sectionName = availableSections.first()
+        }
+    }
+
+    LaunchedEffect(subjectOptions) {
+        if (subjectName !in subjectOptions) {
+            subjectName = subjectOptions.firstOrNull().orEmpty()
         }
     }
 
@@ -410,36 +417,53 @@ fun NewClassScreen(
                             singleLine = true,
                         )
                     }
-                    OutlinedTextField(
-                        value = subjectName,
-                        onValueChange = { subjectName = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Subject") },
-                        placeholder = { Text("e.g. GS") },
-                        singleLine = true,
-                    )
-                    if (subjectOptions.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    if (subjectOptions.isEmpty()) {
+                        Surface(
+                            color = colors.warningSurface,
+                            contentColor = Color(0xFF9A3412),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFED7AA)),
                         ) {
-                            subjectOptions.take(2).forEach { subject ->
-                                LedgrPill(
-                                    text = subject,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { subjectName = subject },
-                                    containerColor = if (subject == subjectName) {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    } else {
-                                        colors.surfaceAlt
-                                    },
-                                    contentColor = if (subject == subjectName) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        colors.textSecondary
-                                    },
-                                )
+                            Text(
+                                text = "Your administrator has not assigned a subject yet. Contact them before adding a class.",
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    } else {
+                        ExposedDropdownMenuBox(
+                            expanded = subjectExpanded,
+                            onExpandedChange = { subjectExpanded = !subjectExpanded },
+                        ) {
+                            OutlinedTextField(
+                                value = subjectName,
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth(),
+                                label = { Text("Subject") },
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(
+                                        expanded = subjectExpanded,
+                                    )
+                                },
+                                singleLine = true,
+                            )
+                            ExposedDropdownMenu(
+                                expanded = subjectExpanded,
+                                onDismissRequest = { subjectExpanded = false },
+                            ) {
+                                subjectOptions.forEach { subject ->
+                                    BorderedDropdownOption(
+                                        text = subject,
+                                        selected = subject == subjectName,
+                                        onClick = {
+                                            subjectName = subject
+                                            subjectExpanded = false
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -456,7 +480,8 @@ fun NewClassScreen(
                         enabled = !saving &&
                             availableInstitutes.isNotEmpty() &&
                             instituteName.isNotBlank() &&
-                            sectionName.isNotBlank(),
+                            sectionName.isNotBlank() &&
+                            subjectName.isNotBlank(),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(

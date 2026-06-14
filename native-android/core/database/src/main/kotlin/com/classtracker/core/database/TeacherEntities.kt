@@ -11,6 +11,8 @@ data class TeacherProfileEntity(
     val photoUrl: String?,
     val subjects: String,
     val institutes: String,
+    val subjectIds: String,
+    val subjectAssignmentVersion: Long,
 )
 
 @Entity(tableName = "teacher_metadata", primaryKeys = ["uid"])

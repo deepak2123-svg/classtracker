@@ -12,6 +12,7 @@ import {
   IconFileText,
   IconLogout,
   IconMessageCircle,
+  IconBooks,
   IconPhoto,
   IconPlus,
   IconSchool,
@@ -29,6 +30,7 @@ import {
   deleteEntryFromTeacherData, deleteClassFromTeacherData, deleteClassNotes,
   trashClassInTeacherData, restoreClassFromTeacherTrash,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute, renameGlobalInstitute, saveInstituteExtraSections,
+  getGlobalSubjects, saveGlobalSubject, setGlobalSubjectActive, updateTeacherSubjectAssignments,
   getDeletedInstitutesList, addToDeletedInstitutesList, removeFromDeletedInstitutesList,
   repairTeacherIndex, saveProfileName, saveUserData,
   deleteInstituteCompletely, deleteInstituteAndMigrate,
@@ -5379,7 +5381,7 @@ function AdminPanelInner({user}){
   const [reduceEffects,setReduceEffects]= useState(false);
   const [mobileLiteMode,setMobileLiteMode] = useState(false);
   const [coarsePointer, setCoarsePointer] = useState(false);
-  const [manageTab,    setManageTab]    = useState("teachers"); // teachers | admins | institutes | sections
+  const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [manageSectionSearch, setManageSectionSearch] = useState("");
@@ -5411,6 +5413,10 @@ function AdminPanelInner({user}){
   const [instDeleteModal, setInstDeleteModal] = useState(null); // null | {inst, step, migrateTarget, busy, error}
   const [deletedInstitutes, setDeletedInstitutes] = useState(new Set());
   const [globalInstList, setGlobalInstList] = useState([]); // from config/institutes
+  const [globalSubjects, setGlobalSubjects] = useState([]);
+  const [newSubjectName, setNewSubjectName] = useState("");
+  const [subjectBusy, setSubjectBusy] = useState(false);
+  const [subjectAssignmentBusy, setSubjectAssignmentBusy] = useState(null);
   const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
   const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
@@ -5583,15 +5589,17 @@ function AdminPanelInner({user}){
   useEffect(()=>{
     (async()=>{
       // Load index + roles + global institutes list in parallel
-      const [t,r,gInst,gDeleted,savedBin,savedLedgrSchedule]=await Promise.all([
+      const [t,r,gInst,gSubjects,gDeleted,savedBin,savedLedgrSchedule]=await Promise.all([
         getAllTeachers(),
         getAllRoles(),
         getGlobalInstitutes(),
+        getGlobalSubjects(),
         getDeletedInstitutesList(),
         getAdminBin(),
         getLedgrReportSchedule(),
       ]);
       setTeachers(t); setRoles(r);
+      setGlobalSubjects(gSubjects);
       setLedgrReportSchedule(savedLedgrSchedule);
       setLedgrReportScheduleLoading(false);
       // Restore persisted deleted-institutes set so page refresh doesn't un-hide them
@@ -8114,6 +8122,91 @@ function AdminPanelInner({user}){
     } catch(e) { showAdminToast("Failed: " + e.message); }
   };
 
+  const handleCreateSubject = async () => {
+    const name = newSubjectName.trim();
+    if (!name || subjectBusy) return;
+    setSubjectBusy(true);
+    try {
+      await saveGlobalSubject(name);
+      setGlobalSubjects(await getGlobalSubjects());
+      setNewSubjectName("");
+      showAdminToast(`Subject "${name}" added.`);
+    } catch (error) {
+      showAdminToast(error?.message || "Subject could not be added.");
+    } finally {
+      setSubjectBusy(false);
+    }
+  };
+
+  const handleImportTeacherSubjects = async () => {
+    if (subjectBusy) return;
+    const names = [...new Set(teachers
+      .flatMap(teacher => teacher.subjects || [])
+      .map(value => String(value || "").trim())
+      .filter(Boolean))];
+    if (!names.length) {
+      showAdminToast("No existing teacher subjects were found.");
+      return;
+    }
+    setSubjectBusy(true);
+    try {
+      for (const name of names) await saveGlobalSubject(name);
+      setGlobalSubjects(await getGlobalSubjects());
+      showAdminToast(`Imported ${names.length} existing subject${names.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      showAdminToast(error?.message || "Existing subjects could not be imported.");
+    } finally {
+      setSubjectBusy(false);
+    }
+  };
+
+  const handleToggleSubjectActive = async subject => {
+    if (subjectBusy) return;
+    setSubjectBusy(true);
+    try {
+      setGlobalSubjects(await setGlobalSubjectActive(subject.id, !subject.active));
+    } catch (error) {
+      showAdminToast(error?.message || "Subject could not be updated.");
+    } finally {
+      setSubjectBusy(false);
+    }
+  };
+
+  const teacherAssignedSubjectIds = teacher => {
+    const explicit = Array.isArray(teacher.assignedSubjectIds) ? teacher.assignedSubjectIds : [];
+    if (explicit.length || Number(teacher.subjectAssignmentVersion || 0) > 0) return explicit;
+    const legacyNames = new Set((teacher.subjects || []).map(value => String(value).trim().toLowerCase()));
+    return globalSubjects
+      .filter(subject => legacyNames.has(subject.name.toLowerCase()))
+      .map(subject => subject.id);
+  };
+
+  const handleToggleTeacherSubject = async (teacher, subject) => {
+    if (subjectAssignmentBusy) return;
+    const currentIds = teacherAssignedSubjectIds(teacher);
+    const nextIds = currentIds.includes(subject.id)
+      ? currentIds.filter(id => id !== subject.id)
+      : [...currentIds, subject.id];
+    const nextSubjects = globalSubjects.filter(item => nextIds.includes(item.id) && item.active);
+    setSubjectAssignmentBusy(teacher.uid);
+    try {
+      await updateTeacherSubjectAssignments(teacher.uid, nextSubjects, user.uid);
+      setTeachers(current => current.map(item => item.uid === teacher.uid ? {
+        ...item,
+        assignedSubjectIds: nextSubjects.map(value => value.id),
+        assignedSubjects: nextSubjects.map(value => ({ id:value.id, name:value.name })),
+        subjects: nextSubjects.map(value => value.name),
+        subjectAssignmentVersion: Number(item.subjectAssignmentVersion || 0) + 1,
+        subjectAssignmentUpdatedAt: Date.now(),
+      } : item));
+      showAdminToast(`${getTeacherDisplayName(teacher)} subject assignment updated.`);
+    } catch (error) {
+      showAdminToast(error?.message || "Teacher subjects could not be updated.");
+    } finally {
+      setSubjectAssignmentBusy(null);
+    }
+  };
+
   // Rename a teacher (admin only)
   const handleRenameTeacher = async (uid, newName) => {
     if (!newName.trim()) return;
@@ -8434,6 +8527,9 @@ function AdminPanelInner({user}){
     } else if(target === "sections"){
       setManageTab("sections");
       setInstDetailView(selInst || null);
+    } else if(target === "subjects"){
+      setManageTab("subjects");
+      setInstDetailView(null);
     }
     setView("manage");
   }, [selInst]);
@@ -10356,6 +10452,7 @@ function AdminPanelInner({user}){
     const teacherOnlyList = teachers.filter(t=>roles[t.uid]!=="admin");
     const manageTabItems = [
       { key:"teachers", label:"Teachers", icon:IconUsersGroup, count:teacherOnlyList.length, hint:"Accounts & classes" },
+      { key:"subjects", label:"Subjects", icon:IconBooks, count:globalSubjects.filter(item=>item.active).length, hint:"Canonical catalog" },
       { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
       { key:"institutes", label:"Institutes", icon:IconBuilding, count:institutes.length, hint:"Names & structure" },
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
@@ -10741,6 +10838,57 @@ function AdminPanelInner({user}){
             </button>
           ))}
         </div>
+
+        {manageTab==="subjects"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
+              <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display}}>Subject catalog</div>
+              <div style={{fontSize:14,color:G.textM,lineHeight:1.55,marginTop:4,marginBottom:14}}>
+                Official subjects used for teacher assignments and future syllabus templates.
+              </div>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                <input
+                  value={newSubjectName}
+                  onChange={event=>setNewSubjectName(event.target.value)}
+                  onKeyDown={event=>event.key==="Enter"&&handleCreateSubject()}
+                  placeholder="e.g. Chemistry"
+                  style={{flex:"1 1 220px",minWidth:0,padding:"11px 14px",borderRadius:10,border:`1.5px solid ${G.border}`,fontSize:15,fontFamily:G.sans,outline:"none",color:G.text}}
+                />
+                <button onClick={handleCreateSubject} disabled={!newSubjectName.trim()||subjectBusy}
+                  style={{...pill(newSubjectName.trim()?G.navy:G.bg,newSubjectName.trim()?"#fff":G.textL,G.border),padding:"10px 16px",fontSize:13.5}}>
+                  Add subject
+                </button>
+                <button onClick={handleImportTeacherSubjects} disabled={subjectBusy}
+                  style={{...pill("#EEF4FF",G.blue,"#C7D7F5"),padding:"10px 16px",fontSize:13.5}}>
+                  Import existing
+                </button>
+              </div>
+            </div>
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
+              {globalSubjects.length===0 ? (
+                <div style={{padding:"28px 12px",textAlign:"center",color:G.textM}}>No canonical subjects yet.</div>
+              ) : (
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
+                  {globalSubjects.map(subject=>(
+                    <div key={subject.id} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",borderRadius:12,border:`1px solid ${subject.active?G.border:"#F5CACA"}`,background:subject.active?G.bg:G.redL}}>
+                      <div style={{width:38,height:38,borderRadius:11,background:subject.active?G.blueL:"#FDE2E2",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <AppIcon icon={IconBooks} size={18} color={subject.active?G.blue:G.red}/>
+                      </div>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{fontSize:15,fontWeight:800,color:G.text}}>{subject.name}</div>
+                        <div style={{fontSize:11.5,color:G.textL,fontFamily:G.mono,marginTop:2}}>{subject.id}</div>
+                      </div>
+                      <button onClick={()=>handleToggleSubjectActive(subject)} disabled={subjectBusy}
+                        style={{...pill(subject.active?G.surface:G.blueL,subject.active?G.red:G.blue,subject.active?"#F5CACA":"#C7D7F5"),fontSize:12}}>
+                        {subject.active?"Archive":"Restore"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {manageTab==="sections"&&(
           <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:isMobile?"14px 14px 12px":"16px 18px",marginBottom:24}}>
@@ -11140,6 +11288,25 @@ function AdminPanelInner({user}){
 
                 {isSel&&(
                   <div style={{borderTop:`1px solid ${G.border}`,background:G.bg,padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Assigned subjects</div>
+                      {globalSubjects.filter(subject=>subject.active).length===0 ? (
+                        <div style={{fontSize:13,color:G.textM,lineHeight:1.5}}>Create subjects in the Subject catalog before assigning them.</div>
+                      ) : (
+                        <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                          {globalSubjects.filter(subject=>subject.active).map(subject=>{
+                            const selected = teacherAssignedSubjectIds(t).includes(subject.id);
+                            return (
+                              <button key={`${t.uid}_${subject.id}`} onClick={()=>handleToggleTeacherSubject(t,subject)}
+                                disabled={subjectAssignmentBusy===t.uid}
+                                style={{...pill(selected?G.navy:G.surface,selected?"#fff":G.textS,selected?G.navy:G.borderM),fontSize:12.5,opacity:subjectAssignmentBusy===t.uid?0.65:1}}>
+                                {selected?"✓ ":""}{subject.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                     {(d.classes||[]).length>0&&(
                       <div>
                         <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Classes</div>

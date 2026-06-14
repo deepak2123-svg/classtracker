@@ -92,6 +92,8 @@ internal fun TeacherProfile.toEntity(uid: String) = TeacherProfileEntity(
     photoUrl = photoUrl,
     subjects = encodeList(subjects),
     institutes = encodeList(institutes),
+    subjectIds = encodeList(subjectIds),
+    subjectAssignmentVersion = subjectAssignmentVersion,
 )
 
 internal fun TeacherSnapshot.toMetadataEntity(uid: String) = TeacherMetadataEntity(
@@ -219,6 +221,8 @@ internal fun TeacherProfileEntity.toTeacherProfile() = TeacherProfile(
     photoUrl = photoUrl,
     subjects = decodeList(subjects),
     institutes = decodeList(institutes),
+    subjectIds = decodeList(subjectIds),
+    subjectAssignmentVersion = subjectAssignmentVersion,
 )
 
 internal fun TeacherClassEntity.toTeacherClass() = TeacherClass(

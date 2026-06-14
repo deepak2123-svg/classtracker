@@ -1047,6 +1047,99 @@ export async function saveGlobalInstitute(name) {
   }, { merge: true });
 }
 
+// ── Canonical subjects (admin-controlled) ────────────────────────────────────
+// Existing class `subject` strings remain untouched for legacy clients.
+
+function subjectIdFromName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+function normaliseSubjectCatalog(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : [])
+    .map(item => {
+      const source = typeof item === "string" ? { name: item } : (item || {});
+      const name = String(source.name || "").trim();
+      const id = String(source.id || subjectIdFromName(name)).trim();
+      if (!id || !name || seen.has(id)) return null;
+      seen.add(id);
+      return {
+        id,
+        name,
+        active: source.active !== false,
+        createdAt: Number(source.createdAt || 0),
+        updatedAt: Number(source.updatedAt || 0),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
+export async function getGlobalSubjects() {
+  try {
+    const snap = await getDoc(doc(db, "config", "subjects"));
+    return snap.exists() ? normaliseSubjectCatalog(snap.data().list) : [];
+  } catch (error) {
+    console.error("getGlobalSubjects", error);
+    return [];
+  }
+}
+
+export async function saveGlobalSubject(name) {
+  const cleanName = String(name || "").trim();
+  if (!cleanName) throw new Error("Enter a subject name.");
+  const current = await getGlobalSubjects();
+  const duplicate = current.find(item => item.name.toLowerCase() === cleanName.toLowerCase());
+  if (duplicate) return duplicate;
+  const now = Date.now();
+  let id = subjectIdFromName(cleanName);
+  if (!id) throw new Error("Enter a valid subject name.");
+  if (current.some(item => item.id === id)) id = `${id}-${now.toString(36)}`;
+  const created = { id, name: cleanName, active: true, createdAt: now, updatedAt: now };
+  await setDoc(doc(db, "config", "subjects"), {
+    list: normaliseSubjectCatalog([...current, created]),
+    version: increment(1),
+    updatedAt: now,
+  }, { merge: true });
+  return created;
+}
+
+export async function setGlobalSubjectActive(subjectId, active) {
+  const current = await getGlobalSubjects();
+  const now = Date.now();
+  const next = current.map(item => item.id === subjectId
+    ? { ...item, active: !!active, updatedAt: now }
+    : item);
+  await setDoc(doc(db, "config", "subjects"), {
+    list: normaliseSubjectCatalog(next),
+    version: increment(1),
+    updatedAt: now,
+  }, { merge: true });
+  return next;
+}
+
+export async function updateTeacherSubjectAssignments(uid, subjects, adminUid = "") {
+  const assigned = normaliseSubjectCatalog(subjects).filter(item => item.active !== false);
+  const ref = doc(db, "teachers", uid);
+  await runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    const current = snap.exists() ? snap.data() : {};
+    tx.set(ref, {
+      assignedSubjectIds: assigned.map(item => item.id),
+      assignedSubjects: assigned.map(item => ({ id: item.id, name: item.name })),
+      subjects: assigned.map(item => item.name),
+      subjectAssignmentVersion: Number(current.subjectAssignmentVersion || 0) + 1,
+      subjectAssignmentUpdatedAt: Date.now(),
+      subjectAssignmentUpdatedBy: adminUid || "admin",
+    }, { merge: true });
+  });
+}
+
 // ── Ledgr report automation ───────────────────────────────────────────────────
 // config/ledgrReportSchedule stores the admin's desired schedule. A trusted
 // backend runner can read this document and write execution metadata alongside

@@ -100,4 +100,42 @@ class LegacyTeacherMapperTest {
 
         assertEquals(listOf("newer", "older"), snapshot.classes.map { it.id })
     }
+
+    @Test
+    fun canonicalAssignmentReplacesLegacySubjectSuggestions() {
+        val snapshot = mapLegacyTeacherSnapshot(
+            teacher = AuthenticatedTeacher(
+                uid = "teacher-1",
+                displayName = "Teacher",
+                email = "teacher@example.com",
+                photoUrl = null,
+            ),
+            main = mapOf(
+                "profile" to mapOf("subjects" to listOf("Free text subject")),
+                "classes" to listOf(
+                    mapOf(
+                        "id" to "class-1",
+                        "section" to "11th",
+                        "subject" to "Legacy Chemistry",
+                    ),
+                ),
+            ),
+            teacherIndex = mapOf(
+                "subjects" to listOf("Old index subject"),
+                "assignedSubjectIds" to listOf("chemistry", "physics"),
+                "assignedSubjects" to listOf(
+                    mapOf("id" to "chemistry", "name" to "Chemistry"),
+                    mapOf("id" to "physics", "name" to "Physics"),
+                ),
+                "subjectAssignmentVersion" to 3L,
+            ),
+            noteDocuments = emptyMap(),
+            instituteConfig = emptyMap(),
+            sectionConfig = emptyMap(),
+        )
+
+        assertEquals(listOf("Chemistry", "Physics"), snapshot.profile.subjects)
+        assertEquals(listOf("chemistry", "physics"), snapshot.profile.subjectIds)
+        assertEquals(3L, snapshot.profile.subjectAssignmentVersion)
+    }
 }

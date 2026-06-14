@@ -69,6 +69,8 @@ data class TeacherProfile(
     val photoUrl: String?,
     val subjects: List<String>,
     val institutes: List<String>,
+    val subjectIds: List<String> = emptyList(),
+    val subjectAssignmentVersion: Long = 0L,
 )
 
 data class TeacherEntry(
@@ -219,6 +221,9 @@ fun validateTeacherClassDraft(draft: TeacherClassDraft): TeacherClassValidation 
     }
     if (draft.sectionName.trim().isBlank()) {
         return TeacherClassValidation.Invalid("Enter the class or section name.")
+    }
+    if (draft.subjectName.trim().isBlank()) {
+        return TeacherClassValidation.Invalid("Select an assigned subject.")
     }
     return TeacherClassValidation.Valid
 }

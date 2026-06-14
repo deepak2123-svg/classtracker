@@ -298,6 +298,9 @@ private fun TeacherApp(
     val draftStore = remember(context) {
         EntryDraftStore(context.applicationContext)
     }
+    val subjectAssignmentStore = remember(context) {
+        SubjectAssignmentPreferenceStore(context.applicationContext)
+    }
     val todayKey = todayKey()
     val dashboard = remember(snapshot, todayKey) { snapshot.dashboard(todayKey) }
     val classesById = remember(snapshot.classes) {
@@ -312,6 +315,11 @@ private fun TeacherApp(
     var showReminderDialog by rememberSaveable(teacher.uid) {
         mutableStateOf(!reminderPreferences.prompted)
     }
+    var acknowledgedSubjectVersion by rememberSaveable(teacher.uid) {
+        mutableStateOf(subjectAssignmentStore.acknowledgedVersion(teacher.uid))
+    }
+    val showSubjectAssignmentDialog =
+        snapshot.profile.subjectAssignmentVersion > acknowledgedSubjectVersion
 
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
@@ -349,7 +357,59 @@ private fun TeacherApp(
         }
     }
 
-    if (showReminderDialog) {
+    if (showSubjectAssignmentDialog) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text(
+                    text = "Your subjects are assigned",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Your administrator updated the subjects available in Ledgr.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LedgrTheme.colors.textSecondary,
+                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text(
+                            text = snapshot.profile.subjects
+                                .takeIf { it.isNotEmpty() }
+                                ?.joinToString(separator = "\n") { "• $it" }
+                                ?: "No active subjects are currently assigned.",
+                            modifier = Modifier.padding(14.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Text(
+                        text = "New classes can use only these official subjects. Contact your administrator if anything is missing.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LedgrTheme.colors.textSecondary,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val version = snapshot.profile.subjectAssignmentVersion
+                        subjectAssignmentStore.acknowledge(teacher.uid, version)
+                        acknowledgedSubjectVersion = version
+                    },
+                ) {
+                    Text("I understand")
+                }
+            },
+        )
+    }
+
+    if (showReminderDialog && !showSubjectAssignmentDialog) {
         ReminderSetupDialog(
             preferences = reminderPreferences,
             firstRun = !reminderPreferences.prompted,
