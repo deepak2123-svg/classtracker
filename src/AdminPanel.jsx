@@ -7388,7 +7388,6 @@ function AdminPanelInner({user}){
       openMobileCentreSummary();
       return;
     }
-    setView("main");
     setProfileOpen(false);
     setInstituteGlanceOpen(true);
     loadInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure);
@@ -11787,6 +11786,32 @@ function AdminPanelInner({user}){
 
   // ── MANAGE ACCESS VIEW ────────────────────────────────────────────────────
   if(view==="manage"){
+    if(instituteGlanceOpen && !isMobile){
+      return (
+        <div style={{height:"100dvh",display:"flex",flexDirection:"column",background:G.bg,overflow:"hidden"}}>
+          {renderDesktopCentreSummaryPage()}
+          {instituteGlanceOptionsOpen&&(
+            <LedgrReportOptionsModal
+              institutes={institutes}
+              period={instituteGlancePeriod}
+              month={instituteGlanceMonth}
+              rangeStart={instituteGlanceRangeStart}
+              rangeEnd={instituteGlanceRangeEnd}
+              schedule={ledgrReportSchedule}
+              scheduleLoading={ledgrReportScheduleLoading}
+              scheduleSaving={ledgrReportScheduleSaving}
+              exportDisabled={instituteGlanceExportDisabled}
+              busyFormat={instituteGlanceExportBusy}
+              onClose={()=>!instituteGlanceExportBusy&&!ledgrReportScheduleSaving&&setInstituteGlanceOptionsOpen(false)}
+              onApply={applyInstituteGlanceOptions}
+              onSaveSchedule={saveInstituteGlanceSchedule}
+            />
+          )}
+          <AdminToastBanner message={adminToast} />
+        </div>
+      );
+    }
+
     const adminOnlyList = teachers.filter(t=>roles[t.uid]==="admin");
     const teacherOnlyList = teachers.filter(t=>roles[t.uid]!=="admin");
     const manageTabItems = [
