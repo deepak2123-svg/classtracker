@@ -1180,15 +1180,78 @@ function normaliseSyllabusChapters(chapters) {
     .filter(Boolean);
 }
 
+function normaliseSyllabusScope(scope, fallbackInstitute = "", fallbackSection = "") {
+  const grouped = new Map();
+  (Array.isArray(scope) ? scope : []).forEach(item => {
+    const instituteName = String(item?.instituteName || "").trim();
+    if (!instituteName) return;
+    const key = instituteName.toLowerCase();
+    const current = grouped.get(key) || { instituteName, sectionNames: [] };
+    const sections = Array.isArray(item?.sectionNames)
+      ? item.sectionNames
+      : [item?.sectionName];
+    sections.forEach(value => {
+      const sectionName = String(value || "").trim();
+      if (!sectionName) return;
+      if (!current.sectionNames.some(existing => existing.toLowerCase() === sectionName.toLowerCase())) {
+        current.sectionNames.push(sectionName);
+      }
+    });
+    grouped.set(key, current);
+  });
+  const legacyInstitute = String(fallbackInstitute || "").trim();
+  const legacySection = String(fallbackSection || "").trim();
+  if (!grouped.size && legacyInstitute && legacySection) {
+    grouped.set(legacyInstitute.toLowerCase(), {
+      instituteName: legacyInstitute,
+      sectionNames: [legacySection],
+    });
+  }
+  return [...grouped.values()]
+    .map(item => ({
+      instituteName: item.instituteName,
+      sectionNames: [...item.sectionNames].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    }))
+    .filter(item => item.sectionNames.length)
+    .sort((a, b) => a.instituteName.localeCompare(b.instituteName, undefined, { sensitivity: "base" }));
+}
+
+function syllabusScopeHash(scope) {
+  const value = normaliseSyllabusScope(scope)
+    .flatMap(item => item.sectionNames.map(sectionName => `${item.instituteName}::${sectionName}`))
+    .join("|")
+    .toLowerCase();
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `scope-${(hash >>> 0).toString(36)}`;
+}
+
 function normaliseSyllabusTemplate(source = {}) {
   const draft = source.draft || {};
+  const draftScope = normaliseSyllabusScope(
+    Array.isArray(draft.scope) && draft.scope.length ? draft.scope : source.scope,
+    draft.instituteName || source.instituteName,
+    draft.sectionName || source.sectionName,
+  );
+  const publishedScope = source.published
+    ? normaliseSyllabusScope(
+        source.published.scope,
+        source.published.instituteName,
+        source.published.sectionName,
+      )
+    : [];
+  const firstDraftScope = draftScope[0] || { instituteName: "", sectionNames: [] };
   return {
     id: String(source.id || ""),
     subjectId: String(source.subjectId || ""),
     subjectName: String(source.subjectName || ""),
     name: String(source.name || draft.name || ""),
-    instituteName: String(source.instituteName || draft.instituteName || ""),
-    sectionName: String(source.sectionName || draft.sectionName || ""),
+    instituteName: String(source.instituteName || draft.instituteName || firstDraftScope.instituteName || ""),
+    sectionName: String(source.sectionName || draft.sectionName || firstDraftScope.sectionNames[0] || ""),
+    scope: draftScope,
     academicYear: String(source.academicYear || draft.academicYear || ""),
     curriculum: String(source.curriculum || draft.curriculum || ""),
     gradeLabel: String(source.gradeLabel || draft.gradeLabel || ""),
@@ -1200,8 +1263,9 @@ function normaliseSyllabusTemplate(source = {}) {
     updatedBy: String(source.updatedBy || ""),
     draft: {
       name: String(draft.name || source.name || ""),
-      instituteName: String(draft.instituteName || source.instituteName || ""),
-      sectionName: String(draft.sectionName || source.sectionName || ""),
+      instituteName: String(draft.instituteName || source.instituteName || firstDraftScope.instituteName || ""),
+      sectionName: String(draft.sectionName || source.sectionName || firstDraftScope.sectionNames[0] || ""),
+      scope: draftScope,
       academicYear: String(draft.academicYear || source.academicYear || ""),
       curriculum: String(draft.curriculum || source.curriculum || ""),
       gradeLabel: String(draft.gradeLabel || source.gradeLabel || ""),
@@ -1209,18 +1273,20 @@ function normaliseSyllabusTemplate(source = {}) {
     },
     published: source.published ? {
       ...source.published,
+      scope: publishedScope,
       version: Number(source.published.version || source.currentVersion || 0),
       chapters: normaliseSyllabusChapters(source.published.chapters),
     } : null,
   };
 }
 
-function syllabusTemplateId({ subjectId, name, instituteName, sectionName, academicYear, curriculum, gradeLabel }) {
-  const scope = [subjectId, name, instituteName, sectionName, academicYear, curriculum, gradeLabel]
+function syllabusTemplateId({ subjectId, name, scope, academicYear, curriculum, gradeLabel }) {
+  const scopeKey = syllabusScopeHash(scope);
+  const idParts = [subjectId, name, scopeKey, academicYear, curriculum, gradeLabel]
     .map(subjectIdFromName)
     .filter(Boolean)
     .join("--");
-  return scope || syllabusNodeId("syllabus");
+  return idParts || syllabusNodeId("syllabus");
 }
 
 export async function getSyllabusTemplates() {
@@ -1243,8 +1309,7 @@ export async function saveSyllabusDraft(template, adminUid = "") {
   const clean = normaliseSyllabusTemplate(template);
   if (!clean.subjectId || !clean.subjectName) throw new Error("Choose an official subject.");
   if (!clean.draft.name.trim()) throw new Error("Enter a syllabus name.");
-  if (!clean.draft.instituteName.trim()) throw new Error("Select an institute.");
-  if (!clean.draft.sectionName.trim()) throw new Error("Select a section.");
+  if (!clean.draft.scope.length) throw new Error("Select at least one institute and section.");
   if (!clean.draft.academicYear.trim()) throw new Error("Enter the academic year.");
   if (!clean.draft.curriculum.trim()) throw new Error("Enter the curriculum or board.");
   if (!clean.draft.gradeLabel.trim()) throw new Error("Enter the grade, course, or programme.");
@@ -1252,8 +1317,7 @@ export async function saveSyllabusDraft(template, adminUid = "") {
   const id = clean.id || syllabusTemplateId({
     subjectId: clean.subjectId,
     name: clean.draft.name,
-    instituteName: clean.draft.instituteName,
-    sectionName: clean.draft.sectionName,
+    scope: clean.draft.scope,
     academicYear: clean.draft.academicYear,
     curriculum: clean.draft.curriculum,
     gradeLabel: clean.draft.gradeLabel,
@@ -1270,6 +1334,7 @@ export async function saveSyllabusDraft(template, adminUid = "") {
       name: clean.draft.name,
       instituteName: clean.draft.instituteName,
       sectionName: clean.draft.sectionName,
+      scope: clean.draft.scope,
       academicYear: clean.draft.academicYear,
       curriculum: clean.draft.curriculum,
       gradeLabel: clean.draft.gradeLabel,
