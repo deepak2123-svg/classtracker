@@ -43,6 +43,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -79,6 +80,7 @@ import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherEntryStatus
 import com.classtracker.core.model.TeacherEntryValidation
 import com.classtracker.core.model.TeacherTimeSlot
+import com.classtracker.core.model.PublishedSyllabus
 import com.classtracker.core.model.validateTeacherEntryDraft
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -1696,6 +1698,7 @@ fun EntryEditorColumn(
     timeSlots: List<TeacherTimeSlot> = emptyList(),
     saving: Boolean,
     validation: TeacherEntryValidation,
+    syllabus: PublishedSyllabus? = null,
     onDraftChanged: (TeacherEntryDraft) -> Unit,
     onSave: (TeacherEntryDraft) -> Unit,
     modifier: Modifier = Modifier,
@@ -1729,6 +1732,15 @@ fun EntryEditorColumn(
 
         if (showCustomTimeFields && draft.timeStart.isNotBlank()) {
             DurationCard(
+                draft = draft,
+                onDraftChanged = onDraftChanged,
+            )
+        }
+
+        if (syllabus != null) {
+            SyllabusProgressEditor(
+                syllabus = syllabus,
+                existingEntries = existingEntries,
                 draft = draft,
                 onDraftChanged = onDraftChanged,
             )
@@ -1797,5 +1809,137 @@ fun EntryEditorColumn(
                 ) onSave(draft)
             },
         )
+    }
+}
+
+@Composable
+private fun SyllabusProgressEditor(
+    syllabus: PublishedSyllabus,
+    existingEntries: List<TeacherEntry>,
+    draft: TeacherEntryDraft,
+    onDraftChanged: (TeacherEntryDraft) -> Unit,
+) {
+    val completedTopicIds = remember(existingEntries, syllabus.templateId) {
+        existingEntries
+            .filter { it.syllabusTemplateId == syllabus.templateId }
+            .flatMapTo(linkedSetOf()) { it.completedSyllabusTopicIds }
+    }
+    val selectedChapter = syllabus.chapters.firstOrNull {
+        it.id == draft.syllabusChapterId
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Text(
+            text = "ONGOING CHAPTER",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = entryInkColor(),
+        )
+        syllabus.chapters.forEach { chapter ->
+            val selected = chapter.id == draft.syllabusChapterId
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        onDraftChanged(
+                            draft.copy(
+                                syllabusTemplateId = syllabus.templateId,
+                                syllabusVersion = syllabus.version,
+                                syllabusChapterId = chapter.id,
+                                syllabusChapterTitle = chapter.title,
+                                completedSyllabusTopicIds = emptyList(),
+                                syllabusChapterCompleted = false,
+                            ),
+                        )
+                    },
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    entrySurfaceColor()
+                },
+                contentColor = if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    entryInkColor()
+                },
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (selected) MaterialTheme.colorScheme.primary else entryBorderColor(),
+                ),
+            ) {
+                Text(
+                    text = "${chapter.order}. ${chapter.title}",
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+            }
+        }
+        selectedChapter?.let { chapter ->
+            Text(
+                text = if (chapter.topics.isEmpty()) {
+                    "Tick when this chapter is covered."
+                } else {
+                    "Tick the topics covered in this entry."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = entryMutedColor(),
+            )
+            chapter.topics.forEach { topic ->
+                val alreadyCompleted = topic.id in completedTopicIds
+                val checked = alreadyCompleted || topic.id in draft.completedSyllabusTopicIds
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !alreadyCompleted) {
+                            val updated = draft.completedSyllabusTopicIds.toMutableSet()
+                            if (!updated.add(topic.id)) updated.remove(topic.id)
+                            val allCovered = chapter.topics.all {
+                                it.id in completedTopicIds || it.id in updated
+                            }
+                            onDraftChanged(
+                                draft.copy(
+                                    completedSyllabusTopicIds = updated.toList(),
+                                    syllabusChapterCompleted = allCovered,
+                                ),
+                            )
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = checked,
+                        enabled = !alreadyCompleted,
+                        onCheckedChange = null,
+                    )
+                    Text(
+                        text = topic.title + if (alreadyCompleted) " · covered" else "",
+                        fontWeight = FontWeight.Bold,
+                        color = if (alreadyCompleted) entryMutedColor() else entryInkColor(),
+                    )
+                }
+            }
+            if (chapter.topics.isEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onDraftChanged(
+                                draft.copy(
+                                    syllabusChapterCompleted = !draft.syllabusChapterCompleted,
+                                ),
+                            )
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = draft.syllabusChapterCompleted,
+                        onCheckedChange = null,
+                    )
+                    Text("Chapter covered", fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        }
     }
 }

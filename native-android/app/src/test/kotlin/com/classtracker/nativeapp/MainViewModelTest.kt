@@ -5,6 +5,7 @@ import com.classtracker.core.firebase.TeacherAuthRepository
 import com.classtracker.core.firebase.TeacherDataRepository
 import com.classtracker.core.firebase.TeacherFeedbackRepository
 import com.classtracker.core.firebase.TeacherRevisionConflictException
+import com.classtracker.core.firebase.TeacherSyllabusRepository
 import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherClassDraft
@@ -54,7 +55,12 @@ class MainViewModelTest {
         )
         val authRepository = FakeAuthRepository()
         val dataRepository = FakeDataRepository(snapshotFor(teacher))
-        val viewModel = MainViewModel(authRepository, dataRepository, FakeFeedbackRepository())
+        val viewModel = MainViewModel(
+            authRepository,
+            dataRepository,
+            FakeFeedbackRepository(),
+            FakeSyllabusRepository(),
+        )
 
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
         advanceUntilIdle()
@@ -85,7 +91,12 @@ class MainViewModelTest {
         val original = snapshotFor(teacher)
         val updated = original.copy(revision = 2)
         val dataRepository = FakeDataRepository(original, updated)
-        val viewModel = MainViewModel(authRepository, dataRepository, FakeFeedbackRepository())
+        val viewModel = MainViewModel(
+            authRepository,
+            dataRepository,
+            FakeFeedbackRepository(),
+            FakeSyllabusRepository(),
+        )
 
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
         advanceUntilIdle()
@@ -144,7 +155,12 @@ class MainViewModelTest {
         )
         val authRepository = FakeAuthRepository()
         val dataRepository = RevisionConflictRepository(original, latest)
-        val viewModel = MainViewModel(authRepository, dataRepository, FakeFeedbackRepository())
+        val viewModel = MainViewModel(
+            authRepository,
+            dataRepository,
+            FakeFeedbackRepository(),
+            FakeSyllabusRepository(),
+        )
 
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
         advanceUntilIdle()
@@ -170,6 +186,7 @@ class MainViewModelTest {
             authRepository,
             FakeDataRepository(snapshotFor(teacher)),
             feedbackRepository,
+            FakeSyllabusRepository(),
         )
 
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
@@ -198,6 +215,7 @@ class MainViewModelTest {
             authRepository,
             FakeDataRepository(snapshotFor(teacher)),
             FailingFeedbackRepository(),
+            FakeSyllabusRepository(),
         )
 
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
@@ -232,7 +250,12 @@ class MainViewModelTest {
         val updated = original.copy(classes = emptyList(), revision = 2L)
         val authRepository = FakeAuthRepository()
         val dataRepository = FakeDataRepository(original, updated)
-        val viewModel = MainViewModel(authRepository, dataRepository, FakeFeedbackRepository())
+        val viewModel = MainViewModel(
+            authRepository,
+            dataRepository,
+            FakeFeedbackRepository(),
+            FakeSyllabusRepository(),
+        )
 
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
         advanceUntilIdle()
@@ -276,7 +299,12 @@ class MainViewModelTest {
         val updated = original.copy(trashedEntries = emptyList(), revision = 2L)
         val authRepository = FakeAuthRepository()
         val dataRepository = FakeDataRepository(original, updated)
-        val viewModel = MainViewModel(authRepository, dataRepository, FakeFeedbackRepository())
+        val viewModel = MainViewModel(
+            authRepository,
+            dataRepository,
+            FakeFeedbackRepository(),
+            FakeSyllabusRepository(),
+        )
 
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
         advanceUntilIdle()
@@ -300,7 +328,12 @@ class MainViewModelTest {
         val updated = original.copy(trashedEntries = listOf(second), revision = 2L)
         val authRepository = FakeAuthRepository()
         val dataRepository = FakeDataRepository(original, updated)
-        val viewModel = MainViewModel(authRepository, dataRepository, FakeFeedbackRepository())
+        val viewModel = MainViewModel(
+            authRepository,
+            dataRepository,
+            FakeFeedbackRepository(),
+            FakeSyllabusRepository(),
+        )
 
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
         advanceUntilIdle()
@@ -320,7 +353,12 @@ class MainViewModelTest {
         val teacher = AuthenticatedTeacher("teacher-1", "Teacher", "teacher@example.com", null)
         val authRepository = FakeAuthRepository()
         val dataRepository = FakeDataRepository(snapshotFor(teacher))
-        val viewModel = MainViewModel(authRepository, dataRepository, FakeFeedbackRepository())
+        val viewModel = MainViewModel(
+            authRepository,
+            dataRepository,
+            FakeFeedbackRepository(),
+            FakeSyllabusRepository(),
+        )
 
         authRepository.sessions.value = AuthSession.SignedIn(teacher)
         advanceUntilIdle()
@@ -444,6 +482,10 @@ private class FailingFeedbackRepository : TeacherFeedbackRepository {
     ) = Unit
 
     override suspend fun markTeacherRead(uid: String) = Unit
+}
+
+private class FakeSyllabusRepository : TeacherSyllabusRepository {
+    override suspend fun loadPublishedSyllabi(teacherUid: String) = emptyList<com.classtracker.core.model.PublishedSyllabus>()
 }
 
 private class FakeDataRepository(

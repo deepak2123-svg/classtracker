@@ -143,6 +143,12 @@ private fun mapLegacyTrashedEntries(
                 teacherName = map.string("teacherName").ifBlank { null },
                 createdAt = map.long("created"),
                 deletedAt = map.long("deletedAt"),
+                syllabusTemplateId = map.string("syllabusTemplateId"),
+                syllabusVersion = map.int("syllabusVersion"),
+                syllabusChapterId = map.string("syllabusChapterId"),
+                syllabusChapterTitle = map.string("syllabusChapterTitle"),
+                completedSyllabusTopicIds = map.stringList("completedSyllabusTopicIds"),
+                syllabusChapterCompleted = map.boolean("syllabusChapterCompleted"),
             )
         }
         .sortedWith(compareByDescending<TeacherTrashedEntry> { it.deletedAt }.thenBy { it.id })
@@ -349,6 +355,12 @@ private fun mapLegacyEntries(
             timeEnd = map.string("timeEnd").ifBlank { null },
             teacherName = map.string("teacherName").ifBlank { null },
             createdAt = map.long("created"),
+            syllabusTemplateId = map.string("syllabusTemplateId"),
+            syllabusVersion = map.int("syllabusVersion"),
+            syllabusChapterId = map.string("syllabusChapterId"),
+            syllabusChapterTitle = map.string("syllabusChapterTitle"),
+            completedSyllabusTopicIds = map.stringList("completedSyllabusTopicIds"),
+            syllabusChapterCompleted = map.boolean("syllabusChapterCompleted"),
         )
     }
 }
@@ -368,6 +380,12 @@ internal fun Map<String, Any?>.string(key: String): String =
 
 private fun Map<String, Any?>.boolean(key: String): Boolean =
     get(key) as? Boolean ?: false
+
+private fun Map<String, Any?>.int(key: String): Int =
+    (get(key) as? Number)?.toInt() ?: get(key)?.toString()?.toIntOrNull() ?: 0
+
+private fun Map<String, Any?>.stringList(key: String): List<String> =
+    (get(key) as? List<*>).orEmpty().mapNotNull { it?.toString()?.trim() }.filter(String::isNotBlank)
 
 private fun Map<String, Any?>.long(key: String): Long =
     when (val value = get(key)) {
@@ -405,13 +423,3 @@ private fun Map<String, Any?>.mapListForCaseInsensitiveKey(key: String): List<Ma
         map.entries.associate { (mapKey, mapValue) -> mapKey.toString() to mapValue }
     }
 }
-
-private fun Map<String, Any?>.stringList(key: String): List<String> =
-    (get(key) as? List<*>).orEmpty().mapNotNull { it?.toString()?.trim() }
-
-private fun Map<String, Any?>.int(key: String): Int? =
-    when (val value = get(key)) {
-        is Number -> value.toInt()
-        is String -> value.toIntOrNull()
-        else -> null
-    }

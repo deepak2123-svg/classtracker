@@ -73,6 +73,8 @@ import com.classtracker.core.model.TeacherReportClassRow
 import com.classtracker.core.model.TeacherReportPeriod
 import com.classtracker.core.model.TeacherReportSummary
 import com.classtracker.core.model.TeacherSnapshot
+import com.classtracker.core.model.PublishedSyllabus
+import com.classtracker.core.model.progress
 import com.classtracker.core.model.formatReportMinutes
 import com.classtracker.core.model.teacherReport
 import java.io.File
@@ -90,6 +92,7 @@ import kotlinx.coroutines.withContext
 fun ReportsScreen(
     snapshot: TeacherSnapshot,
     todayKey: String,
+    syllabi: List<PublishedSyllabus> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -138,6 +141,7 @@ fun ReportsScreen(
                         context = context,
                         snapshot = snapshot,
                         report = report,
+                        syllabi = syllabi,
                     )
                     context.contentResolver.openOutputStream(destination)?.use { output ->
                         export.file.inputStream().use { input ->
@@ -244,6 +248,7 @@ fun ReportsScreen(
                                         context = context,
                                         snapshot = snapshot,
                                         report = report,
+                                        syllabi = syllabi,
                                     )
                                 }
                             }.onSuccess { export ->
@@ -976,6 +981,7 @@ private fun createReportPdf(
     context: android.content.Context,
     snapshot: TeacherSnapshot,
     report: TeacherReportSummary,
+    syllabi: List<PublishedSyllabus>,
 ): ReportPdfExport {
     val outputDir = File(context.filesDir, "reports")
     if (!outputDir.exists() && !outputDir.mkdirs()) {
@@ -997,7 +1003,7 @@ private fun createReportPdf(
         )
     }
     try {
-        val groups = buildPdfGroups(snapshot = snapshot, report = report)
+        val groups = buildPdfGroups(snapshot = snapshot, report = report, syllabi = syllabi)
         val pageWidth = 595f
         val pageHeight = 842f
         val marginX = 40f
@@ -1247,6 +1253,16 @@ private fun createReportPdf(
                     }
                 }
                 y += 38f
+                if (classGroup.syllabusProgress.isNotBlank()) {
+                    ensureSpace(24f)
+                    canvas.drawText(
+                        classGroup.syllabusProgress,
+                        marginX + 4f,
+                        y + 10f,
+                        bodyPaint,
+                    )
+                    y += 22f
+                }
                 drawTableHeader(columnLefts, columnWidths)
 
                 classGroup.entries.forEachIndexed { index, row ->
@@ -1325,6 +1341,7 @@ private data class PdfInstituteGroup(
 private data class PdfClassGroup(
     val className: String,
     val subjectName: String,
+    val syllabusProgress: String,
     val entries: List<PdfEntryRow>,
 )
 
@@ -1339,6 +1356,7 @@ private data class PdfEntryRow(
 private fun buildPdfGroups(
     snapshot: TeacherSnapshot,
     report: TeacherReportSummary,
+    syllabi: List<PublishedSyllabus>,
 ): List<PdfInstituteGroup> {
     val scopedInstituteNames = report.scopedInstituteNames
     val scopedClasses = snapshot.classes
@@ -1391,6 +1409,20 @@ private fun buildPdfGroups(
                     PdfClassGroup(
                         className = teacherClass.sectionName.ifBlank { "Untitled Class" },
                         subjectName = teacherClass.subjectName,
+                        syllabusProgress = syllabi
+                            .filter { syllabus ->
+                                syllabus.targets.any { target ->
+                                    target.teacherUid == snapshot.profile.uid &&
+                                        target.classId == teacherClass.id
+                                }
+                            }
+                            .maxByOrNull(PublishedSyllabus::version)
+                            ?.let { syllabus ->
+                                val progress = syllabus.progress(snapshot.entriesForClass(teacherClass.id))
+                                "Syllabus progress: ${progress.percent}% · " +
+                                    "${progress.completedChapters}/${progress.totalChapters} chapters"
+                            }
+                            .orEmpty(),
                         entries = entries,
                     )
                 }

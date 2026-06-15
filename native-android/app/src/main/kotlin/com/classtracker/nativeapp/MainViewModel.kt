@@ -9,7 +9,9 @@ import com.classtracker.core.firebase.TeacherDataRepository
 import com.classtracker.core.firebase.TeacherEntryConflictException
 import com.classtracker.core.firebase.TeacherFeedbackRepository
 import com.classtracker.core.firebase.TeacherRevisionConflictException
+import com.classtracker.core.firebase.TeacherSyllabusRepository
 import com.classtracker.core.model.AuthenticatedTeacher
+import com.classtracker.core.model.PublishedSyllabus
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherClassValidation
@@ -60,6 +62,9 @@ data class MainUiState(
     val feedbackErrorMessage: String? = null,
     val sendingFeedback: Boolean = false,
     val feedbackSent: Boolean = false,
+    val publishedSyllabi: List<PublishedSyllabus> = emptyList(),
+    val loadingSyllabi: Boolean = false,
+    val syllabusErrorMessage: String? = null,
     val errorMessage: String? = null,
 )
 
@@ -68,6 +73,7 @@ class MainViewModel @Inject constructor(
     private val authRepository: TeacherAuthRepository,
     private val dataRepository: TeacherDataRepository,
     private val feedbackRepository: TeacherFeedbackRepository,
+    private val syllabusRepository: TeacherSyllabusRepository,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(MainUiState())
     val state: StateFlow<MainUiState> = mutableState.asStateFlow()
@@ -108,6 +114,7 @@ class MainViewModel @Inject constructor(
                             loadedUid = session.teacher.uid
                             observeLocalData(session.teacher.uid)
                             observeFeedback(session.teacher.uid)
+                            loadPublishedSyllabi(session.teacher.uid)
                             loadTeacherData(session.teacher, refresh = false)
                         }
                     }
@@ -134,7 +141,34 @@ class MainViewModel @Inject constructor(
 
     fun refresh() {
         val teacher = mutableState.value.teacher ?: return
+        loadPublishedSyllabi(teacher.uid)
         loadTeacherData(teacher, refresh = true)
+    }
+
+    private fun loadPublishedSyllabi(uid: String) {
+        viewModelScope.launch {
+            mutableState.update {
+                it.copy(loadingSyllabi = true, syllabusErrorMessage = null)
+            }
+            runCatching { syllabusRepository.loadPublishedSyllabi(uid) }
+                .onSuccess { syllabi ->
+                    mutableState.update {
+                        it.copy(
+                            publishedSyllabi = syllabi,
+                            loadingSyllabi = false,
+                            syllabusErrorMessage = null,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(
+                            loadingSyllabi = false,
+                            syllabusErrorMessage = error.toFriendlyMessage(),
+                        )
+                    }
+                }
+        }
     }
 
     fun signOut() {

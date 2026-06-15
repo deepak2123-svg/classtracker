@@ -4,9 +4,11 @@ import android.content.Context
 import com.classtracker.core.firebase.FirebaseTeacherAuthRepository
 import com.classtracker.core.firebase.FirebaseTeacherDataRepository
 import com.classtracker.core.firebase.FirebaseTeacherFeedbackRepository
+import com.classtracker.core.firebase.FirebaseTeacherSyllabusRepository
 import com.classtracker.core.firebase.TeacherAuthRepository
 import com.classtracker.core.firebase.TeacherFeedbackRepository
 import com.classtracker.core.firebase.TeacherRemoteDataSource
+import com.classtracker.core.firebase.TeacherSyllabusRepository
 import com.classtracker.nativeapp.FirebaseBootstrap
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
@@ -54,4 +56,10 @@ object FirebaseModule {
     fun provideTeacherFeedbackRepository(
         firestore: FirebaseFirestore,
     ): TeacherFeedbackRepository = FirebaseTeacherFeedbackRepository(firestore)
+
+    @Provides
+    @Singleton
+    fun provideTeacherSyllabusRepository(
+        firestore: FirebaseFirestore,
+    ): TeacherSyllabusRepository = FirebaseTeacherSyllabusRepository(firestore)
 }

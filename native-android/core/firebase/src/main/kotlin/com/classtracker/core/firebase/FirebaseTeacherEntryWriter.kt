@@ -643,6 +643,12 @@ private fun mapLegacyEntriesForMutation(
             timeEnd = map.string("timeEnd").ifBlank { null },
             teacherName = map.string("teacherName").ifBlank { null },
             createdAt = map.longValue("created"),
+            syllabusTemplateId = map.string("syllabusTemplateId"),
+            syllabusVersion = map.intValue("syllabusVersion"),
+            syllabusChapterId = map.string("syllabusChapterId"),
+            syllabusChapterTitle = map.string("syllabusChapterTitle"),
+            completedSyllabusTopicIds = map.stringListValue("completedSyllabusTopicIds"),
+            syllabusChapterCompleted = map.booleanValue("syllabusChapterCompleted"),
         )
     }
 }
@@ -731,6 +737,12 @@ internal fun buildLegacyEntryMap(
     "timeEnd" to draft.timeEnd.trim(),
     "teacherName" to teacherName.trim(),
     "created" to (draft.createdAt ?: now),
+    "syllabusTemplateId" to draft.syllabusTemplateId,
+    "syllabusVersion" to draft.syllabusVersion,
+    "syllabusChapterId" to draft.syllabusChapterId,
+    "syllabusChapterTitle" to draft.syllabusChapterTitle,
+    "completedSyllabusTopicIds" to draft.completedSyllabusTopicIds,
+    "syllabusChapterCompleted" to draft.syllabusChapterCompleted,
 )
 
 internal fun upsertLegacyEntry(
@@ -889,6 +901,16 @@ internal fun buildLegacyTrashEntryMap(
     "institute" to classMap.string("institute").ifBlank { entry.instituteName },
     "dateKey" to dateKey,
     "deletedAt" to deletedAt,
+    "syllabusTemplateId" to noteEntry.string("syllabusTemplateId").ifBlank { entry.syllabusTemplateId },
+    "syllabusVersion" to noteEntry.intValue("syllabusVersion").takeIf { it > 0 }
+        .let { it ?: entry.syllabusVersion },
+    "syllabusChapterId" to noteEntry.string("syllabusChapterId").ifBlank { entry.syllabusChapterId },
+    "syllabusChapterTitle" to noteEntry.string("syllabusChapterTitle").ifBlank { entry.syllabusChapterTitle },
+    "completedSyllabusTopicIds" to noteEntry.stringListValue("completedSyllabusTopicIds")
+        .ifEmpty { entry.completedSyllabusTopicIds },
+    "syllabusChapterCompleted" to (
+        noteEntry.booleanValue("syllabusChapterCompleted") || entry.syllabusChapterCompleted
+    ),
 )
 
 internal fun buildLegacyEntryMapFromTrash(
@@ -903,6 +925,12 @@ internal fun buildLegacyEntryMapFromTrash(
     "timeEnd" to trashEntry.string("timeEnd"),
     "teacherName" to trashEntry.string("teacherName"),
     "created" to trashEntry.longValue("created"),
+    "syllabusTemplateId" to trashEntry.string("syllabusTemplateId"),
+    "syllabusVersion" to trashEntry.intValue("syllabusVersion"),
+    "syllabusChapterId" to trashEntry.string("syllabusChapterId"),
+    "syllabusChapterTitle" to trashEntry.string("syllabusChapterTitle"),
+    "completedSyllabusTopicIds" to trashEntry.stringListValue("completedSyllabusTopicIds"),
+    "syllabusChapterCompleted" to trashEntry.booleanValue("syllabusChapterCompleted"),
 )
 
 private fun Map<String, Any?>.toDraftForRestore(): TeacherEntryDraft = TeacherEntryDraft(
@@ -916,6 +944,12 @@ private fun Map<String, Any?>.toDraftForRestore(): TeacherEntryDraft = TeacherEn
     timeStart = string("timeStart"),
     timeEnd = string("timeEnd"),
     createdAt = longValue("created"),
+    syllabusTemplateId = string("syllabusTemplateId"),
+    syllabusVersion = intValue("syllabusVersion"),
+    syllabusChapterId = string("syllabusChapterId"),
+    syllabusChapterTitle = string("syllabusChapterTitle"),
+    completedSyllabusTopicIds = stringListValue("completedSyllabusTopicIds"),
+    syllabusChapterCompleted = booleanValue("syllabusChapterCompleted"),
 )
 
 private fun Map<String, Any?>.withRevision(
@@ -1007,6 +1041,12 @@ private fun Map<String, Any?>.longValue(key: String): Long =
 
 private fun Map<String, Any?>.stringListValue(key: String): List<String> =
     (get(key) as? List<*>).orEmpty().mapNotNull { it?.toString()?.trim() }
+
+private fun Map<String, Any?>.intValue(key: String): Int =
+    (get(key) as? Number)?.toInt() ?: get(key)?.toString()?.toIntOrNull() ?: 0
+
+private fun Map<String, Any?>.booleanValue(key: String): Boolean =
+    get(key) as? Boolean ?: false
 
 private fun uniqueLabels(values: List<String>): List<String> {
     val seen = mutableSetOf<String>()

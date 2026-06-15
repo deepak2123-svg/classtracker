@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.core.content.edit
 import com.classtracker.core.model.TeacherEntryDraft
 import org.json.JSONObject
+import org.json.JSONArray
 
 data class StoredEntryDraft(
     val draft: TeacherEntryDraft,
@@ -37,6 +38,20 @@ class EntryDraftStore(context: Context) {
                     timeStart = json.optString("timeStart"),
                     timeEnd = json.optString("timeEnd"),
                     createdAt = json.optLong("createdAt").takeIf { it > 0L },
+                    syllabusTemplateId = json.optString("syllabusTemplateId"),
+                    syllabusVersion = json.optInt("syllabusVersion"),
+                    syllabusChapterId = json.optString("syllabusChapterId"),
+                    syllabusChapterTitle = json.optString("syllabusChapterTitle"),
+                    completedSyllabusTopicIds = json.optJSONArray("completedSyllabusTopicIds")
+                        ?.let { array ->
+                            buildList {
+                                for (index in 0 until array.length()) {
+                                    array.optString(index).takeIf(String::isNotBlank)?.let(::add)
+                                }
+                            }
+                        }
+                        .orEmpty(),
+                    syllabusChapterCompleted = json.optBoolean("syllabusChapterCompleted"),
                 ),
                 savedAt = json.optLong("savedAt"),
             )
@@ -60,6 +75,12 @@ class EntryDraftStore(context: Context) {
             .put("timeStart", draft.timeStart)
             .put("timeEnd", draft.timeEnd)
             .put("createdAt", draft.createdAt ?: 0L)
+            .put("syllabusTemplateId", draft.syllabusTemplateId)
+            .put("syllabusVersion", draft.syllabusVersion)
+            .put("syllabusChapterId", draft.syllabusChapterId)
+            .put("syllabusChapterTitle", draft.syllabusChapterTitle)
+            .put("completedSyllabusTopicIds", JSONArray(draft.completedSyllabusTopicIds))
+            .put("syllabusChapterCompleted", draft.syllabusChapterCompleted)
             .put("savedAt", System.currentTimeMillis())
         preferences.edit {
             putString(key(uid, draft.classId, entryId), json.toString())

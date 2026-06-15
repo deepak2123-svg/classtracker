@@ -52,6 +52,12 @@ data class TeacherEntryEntity(
     val timeEnd: String?,
     val teacherName: String?,
     val createdAt: Long,
+    val syllabusTemplateId: String,
+    val syllabusVersion: Int,
+    val syllabusChapterId: String,
+    val syllabusChapterTitle: String,
+    val completedSyllabusTopicIds: String,
+    val syllabusChapterCompleted: Boolean,
 )
 
 @Entity(
@@ -77,6 +83,12 @@ data class TeacherTrashedEntryEntity(
     val teacherName: String?,
     val createdAt: Long,
     val deletedAt: Long,
+    val syllabusTemplateId: String,
+    val syllabusVersion: Int,
+    val syllabusChapterId: String,
+    val syllabusChapterTitle: String,
+    val completedSyllabusTopicIds: String,
+    val syllabusChapterCompleted: Boolean,
 )
 
 @Entity(
@@ -105,6 +117,12 @@ data class EntryMutationEntity(
     val teacherName: String?,
     val createdAt: Long?,
     val deletedAt: Long?,
+    val syllabusTemplateId: String,
+    val syllabusVersion: Int,
+    val syllabusChapterId: String,
+    val syllabusChapterTitle: String,
+    val completedSyllabusTopicIds: String,
+    val syllabusChapterCompleted: Boolean,
     val state: String,
     val attemptCount: Int,
     val lastError: String?,

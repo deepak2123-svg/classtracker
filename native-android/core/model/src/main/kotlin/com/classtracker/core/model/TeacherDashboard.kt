@@ -85,6 +85,12 @@ data class TeacherEntry(
     val timeEnd: String?,
     val teacherName: String?,
     val createdAt: Long,
+    val syllabusTemplateId: String = "",
+    val syllabusVersion: Int = 0,
+    val syllabusChapterId: String = "",
+    val syllabusChapterTitle: String = "",
+    val completedSyllabusTopicIds: List<String> = emptyList(),
+    val syllabusChapterCompleted: Boolean = false,
     val syncState: TeacherEntrySyncState = TeacherEntrySyncState.Synced,
 )
 
@@ -103,6 +109,12 @@ data class TeacherTrashedEntry(
     val teacherName: String?,
     val createdAt: Long,
     val deletedAt: Long,
+    val syllabusTemplateId: String = "",
+    val syllabusVersion: Int = 0,
+    val syllabusChapterId: String = "",
+    val syllabusChapterTitle: String = "",
+    val completedSyllabusTopicIds: List<String> = emptyList(),
+    val syllabusChapterCompleted: Boolean = false,
     val syncState: TeacherEntrySyncState = TeacherEntrySyncState.Synced,
 )
 
@@ -139,7 +151,94 @@ data class TeacherEntryDraft(
     val timeStart: String = "",
     val timeEnd: String = "",
     val createdAt: Long? = null,
+    val syllabusTemplateId: String = "",
+    val syllabusVersion: Int = 0,
+    val syllabusChapterId: String = "",
+    val syllabusChapterTitle: String = "",
+    val completedSyllabusTopicIds: List<String> = emptyList(),
+    val syllabusChapterCompleted: Boolean = false,
 )
+
+data class PublishedSyllabus(
+    val templateId: String,
+    val name: String,
+    val subjectName: String,
+    val version: Int,
+    val academicYear: String,
+    val curriculum: String,
+    val gradeLabel: String,
+    val chapters: List<SyllabusChapter>,
+    val targets: List<SyllabusTarget>,
+    val publishedAt: Long,
+) {
+    fun appliesTo(teacherUid: String, classId: String): Boolean =
+        targets.any { it.teacherUid == teacherUid && it.classId == classId }
+}
+
+data class SyllabusChapter(
+    val id: String,
+    val title: String,
+    val order: Int,
+    val topics: List<SyllabusTopic>,
+)
+
+data class SyllabusTopic(
+    val id: String,
+    val title: String,
+    val order: Int,
+)
+
+data class SyllabusTarget(
+    val teacherUid: String,
+    val teacherName: String,
+    val classId: String,
+    val className: String,
+    val instituteName: String,
+    val sectionName: String,
+    val subjectName: String,
+)
+
+data class SyllabusProgress(
+    val completedChapters: Int,
+    val totalChapters: Int,
+    val completedTopics: Int,
+    val totalTopics: Int,
+    val completedUnits: Int,
+    val totalUnits: Int,
+) {
+    val percent: Int
+        get() = if (totalUnits == 0) 0 else ((completedUnits * 100f) / totalUnits).toInt()
+}
+
+fun PublishedSyllabus.progress(entries: List<TeacherEntry>): SyllabusProgress {
+    val relevant = entries.filter {
+        it.syllabusTemplateId == templateId && it.syllabusVersion <= version
+    }
+    val completedTopicIds = relevant.flatMapTo(linkedSetOf()) { it.completedSyllabusTopicIds }
+    val completedChapterIds = relevant
+        .filter(TeacherEntry::syllabusChapterCompleted)
+        .mapTo(linkedSetOf(), TeacherEntry::syllabusChapterId)
+    val completedChapters = chapters.count { chapter ->
+        chapter.id in completedChapterIds ||
+            (chapter.topics.isNotEmpty() && chapter.topics.all { it.id in completedTopicIds })
+    }
+    return SyllabusProgress(
+        completedChapters = completedChapters,
+        totalChapters = chapters.size,
+        completedTopics = chapters.sumOf { chapter ->
+            chapter.topics.count { it.id in completedTopicIds }
+        },
+        totalTopics = chapters.sumOf { it.topics.size },
+        completedUnits = chapters.sumOf { chapter ->
+            if (chapter.topics.isEmpty()) {
+                if (chapter.id in completedChapterIds) 1 else 0
+            } else {
+                chapter.topics.count { it.id in completedTopicIds }
+            }
+        },
+        totalUnits = chapters.sumOf { chapter -> chapter.topics.size.coerceAtLeast(1) },
+    )
+}
 
 fun TeacherEntryDraft.resolvedEntryId(fallback: String): String =
     entryId ?: mutationId.takeIf(String::isNotBlank) ?: fallback
@@ -154,6 +253,12 @@ fun TeacherEntry.toDuplicateDraft(mutationId: String): TeacherEntryDraft = Teach
     status = status,
     timeStart = timeStart.orEmpty(),
     timeEnd = timeEnd.orEmpty(),
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = completedSyllabusTopicIds,
+    syllabusChapterCompleted = syllabusChapterCompleted,
 )
 
 fun TeacherEntry.toTrashedEntry(
@@ -176,6 +281,12 @@ fun TeacherEntry.toTrashedEntry(
     teacherName = teacherName,
     createdAt = createdAt,
     deletedAt = deletedAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = completedSyllabusTopicIds,
+    syllabusChapterCompleted = syllabusChapterCompleted,
     syncState = syncState,
 )
 
@@ -191,6 +302,12 @@ fun TeacherTrashedEntry.toRestoreDraft(mutationId: String): TeacherEntryDraft = 
     timeStart = timeStart.orEmpty(),
     timeEnd = timeEnd.orEmpty(),
     createdAt = createdAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = completedSyllabusTopicIds,
+    syllabusChapterCompleted = syllabusChapterCompleted,
 )
 
 enum class TeacherEntryStatus(

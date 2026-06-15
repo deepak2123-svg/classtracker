@@ -130,6 +130,12 @@ internal fun TeacherEntry.toEntity(uid: String) = TeacherEntryEntity(
     timeEnd = timeEnd,
     teacherName = teacherName,
     createdAt = createdAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = encodeList(completedSyllabusTopicIds),
+    syllabusChapterCompleted = syllabusChapterCompleted,
 )
 
 internal fun TeacherTrashedEntry.toEntity(uid: String) = TeacherTrashedEntryEntity(
@@ -148,6 +154,12 @@ internal fun TeacherTrashedEntry.toEntity(uid: String) = TeacherTrashedEntryEnti
     teacherName = teacherName,
     createdAt = createdAt,
     deletedAt = deletedAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = encodeList(completedSyllabusTopicIds),
+    syllabusChapterCompleted = syllabusChapterCompleted,
 )
 
 internal fun TeacherEntryDraft.toEntity(
@@ -175,6 +187,12 @@ internal fun TeacherEntryDraft.toEntity(
     teacherName = null,
     createdAt = createdAt,
     deletedAt = null,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = encodeList(completedSyllabusTopicIds),
+    syllabusChapterCompleted = syllabusChapterCompleted,
     state = MutationState.Pending,
     attemptCount = 0,
     lastError = null,
@@ -207,6 +225,12 @@ internal fun TeacherTrashedEntry.toMutationEntity(
     teacherName = teacherName,
     createdAt = createdAt,
     deletedAt = deletedAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = encodeList(completedSyllabusTopicIds),
+    syllabusChapterCompleted = syllabusChapterCompleted,
     state = MutationState.Pending,
     attemptCount = 0,
     lastError = null,
@@ -248,6 +272,12 @@ internal fun TeacherEntryEntity.toTeacherEntry() = TeacherEntry(
     timeEnd = timeEnd,
     teacherName = teacherName,
     createdAt = createdAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = decodeList(completedSyllabusTopicIds),
+    syllabusChapterCompleted = syllabusChapterCompleted,
 )
 
 internal fun TeacherTrashedEntryEntity.toTeacherTrashedEntry() = TeacherTrashedEntry(
@@ -265,6 +295,12 @@ internal fun TeacherTrashedEntryEntity.toTeacherTrashedEntry() = TeacherTrashedE
     teacherName = teacherName,
     createdAt = createdAt,
     deletedAt = deletedAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = decodeList(completedSyllabusTopicIds),
+    syllabusChapterCompleted = syllabusChapterCompleted,
 )
 
 internal fun EntryMutationEntity.toTeacherEntry() = TeacherEntry(
@@ -279,6 +315,12 @@ internal fun EntryMutationEntity.toTeacherEntry() = TeacherEntry(
     timeEnd = timeEnd.ifBlank { null },
     teacherName = teacherName,
     createdAt = createdAt ?: queuedAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = decodeList(completedSyllabusTopicIds),
+    syllabusChapterCompleted = syllabusChapterCompleted,
     syncState = toSyncState(),
 )
 
@@ -299,6 +341,12 @@ internal fun EntryMutationEntity.toTeacherTrashedEntry(
     teacherName = teacherName,
     createdAt = createdAt ?: queuedAt,
     deletedAt = deletedAt ?: queuedAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = decodeList(completedSyllabusTopicIds),
+    syllabusChapterCompleted = syllabusChapterCompleted,
     syncState = toSyncState(),
 )
 
@@ -320,6 +368,12 @@ internal fun EntryMutationEntity.toPendingMutation() = PendingEntryMutation(
         timeStart = timeStart,
         timeEnd = timeEnd,
         createdAt = createdAt,
+        syllabusTemplateId = syllabusTemplateId,
+        syllabusVersion = syllabusVersion,
+        syllabusChapterId = syllabusChapterId,
+        syllabusChapterTitle = syllabusChapterTitle,
+        completedSyllabusTopicIds = decodeList(completedSyllabusTopicIds),
+        syllabusChapterCompleted = syllabusChapterCompleted,
     ),
     trashedEntry = toTeacherTrashedEntry(emptyMap()),
     attemptCount = attemptCount,

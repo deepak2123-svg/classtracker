@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TeacherTrashedEntryEntity::class,
         EntryMutationEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class LedgrDatabase : RoomDatabase() {
@@ -31,6 +31,7 @@ abstract class LedgrDatabase : RoomDatabase() {
             .addMigrations(MIGRATION_1_2)
             .addMigrations(MIGRATION_2_3)
             .addMigrations(MIGRATION_3_4)
+            .addMigrations(MIGRATION_4_5)
             .build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -93,6 +94,20 @@ abstract class LedgrDatabase : RoomDatabase() {
                     ADD COLUMN `subjectAssignmentVersion` INTEGER NOT NULL DEFAULT 0
                     """.trimIndent(),
                 )
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                listOf("teacher_entries", "teacher_trashed_entries", "entry_mutations")
+                    .forEach { table ->
+                        db.execSQL("ALTER TABLE `$table` ADD COLUMN `syllabusTemplateId` TEXT NOT NULL DEFAULT ''")
+                        db.execSQL("ALTER TABLE `$table` ADD COLUMN `syllabusVersion` INTEGER NOT NULL DEFAULT 0")
+                        db.execSQL("ALTER TABLE `$table` ADD COLUMN `syllabusChapterId` TEXT NOT NULL DEFAULT ''")
+                        db.execSQL("ALTER TABLE `$table` ADD COLUMN `syllabusChapterTitle` TEXT NOT NULL DEFAULT ''")
+                        db.execSQL("ALTER TABLE `$table` ADD COLUMN `completedSyllabusTopicIds` TEXT NOT NULL DEFAULT ''")
+                        db.execSQL("ALTER TABLE `$table` ADD COLUMN `syllabusChapterCompleted` INTEGER NOT NULL DEFAULT 0")
+                    }
             }
         }
     }

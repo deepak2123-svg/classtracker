@@ -61,6 +61,7 @@ import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherEntryStatus
 import com.classtracker.core.model.TeacherEntrySyncState
 import com.classtracker.core.model.TeacherTrashedEntry
+import com.classtracker.core.model.PublishedSyllabus
 import com.classtracker.core.model.filterTeacherEntries
 import com.classtracker.core.model.isTeacherEntryDateWithinWindow
 import com.classtracker.core.model.sortTeacherEntriesNewestFirst
@@ -86,6 +87,7 @@ fun ClassEntryScreen(
     editEnabled: Boolean = false,
     deleteEnabled: Boolean = false,
     editorVisible: Boolean = true,
+    syllabus: PublishedSyllabus? = null,
     onDraftChanged: (TeacherEntryDraft) -> Unit,
     onSave: (TeacherEntryDraft) -> Unit,
     onAddAnotherEntry: () -> Unit = {},
@@ -171,6 +173,7 @@ fun ClassEntryScreen(
                     timeSlots = teacherClass.timeSlots,
                     saving = saving,
                     validation = validation,
+                    syllabus = syllabus,
                     onDraftChanged = onDraftChanged,
                     onSave = onSave,
                 )

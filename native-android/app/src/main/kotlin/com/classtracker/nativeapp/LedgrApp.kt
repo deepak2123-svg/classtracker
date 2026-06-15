@@ -108,6 +108,7 @@ import com.classtracker.feature.auth.AuthScreen
 import com.classtracker.feature.classes.ClassEntryScreen
 import com.classtracker.feature.classes.ClassHistoryScreen
 import com.classtracker.feature.classes.StatsScreen
+import com.classtracker.feature.classes.SyllabusScreen
 import com.classtracker.feature.entries.EntryEditorScreen
 import com.classtracker.feature.profile.ProfileScreen
 import com.classtracker.feature.profile.ManageClassesScreen
@@ -231,6 +232,9 @@ fun LedgrApp(
             feedbackErrorMessage = state.feedbackErrorMessage,
             sendingFeedback = state.sendingFeedback,
             feedbackSent = state.feedbackSent,
+            publishedSyllabi = state.publishedSyllabi,
+            loadingSyllabi = state.loadingSyllabi,
+            syllabusErrorMessage = state.syllabusErrorMessage,
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
             reminderPreferences = reminderPreferences,
@@ -275,6 +279,9 @@ private fun TeacherApp(
     feedbackErrorMessage: String?,
     sendingFeedback: Boolean,
     feedbackSent: Boolean,
+    publishedSyllabi: List<com.classtracker.core.model.PublishedSyllabus>,
+    loadingSyllabi: Boolean,
+    syllabusErrorMessage: String?,
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
     reminderPreferences: ReminderPreferences,
@@ -719,6 +726,19 @@ private fun TeacherApp(
                             },
                         )
                     }
+                    composable(AppDestination.Syllabus.route) {
+                        SyllabusScreen(
+                            teacherUid = teacher.uid,
+                            classes = snapshot.classes,
+                            entries = snapshot.entries,
+                            syllabi = publishedSyllabi,
+                            loading = loadingSyllabi,
+                            errorMessage = syllabusErrorMessage,
+                            onClassClick = { teacherClass ->
+                                navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
+                            },
+                        )
+                    }
                     composable(AppDestination.Profile.route) {
                         ProfileScreen(
                             profile = snapshot.profile,
@@ -800,6 +820,7 @@ private fun TeacherApp(
                         ReportsScreen(
                             snapshot = snapshot,
                             todayKey = todayKey,
+                            syllabi = publishedSyllabi,
                         )
                     }
                     composable(FeedbackRoute) {
@@ -829,6 +850,7 @@ private fun TeacherApp(
                                 initialClassId = classId,
                                 teacher = teacher,
                                 snapshot = snapshot,
+                                publishedSyllabi = publishedSyllabi,
                                 entriesByClass = entriesByClass,
                                 trashedEntriesByClass = trashedEntriesByClass,
                                 createEnabled = BuildConfig.NATIVE_ENTRY_CREATE_ENABLED,
@@ -1256,6 +1278,7 @@ private fun ClassEntryPagerRoute(
     initialClassId: String,
     teacher: AuthenticatedTeacher,
     snapshot: TeacherSnapshot,
+    publishedSyllabi: List<com.classtracker.core.model.PublishedSyllabus>,
     entriesByClass: Map<String, List<TeacherEntry>>,
     trashedEntriesByClass: Map<String, List<TeacherTrashedEntry>>,
     createEnabled: Boolean,
@@ -1315,6 +1338,9 @@ private fun ClassEntryPagerRoute(
             modifier = Modifier.fillMaxSize(),
         ) {
             val classTrashedEntries = trashedEntriesByClass[pageClass.id].orEmpty()
+            val classSyllabus = publishedSyllabi
+                .filter { it.appliesTo(teacher.uid, pageClass.id) }
+                .maxByOrNull(com.classtracker.core.model.PublishedSyllabus::version)
             val draftKeyEntryId: String? = null
             val baseDraft = remember(pageClass.id, todayKey) {
                 TeacherEntryDraft(
@@ -1367,6 +1393,7 @@ private fun ClassEntryPagerRoute(
                 editEnabled = editEnabled,
                 deleteEnabled = deleteEnabled,
                 editorVisible = editorVisible,
+                syllabus = classSyllabus,
                 onDraftChanged = { updated ->
                     draft = updated
                     draftStore.write(
@@ -1784,4 +1811,10 @@ private fun TeacherEntry.toDraft(): TeacherEntryDraft = TeacherEntryDraft(
     timeStart = timeStart.orEmpty(),
     timeEnd = timeEnd.orEmpty(),
     createdAt = createdAt,
+    syllabusTemplateId = syllabusTemplateId,
+    syllabusVersion = syllabusVersion,
+    syllabusChapterId = syllabusChapterId,
+    syllabusChapterTitle = syllabusChapterTitle,
+    completedSyllabusTopicIds = completedSyllabusTopicIds,
+    syllabusChapterCompleted = syllabusChapterCompleted,
 )
