@@ -1180,6 +1180,38 @@ function normaliseSyllabusChapters(chapters) {
     .filter(Boolean);
 }
 
+function normaliseSyllabusTargets(targets) {
+  const seen = new Set();
+  return (Array.isArray(targets) ? targets : [])
+    .map(target => {
+      const teacherUid = String(target?.teacherUid || "").trim();
+      const classId = String(target?.classId || "").trim();
+      const instituteName = String(target?.instituteName || "").trim();
+      const sectionName = String(target?.sectionName || "").trim();
+      const subjectName = String(target?.subjectName || "").trim();
+      const key = `${teacherUid}::${classId}`;
+      if (!teacherUid || !classId || !instituteName || !sectionName || !subjectName || seen.has(key)) return null;
+      seen.add(key);
+      return {
+        teacherUid,
+        teacherName: String(target?.teacherName || "").trim(),
+        classId,
+        className: String(target?.className || sectionName).trim(),
+        instituteName,
+        sectionName,
+        subjectName,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const instituteOrder = a.instituteName.localeCompare(b.instituteName, undefined, { sensitivity: "base" });
+      if (instituteOrder) return instituteOrder;
+      const sectionOrder = a.sectionName.localeCompare(b.sectionName, undefined, { sensitivity: "base" });
+      if (sectionOrder) return sectionOrder;
+      return a.teacherName.localeCompare(b.teacherName, undefined, { sensitivity: "base" });
+    });
+}
+
 function normaliseSyllabusScope(scope, fallbackInstitute = "", fallbackSection = "") {
   const grouped = new Map();
   (Array.isArray(scope) ? scope : []).forEach(item => {
@@ -1270,12 +1302,14 @@ function normaliseSyllabusTemplate(source = {}) {
       curriculum: String(draft.curriculum || source.curriculum || ""),
       gradeLabel: String(draft.gradeLabel || source.gradeLabel || ""),
       chapters: normaliseSyllabusChapters(draft.chapters),
+      targets: normaliseSyllabusTargets(draft.targets || source.targets),
     },
     published: source.published ? {
       ...source.published,
       scope: publishedScope,
       version: Number(source.published.version || source.currentVersion || 0),
       chapters: normaliseSyllabusChapters(source.published.chapters),
+      targets: normaliseSyllabusTargets(source.published.targets),
     } : null,
   };
 }
@@ -1307,9 +1341,10 @@ export async function getSyllabusTemplates() {
 
 export async function saveSyllabusDraft(template, adminUid = "") {
   const clean = normaliseSyllabusTemplate(template);
-  if (!clean.subjectId || !clean.subjectName) throw new Error("Choose an official subject.");
-  if (!clean.draft.name.trim()) throw new Error("Enter a syllabus name.");
+  if (!clean.subjectId || !clean.subjectName) throw new Error("Choose a subject already used by a class.");
+  if (!clean.draft.name.trim()) clean.draft.name = `${clean.subjectName} syllabus`;
   if (!clean.draft.scope.length) throw new Error("Select at least one institute and section.");
+  if (!clean.draft.targets.length) throw new Error("No matching teacher classes were found for this subject.");
   if (!clean.draft.academicYear.trim()) throw new Error("Enter the academic year.");
   if (!clean.draft.curriculum.trim()) throw new Error("Enter the curriculum or board.");
   if (!clean.draft.gradeLabel.trim()) throw new Error("Enter the grade, course, or programme.");
@@ -1390,6 +1425,18 @@ export async function publishSyllabusTemplate(templateId, adminUid = "") {
   });
 
   return publishedResult;
+}
+
+export async function deleteSyllabusTemplate(templateId) {
+  const cleanId = String(templateId || "").trim();
+  if (!cleanId) throw new Error("Choose a syllabus to delete.");
+  const versionsRef = collection(db, "syllabusTemplates", cleanId, "versions");
+  const versions = await getDocs(versionsRef);
+  const batch = writeBatch(db);
+  versions.docs.forEach(item => batch.delete(item.ref));
+  batch.delete(doc(db, "publishedSyllabi", cleanId));
+  batch.delete(doc(db, "syllabusTemplates", cleanId));
+  await batch.commit();
 }
 
 // ── Ledgr report automation ───────────────────────────────────────────────────
