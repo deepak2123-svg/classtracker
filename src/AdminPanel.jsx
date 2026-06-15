@@ -5690,7 +5690,7 @@ function SyllabusBuilder({
           </div>
         </div>
 
-        <div style={{display:"flex",gap:9,alignItems:"stretch",marginBottom:12}}>
+        <div style={{display:"flex",flexDirection:isMobile?"column":"row",gap:9,alignItems:"stretch",marginBottom:12}}>
           <input
             value={chapterInput}
             onChange={event=>setChapterInput(event.target.value)}
@@ -5703,7 +5703,7 @@ function SyllabusBuilder({
             placeholder="Write a chapter name"
             style={{...fieldStyle,flex:1}}
           />
-          <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"9px 13px",fontWeight:750,whiteSpace:"nowrap"}}>
+          <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"10px 13px",fontWeight:750,whiteSpace:"nowrap",minHeight:isMobile?44:undefined}}>
             <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={16}/> Add</span>
           </button>
         </div>
@@ -5737,7 +5737,7 @@ function SyllabusBuilder({
                         ))}
                       </div>
                     )}
-                    <div style={{display:"flex",gap:8}}>
+                    <div style={{display:"flex",flexDirection:isMobile?"column":"row",gap:8}}>
                       <input
                         value={topicInputs[chapter.id]||""}
                         onChange={event=>setTopicInputs(current=>({...current,[chapter.id]:event.target.value}))}
@@ -5750,7 +5750,7 @@ function SyllabusBuilder({
                         placeholder="Add a topic (optional)"
                         style={{...fieldStyle,flex:1,padding:"8px 10px",fontSize:13}}
                       />
-                      <button onClick={()=>addTopic(chapter)} disabled={!String(topicInputs[chapter.id]||"").trim()} style={{...pill("#EEF4FF",G.blue,"#C7D7F5"),padding:"7px 10px",fontSize:12,fontWeight:750}}>Add topic</button>
+                      <button onClick={()=>addTopic(chapter)} disabled={!String(topicInputs[chapter.id]||"").trim()} style={{...pill("#EEF4FF",G.blue,"#C7D7F5"),padding:"9px 10px",fontSize:12,fontWeight:750,minHeight:isMobile?42:undefined}}>Add topic</button>
                     </div>
                   </div>
                 </div>
@@ -5759,15 +5759,15 @@ function SyllabusBuilder({
           </div>
         )}
 
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginTop:20,paddingTop:18,borderTop:`1px solid ${G.border}`}}>
+        <div style={{display:"flex",flexDirection:isMobile?"column":"row",justifyContent:"space-between",alignItems:isMobile?"stretch":"center",gap:12,flexWrap:"wrap",marginTop:20,paddingTop:18,borderTop:`1px solid ${G.border}`}}>
           <div style={{fontSize:12.5,color:G.textM,maxWidth:520,lineHeight:1.5}}>
             Saving updates the private draft. Publishing creates a permanent version and makes it available for future teacher syllabus views.
           </div>
-          <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
-            <button onClick={save} disabled={busy} style={{...pill("#FFFFFF",G.navy,G.borderM),padding:"10px 15px",fontWeight:800}}>
+          <div style={{display:"flex",flexDirection:isMobile?"column":"row",gap:9,flexWrap:"wrap",width:isMobile?"100%":"auto"}}>
+            <button onClick={save} disabled={busy} style={{...pill("#FFFFFF",G.navy,G.borderM),padding:"11px 15px",fontWeight:800,minHeight:isMobile?46:undefined,width:isMobile?"100%":"auto",justifyContent:"center"}}>
               <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconDeviceFloppy} size={16}/>{busy?"Saving...":"Save draft"}</span>
             </button>
-            <button onClick={publish} disabled={busy||!draft.chapters.length} style={{...pill(draft.chapters.length?"#16845B":G.bg,"#FFFFFF",draft.chapters.length?"#16845B":G.border),padding:"10px 15px",fontWeight:800}}>
+            <button onClick={publish} disabled={busy||!draft.chapters.length} style={{...pill(draft.chapters.length?"#16845B":G.bg,"#FFFFFF",draft.chapters.length?"#16845B":G.border),padding:"11px 15px",fontWeight:800,minHeight:isMobile?46:undefined,width:isMobile?"100%":"auto",justifyContent:"center"}}>
               <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconCheck} size={16}/> Publish version</span>
             </button>
           </div>
@@ -6038,7 +6038,7 @@ function SharedSyllabusFlow({
   };
   const selectionCard=(selected)=>({
     width:"100%",
-    minHeight:68,
+    minHeight:isMobile?56:68,
     boxSizing:"border-box",
     display:"flex",
     alignItems:"center",
@@ -6047,7 +6047,7 @@ function SharedSyllabusFlow({
     borderLeft:`4px solid ${selected?G.blue:G.border}`,
     borderRadius:11,
     background:selected?"#EEF4FF":"#FFFFFF",
-    padding:"11px 12px",
+    padding:isMobile?"9px 10px":"11px 12px",
     color:G.text,
     fontFamily:G.sans,
     cursor:"pointer",
@@ -6115,7 +6115,24 @@ function SharedSyllabusFlow({
             const sections=sectionOptionsByInstitute[instituteName]||[];
             return (
               <div key={instituteName}>
-                <div style={{fontSize:12,fontWeight:850,color:G.textM,marginBottom:8}}>{instituteName}</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
+                  <div style={{fontSize:12,fontWeight:850,color:G.textM,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{instituteName}</div>
+                  {!!sections.length&&(
+                    <button
+                      onClick={()=>{
+                        setSelectedSubject(null);
+                        setSelectedSections(current=>{
+                          const currentSections=current[instituteName]||[];
+                          const allSelected=sections.every(section=>currentSections.includes(section));
+                          return {...current,[instituteName]:allSelected?[]:[...sections]};
+                        });
+                      }}
+                      style={{border:"none",background:"transparent",padding:"4px 2px",fontSize:11.5,fontWeight:850,color:G.blue,fontFamily:G.sans,cursor:"pointer",whiteSpace:"nowrap"}}
+                    >
+                      {sections.every(section=>(selectedSections[instituteName]||[]).includes(section))?"Clear all":"Select all"}
+                    </button>
+                  )}
+                </div>
                 {sections.length?(
                   <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:9}}>
                     {sections.map(sectionName=>{
@@ -9466,6 +9483,9 @@ function AdminPanelInner({user}){
     } else if(target === "subjects"){
       setManageTab("subjects");
       setInstDetailView(null);
+    } else if(target === "catalog"){
+      setManageTab("catalog");
+      setInstDetailView(null);
     }
     setView("manage");
   }, [selInst]);
@@ -11389,10 +11409,10 @@ function AdminPanelInner({user}){
     const manageTabItems = [
       { key:"teachers", label:"Teachers", icon:IconUsersGroup, count:teacherOnlyList.length, hint:"Accounts & classes" },
       { key:"subjects", label:"Syllabus", icon:IconBooks, count:syllabusTemplates.length, hint:"Chapters & topics" },
-      { key:"catalog", label:"Subject Catalog", icon:IconBooks, count:globalSubjects.filter(item=>item.active).length, hint:"Official vocabulary" },
-      { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
-      { key:"institutes", label:"Institutes", icon:IconBuilding, count:institutes.length, hint:"Names & structure" },
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
+      { key:"catalog", label:"Subject Catalog", icon:IconBooks, count:globalSubjects.filter(item=>item.active).length, hint:"Official vocabulary" },
+      { key:"institutes", label:"Institutes", icon:IconBuilding, count:institutes.length, hint:"Names & structure" },
+      { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
     ];
     const manageTitle = manageTabItems.find(item=>item.key===manageTab)?.label || "Control Centre";
     const getSyllabusAffectedSummary = (scope,subjectOverride) => {
@@ -11429,7 +11449,7 @@ function AdminPanelInner({user}){
       setMobileSurface("profile");
       setProfileOpen(false);
     };
-    const mobileManageOuterPad = "12px 12px calc(34px + env(safe-area-inset-bottom, 0px))";
+    const mobileManageOuterPad = "10px 12px calc(92px + env(safe-area-inset-bottom, 0px))";
     const mobileManageSections = (() => {
       const searchKey = manageSectionSearch.trim().toLowerCase();
       return institutes
@@ -11873,7 +11893,7 @@ function AdminPanelInner({user}){
           );
         })():(<>
 
-        <div style={{marginBottom:isMobile?12:20}}>
+        <div style={{marginBottom:isMobile?8:20,display:isMobile?"none":"block"}}>
           <div style={{fontSize:11,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1}}>Control centre</div>
           <h2 style={{fontSize:isMobile?22:28,fontWeight:850,color:G.text,fontFamily:G.display,margin:"5px 0 0",lineHeight:1.15}}>
             {manageScopeInstitute||manageTitle}
@@ -11886,43 +11906,44 @@ function AdminPanelInner({user}){
         </div>
 
         {/* Tab switcher */}
-        {isMobile&&<div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:18}}>
+        {isMobile&&<div style={{position:"sticky",top:61,zIndex:65,margin:"-10px -12px 14px",padding:"9px 12px 10px",background:"rgba(245,247,250,0.96)",borderBottom:`1px solid ${G.border}`,backdropFilter:"blur(12px)",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
+          <div style={{display:"flex",gap:8,width:"max-content",minWidth:"100%"}}>
           {manageTabItems.map(item=>(
             <button key={item.key} onClick={()=>{setManageTab(item.key); if(item.key!=="sections") setInstDetailView(null);}}
               className={isMobile?"admin-mobile-touch":undefined}
               style={isMobile
                 ? {
-                    background:manageTab===item.key ? "#E8F0FF" : "#FFFFFF",
-                    border:`1px solid ${manageTab===item.key ? "#C7D7F5" : G.border}`,
-                    borderRadius:16,
-                    padding:"12px 12px 11px",
-                    textAlign:"left",
+                    minHeight:44,
+                    background:manageTab===item.key ? G.navy : "#FFFFFF",
+                    border:`1px solid ${manageTab===item.key ? G.navy : G.border}`,
+                    borderRadius:13,
+                    padding:"0 11px",
                     cursor:"pointer",
                     boxShadow:reduceEffects ? "none" : G.shadowSm,
                     WebkitTapHighlightColor:"transparent",
+                    display:"inline-flex",
+                    alignItems:"center",
+                    gap:7,
+                    whiteSpace:"nowrap",
                   }
                 : {
                     flex:1,padding:"10px 0",borderRadius:9,border:"none",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:G.sans,transition:"all 0.15s",
                     background:manageTab===item.key?G.navy:"none",color:manageTab===item.key?"#fff":G.textM
                   }}>
               {isMobile ? (
-                <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-                  <div style={{width:36,height:36,borderRadius:12,background:manageTab===item.key ? G.navy : "#EEF4FF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <AppIcon icon={item.icon} size={17} color={manageTab===item.key ? "#FFFFFF" : G.blue} />
-                  </div>
-                  <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:13.5,fontWeight:800,color:manageTab===item.key ? G.navy : G.text,fontFamily:G.sans}}>{item.label}</div>
-                    <div style={{fontSize:11,color:G.textM,lineHeight:1.4,marginTop:3}}>{item.hint}</div>
-                    <div style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,background:manageTab===item.key ? "#DCE9FF" : G.bg,border:`1px solid ${manageTab===item.key ? "#B7CCF5" : G.border}`,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontFamily:G.mono,fontWeight:700,color:manageTab===item.key ? G.navy : G.textL}}>
-                      {item.count}
-                    </div>
-                  </div>
-                </div>
+                <>
+                  <AppIcon icon={item.icon} size={16} color={manageTab===item.key ? "#FFFFFF" : G.blue} />
+                  <span style={{fontSize:12.5,fontWeight:800,color:manageTab===item.key ? "#FFFFFF" : G.text,fontFamily:G.sans}}>{item.label}</span>
+                  <span style={{minWidth:21,height:21,borderRadius:999,background:manageTab===item.key?"rgba(255,255,255,0.16)":G.bg,border:`1px solid ${manageTab===item.key?"rgba(255,255,255,0.16)":G.border}`,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 5px",fontSize:9.5,fontFamily:G.mono,fontWeight:800,color:manageTab===item.key?"#FFFFFF":G.textL}}>
+                    {item.count}
+                  </span>
+                </>
               ) : (
                 item.label
               )}
             </button>
           ))}
+          </div>
         </div>}
 
         {manageTab==="subjects"&&(
@@ -12845,7 +12866,7 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Manage the workspace</div>
               </div>
               <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono}}>
-                4 zones
+                6 tools
               </span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:9}}>
@@ -12857,11 +12878,25 @@ function AdminPanelInner({user}){
                 onClick={()=>openMobileManageArea("teachers")}
               />
               <MobileManageTile
-                icon={IconSettings}
-                title="Admins"
-                subtitle="Roles, invite links, permissions"
-                count={teachers.filter(t=>roles[t.uid]==="admin").length}
-                onClick={()=>openMobileManageArea("admins")}
+                icon={IconBooks}
+                title="Syllabus"
+                subtitle="Shared chapters and topics"
+                count={syllabusTemplates.length}
+                onClick={()=>openMobileManageArea("subjects")}
+              />
+              <MobileManageTile
+                icon={IconSchool}
+                title="Sections"
+                subtitle={selInst ? "Groups for current institute" : "Groups and timetables"}
+                count={institutes.length}
+                onClick={()=>openMobileManageArea("sections")}
+              />
+              <MobileManageTile
+                icon={IconBooks}
+                title="Subject Catalog"
+                subtitle="Official subject vocabulary"
+                count={globalSubjects.filter(item=>item.active).length}
+                onClick={()=>openMobileManageArea("catalog")}
               />
               <MobileManageTile
                 icon={IconBuilding}
@@ -12871,11 +12906,11 @@ function AdminPanelInner({user}){
                 onClick={()=>openMobileManageArea("institutes")}
               />
               <MobileManageTile
-                icon={IconSchool}
-                title="Sections"
-                subtitle={selInst ? "Groups for current institute" : "Groups, legacy repair, timetables"}
-                count={institutes.length}
-                onClick={()=>openMobileManageArea("sections")}
+                icon={IconSettings}
+                title="Admins"
+                subtitle="Roles and permissions"
+                count={teachers.filter(t=>roles[t.uid]==="admin").length}
+                onClick={()=>openMobileManageArea("admins")}
               />
             </div>
           </div>
