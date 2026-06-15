@@ -7031,6 +7031,8 @@ function AdminPanelInner({user}){
       openMobileCentreSummary();
       return;
     }
+    setView("main");
+    setProfileOpen(false);
     setInstituteGlanceOpen(true);
     loadInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure);
   }, [handleInstituteGlanceLoadFailure, isMobile, loadInstituteGlanceReport, openMobileCentreSummary]);
@@ -11480,6 +11482,11 @@ function AdminPanelInner({user}){
       if(area==="sections"){
         setManageTab("sections");
         setInstDetailView(institute);
+      } else if(area==="teachers"){
+        setManageTab("teachers");
+        setOpenTeacherInstitute(institute);
+      } else if(area==="institutes"){
+        setManageTab("institutes");
       } else {
         setManageTab("subjects");
       }
@@ -11543,7 +11550,7 @@ function AdminPanelInner({user}){
       </div>
       <div style={isMobile
         ? {maxWidth:860,margin:"0 auto",padding:mobileManageOuterPad}
-        : {maxWidth:1480,margin:"0 auto",padding:"22px 22px 72px",display:"grid",gridTemplateColumns:"292px minmax(0,1fr)",gap:24,alignItems:"start"}}>
+        : {width:"100%",boxSizing:"border-box",padding:"0 24px 72px 0",display:"grid",gridTemplateColumns:"300px minmax(0,1fr)",gap:24,alignItems:"start"}}>
 
         {/* Copy group to institutes modal */}
         {copyGroupModal&&(
@@ -11602,7 +11609,7 @@ function AdminPanelInner({user}){
         )}
 
         {!isMobile&&(
-          <aside style={{position:"sticky",top:20,alignSelf:"start",maxHeight:"calc(100vh - 96px)",display:"flex",flexDirection:"column",background:"#F8FAFD",border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden"}}>
+          <aside style={{position:"sticky",top:0,alignSelf:"start",height:"calc(100vh - 54px)",maxHeight:"calc(100vh - 54px)",display:"flex",flexDirection:"column",background:"#F8FAFD",borderRight:`1px solid ${G.border}`,borderBottom:`1px solid ${G.border}`,borderRadius:"0 0 16px 0",overflow:"hidden"}}>
             <div style={{padding:"15px 15px 12px",borderBottom:`1px solid ${G.border}`,background:"#FFFFFF"}}>
               <input value={manageInstituteFilter} onChange={event=>setManageInstituteFilter(event.target.value)} placeholder="Filter institutes" style={{width:"100%",boxSizing:"border-box",border:`1px solid ${G.borderM}`,borderRadius:11,padding:"10px 12px",fontFamily:G.sans,fontSize:13,color:G.text,outline:"none"}}/>
             </div>
@@ -11644,8 +11651,10 @@ function AdminPanelInner({user}){
                         {selected&&(
                           <div style={{margin:"3px 0 5px 18px",paddingLeft:8,borderLeft:`2px solid #B8CCF7`,display:"flex",flexDirection:"column",gap:3}}>
                             {[
+                              {key:"teachers",label:"Teachers",icon:IconUsersGroup},
                               {key:"sections",label:"Sections",icon:IconSchool},
                               {key:"subjects",label:"Syllabus",icon:IconBooks},
+                              {key:"institutes",label:"Institute settings",icon:IconSettings},
                             ].map(item=>(
                               <button key={item.key} onClick={()=>openInstituteArea(institute,item.key)} style={{display:"flex",alignItems:"center",gap:8,border:"none",borderRadius:8,padding:"7px 9px",background:manageTab===item.key?"#FFFFFF":"transparent",color:manageTab===item.key?G.navy:G.textM,fontFamily:G.sans,fontSize:12,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
                                 <AppIcon icon={item.icon} size={14} color={manageTab===item.key?G.blue:G.textL}/>{item.label}
@@ -11662,9 +11671,9 @@ function AdminPanelInner({user}){
 
               <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"10px 8px 7px",borderTop:`1px solid ${G.border}`}}>Workspace</div>
               {[
-                {key:"teachers",label:"Teachers",icon:IconUsersGroup},
+                {key:"teachers",label:"All Teachers",icon:IconUsersGroup},
                 {key:"catalog",label:"Subject Catalog",icon:IconBooks},
-                {key:"institutes",label:"Manage Institutes",icon:IconBuilding},
+                {key:"institutes",label:"Institute Directory",icon:IconBuilding},
                 {key:"admins",label:"Admins",icon:IconSettings},
               ].map(item=>(
                 <button key={item.key} onClick={()=>{setManageScopeInstitute("");setInstDetailView(null);setManageTab(item.key);}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:!manageScopeInstitute&&manageTab===item.key?"#EEF4FF":"transparent",color:!manageScopeInstitute&&manageTab===item.key?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
@@ -11685,7 +11694,7 @@ function AdminPanelInner({user}){
           </aside>
         )}
 
-        <main style={{minWidth:0}}>
+        <main style={{minWidth:0,paddingTop:isMobile?0:22}}>
 
         {/* Institute detail drill-down (replaces tab content when active) */}
         {instDetailView?(()=>{
@@ -12088,12 +12097,17 @@ function AdminPanelInner({user}){
         {!isMobile&&<div style={{background:`linear-gradient(135deg,${G.navy},${G.navyS})`,borderRadius:14,padding:"20px",marginBottom:20,display:"flex",alignItems:"center",gap:14}}>
           <div style={{width:48,height:48,borderRadius:14,background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>📚</div>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:17,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:3}}>Class Manager</div>
-            <div style={{fontSize:13,color:"rgba(255,255,255,0.6)",lineHeight:1.5}}>Tap any institute below to create named timetable groups. Each group contains the sections that share one slot pattern.</div>
+            <div style={{fontSize:17,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:3}}>{manageScopeInstitute ? "Institute settings" : "Institute directory"}</div>
+            <div style={{fontSize:13,color:"rgba(255,255,255,0.6)",lineHeight:1.5}}>
+              {manageScopeInstitute
+                ? `Manage the identity, structure, and lifecycle of ${manageScopeInstitute}.`
+                : "Create institutes and maintain the workspace-wide institute directory."}
+            </div>
           </div>
         </div>}
 
         {/* Create Institute */}
+        {!manageScopeInstitute&&(
         <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:20}}>
           <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Create Institute</div>
           <div style={{fontSize:14,color:G.textM,marginBottom:14}}>Only admins can create institutes. Teachers will see the full list when adding a class.</div>
@@ -12113,15 +12127,21 @@ function AdminPanelInner({user}){
             </button>
           </div>
         </div>
+        )}
 
         {/* Institute list */}
         <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:24}}>
-          <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>All Institutes</div>
-          <div style={{fontSize:14,color:G.textM,marginBottom:14}}>Delete removes from the list only. Teacher data is not affected.</div>
+          <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{manageScopeInstitute ? manageScopeInstitute : "All Institutes"}</div>
+          <div style={{fontSize:14,color:G.textM,marginBottom:14}}>
+            {manageScopeInstitute
+              ? "Rename this institute, open its sections, or manage its lifecycle."
+              : "Delete removes from the list only. Teacher data is not affected."}
+          </div>
           {institutes.length===0
             ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No institutes yet. Create one above.</div>
             :<div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {institutes.map((inst,instIdx)=>{
+              {(manageScopeInstitute ? institutes.filter(inst=>sameInstituteName(inst,manageScopeInstitute)) : institutes).map((inst)=>{
+                const instIdx=institutes.indexOf(inst);
                 const instTeacherList=teachers.filter(t=>teacherBelongsToInstitute(t, inst));
                 const clsCount=instituteStats[inst]?.classCount || instTeacherList.length;
                 return(
@@ -12366,6 +12386,9 @@ function AdminPanelInner({user}){
         {/* ── TEACHERS TAB ── */}
         {manageTab==="teachers"&&(()=>{
           const teacherOnlyList = teachers.filter(t=>roles[t.uid]!=="admin");
+          const scopedTeacherOnlyList = manageScopeInstitute
+            ? teacherOnlyList.filter(t=>teacherBelongsToInstitute(t, manageScopeInstitute))
+            : teacherOnlyList;
           const teacherSearchKey = manageTeacherSearch.trim().toLowerCase();
           const matchesTeacher = (teacher) => {
             if(!teacherSearchKey) return true;
@@ -12375,13 +12398,15 @@ function AdminPanelInner({user}){
             return name.includes(teacherSearchKey) || email.includes(teacherSearchKey) || instituteText.includes(teacherSearchKey);
           };
           const teacherInstitutes = [...new Set([
-            ...institutes,
-            ...teacherOnlyList.flatMap(t=>getTeacherInstituteList(t)),
+            ...(manageScopeInstitute ? [manageScopeInstitute] : institutes),
+            ...scopedTeacherOnlyList.flatMap(t=>getTeacherInstituteList(t)),
           ])]
             .filter(Boolean)
             .sort(exportTextSorter.compare);
-          const teachersWithoutInstitute = teacherOnlyList.filter(t=>!getTeacherInstituteList(t).length && matchesTeacher(t));
-          const hasInstituteMatches = teacherInstitutes.some(inst => teacherOnlyList.some(t => teacherBelongsToInstitute(t, inst) && matchesTeacher(t)));
+          const teachersWithoutInstitute = manageScopeInstitute
+            ? []
+            : scopedTeacherOnlyList.filter(t=>!getTeacherInstituteList(t).length && matchesTeacher(t));
+          const hasInstituteMatches = teacherInstitutes.some(inst => scopedTeacherOnlyList.some(t => teacherBelongsToInstitute(t, inst) && matchesTeacher(t)));
 
           const TeacherCard = ({ t, currentInstitute = null }) => {
             const d = fullData[t.uid] || {};
@@ -12508,20 +12533,22 @@ function AdminPanelInner({user}){
           return(
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
               <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
-                Teachers ({teacherOnlyList.length})
+                {manageScopeInstitute ? `Teachers at ${manageScopeInstitute}` : "All teachers"} ({scopedTeacherOnlyList.length})
               </div>
               <div style={{fontSize:14,color:G.textM,marginBottom:10}}>
-                Click an institute to expand its teachers. Search by name, email, or institute.
+                {manageScopeInstitute
+                  ? "Manage the teacher accounts, assigned subjects, and classes connected to this institute."
+                  : "Click an institute to expand its teachers. Search by name, email, or institute."}
               </div>
               {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search teachers by name, email, or institute")}
 
-              {teacherOnlyList.length===0
-                ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No teachers found yet.</div>
+              {scopedTeacherOnlyList.length===0
+                ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>{manageScopeInstitute ? "No teachers are connected to this institute yet." : "No teachers found yet."}</div>
                 :<div style={{display:"flex",flexDirection:"column",gap:12}}>
                   {teacherInstitutes.map(inst=>{
-                    const instTeachers = teacherOnlyList.filter(t=>teacherBelongsToInstitute(t, inst) && matchesTeacher(t));
+                    const instTeachers = scopedTeacherOnlyList.filter(t=>teacherBelongsToInstitute(t, inst) && matchesTeacher(t));
                     if(!instTeachers.length) return null;
-                    const isOpen = openTeacherInstitute===inst;
+                    const isOpen = manageScopeInstitute ? true : openTeacherInstitute===inst;
                     return(
                       <div key={inst}>
                         {instituteAccordionHeader({
@@ -12531,6 +12558,7 @@ function AdminPanelInner({user}){
                           countLabel:"teacher",
                           isOpen,
                           onClick:()=>{
+                            if(manageScopeInstitute) return;
                             if(!isOpen) warmTeacherUids(instTeachers.map(t=>t.uid), inst);
                             setOpenTeacherInstitute(curr=>curr===inst?null:inst);
                           },
@@ -12568,7 +12596,7 @@ function AdminPanelInner({user}){
                     </div>
                   )}
 
-                  {teacherOnlyList.length>0 && !hasInstituteMatches && teachersWithoutInstitute.length===0 && (
+                  {scopedTeacherOnlyList.length>0 && !hasInstituteMatches && teachersWithoutInstitute.length===0 && (
                     <div style={{fontSize:15,color:G.textM,padding:"10px 0",textAlign:"center"}}>No teachers match your search.</div>
                   )}
                 </div>
@@ -13791,6 +13819,74 @@ function AdminPanelInner({user}){
       </div>
     );
 
+  const renderDesktopProfileMenu = () => {
+    const profileAction = ({ icon, title, subtitle, onClick, danger = false, badge = null }) => (
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          width:"100%",
+          border:"none",
+          borderRadius:12,
+          background:danger ? "#FFF1F2" : "transparent",
+          padding:"10px 11px",
+          display:"flex",
+          alignItems:"center",
+          gap:10,
+          textAlign:"left",
+          cursor:"pointer",
+          fontFamily:G.sans,
+        }}>
+        <span style={{width:34,height:34,borderRadius:11,background:danger?"#FDE2E2":"#EEF4FF",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <AppIcon icon={icon} size={16} color={danger?G.red:G.blue}/>
+        </span>
+        <span style={{minWidth:0,flex:1}}>
+          <span style={{display:"block",fontSize:13.5,fontWeight:800,color:danger?G.red:G.text}}>{title}</span>
+          <span style={{display:"block",fontSize:11.5,color:danger?"#A94444":G.textM,lineHeight:1.4,marginTop:2}}>{subtitle}</span>
+        </span>
+        {badge!=null&&badge!==0&&(
+          <span style={{background:danger?G.redL:G.blueL,color:danger?G.red:G.blue,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:850,fontFamily:G.mono,flexShrink:0}}>{badge}</span>
+        )}
+        {!danger&&<AppIcon icon={IconChevronRight} size={15} color={G.textL}/>}
+      </button>
+    );
+    return (
+      <div style={{position:"absolute",top:"calc(100% + 10px)",right:0,zIndex:200,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:18,boxShadow:"0 24px 70px rgba(15,23,42,0.24)",width:360,maxWidth:"calc(100vw - 28px)",overflow:"hidden"}}>
+        <div style={{padding:"16px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD"}}>
+          <div style={{display:"flex",alignItems:"center",gap:11}}>
+            <div style={{width:44,height:44,borderRadius:14,background:"linear-gradient(135deg,#3B82F6,#1D4ED8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:850,color:"#FFFFFF",fontFamily:G.display,flexShrink:0}}>
+              {(user?.email||"A").charAt(0).toUpperCase()}
+            </div>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:15,fontWeight:850,color:G.text,fontFamily:G.display}}>Administrator</div>
+              <div style={{fontSize:11.5,color:G.textM,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user?.email||"—"}</div>
+            </div>
+            <span style={{background:G.blueL,border:"1px solid #C7D7F5",borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:800,color:G.blue,fontFamily:G.mono,whiteSpace:"nowrap"}}>{currentSession()}</span>
+          </div>
+        </div>
+        <div style={{padding:"12px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:7,marginBottom:10}}>
+            {adminWorkspaceStats.map(item=>(
+              <div key={item.key} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:11,padding:"9px 8px",minWidth:0}}>
+                <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
+                <div style={{fontSize:8.5,fontWeight:800,color:G.textL,textTransform:"uppercase",letterSpacing:0.35,fontFamily:G.mono,marginTop:6,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Workspace</div>
+          {profileAction({icon:IconChartBar,title:"Ledgr Report",subtitle:"Reports, PDFs, and centre summaries",onClick:()=>{setProfileOpen(false);openInstituteGlancePanel();},badge:instituteGlanceReport.ready?"Ready":null})}
+          {profileAction({icon:IconSettings,title:"Control Centre",subtitle:"Institutes, teachers, syllabus, and access",onClick:()=>{setProfileOpen(false);openManageTab("teachers");}})}
+          <div style={{height:1,background:G.border,margin:"8px 0"}}/>
+          <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Support</div>
+          {profileAction({icon:IconMessageCircle,title:"Teacher Feedback",subtitle:"Read issues and send replies",onClick:()=>{setProfileOpen(false);openFeedbackInbox();},badge:feedbackUnreadCount})}
+          {profileAction({icon:IconTrash,title:"Recycle Bin",subtitle:"Review deleted workspace records",onClick:()=>{setProfileOpen(false);setBinView(true);},badge:adminBin.length})}
+          <div style={{height:1,background:G.border,margin:"8px 0"}}/>
+          {profileAction({icon:IconLogout,title:"Sign Out",subtitle:"Leave this admin session",onClick:()=>{setProfileOpen(false);logout();},danger:true})}
+        </div>
+      </div>
+    );
+  };
+
   // ── DESKTOP: original 4-panel layout ─────────────────────────────────────
   return(
     <div style={{minHeight:"100svh",height:"100vh",display:"flex",flexDirection:"column",fontFamily:G.sans,background:G.bg,overflow:"hidden"}}>
@@ -13860,6 +13956,10 @@ function AdminPanelInner({user}){
               <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:2}}>{profileOpen?"▲":"▼"}</span>
             </div>
             {profileOpen&&(<>
+              <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
+              {renderDesktopProfileMenu()}
+            </>)}
+            {false&&profileOpen&&(<>
               <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
               <div style={{position:"absolute",top:"calc(100% + 10px)",right:0,zIndex:200,background:"#0B1730",border:"1px solid rgba(255,255,255,0.13)",borderRadius:18,boxShadow:"0 22px 60px rgba(0,0,0,0.42)",width:430,maxWidth:"calc(100vw - 32px)",maxHeight:"calc(100vh - 96px)",overflowY:"auto",overflowX:"hidden"}}>
                 {/* Profile header */}
