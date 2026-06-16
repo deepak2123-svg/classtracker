@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrTheme
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.PublishedSyllabus
 import com.classtracker.core.model.SyllabusChapter
 import com.classtracker.core.model.TeacherClass
@@ -171,6 +172,7 @@ private fun SyllabusClassCard(
     onClick: () -> Unit,
     onSaveProgress: (Set<String>) -> Unit,
 ) {
+    val haptics = rememberLedgrHaptics()
     val savedUnitIds = remember(syllabus, entries) {
         completedSyllabusUnitIds(entries.filter { it.syllabusTemplateId == syllabus.templateId })
     }
@@ -262,6 +264,7 @@ private fun SyllabusClassCard(
             Text(
                 text = if (expanded) "Hide chapters  ^" else "View chapters  v",
                 modifier = Modifier.clickable {
+                    haptics.selection()
                     expanded = !expanded
                     if (!expanded) draftUnitIds = savedUnitIds
                 },
@@ -301,6 +304,7 @@ private fun SyllabusClassCard(
                             modifier = Modifier.fillMaxWidth(),
                             enabled = hasChanges,
                             onClick = {
+                                haptics.confirm()
                                 onSaveProgress(draftUnitIds)
                                 expanded = false
                             },
@@ -314,11 +318,17 @@ private fun SyllabusClassCard(
                         ) {
                             TextButton(
                                 enabled = hasChanges,
-                                onClick = { draftUnitIds = savedUnitIds },
+                                onClick = {
+                                    haptics.selection()
+                                    draftUnitIds = savedUnitIds
+                                },
                             ) {
                                 Text("Reset changes")
                             }
-                            TextButton(onClick = onClick) { Text("Open class entry") }
+                            TextButton(onClick = {
+                                haptics.selection()
+                                onClick()
+                            }) { Text("Open class entry") }
                         }
                     }
                 }
@@ -363,6 +373,7 @@ private fun SyllabusCompletionRow(
     completedUnitIds: Set<String>,
     onCompletedUnitIdsChanged: (Set<String>) -> Unit,
 ) {
+    val haptics = rememberLedgrHaptics()
     val marker = syllabusChapterCompletionMarker(chapter.id)
     val chapterComplete = marker in completedUnitIds ||
         (chapter.topics.isNotEmpty() && chapter.topics.all { it.id in completedUnitIds })
@@ -371,6 +382,7 @@ private fun SyllabusCompletionRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
+                    haptics.selection()
                     val topicIds = chapter.topics.map { it.id }.toSet()
                     onCompletedUnitIdsChanged(
                         if (chapterComplete) {
@@ -385,6 +397,7 @@ private fun SyllabusCompletionRow(
             SyllabusCheckBox(
                 checked = chapterComplete,
                 onClick = {
+                    haptics.selection()
                     val topicIds = chapter.topics.map { topic -> topic.id }.toSet()
                     onCompletedUnitIdsChanged(
                         if (chapterComplete) {
@@ -415,6 +428,7 @@ private fun SyllabusCompletionRow(
                         .fillMaxWidth()
                         .padding(start = 28.dp)
                         .clickable {
+                            haptics.selection()
                             onCompletedUnitIdsChanged(
                                 completedUnitIds.toggledTopicIds(
                                     chapter = chapter,
@@ -428,6 +442,7 @@ private fun SyllabusCompletionRow(
                     SyllabusCheckBox(
                         checked = topicComplete,
                         onClick = {
+                            haptics.selection()
                             onCompletedUnitIdsChanged(
                                 completedUnitIds.toggledTopicIds(
                                     chapter = chapter,

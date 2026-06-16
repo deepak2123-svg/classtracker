@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.classtracker.core.designsystem.LedgrTheme.colors
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
 
@@ -46,6 +47,7 @@ fun ManageClassesScreen(
     onDeleteClass: (TeacherClass) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberLedgrHaptics()
     var pendingDelete by remember { mutableStateOf<TeacherClass?>(null) }
     val entryCounts = remember(entries) { entries.groupingBy(TeacherEntry::classId).eachCount() }
 
@@ -66,6 +68,7 @@ fun ManageClassesScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        haptics.warning()
                         pendingDelete = null
                         onDeleteClass(teacherClass)
                     },
@@ -145,7 +148,10 @@ fun ManageClassesScreen(
                         )
                     }
                     OutlinedButton(
-                        onClick = { pendingDelete = teacherClass },
+                        onClick = {
+                            haptics.warning()
+                            pendingDelete = teacherClass
+                        },
                         enabled = deleteEnabled && deletingClassId == null,
                     ) {
                         if (deleting) {

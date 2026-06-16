@@ -73,6 +73,7 @@ import androidx.compose.ui.window.Dialog
 import com.classtracker.core.designsystem.LedgrClassCard
 import com.classtracker.core.designsystem.LedgrSectionHeading
 import com.classtracker.core.designsystem.LedgrTheme
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
@@ -148,6 +149,7 @@ fun EntryEditorScreen(
     modifier: Modifier = Modifier,
     showClassHeader: Boolean = true,
 ) {
+    val haptics = rememberLedgrHaptics()
     val validation = remember(draft, existingEntries) {
         validateTeacherEntryDraft(draft, existingEntries)
     }
@@ -361,7 +363,10 @@ fun EntryEditorScreen(
 
         item {
             Button(
-                onClick = { onSave(draft) },
+                onClick = {
+                    haptics.confirm()
+                    onSave(draft)
+                },
                 enabled = (validation == TeacherEntryValidation.Valid ||
                     validation is TeacherEntryValidation.Overlap) && !saving,
                 modifier = Modifier.fillMaxWidth(),
@@ -1702,6 +1707,7 @@ fun EntryEditorColumn(
     onSave: (TeacherEntryDraft) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberLedgrHaptics()
     // Only show validation errors after the user has tapped Save at least once.
     // Resets whenever the draft's mutationId changes (i.e. after a successful save).
     var saveAttempted by remember(draft.mutationId) { mutableStateOf(false) }
@@ -1755,6 +1761,7 @@ fun EntryEditorColumn(
                         status = status,
                         selected = draft.status == status.storageValue,
                         onClick = {
+                            haptics.selection()
                             onDraftChanged(
                                 draft.copy(
                                     status = if (draft.status == status.storageValue) "" else status.storageValue,
@@ -1774,6 +1781,7 @@ fun EntryEditorColumn(
                         status = status,
                         selected = draft.status == status.storageValue,
                         onClick = {
+                            haptics.selection()
                             onDraftChanged(
                                 draft.copy(
                                     status = if (draft.status == status.storageValue) "" else status.storageValue,
@@ -1796,7 +1804,12 @@ fun EntryEditorColumn(
                 saveAttempted = true
                 if (validation == TeacherEntryValidation.Valid ||
                     validation is TeacherEntryValidation.Overlap
-                ) onSave(draft)
+                ) {
+                    haptics.confirm()
+                    onSave(draft)
+                } else {
+                    haptics.warning()
+                }
             },
         )
     }

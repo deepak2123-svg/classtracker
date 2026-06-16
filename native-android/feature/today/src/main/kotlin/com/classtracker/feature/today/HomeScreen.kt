@@ -3,6 +3,7 @@ package com.classtracker.feature.today
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,10 +41,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,11 +56,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrPill
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.designsystem.ledgrSectionTone
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherDashboard
@@ -105,6 +112,18 @@ private fun homeStrongTextColor() =
     if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF111827)
 
 @Composable
+private fun homeClassBorderColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFF111827).copy(alpha = 0.82f)
+
+@Composable
+private fun homeLoggedIndicatorColor() =
+    if (LedgrTheme.isDark) Color(0xFF22C55E) else Color(0xFF047A3C)
+
+@Composable
+private fun homeDragHandleColor() =
+    if (LedgrTheme.isDark) colors.textMuted.copy(alpha = 0.78f) else Color(0xFF111827).copy(alpha = 0.48f)
+
+@Composable
 fun HomeScreen(
     dashboard: TeacherDashboard,
     classes: List<TeacherClass>,
@@ -114,15 +133,31 @@ fun HomeScreen(
     onAddClassClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberLedgrHaptics()
     val institutes = remember(classes) {
         classes.map(TeacherClass::instituteName).distinct()
     }
     var selectedInstitute by rememberSaveable { mutableStateOf(AllInstitutes) }
-    val visibleClasses = remember(classes, selectedInstitute) {
+    var classOrder by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    val allClassIds = remember(classes) { classes.map(TeacherClass::id) }
+
+    LaunchedEffect(allClassIds) {
+        classOrder = classOrder.filter { it in allClassIds } +
+            allClassIds.filterNot { it in classOrder }
+    }
+
+    val orderedClasses = remember(classes, classOrder) {
+        val classesById = classes.associateBy(TeacherClass::id)
+        val orderedIds = classOrder.ifEmpty { allClassIds }
+        val ordered = orderedIds.mapNotNull(classesById::get)
+        val orderedIdSet = ordered.mapTo(hashSetOf(), TeacherClass::id)
+        ordered + classes.filterNot { it.id in orderedIdSet }
+    }
+    val visibleClasses = remember(orderedClasses, selectedInstitute) {
         if (selectedInstitute == AllInstitutes) {
-            classes
+            orderedClasses
         } else {
-            classes.filter { it.instituteName == selectedInstitute }
+            orderedClasses.filter { it.instituteName == selectedInstitute }
         }
     }
     val visibleClassIds = remember(visibleClasses) { visibleClasses.mapTo(hashSetOf(), TeacherClass::id) }
@@ -136,6 +171,30 @@ fun HomeScreen(
     if (selectedInstitute != AllInstitutes && selectedInstitute !in institutes) {
         selectedInstitute = AllInstitutes
     }
+
+    var draggingClassId by remember { mutableStateOf<String?>(null) }
+    var dragOffsetY by remember { mutableStateOf(0f) }
+    var dragMoved by remember { mutableStateOf(false) }
+    val dragStepPx = with(LocalDensity.current) { 88.dp.toPx() }
+    val moveVisibleClass = rememberUpdatedState<(String, Int) -> Boolean>(move@{ classId, direction ->
+        val visibleIds = visibleClasses.map(TeacherClass::id)
+        val currentVisibleIndex = visibleIds.indexOf(classId)
+        if (currentVisibleIndex == -1) return@move false
+        val targetVisibleIndex = (currentVisibleIndex + direction).coerceIn(0, visibleIds.lastIndex)
+        if (targetVisibleIndex == currentVisibleIndex) return@move false
+
+        val targetId = visibleIds[targetVisibleIndex]
+        val nextOrder = (classOrder.ifEmpty { allClassIds }).toMutableList()
+        val fromIndex = nextOrder.indexOf(classId)
+        if (fromIndex == -1 || targetId !in nextOrder) return@move false
+
+        val movingId = nextOrder.removeAt(fromIndex)
+        val targetIndexAfterRemoval = nextOrder.indexOf(targetId)
+        val insertIndex = if (direction > 0) targetIndexAfterRemoval + 1 else targetIndexAfterRemoval
+        nextOrder.add(insertIndex.coerceIn(0, nextOrder.size), movingId)
+        classOrder = nextOrder
+        true
+    })
 
     LazyColumn(
         modifier = modifier
@@ -222,10 +281,63 @@ fun HomeScreen(
                 items = visibleClasses,
                 key = TeacherClass::id,
             ) { teacherClass ->
+                val isDragging = draggingClassId == teacherClass.id
                 HomeClassCard(
                     teacherClass = teacherClass,
                     loggedToday = teacherClass.id in dashboard.loggedClassIdsToday,
                     onClick = { onClassClick(teacherClass) },
+                    modifier = Modifier
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .graphicsLayer {
+                            translationY = if (isDragging) dragOffsetY else 0f
+                            scaleX = if (isDragging) 1.015f else 1f
+                            scaleY = if (isDragging) 1.015f else 1f
+                        }
+                        .pointerInput(teacherClass.id, dragStepPx) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    draggingClassId = teacherClass.id
+                                    dragOffsetY = 0f
+                                    dragMoved = false
+                                    haptics.dragStart()
+                                },
+                                onDragCancel = {
+                                    draggingClassId = null
+                                    dragOffsetY = 0f
+                                    dragMoved = false
+                                },
+                                onDragEnd = {
+                                    if (dragMoved) haptics.dragDrop()
+                                    draggingClassId = null
+                                    dragOffsetY = 0f
+                                    dragMoved = false
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    dragOffsetY += dragAmount.y
+                                    while (dragOffsetY > dragStepPx) {
+                                        if (moveVisibleClass.value(teacherClass.id, 1)) {
+                                            dragOffsetY -= dragStepPx
+                                            dragMoved = true
+                                            haptics.selection()
+                                        } else {
+                                            dragOffsetY = dragStepPx
+                                            break
+                                        }
+                                    }
+                                    while (dragOffsetY < -dragStepPx) {
+                                        if (moveVisibleClass.value(teacherClass.id, -1)) {
+                                            dragOffsetY += dragStepPx
+                                            dragMoved = true
+                                            haptics.selection()
+                                        } else {
+                                            dragOffsetY = -dragStepPx
+                                            break
+                                        }
+                                    }
+                                },
+                            )
+                        },
                 )
             }
         }
@@ -260,6 +372,7 @@ fun NewClassScreen(
     onSaveClass: (TeacherClassDraft) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberLedgrHaptics()
     val firstInstitute = remember(availableInstitutes) { availableInstitutes.firstOrNull().orEmpty() }
     var instituteName by rememberSaveable(firstInstitute) { mutableStateOf(firstInstitute) }
     var sectionName by rememberSaveable { mutableStateOf("") }
@@ -469,6 +582,7 @@ fun NewClassScreen(
                     }
                     Button(
                         onClick = {
+                            haptics.confirm()
                             onSaveClass(
                                 TeacherClassDraft(
                                     instituteName = instituteName,
@@ -793,13 +907,8 @@ private fun InstituteOption(
     } else {
         tone.surface
     }
-    val borderColor = when {
-        selected && allClasses -> colors.outlineStrong
-        selected -> tone.accent
-        allClasses -> MaterialTheme.colorScheme.outline
-        else -> tone.border
-    }
     val textColor = homeStrongTextColor()
+    val borderColor = homeClassBorderColor()
 
     Surface(
         modifier = modifier
@@ -808,7 +917,7 @@ private fun InstituteOption(
         color = background,
         contentColor = textColor,
         shape = RoundedCornerShape(15.dp),
-        border = BorderStroke(if (selected) 1.4.dp else 1.2.dp, borderColor),
+        border = BorderStroke(if (selected) 1.7.dp else 1.5.dp, borderColor),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -853,24 +962,18 @@ private fun HomeClassCard(
     teacherClass: TeacherClass,
     loggedToday: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val tone = ledgrSectionTone(teacherClass.sectionName)
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(70.dp)
             .clickable(onClick = onClick),
         color = tone.surface,
         contentColor = tone.text,
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(
-            1.6.dp,
-            if (LedgrTheme.isDark) {
-                MaterialTheme.colorScheme.outlineVariant
-            } else {
-                Color(0xFF111827).copy(alpha = 0.82f)
-            },
-        ),
+        border = BorderStroke(1.6.dp, homeClassBorderColor()),
         shadowElevation = 0.dp,
     ) {
         Row(
@@ -911,14 +1014,58 @@ private fun HomeClassCard(
                     }
                 }
             }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DragHandleAffordance()
+                LoggedClassIndicator(loggedToday = loggedToday)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DragHandleAffordance(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        repeat(3) {
             Surface(
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(width = 16.dp, height = 3.dp),
+                shape = RoundedCornerShape(999.dp),
+                color = homeDragHandleColor(),
+            ) {}
+        }
+    }
+}
+
+@Composable
+private fun LoggedClassIndicator(loggedToday: Boolean) {
+    val active = homeLoggedIndicatorColor()
+    val inactive = if (LedgrTheme.isDark) {
+        MaterialTheme.colorScheme.outlineVariant
+    } else {
+        Color(0xFFBDBEC4)
+    }
+
+    Box(
+        modifier = Modifier.size(28.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            modifier = Modifier.size(25.dp),
+            shape = CircleShape,
+            color = if (loggedToday) active.copy(alpha = 0.14f) else Color.Transparent,
+            border = BorderStroke(if (loggedToday) 2.2.dp else 1.8.dp, if (loggedToday) active else inactive),
+        ) {}
+        if (loggedToday) {
+            Surface(
+                modifier = Modifier.size(11.dp),
                 shape = CircleShape,
-                color = if (loggedToday) tone.accent.copy(alpha = 0.16f) else Color.Transparent,
-                border = BorderStroke(
-                    1.6.dp,
-                    if (loggedToday) tone.accent else Color(0xFFBDBEC4),
-                ),
+                color = active,
             ) {}
         }
     }

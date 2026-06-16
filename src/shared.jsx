@@ -81,39 +81,117 @@ export function formatDateLabel(dk){
   return new Date(y,m-1,d).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
 }
 
+export function LedgrLogoMark({ size=44, animated=false, background="#DCE6F2", ink="#1A2A52", style={} }) {
+  const moons = [
+    [240, 60], [367, 113], [420, 240], [367, 367],
+    [240, 420], [113, 367], [60, 240], [113, 113],
+  ];
+  return (
+    <svg
+      className={animated ? "ledgr-logo-scene" : undefined}
+      viewBox="0 0 480 480"
+      width={size}
+      height={size}
+      aria-hidden="true"
+      style={{display:"block",...style}}>
+      <rect width="480" height="480" rx="96" fill={background}/>
+      <defs>
+        <clipPath id="ledgrMoonClip"><circle r="16"/></clipPath>
+      </defs>
+      <g className={animated ? "ledgr-logo-wheel" : undefined} style={{transformOrigin:"240px 240px"}}>
+        {moons.map(([x, y], index) => (
+          <g key={`${x}-${y}`} className={animated ? `ledgr-logo-moon ledgr-logo-moon-${index}` : undefined} transform={`translate(${x},${y})`}>
+            <circle className={animated ? "ledgr-logo-glow" : undefined} r="16" fill={ink} opacity={animated ? 0 : 0.12}/>
+            <circle r="16" fill={ink}/>
+            <g clipPath="url(#ledgrMoonClip)" className={animated ? "ledgr-logo-mask" : undefined}>
+              <circle r="16" fill={background}/>
+            </g>
+            <circle r="16" fill="none" stroke={ink} strokeWidth="2"/>
+          </g>
+        ))}
+      </g>
+      <text
+        x="240"
+        y="258"
+        textAnchor="middle"
+        fontFamily="'Sacramento', cursive"
+        fontSize="64"
+        fill={ink}>
+        ledgr
+      </text>
+    </svg>
+  );
+}
+
+export function LedgrLogoLockup({ admin=false, markSize=40, color="#10204A", subColor="#667085", animated=false, style={} }) {
+  return (
+    <div style={{display:"inline-flex",alignItems:"center",gap:12,minWidth:0,...style}}>
+      <LedgrLogoMark size={markSize} animated={animated} />
+      <div style={{display:"flex",alignItems:"baseline",gap:8,minWidth:0}}>
+        <span style={{fontFamily:"'Sacramento', cursive",fontSize:Math.max(30, markSize * 0.96),lineHeight:0.92,color,fontWeight:400,whiteSpace:"nowrap"}}>
+          ledgr
+        </span>
+        {admin && (
+          <span style={{fontFamily:"'Inter',sans-serif",fontSize:11,fontWeight:800,letterSpacing:2.2,textTransform:"uppercase",color:subColor,whiteSpace:"nowrap"}}>
+            Admin
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Spinner({ text="Loading…" }) {
   return (
-    <div style={{minHeight:"100vh",background:"linear-gradient(180deg, #F8FAFC 0%, #EEF4FF 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:20,padding:"24px 16px"}}>
-      <div style={{position:"relative",width:132,height:96,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <div style={{position:"absolute",bottom:2,width:108,height:14,borderRadius:999,background:"rgba(15,23,42,0.1)",filter:"blur(7px)"}}/>
-        <svg className="book-loader-shell" viewBox="0 0 180 120" aria-hidden="true" style={{width:132,height:96,overflow:"visible"}}>
-          <path className="book-loader-base book-loader-base-left" d="M90 90 C68 83 39 84 14 94 L18 100 C42 91 66 92 89 101 Z"/>
-          <path className="book-loader-base book-loader-base-right" d="M90 90 C112 83 141 84 166 94 L162 100 C138 91 114 92 91 101 Z"/>
-          <path className="book-loader-stack" d="M92 84 C116 78 143 79 167 88"/>
-          <path className="book-loader-stack" d="M93 88 C118 82 144 83 166 91"/>
-          <path className="book-loader-stack book-loader-stack-left" d="M88 84 C64 78 37 79 13 88"/>
-          <path className="book-loader-stack book-loader-stack-left" d="M87 88 C62 82 36 83 14 91"/>
-          <g className="book-loader-leaf book-loader-leaf-a">
-            <path d="M89 88 C92 65 101 41 118 21 C110 23 102 28 95 35 C86 45 82 61 82 84 Z"/>
-          </g>
-          <g className="book-loader-leaf book-loader-leaf-b">
-            <path d="M89 88 C93 61 104 35 128 12 C117 16 107 22 98 32 C88 44 83 60 82 85 Z"/>
-          </g>
-          <g className="book-loader-leaf book-loader-leaf-c">
-            <path d="M89 88 C94 58 110 31 139 10 C126 13 114 20 103 30 C91 42 84 60 82 85 Z"/>
-          </g>
-          <g className="book-loader-leaf book-loader-leaf-d">
-            <path d="M89 88 C95 55 114 28 149 12 C136 13 123 19 110 30 C96 42 86 60 82 85 Z"/>
-          </g>
-          <path className="book-loader-spine" d="M84 87 C85 98 87 108 90 114 C93 108 95 98 96 87"/>
-          <path className="book-loader-crease" d="M90 88 C89 95 89 102 90 110"/>
-        </svg>
-      </div>
+    <div style={{minHeight:"100vh",background:"#DCE6F2",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14,padding:"24px 16px"}}>
+      <LedgrLogoMark size={232} animated />
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-        <div style={{fontSize:14,fontWeight:800,letterSpacing:1.1,textTransform:"uppercase",color:"#2563EB",fontFamily:"'Inter',sans-serif"}}>Loading Ledgr</div>
-        <div style={{color:"#64748B",fontSize:15,fontFamily:"'Inter',sans-serif",textAlign:"center"}}>{text}</div>
+        <div style={{fontFamily:"'Sacramento', cursive",fontSize:48,lineHeight:0.95,color:"#1A2A52"}}>ledgr</div>
+        <div style={{color:"#1A2A52",fontSize:14,fontWeight:700,fontFamily:"'Inter',sans-serif",textAlign:"center",opacity:0.78}}>{text}</div>
       </div>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Sacramento&display=swap');
+        .ledgr-logo-scene{
+          opacity:0;
+          animation:ledgr-logo-fade-in 1.2s ease-out forwards;
+        }
+        .ledgr-logo-wheel{
+          animation:ledgr-logo-spin 24s linear infinite;
+        }
+        .ledgr-logo-glow{
+          transform-origin:center;
+          animation:ledgr-logo-glow 7s ease-in-out infinite;
+        }
+        .ledgr-logo-mask circle{
+          transform-origin:center;
+          animation:ledgr-logo-fill 7s ease-in-out infinite;
+        }
+        .ledgr-logo-moon-0 .ledgr-logo-mask circle, .ledgr-logo-moon-0 .ledgr-logo-glow { animation-delay:0s; }
+        .ledgr-logo-moon-1 .ledgr-logo-mask circle, .ledgr-logo-moon-1 .ledgr-logo-glow { animation-delay:0.875s; }
+        .ledgr-logo-moon-2 .ledgr-logo-mask circle, .ledgr-logo-moon-2 .ledgr-logo-glow { animation-delay:1.75s; }
+        .ledgr-logo-moon-3 .ledgr-logo-mask circle, .ledgr-logo-moon-3 .ledgr-logo-glow { animation-delay:2.625s; }
+        .ledgr-logo-moon-4 .ledgr-logo-mask circle, .ledgr-logo-moon-4 .ledgr-logo-glow { animation-delay:3.5s; }
+        .ledgr-logo-moon-5 .ledgr-logo-mask circle, .ledgr-logo-moon-5 .ledgr-logo-glow { animation-delay:4.375s; }
+        .ledgr-logo-moon-6 .ledgr-logo-mask circle, .ledgr-logo-moon-6 .ledgr-logo-glow { animation-delay:5.25s; }
+        .ledgr-logo-moon-7 .ledgr-logo-mask circle, .ledgr-logo-moon-7 .ledgr-logo-glow { animation-delay:6.125s; }
+        @keyframes ledgr-logo-fill{
+          0%{ transform:translateX(-32px); }
+          50%{ transform:translateX(0); }
+          100%{ transform:translateX(32px); }
+        }
+        @keyframes ledgr-logo-glow{
+          0%{ opacity:0; transform:scale(1); }
+          50%{ opacity:0.22; transform:scale(1.6); }
+          100%{ opacity:0; transform:scale(1); }
+        }
+        @keyframes ledgr-logo-spin{
+          from{ transform:rotate(0deg); }
+          to{ transform:rotate(360deg); }
+        }
+        @keyframes ledgr-logo-fade-in{
+          from{ opacity:0; transform:scale(0.96); }
+          to{ opacity:1; transform:scale(1); }
+        }
         .book-loader-shell{
           overflow:visible;
           animation:book-shell-float 2.3s ease-in-out infinite;

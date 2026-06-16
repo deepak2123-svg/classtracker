@@ -66,6 +66,7 @@ import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrPill
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherProfile
@@ -96,6 +97,7 @@ fun ReportsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val haptics = rememberLedgrHaptics()
     val coroutineScope = rememberCoroutineScope()
     val instituteOptions = remember(snapshot.classes) {
         snapshot.classes.map(TeacherClass::instituteName).distinct().sorted()
@@ -171,7 +173,10 @@ fun ReportsScreen(
         item {
             PeriodSelector(
                 selected = period,
-                onSelected = { period = it },
+                onSelected = {
+                    haptics.selection()
+                    period = it
+                },
             )
         }
         if (period == TeacherReportPeriod.Monthly) {
@@ -179,10 +184,15 @@ fun ReportsScreen(
                 MonthSelectionCard(
                     selectedMonthDate = selectedMonthDate,
                     onPreviousMonth = {
+                        haptics.selection()
                         selectedMonthDate = shiftReportMonth(selectedMonthDate, -1)
                     },
-                    onChooseMonth = { showMonthPicker = true },
+                    onChooseMonth = {
+                        haptics.selection()
+                        showMonthPicker = true
+                    },
                     onNextMonth = {
+                        haptics.selection()
                         selectedMonthDate = shiftReportMonth(selectedMonthDate, 1)
                     },
                 )
@@ -202,8 +212,12 @@ fun ReportsScreen(
             ScopeSelector(
                 institutes = instituteOptions,
                 selectedInstitutes = selectedInstitutes,
-                onAllSelected = { selectedInstitutes = emptySet() },
+                onAllSelected = {
+                    haptics.selection()
+                    selectedInstitutes = emptySet()
+                },
                 onInstituteToggled = { institute ->
+                    haptics.selection()
                     selectedInstitutes = if (institute in selectedInstitutes) {
                         selectedInstitutes - institute
                     } else {
@@ -223,6 +237,7 @@ fun ReportsScreen(
             ) {
                 OutlinedButton(
                     onClick = {
+                        haptics.confirm()
                         savePdfLauncher.launch(reportPdfFileName(snapshot, report))
                     },
                     enabled = !isExporting,
@@ -240,6 +255,7 @@ fun ReportsScreen(
                 }
                 Button(
                     onClick = {
+                        haptics.confirm()
                         pdfExportState = PdfExportState.InProgress
                         coroutineScope.launch {
                             runCatching {

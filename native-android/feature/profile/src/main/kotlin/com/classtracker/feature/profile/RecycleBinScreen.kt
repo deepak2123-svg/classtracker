@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrSectionHeading
 import com.classtracker.core.designsystem.LedgrTheme.colors
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherEntrySyncState
 import com.classtracker.core.model.TeacherEntryStatus
 import com.classtracker.core.model.TeacherTrashedEntry
@@ -67,6 +68,7 @@ fun RecycleBinScreen(
     onDeleteEntry: (TeacherTrashedEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberLedgrHaptics()
     var showDeleteAllConfirmation by remember { mutableStateOf(false) }
     var entryPendingDelete by remember { mutableStateOf<TeacherTrashedEntry?>(null) }
 
@@ -90,6 +92,7 @@ fun RecycleBinScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptics.warning()
                         showDeleteAllConfirmation = false
                         onDeleteAll()
                     },
@@ -128,6 +131,7 @@ fun RecycleBinScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptics.warning()
                         entryPendingDelete = null
                         onDeleteEntry(entry)
                     },
@@ -182,7 +186,10 @@ fun RecycleBinScreen(
                 count = trashedEntries.size,
                 deletingAll = deletingAll,
                 deleteAllEnabled = deleteAllEnabled,
-                onDeleteAll = { showDeleteAllConfirmation = true },
+                onDeleteAll = {
+                    haptics.warning()
+                    showDeleteAllConfirmation = true
+                },
             )
         }
 
@@ -219,10 +226,16 @@ fun RecycleBinScreen(
             ) { entry ->
                 TrashedEntryCard(
                     entry = entry,
-                    onRestore = { onRestoreEntry(entry) },
+                    onRestore = {
+                        haptics.confirm()
+                        onRestoreEntry(entry)
+                    },
                     deleteEnabled = deleteAllEnabled,
                     deleting = deletingEntryId == entry.id,
-                    onDelete = { entryPendingDelete = entry },
+                    onDelete = {
+                        haptics.warning()
+                        entryPendingDelete = entry
+                    },
                 )
             }
         }

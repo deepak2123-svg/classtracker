@@ -61,6 +61,7 @@ import com.classtracker.core.designsystem.LedgrTeal
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.designsystem.LedgrThemeMode
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherProfile
 
 @Composable
@@ -87,6 +88,7 @@ fun ProfileScreen(
     onDeleteAccount: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberLedgrHaptics()
     var deleteAccountStep by remember { mutableIntStateOf(0) }
     var deleteAccountConfirmation by remember { mutableStateOf("") }
 
@@ -105,6 +107,7 @@ fun ProfileScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptics.warning()
                         deleteAccountConfirmation = ""
                         deleteAccountStep = 2
                     },
@@ -147,7 +150,10 @@ fun ProfileScreen(
             },
             confirmButton = {
                 TextButton(
-                    onClick = onDeleteAccount,
+                    onClick = {
+                        haptics.warning()
+                        onDeleteAccount()
+                    },
                     enabled = !deletingAccount &&
                         deleteAccountConfirmation.trim() == "DELETE MY ACCOUNT",
                 ) {
@@ -423,7 +429,15 @@ private fun ProfileActionCard(
     danger: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
-    val clickModifier = if (onClick == null) modifier else modifier.clickable(onClick = onClick)
+    val haptics = rememberLedgrHaptics()
+    val clickModifier = if (onClick == null) {
+        modifier
+    } else {
+        modifier.clickable {
+            if (danger) haptics.warning() else haptics.selection()
+            onClick()
+        }
+    }
     Surface(
         modifier = clickModifier.fillMaxWidth(),
         color = if (danger) colors.errorSurface else MaterialTheme.colorScheme.surface,
@@ -478,6 +492,7 @@ private fun ThemeCard(
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
 ) {
+    val haptics = rememberLedgrHaptics()
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
@@ -531,7 +546,10 @@ private fun ThemeCard(
                     icon = Icons.Outlined.Settings,
                     selected = themeMode == LedgrThemeMode.System,
                     previewMode = LedgrThemeMode.System,
-                    onClick = { onThemeModeChange(LedgrThemeMode.System) },
+                    onClick = {
+                        haptics.selection()
+                        onThemeModeChange(LedgrThemeMode.System)
+                    },
                     modifier = Modifier.weight(1f),
                 )
                 ThemePreview(
@@ -539,7 +557,10 @@ private fun ThemeCard(
                     icon = Icons.Outlined.LightMode,
                     selected = themeMode == LedgrThemeMode.Light,
                     previewMode = LedgrThemeMode.Light,
-                    onClick = { onThemeModeChange(LedgrThemeMode.Light) },
+                    onClick = {
+                        haptics.selection()
+                        onThemeModeChange(LedgrThemeMode.Light)
+                    },
                     modifier = Modifier.weight(1f),
                 )
                 ThemePreview(
@@ -547,7 +568,10 @@ private fun ThemeCard(
                     icon = Icons.Outlined.DarkMode,
                     selected = themeMode == LedgrThemeMode.Dark,
                     previewMode = LedgrThemeMode.Dark,
-                    onClick = { onThemeModeChange(LedgrThemeMode.Dark) },
+                    onClick = {
+                        haptics.selection()
+                        onThemeModeChange(LedgrThemeMode.Dark)
+                    },
                     modifier = Modifier.weight(1f),
                 )
             }

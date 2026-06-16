@@ -45,7 +45,7 @@ import {
   subscribeFeedbackThreads, subscribeFeedbackMessages,
   sendAdminFeedbackReply, markFeedbackThreadRead, setFeedbackThreadStatus,
 } from "./firebase";
-import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
+import { Avatar, LedgrLogoLockup, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const G = {
@@ -1760,6 +1760,43 @@ function countEntriesForMonth(classNotes = {}, monthKey = currentMonthKey()){
     return sum + entries.length;
   }, 0);
 }
+function getSyllabusProgressChapterTitle(entry){
+  const explicit = String(entry?.syllabusChapterTitle || entry?.chapterTitle || "").trim();
+  if(explicit) return explicit;
+  const title = String(entry?.title || "").trim();
+  if(/^completed\s+/i.test(title)) return title.replace(/^completed\s+/i, "").trim();
+  return title;
+}
+function isSyllabusProgressEntry(entry){
+  if(!entry || typeof entry !== "object") return false;
+  const title = String(entry?.title || "").trim();
+  const notes = String(entry?.body || entry?.notes || "").trim();
+  const hasSyllabusMarker = Boolean(
+    entry?.syllabusTemplateId ||
+    entry?.syllabusId ||
+    entry?.syllabusChapterId ||
+    entry?.syllabusChapterTitle ||
+    entry?.chapterTitle ||
+    entry?.syllabusChapterCompleted ||
+    (Array.isArray(entry?.completedSyllabusChapterIds) && entry.completedSyllabusChapterIds.length) ||
+    (Array.isArray(entry?.coveredSyllabusChapterIds) && entry.coveredSyllabusChapterIds.length) ||
+    (Array.isArray(entry?.completedSyllabusTopicIds) && entry.completedSyllabusTopicIds.length)
+  );
+  if(!hasSyllabusMarker) return false;
+  return (
+    entry?.syllabusChapterCompleted === true ||
+    /^completed\s+/i.test(title) ||
+    /syllabus progress update/i.test(title) ||
+    /^gs syllabus$/i.test(notes) ||
+    /syllabus/i.test(notes)
+  );
+}
+function countTeachingEntriesForMonth(classNotes = {}, monthKey = currentMonthKey()){
+  return Object.entries(classNotes || {}).reduce((sum, [dk, entries]) => {
+    if(!dk.startsWith(monthKey) || !Array.isArray(entries)) return sum;
+    return sum + entries.filter(entry => !isSyllabusProgressEntry(entry)).length;
+  }, 0);
+}
 function firstClassCreatedTs(classes = []){
   return (classes || []).reduce((earliest, cls) => {
     const created = Number(cls?.created || 0) || 0;
@@ -2053,6 +2090,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   const monthKey = currentMonthKey();
   const sectionMap = new Map();
+  const syllabusCoverageMap = new Map();
   const todayDetails = [];
   let todayEntries = 0;
   let monthEntries = 0;
@@ -2062,8 +2100,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
   classesHere.forEach(cls => {
     const classNotes = (data.notes || {})[cls.id] || {};
     const notesToday = getEntriesInRange(classNotes, periodMeta.days, periodMeta.startKey, periodMeta.endKey);
-    monthEntries += countEntriesForMonth(classNotes, monthKey);
-    if(!notesToday.length) return;
+    monthEntries += countTeachingEntriesForMonth(classNotes, monthKey);
 
     const resolvedSection = typeof resolveSectionName === "function"
       ? resolveSectionName(cls?.section, cls?.institute || instituteName)
@@ -2075,7 +2112,33 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       totalMinutes:0,
     };
 
+    Object.entries(classNotes || {}).forEach(([dateKey, entries]) => {
+      if(!Array.isArray(entries)) return;
+      if(periodMeta.endKey && dateKey > periodMeta.endKey) return;
+      entries.forEach(entry => {
+        if(!isSyllabusProgressEntry(entry)) return;
+        const title = getSyllabusProgressChapterTitle(entry);
+        if(!title || /syllabus progress update/i.test(title)) return;
+        const key = `${sectionLabel}::${cls?.subject || ""}::${entry?.syllabusChapterId || title}`;
+        const current = syllabusCoverageMap.get(key);
+        if(current && String(current.dateKey || "") >= String(dateKey || "")) return;
+        syllabusCoverageMap.set(key, {
+          dateKey,
+          section:sectionLabel,
+          subject:cls?.subject || "",
+          chapterTitle:title,
+          status:"Covered",
+        });
+      });
+    });
+
+    if(!notesToday.length) {
+      if(currentSection.entryCount > 0) sectionMap.set(sectionLabel, currentSection);
+      return;
+    }
+
     notesToday.forEach(({ dateKey, entry }) => {
+      if(isSyllabusProgressEntry(entry)) return;
       const mins = entryDurationMinutes(entry);
       todayEntries += 1;
       totalMinutes += mins;
@@ -2139,6 +2202,13 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       const sectionCmp = exportTextSorter.compare(a.section || "", b.section || "");
       if(sectionCmp !== 0) return sectionCmp;
       return exportTextSorter.compare(a.title || "", b.title || "");
+    }),
+    syllabusCoveredRows: Array.from(syllabusCoverageMap.values()).sort((a, b) => {
+      const sectionCmp = exportTextSorter.compare(a.section || "", b.section || "");
+      if(sectionCmp !== 0) return sectionCmp;
+      const subjectCmp = exportTextSorter.compare(a.subject || "", b.subject || "");
+      if(subjectCmp !== 0) return subjectCmp;
+      return exportTextSorter.compare(a.chapterTitle || "", b.chapterTitle || "");
     }),
     totalMinutes,
     untimedEntries,
@@ -2907,6 +2977,9 @@ const CENTRE_SUMMARY_CSS = `
   .time-str { color: var(--ink-3); font-size: 11.5px; }
   .topic { color: var(--ink-2); }
   .notes-str { color: var(--ink-4); font-size: 11px; text-align: right; }
+  .session-row.syllabus-row { background: #fbfefa; }
+  .session-row.syllabus-row .topic { color: var(--ink); font-weight: 600; }
+  .syllabus-status { display: inline-block; border-radius: 99px; background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); padding: 2px 8px; font-size: 10px; font-weight: 700; }
   .empty-notice { background: var(--blue-bg); border: 0.5px solid var(--blue-border); border-radius: 8px; padding: 16px 18px; color: var(--blue); font-size: 12.5px; margin-bottom: 8px; }
   .empty-notice.green { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
   .pending-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px; overflow: hidden; font-size: 12px; }
@@ -3087,6 +3160,18 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
             <span class="time-str">${e(formatExportPdfTime(d.timeStart, d.timeEnd) || "—")}</span>
             <span class="topic">${e(d.title || d.subject || "—")}</span>
             <span class="notes-str">${e(d.notes || "—")}</span>
+          </div>`
+        ).join("");
+      }
+      const syllabusRows = Array.isArray(teacher.syllabusCoveredRows) ? teacher.syllabusCoveredRows : [];
+      if(syllabusRows.length){
+        rows += syllabusRows.map(item =>
+          `<div class="session-row syllabus-row${showEntryDates ? " multi-day" : ""}">
+            ${showEntryDates ? `<span class="date-str">${e(formatInstituteReportEntryDate(item.dateKey))}</span>` : ""}
+            <span class="section-name">${e(item.section || "—")}</span>
+            <span class="time-str">Syllabus</span>
+            <span class="topic">${e(item.chapterTitle || "—")}</span>
+            <span class="notes-str"><span class="syllabus-status">Covered</span></span>
           </div>`
         ).join("");
       }
@@ -3370,40 +3455,133 @@ async function buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, per
   });
 
   let cursorY = 260;
+  const pageBottom = 780;
+  const showEntryDates = periodMeta.key !== "daily";
+  const filledTeachers = row?.filledTeacherRows || [];
+  const ensurePageSpace = (height = 90) => {
+    if(cursorY + height <= pageBottom) return;
+    doc.addPage();
+    cursorY = 50;
+  };
+
   doc.setTextColor(...navy);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
-  doc.text("Teacher status", margin, cursorY);
+  doc.text(`${periodMeta.activeLabel} (${filledTeachers.length})`, margin, cursorY);
+  cursorY += 16;
 
-  const body = teachers.map(teacher => [
-    teacher?.name || "Teacher",
-    teacher?.todayStatusLabel || (teacher?.updatedToday ? "Updated" : "Pending"),
-    (teacher?.sectionNames || []).join(", ") || "-",
-    String(teacher?.todayEntries || 0),
-    String(teacher?.monthEntries || 0),
-    teacher?.lastActivityLabel || instituteGlanceLastActivityLabel(teacher),
-    teacher?.totalMinutes > 0 ? formatDurationShort(teacher.totalMinutes) : teacher?.untimedEntries > 0 ? "Untimed" : "0m",
-  ]);
-  autoTable(doc, {
-    startY: cursorY + 14,
-    head: [["Teacher", "Status", "Sections", periodMeta.key === "daily" ? "Today" : periodMeta.label, "Month", "Last entry", "Hours"]],
-    body: body.length ? body : [["No linked teachers", "-", "-", "-", "-", "-", "-"]],
-    margin:{ left:margin, right:margin },
-    styles:{ font:"helvetica", fontSize:8.4, cellPadding:6, lineColor:[226,232,240], lineWidth:0.5, textColor:[31,41,55], overflow:"linebreak" },
-    headStyles:{ fillColor:navy, textColor:[255,255,255], fontStyle:"bold" },
-    alternateRowStyles:{ fillColor:[248,250,252] },
-    columnStyles:{
-      0:{ cellWidth:88 },
-      1:{ cellWidth:66 },
-      2:{ cellWidth:112 },
-      3:{ cellWidth:42, halign:"center" },
-      4:{ cellWidth:42, halign:"center" },
-      5:{ cellWidth:74 },
-      6:{ cellWidth:48, halign:"right" },
-    },
-  });
+  if(!filledTeachers.length){
+    ensurePageSpace(54);
+    doc.setFillColor(239, 246, 255);
+    doc.setDrawColor(191, 219, 254);
+    doc.roundedRect(margin, cursorY, pageWidth - margin * 2, 42, 8, 8, "FD");
+    doc.setTextColor(...blue);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`No teacher has uploaded during this ${periodMeta.label.toLowerCase()} period.`, margin + 12, cursorY + 25);
+    cursorY += 60;
+  } else {
+    filledTeachers.forEach(teacher => {
+      const details = Array.isArray(teacher.todayDetails) ? teacher.todayDetails : [];
+      const syllabusRows = Array.isArray(teacher.syllabusCoveredRows) ? teacher.syllabusCoveredRows : [];
+      const subjectSet = [...new Set([
+        ...details.map(d => d.subject).filter(Boolean),
+        ...syllabusRows.map(d => d.subject).filter(Boolean),
+      ])];
+      const subjectLabel = subjectSet.join(", ") || "-";
+      const initials = _avatarInitials(teacher?.name || "Teacher");
+      ensurePageSpace(98);
 
-  cursorY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 28 : 520;
+      doc.setFillColor(241, 245, 249);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(margin, cursorY, pageWidth - margin * 2, 34, 8, 8, "FD");
+      doc.setFillColor(219, 234, 254);
+      doc.setDrawColor(147, 197, 253);
+      doc.circle(margin + 17, cursorY + 17, 11, "FD");
+      doc.setTextColor(...blue);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text(initials, margin + 17, cursorY + 20, { align:"center" });
+      doc.setTextColor(...navy);
+      doc.setFontSize(11);
+      doc.text(teacher?.name || "Teacher", margin + 36, cursorY + 21, { maxWidth: pageWidth - margin * 2 - 150 });
+      doc.setDrawColor(147, 197, 253);
+      doc.setFillColor(239, 246, 255);
+      doc.roundedRect(pageWidth - margin - 72, cursorY + 8, 72, 18, 9, 9, "FD");
+      doc.setTextColor(...blue);
+      doc.setFontSize(8);
+      doc.text(subjectLabel.slice(0, 22), pageWidth - margin - 36, cursorY + 20, { align:"center" });
+      cursorY += 34;
+
+      const entryRows = [];
+      details.forEach(d => {
+        const base = [
+          d.section || "-",
+          formatExportPdfTime(d.timeStart, d.timeEnd) || "-",
+          d.title || d.subject || "-",
+          d.notes || "-",
+        ];
+        entryRows.push(showEntryDates ? [formatInstituteReportEntryDate(d.dateKey), ...base] : base);
+      });
+      syllabusRows.forEach(item => {
+        const base = [
+          item.section || "-",
+          "Syllabus",
+          item.chapterTitle || "-",
+          "Covered",
+        ];
+        entryRows.push(showEntryDates ? [formatInstituteReportEntryDate(item.dateKey), ...base] : base);
+      });
+      if(!entryRows.length){
+        const base = [
+          instituteGlanceTeacherSectionCaption(teacher),
+          "-",
+          `${teacher.todayEntries || 0} entries uploaded`,
+          instituteGlanceTeacherHoursLabel(teacher),
+        ];
+        entryRows.push(showEntryDates ? ["-", ...base] : base);
+      }
+
+      autoTable(doc, {
+        startY: cursorY,
+        head: [showEntryDates ? ["Date", "Section", "Time", "Topic / Title", "Notes"] : ["Section", "Time", "Topic / Title", "Notes"]],
+        body: entryRows,
+        margin:{ left:margin, right:margin },
+        theme:"grid",
+        styles:{ font:"helvetica", fontSize:8.8, cellPadding:6, lineColor:[226,232,240], lineWidth:0.5, textColor:[31,41,55], overflow:"linebreak" },
+        headStyles:{ fillColor:[248,250,252], textColor:[100,116,139], fontStyle:"bold" },
+        alternateRowStyles:{ fillColor:[255,255,255] },
+        columnStyles: showEntryDates
+          ? {
+              0:{ cellWidth:54, textColor:[31,41,55], fontStyle:"bold" },
+              1:{ cellWidth:58, fontStyle:"bold" },
+              2:{ cellWidth:76, textColor:muted },
+              3:{ cellWidth:160 },
+              4:{ cellWidth:pageWidth - margin * 2 - 54 - 58 - 76 - 160 },
+            }
+          : {
+              0:{ cellWidth:72, fontStyle:"bold" },
+              1:{ cellWidth:94, textColor:muted },
+              2:{ cellWidth:176 },
+              3:{ cellWidth:pageWidth - margin * 2 - 72 - 94 - 176, halign:"right", textColor:muted },
+            },
+        didParseCell:(hookData) => {
+          if(hookData.section !== "body") return;
+          const rowData = entryRows[hookData.row.index] || [];
+          const isSyllabus = rowData.includes("Syllabus");
+          if(!isSyllabus) return;
+          hookData.cell.styles.fillColor = [251, 254, 250];
+          if(String(hookData.cell.raw || "") === "Covered"){
+            hookData.cell.styles.textColor = green;
+            hookData.cell.styles.fontStyle = "bold";
+          }
+        },
+      });
+      cursorY = (doc.lastAutoTable?.finalY || cursorY) + 13;
+    });
+  }
+
+  cursorY += 10;
   const pendingTeachers = row?.pendingTeacherRows || [];
   if(pendingTeachers.length){
     doc.setTextColor(...amber);
@@ -3445,9 +3623,10 @@ async function buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, per
 }
 async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const { JSZip } = await loadInstituteGlanceExportRuntime();
+  const safeRows = Array.isArray(rows) ? rows : [];
   const zip = new JSZip();
-  const folder = zip.folder("centre-pdfs") || zip;
-  for(const row of rows || []){
+  const folder = zip.folder("Ledgr centre PDFs") || zip;
+  for(const row of safeRows){
     const filename = instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey);
     const blob = await buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, period, rangeStartKey, rangeEndKey });
     folder.file(filename, blob);
@@ -3460,11 +3639,19 @@ async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, per
     "",
     `Generated: ${generatedOnLabel}`,
     `Period: ${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).title}`,
-    `Centres: ${(rows || []).length}`,
+    `Centres: ${safeRows.length}`,
   ].join("\n");
   zip.file("README.txt", readme);
-  const zipBlob = await zip.generateAsync({ type:"blob", compression:"DEFLATE" });
-  triggerBlobDownload(zipBlob, instituteGlanceZipFilename(period, rangeStartKey, rangeEndKey, (rows || []).length));
+  const zipBlob = await zip.generateAsync({
+    type:"blob",
+    mimeType:"application/zip",
+    compression:"DEFLATE",
+    compressionOptions:{ level:6 },
+  });
+  triggerBlobDownload(
+    new Blob([zipBlob], { type:"application/zip" }),
+    instituteGlanceZipFilename(period, rangeStartKey, rangeEndKey, safeRows.length),
+  );
 }
 function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
   // returns flat array of {dateKey, entry} sorted by date desc, time asc
@@ -3917,7 +4104,7 @@ function LedgrReportOptionsModal({
   const formatOptions = [
     { key:"pdf", label:"PDF report", icon:IconFileText, help:"Opens executive PDF" },
     { key:"png", label:"PNG summary", icon:IconPhoto, help:"Downloads summary image" },
-    { key:"zip", label:"Centre PDFs", icon:IconDownload, help:"Downloads ZIP of institute PDFs" },
+    { key:"zip", label:"Centre PDFs ZIP", icon:IconDownload, help:"Downloads one ZIP containing institute PDFs" },
   ];
   const effectiveInstitutes = scope === "all" ? allInstitutes : selectedInstitutes;
   const scopeLabel = scope === "all"
@@ -12082,13 +12269,13 @@ function AdminPanelInner({user}){
           </>
         ) : (
           <>
-            <div style={{display:"flex",alignItems:"center",gap:9}}>
-              <div style={{width:28,height:28,background:G.blueV,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
-              </div>
-              <span style={{fontFamily:G.display,fontSize:18,fontWeight:800,color:"#fff",letterSpacing:-0.4}}>Ledgr</span>
-              <span style={{fontSize:11,letterSpacing:2,color:"rgba(255,255,255,0.25)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</span>
-            </div>
+            <LedgrLogoLockup
+              admin
+              markSize={32}
+              color="#FFFFFF"
+              subColor="rgba(255,255,255,0.36)"
+              style={{flexShrink:0}}
+            />
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setView("main")} style={{...pill("rgba(255,255,255,0.08)","rgba(255,255,255,0.6)","rgba(255,255,255,0.1)")}}>← Back</button>
               <button onClick={logout} style={{...pill("none","rgba(255,255,255,0.35)","rgba(255,255,255,0.15)")}}>Sign Out</button>

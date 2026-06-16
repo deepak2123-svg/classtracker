@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.classtracker.core.designsystem.LedgrTheme.colors
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherFeedbackConversation
 import com.classtracker.core.model.TeacherFeedbackMessage
 import com.classtracker.core.model.TeacherFeedbackSenderRole
@@ -54,6 +55,7 @@ fun FeedbackScreen(
     onSentConsumed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberLedgrHaptics()
     var draft by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
@@ -156,7 +158,10 @@ fun FeedbackScreen(
                     enabled = unavailableMessage == null,
                 )
                 Button(
-                    onClick = { onSend(draft) },
+                    onClick = {
+                        haptics.confirm()
+                        onSend(draft)
+                    },
                     enabled = unavailableMessage == null && draft.isNotBlank() && !sending,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(

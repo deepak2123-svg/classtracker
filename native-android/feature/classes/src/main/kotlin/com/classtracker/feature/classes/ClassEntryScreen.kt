@@ -55,6 +55,7 @@ import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrSectionHeading
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
@@ -97,6 +98,7 @@ fun ClassEntryScreen(
     onRestoreEntry: (TeacherTrashedEntry) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberLedgrHaptics()
     val todayKey = remember { todayKey() }
     val monthPrefix = todayKey.take(7)
     val metrics = remember(entries, todayKey) {
@@ -192,7 +194,10 @@ fun ClassEntryScreen(
         if (!editorVisible) {
             item(key = "add-another-entry") {
                 Button(
-                    onClick = onAddAnotherEntry,
+                    onClick = {
+                        haptics.selection()
+                        onAddAnotherEntry()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = colors.teal,
@@ -271,9 +276,18 @@ fun ClassEntryScreen(
                     duplicateEnabled = createEnabled && canMutateEntry,
                     deleteEnabled = deleteEnabled &&
                         entry.syncState == TeacherEntrySyncState.Synced,
-                    onEdit = { onEditEntry(entry) },
-                    onDuplicate = { onDuplicateEntry(entry) },
-                    onDelete = { deleteCandidate = entry },
+                    onEdit = {
+                        haptics.selection()
+                        onEditEntry(entry)
+                    },
+                    onDuplicate = {
+                        haptics.selection()
+                        onDuplicateEntry(entry)
+                    },
+                    onDelete = {
+                        haptics.warning()
+                        deleteCandidate = entry
+                    },
                 )
             }
         }
@@ -296,7 +310,10 @@ fun ClassEntryScreen(
                     entry = entry,
                     restoreEnabled = deleteEnabled &&
                         entry.syncState != TeacherEntrySyncState.Syncing,
-                    onRestore = { onRestoreEntry(entry) },
+                    onRestore = {
+                        haptics.confirm()
+                        onRestoreEntry(entry)
+                    },
                 )
             }
         } else if (deleteEnabled) {
@@ -318,7 +335,11 @@ fun ClassEntryScreen(
             title = { Text("Move entry to recycle bin?") },
             text = { Text(entry.title.ifBlank { "This teaching entry can be restored later." }) },
             confirmButton = {
-                TextButton(onClick = { deleteCandidate = null; onDeleteEntry(entry) }) {
+                TextButton(onClick = {
+                    haptics.warning()
+                    deleteCandidate = null
+                    onDeleteEntry(entry)
+                }) {
                     Text("Move to bin")
                 }
             },

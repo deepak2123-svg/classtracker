@@ -95,6 +95,7 @@ import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrOfflineBanner
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrThemeMode
+import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherClassDraft
@@ -306,6 +307,7 @@ private fun TeacherApp(
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberLedgrHaptics()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -428,6 +430,7 @@ private fun TeacherApp(
             confirmButton = {
                 Button(
                     onClick = {
+                        haptics.confirm()
                         val version = snapshot.profile.subjectAssignmentVersion
                         subjectAssignmentStore.acknowledge(teacher.uid, version)
                         acknowledgedSubjectVersion = version
@@ -630,6 +633,7 @@ private fun TeacherApp(
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = {
+                                    haptics.selection()
                                     navController.navigate(destination.route) {
                                         popUpTo(navController.graph.startDestinationId) {
                                             saveState = true
@@ -1082,6 +1086,7 @@ private fun ReminderSetupDialog(
     onDismiss: () -> Unit,
     onSave: (ReminderPreferences) -> Unit,
 ) {
+    val haptics = rememberLedgrHaptics()
     val initialHour12 = (preferences.hour % 12).let { if (it == 0) 12 else it }
     val initialPeriodIndex = if (preferences.hour >= 12) 1 else 0
     val hours = remember { (1..12).map { "%02d".format(Locale.US, it) } }
@@ -1160,6 +1165,7 @@ private fun ReminderSetupDialog(
         confirmButton = {
             TextButton(
                 onClick = {
+                    haptics.confirm()
                     onSave(selectedPreferences())
                 },
             ) {
@@ -1171,13 +1177,17 @@ private fun ReminderSetupDialog(
                 if (preferences.enabled) {
                     TextButton(
                         onClick = {
+                            haptics.warning()
                             onSave(preferences.copy(prompted = true, enabled = false))
                         },
                     ) {
                         Text("Turn off")
                     }
                 }
-                TextButton(onClick = onDismiss) {
+                TextButton(onClick = {
+                    haptics.selection()
+                    onDismiss()
+                }) {
                     Text(if (firstRun) "Not now" else "Cancel")
                 }
             }
