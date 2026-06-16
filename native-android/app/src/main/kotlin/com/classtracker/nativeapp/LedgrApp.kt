@@ -100,9 +100,11 @@ import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
+import com.classtracker.core.model.TeacherEntryStatus
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherSyncSummary
 import com.classtracker.core.model.TeacherTrashedEntry
+import com.classtracker.core.model.SyllabusProgressSnapshotTitle
 import com.classtracker.core.model.toDuplicateDraft
 import com.classtracker.feature.auth.AuthScreen
 import com.classtracker.feature.classes.ClassEntryScreen
@@ -736,6 +738,27 @@ private fun TeacherApp(
                             errorMessage = syllabusErrorMessage,
                             onClassClick = { teacherClass ->
                                 navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
+                            },
+                            onSaveProgress = { teacherClass, syllabus, unitIds ->
+                                onSaveEntry(
+                                    TeacherEntryDraft(
+                                        mutationId = "native_${UUID.randomUUID()}",
+                                        classId = teacherClass.id,
+                                        dateKey = todayKey,
+                                        title = SyllabusProgressSnapshotTitle,
+                                        body = syllabus.name,
+                                        tag = "syllabus",
+                                        status = TeacherEntryStatus.Completed.storageValue,
+                                        timeStart = teacherClass.startTime?.takeIf(String::isNotBlank) ?: "00:00",
+                                        timeEnd = "",
+                                        syllabusTemplateId = syllabus.templateId,
+                                        syllabusVersion = syllabus.version,
+                                        syllabusChapterId = "",
+                                        syllabusChapterTitle = "",
+                                        completedSyllabusTopicIds = unitIds.toList(),
+                                        syllabusChapterCompleted = false,
+                                    ),
+                                )
                             },
                         )
                     }

@@ -863,7 +863,14 @@ private fun HomeClassCard(
         color = tone.surface,
         contentColor = tone.text,
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.1.dp, tone.border),
+        border = BorderStroke(
+            1.6.dp,
+            if (LedgrTheme.isDark) {
+                MaterialTheme.colorScheme.outlineVariant
+            } else {
+                Color(0xFF111827).copy(alpha = 0.82f)
+            },
+        ),
         shadowElevation = 0.dp,
     ) {
         Row(

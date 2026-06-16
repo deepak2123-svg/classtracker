@@ -2774,6 +2774,10 @@ async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLab
 function instituteGlancePdfFilename(instituteName, period = "daily", rangeStartKey = "", rangeEndKey = ""){
   return `${slugifyDownloadPart(instituteName)}_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_${todayKey()}.pdf`;
 }
+function instituteGlanceZipFilename(period = "daily", rangeStartKey = "", rangeEndKey = "", count = 0){
+  const countPart = Number(count) > 0 ? `${count}_centres` : "centres";
+  return `${countPart}_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_pdfs_${todayKey()}.zip`;
+}
 
 // ── HTML-based centre summary export ─────────────────────────────────────────
 // Builds a rich HTML template (DM Sans, scorecards, teacher blocks, pending
@@ -3312,16 +3316,155 @@ async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel, peri
   const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period, rangeStartKey, rangeEndKey);
   _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey));
 }
-async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
-  // For zip we still produce PDFs — open each in sequence with a small gap
-  // so the browser doesn't block multiple windows. Each teacher saves manually.
-  // (Fully automated zip-of-PDFs requires a server-side renderer.)
-  for(let i = 0; i < (rows || []).length; i++){
-    const row  = rows[i];
-    const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period, rangeStartKey, rangeEndKey);
-    await new Promise(r => setTimeout(r, i === 0 ? 0 : 600));
-    _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey));
+async function buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+  const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
+  const doc = new jsPDF({ orientation:"portrait", unit:"pt", format:"a4" });
+  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 40;
+  const navy = [26, 47, 90];
+  const blue = [29, 78, 216];
+  const green = [22, 101, 52];
+  const amber = [180, 83, 9];
+  const muted = [100, 116, 139];
+  const teachers = row?.teacherRows || [];
+  const filled = row?.filledToday || 0;
+  const total = row?.totalTeachers || 0;
+  const pending = row?.missingToday || 0;
+  const pct = total > 0 ? Math.round((filled / total) * 100) : 0;
+
+  doc.setFillColor(...navy);
+  doc.rect(0, 0, pageWidth, 142, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(24);
+  doc.text(row?.institute || "Institute", margin, 55, { maxWidth: pageWidth - margin * 2 });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.text(`${periodMeta.title} · ${generatedOnLabel}`, margin, 78, { maxWidth: pageWidth - margin * 2 });
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.text(`${filled}/${total} teachers updated · ${pending} pending · ${pct}%`, margin, 112);
+
+  const cardY = 166;
+  const cardGap = 10;
+  const cardW = (pageWidth - margin * 2 - cardGap * 3) / 4;
+  const metrics = [
+    ["Teachers", String(total || 0)],
+    [periodMeta.updatedLabel, String(filled || 0)],
+    [periodMeta.pendingLabel, String(pending || 0)],
+    ["Study hours", formatDurationShort(row?.totalStudyMinutes || 0)],
+  ];
+  metrics.forEach(([label, value], index) => {
+    const x = margin + index * (cardW + cardGap);
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(221, 227, 237);
+    doc.roundedRect(x, cardY, cardW, 62, 10, 10, "FD");
+    doc.setTextColor(...muted);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text(String(label).toUpperCase(), x + 12, cardY + 22, { maxWidth: cardW - 24 });
+    doc.setTextColor(...navy);
+    doc.setFontSize(18);
+    doc.text(String(value), x + 12, cardY + 47, { maxWidth: cardW - 24 });
+  });
+
+  let cursorY = 260;
+  doc.setTextColor(...navy);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.text("Teacher status", margin, cursorY);
+
+  const body = teachers.map(teacher => [
+    teacher?.name || "Teacher",
+    teacher?.todayStatusLabel || (teacher?.updatedToday ? "Updated" : "Pending"),
+    (teacher?.sectionNames || []).join(", ") || "-",
+    String(teacher?.todayEntries || 0),
+    String(teacher?.monthEntries || 0),
+    teacher?.lastActivityLabel || instituteGlanceLastActivityLabel(teacher),
+    teacher?.totalMinutes > 0 ? formatDurationShort(teacher.totalMinutes) : teacher?.untimedEntries > 0 ? "Untimed" : "0m",
+  ]);
+  autoTable(doc, {
+    startY: cursorY + 14,
+    head: [["Teacher", "Status", "Sections", periodMeta.key === "daily" ? "Today" : periodMeta.label, "Month", "Last entry", "Hours"]],
+    body: body.length ? body : [["No linked teachers", "-", "-", "-", "-", "-", "-"]],
+    margin:{ left:margin, right:margin },
+    styles:{ font:"helvetica", fontSize:8.4, cellPadding:6, lineColor:[226,232,240], lineWidth:0.5, textColor:[31,41,55], overflow:"linebreak" },
+    headStyles:{ fillColor:navy, textColor:[255,255,255], fontStyle:"bold" },
+    alternateRowStyles:{ fillColor:[248,250,252] },
+    columnStyles:{
+      0:{ cellWidth:88 },
+      1:{ cellWidth:66 },
+      2:{ cellWidth:112 },
+      3:{ cellWidth:42, halign:"center" },
+      4:{ cellWidth:42, halign:"center" },
+      5:{ cellWidth:74 },
+      6:{ cellWidth:48, halign:"right" },
+    },
+  });
+
+  cursorY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 28 : 520;
+  const pendingTeachers = row?.pendingTeacherRows || [];
+  if(pendingTeachers.length){
+    doc.setTextColor(...amber);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("Pending follow-up", margin, cursorY);
+    autoTable(doc, {
+      startY: cursorY + 12,
+      head: [["Teacher", "Last activity", "Classes"]],
+      body: pendingTeachers.map(teacher => [
+        teacher?.name || "Teacher",
+        teacher?.lastActivityLabel || instituteGlanceLastActivityLabel(teacher),
+        (teacher?.classNames || teacher?.sectionNames || []).join(", ") || "-",
+      ]),
+      margin:{ left:margin, right:margin },
+      styles:{ font:"helvetica", fontSize:8.7, cellPadding:6, lineColor:[253,230,138], lineWidth:0.5, textColor:[55,65,81], overflow:"linebreak" },
+      headStyles:{ fillColor:amber, textColor:[255,255,255], fontStyle:"bold" },
+      alternateRowStyles:{ fillColor:[255,251,235] },
+    });
+  } else {
+    doc.setTextColor(...green);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text(total ? "All linked teachers are updated for this period." : "No teacher records are linked to this centre yet.", margin, cursorY);
   }
+
+  const pageCount = doc.internal.getNumberOfPages();
+  for(let page = 1; page <= pageCount; page += 1){
+    doc.setPage(page);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Ledgr · ${periodMeta.label} centre PDF`, margin, 820);
+    doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, 820, { align:"right" });
+    doc.setTextColor(...blue);
+  }
+
+  return new Blob([doc.output("arraybuffer")], { type:"application/pdf" });
+}
+async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+  const { JSZip } = await loadInstituteGlanceExportRuntime();
+  const zip = new JSZip();
+  const folder = zip.folder("centre-pdfs") || zip;
+  for(const row of rows || []){
+    const filename = instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey);
+    const blob = await buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, period, rangeStartKey, rangeEndKey });
+    folder.file(filename, blob);
+  }
+  const readme = [
+    "Ledgr Centre PDFs",
+    "",
+    "This ZIP contains one separate PDF report for each selected institute.",
+    "The main PDF report option creates one combined executive report instead.",
+    "",
+    `Generated: ${generatedOnLabel}`,
+    `Period: ${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).title}`,
+    `Centres: ${(rows || []).length}`,
+  ].join("\n");
+  zip.file("README.txt", readme);
+  const zipBlob = await zip.generateAsync({ type:"blob", compression:"DEFLATE" });
+  triggerBlobDownload(zipBlob, instituteGlanceZipFilename(period, rangeStartKey, rangeEndKey, (rows || []).length));
 }
 function getEntriesInRange(classNotes={}, days=null, startKey=null, endKey=null){
   // returns flat array of {dateKey, entry} sorted by date desc, time asc
@@ -3774,7 +3917,7 @@ function LedgrReportOptionsModal({
   const formatOptions = [
     { key:"pdf", label:"PDF report", icon:IconFileText, help:"Opens executive PDF" },
     { key:"png", label:"PNG summary", icon:IconPhoto, help:"Downloads summary image" },
-    { key:"zip", label:"Centre PDFs", icon:IconDownload, help:"Opens selected centre PDFs" },
+    { key:"zip", label:"Centre PDFs", icon:IconDownload, help:"Downloads ZIP of institute PDFs" },
   ];
   const effectiveInstitutes = scope === "all" ? allInstitutes : selectedInstitutes;
   const scopeLabel = scope === "all"
@@ -4122,7 +4265,7 @@ function LedgrReportOptionsModal({
             <AppIcon icon={actionMode === "schedule" ? IconClock : IconCalendar} size={16} color={G.blue} style={{display:"inline-flex",verticalAlign:"-3px",marginRight:7}} />
             <strong>{scopeLabel}</strong> · {rangeLabel} · {actionMode === "schedule"
               ? `${scheduleEnabled ? validScheduleTimes.length : 0} daily run${validScheduleTimes.length === 1 ? "" : "s"}`
-              : format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "opens centre PDFs"}
+              : format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "downloads centre ZIP"}
           </div>
         </div>
 

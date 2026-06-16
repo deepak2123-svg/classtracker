@@ -210,34 +210,54 @@ data class SyllabusProgress(
         get() = if (totalUnits == 0) 0 else ((completedUnits * 100f) / totalUnits).toInt()
 }
 
+const val SyllabusProgressSnapshotTitle: String = "Syllabus progress update"
+
+fun syllabusChapterCompletionMarker(chapterId: String): String = "chapter:$chapterId"
+
 fun PublishedSyllabus.progress(entries: List<TeacherEntry>): SyllabusProgress {
     val relevant = entries.filter {
         it.syllabusTemplateId == templateId && it.syllabusVersion <= version
     }
-    val completedTopicIds = relevant.flatMapTo(linkedSetOf()) { it.completedSyllabusTopicIds }
-    val completedChapterIds = relevant
-        .filter(TeacherEntry::syllabusChapterCompleted)
-        .mapTo(linkedSetOf(), TeacherEntry::syllabusChapterId)
+    return progressForCompletedUnitIds(completedSyllabusUnitIds(relevant))
+}
+
+fun PublishedSyllabus.progressForCompletedUnitIds(completedUnitIds: Set<String>): SyllabusProgress {
     val completedChapters = chapters.count { chapter ->
-        chapter.id in completedChapterIds ||
-            (chapter.topics.isNotEmpty() && chapter.topics.all { it.id in completedTopicIds })
+        syllabusChapterCompletionMarker(chapter.id) in completedUnitIds ||
+            (chapter.topics.isNotEmpty() && chapter.topics.all { it.id in completedUnitIds })
     }
     return SyllabusProgress(
         completedChapters = completedChapters,
         totalChapters = chapters.size,
         completedTopics = chapters.sumOf { chapter ->
-            chapter.topics.count { it.id in completedTopicIds }
+            chapter.topics.count { it.id in completedUnitIds }
         },
         totalTopics = chapters.sumOf { it.topics.size },
         completedUnits = chapters.sumOf { chapter ->
+            val chapterMarkedComplete = syllabusChapterCompletionMarker(chapter.id) in completedUnitIds
             if (chapter.topics.isEmpty()) {
-                if (chapter.id in completedChapterIds) 1 else 0
+                if (chapterMarkedComplete) 1 else 0
             } else {
-                chapter.topics.count { it.id in completedTopicIds }
+                if (chapterMarkedComplete) chapter.topics.size else chapter.topics.count { it.id in completedUnitIds }
             }
         },
         totalUnits = chapters.sumOf { chapter -> chapter.topics.size.coerceAtLeast(1) },
     )
+}
+
+fun completedSyllabusUnitIds(entries: List<TeacherEntry>): Set<String> {
+    val latestSnapshot = entries
+        .filter { it.tag == "syllabus" && it.title == SyllabusProgressSnapshotTitle }
+        .maxByOrNull(TeacherEntry::createdAt)
+    if (latestSnapshot != null) return latestSnapshot.completedSyllabusTopicIds.toSet()
+
+    return entries.flatMapTo(linkedSetOf()) { entry ->
+        entry.completedSyllabusTopicIds + if (entry.syllabusChapterCompleted) {
+            listOf(syllabusChapterCompletionMarker(entry.syllabusChapterId))
+        } else {
+            emptyList()
+        }
+    }
 }
 
 fun TeacherEntryDraft.resolvedEntryId(fallback: String): String =
