@@ -3401,6 +3401,28 @@ async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel, peri
   const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period, rangeStartKey, rangeEndKey);
   _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey));
 }
+async function renderInstituteGlanceHtmlPdfBlob({ html, filename }){
+  const response = await fetch("/api/render-ledgr-pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ html, filename }),
+  });
+  if(!response.ok){
+    let message = "Could not render institute PDF.";
+    try{
+      const payload = await response.json();
+      if(payload?.error) message = payload.error;
+    } catch(_error){
+      // Keep the concise fallback above when the server returned a non-JSON error.
+    }
+    throw new Error(message);
+  }
+  const blob = await response.blob();
+  if(!blob || blob.size === 0){
+    throw new Error("The PDF renderer returned an empty file.");
+  }
+  return new Blob([blob], { type: "application/pdf" });
+}
 async function buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
   const doc = new jsPDF({ orientation:"portrait", unit:"pt", format:"a4" });
@@ -3628,14 +3650,15 @@ async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, per
   const folder = zip.folder("Ledgr centre PDFs") || zip;
   for(const row of safeRows){
     const filename = instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey);
-    const blob = await buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, period, rangeStartKey, rangeEndKey });
+    const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period, rangeStartKey, rangeEndKey);
+    const blob = await renderInstituteGlanceHtmlPdfBlob({ html, filename });
     folder.file(filename, blob);
   }
   const readme = [
     "Ledgr Centre PDFs",
     "",
     "This ZIP contains one separate PDF report for each selected institute.",
-    "The main PDF report option creates one combined executive report instead.",
+    "Every institute PDF is rendered from the same print template as the combined PDF report.",
     "",
     `Generated: ${generatedOnLabel}`,
     `Period: ${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).title}`,
@@ -4104,7 +4127,7 @@ function LedgrReportOptionsModal({
   const formatOptions = [
     { key:"pdf", label:"PDF report", icon:IconFileText, help:"Opens executive PDF" },
     { key:"png", label:"PNG summary", icon:IconPhoto, help:"Downloads summary image" },
-    { key:"zip", label:"Centre PDFs ZIP", icon:IconDownload, help:"Downloads one ZIP containing institute PDFs" },
+    { key:"zip", label:"Centre PDFs ZIP", icon:IconDownload, help:"Downloads one ZIP of pixel-matched institute PDFs" },
   ];
   const effectiveInstitutes = scope === "all" ? allInstitutes : selectedInstitutes;
   const scopeLabel = scope === "all"
@@ -7822,7 +7845,7 @@ function AdminPanelInner({user}){
       }
     } catch (error) {
       console.error("institute glance export failed", error);
-      window.alert("Could not export the institute glance summary. Please try again.");
+      window.alert(error?.message || "Could not export the institute glance summary. Please try again.");
     } finally {
       setInstituteGlanceExportBusy("");
     }
