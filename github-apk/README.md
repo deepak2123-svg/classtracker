@@ -1,12 +1,10 @@
-# Android APKs
+# Ledgr Android APK
 
-This folder holds the latest sideloadable Android debug builds for ClassLog.
+This folder holds the latest sideloadable native Android beta build for teacher testing.
 
-Files:
-- `classlog-arm64-v8a-debug.apk`
-- `classlog-armeabi-v7a-debug.apk`
-- `classlog-universal-debug.apk`
+File:
+- `ledgr-teacher-beta-debug.apk`
 
 Notes:
-- These are debug/testing APKs, not Play Store release builds.
-- They are refreshed from the latest shared teacher-panel code pushed to `main`.
+- This is a debug/testing APK, not a Play Store release build.
+- The older webapp-based ClassLog APKs were removed; this artifact is built from `native-android`.

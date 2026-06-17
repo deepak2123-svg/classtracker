@@ -1,5 +1,6 @@
 package com.classtracker.feature.today
 
+import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +74,8 @@ import java.util.Date
 import java.util.Locale
 
 private const val AllInstitutes = "All Classes"
+private const val HomeClassOrderPrefs = "ledgr_home_class_order"
+private const val HomeClassOrderDelimiter = "|"
 private val HomeCanvas = Color(0xFFEFEEE8)
 private val HomeInk = Color(0xFF10204A)
 private val HomeMuted = Color(0xFF85837D)
@@ -131,19 +135,40 @@ fun HomeScreen(
     onClassClick: (TeacherClass) -> Unit,
     classCreateEnabled: Boolean,
     onAddClassClick: () -> Unit,
+    orderStorageKey: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberLedgrHaptics()
+    val context = LocalContext.current
+    val classOrderStore = remember(context) {
+        context.applicationContext.getSharedPreferences(HomeClassOrderPrefs, Context.MODE_PRIVATE)
+    }
+    val classOrderPreferenceKey = remember(orderStorageKey) {
+        homeClassOrderPreferenceKey(orderStorageKey)
+    }
+    val persistClassOrder = remember(classOrderStore, classOrderPreferenceKey) {
+        { order: List<String> ->
+            classOrderStore.edit()
+                .putString(classOrderPreferenceKey, order.joinToString(HomeClassOrderDelimiter))
+                .apply()
+        }
+    }
     val institutes = remember(classes) {
         classes.map(TeacherClass::instituteName).distinct()
     }
     var selectedInstitute by rememberSaveable { mutableStateOf(AllInstitutes) }
-    var classOrder by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var classOrder by rememberSaveable(classOrderPreferenceKey) {
+        mutableStateOf(readHomeClassOrder(classOrderStore, classOrderPreferenceKey))
+    }
     val allClassIds = remember(classes) { classes.map(TeacherClass::id) }
 
-    LaunchedEffect(allClassIds) {
-        classOrder = classOrder.filter { it in allClassIds } +
+    LaunchedEffect(allClassIds, classOrderPreferenceKey) {
+        val normalizedOrder = classOrder.filter { it in allClassIds } +
             allClassIds.filterNot { it in classOrder }
+        if (normalizedOrder != classOrder) {
+            classOrder = normalizedOrder
+            persistClassOrder(normalizedOrder)
+        }
     }
 
     val orderedClasses = remember(classes, classOrder) {
@@ -193,6 +218,7 @@ fun HomeScreen(
         val insertIndex = if (direction > 0) targetIndexAfterRemoval + 1 else targetIndexAfterRemoval
         nextOrder.add(insertIndex.coerceIn(0, nextOrder.size), movingId)
         classOrder = nextOrder
+        persistClassOrder(nextOrder)
         true
     })
 
@@ -1127,6 +1153,23 @@ private fun currentDateLabel(): String =
 
 private fun currentMonthPrefix(): String =
     SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
+
+private fun homeClassOrderPreferenceKey(storageKey: String?): String {
+    val scopedKey = storageKey
+        ?.takeIf(String::isNotBlank)
+        ?.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+        ?: "default"
+    return "class_order_$scopedKey"
+}
+
+private fun readHomeClassOrder(
+    store: android.content.SharedPreferences,
+    key: String,
+): List<String> =
+    store.getString(key, null)
+        ?.split(HomeClassOrderDelimiter)
+        ?.filter(String::isNotBlank)
+        .orEmpty()
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable

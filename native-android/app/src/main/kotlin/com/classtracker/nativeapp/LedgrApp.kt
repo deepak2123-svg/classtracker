@@ -129,6 +129,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val ClassEntryRoute = "class-entry/{classId}"
@@ -178,11 +179,19 @@ fun LedgrApp(
     val context = LocalContext.current
     val activity = context as? Activity
     val scope = rememberCoroutineScope()
+    var keepStartupLoadingVisible by rememberSaveable { mutableStateOf(true) }
     val credentialReader = remember(activity) {
         activity?.let(::GoogleCredentialReader)
     }
 
+    LaunchedEffect(Unit) {
+        delay(900)
+        keepStartupLoadingVisible = false
+    }
+
     when {
+        keepStartupLoadingVisible -> FullScreenLoading(modifier = modifier)
+
         state.checkingSession -> FullScreenLoading(modifier = modifier)
 
         state.teacher == null -> AuthScreen(
@@ -691,6 +700,7 @@ private fun TeacherApp(
                             dashboard = dashboard,
                             classes = snapshot.classes,
                             entries = snapshot.entries,
+                            orderStorageKey = teacher.uid,
                             onClassClick = { teacherClass ->
                                 navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
                             },
