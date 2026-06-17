@@ -44,7 +44,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
-import { TAG_STYLES, STATUS_STYLES, Avatar, LedgrLogoMark, LedgrLogoLockup, todayKey, toDateKey, formatDateLabel, fmt, formatPeriod, getSectionTone } from "./shared.jsx";
+import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, toDateKey, formatDateLabel, fmt, formatPeriod, getSectionTone } from "./shared.jsx";
 
 const TEACHER_THEME_STORAGE_KEY = "classlog_teacher_theme";
 const TEACHER_LOCAL_NOTICE_DISMISS_KEY = "classlog_teacher_local_notice_dismissed";
@@ -1276,7 +1276,14 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
           onPointerDown={e=>{e.currentTarget.style.opacity="0.72";}}
           onPointerUp={e=>{e.currentTarget.style.opacity="1";}}
           onPointerCancel={e=>{e.currentTarget.style.opacity="1";}}>
-          <LedgrLogoLockup markSize={40} color={G.text} style={{minWidth:0}} />
+          <div style={{width:40,height:40,borderRadius:12,background:G.green,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <svg width="19" height="19" viewBox="0 0 18 18" fill="none">
+              <path d="M4 3H7V13H14V16H4V3Z" fill="white"/>
+            </svg>
+          </div>
+          <div style={{minWidth:0,display:"flex",alignItems:"center"}}>
+            <div style={{fontFamily:G.display,fontWeight:700,fontSize:22,color:G.text,letterSpacing:-0.35,lineHeight:1}}>Ledgr</div>
+          </div>
         </div>
 
         <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,minWidth:0}}>
@@ -3582,31 +3589,66 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
 }
 
 function TeacherLoadingScreen({text="Loading teacher panel…", themeShell={}}){
+  const shimmer = {
+    background:"linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 100%)",
+    backgroundSize:"220% 100%",
+    animation:"teacherSkeletonWave 1.25s linear infinite",
+  };
+  const block = (width, height, extra={}) => (
+    <div style={{width, height, borderRadius:12, background:G.surfaceAlt, overflow:"hidden", ...extra}}>
+      <div style={{width:"100%",height:"100%",...shimmer}}/>
+    </div>
+  );
+
   return(
-    <div style={{...themeShell,minHeight:"100vh",background:"#DCE6F2",fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 18px"}}>
+    <div style={{...themeShell,minHeight:"100vh",background:G.pageBg,fontFamily:G.sans,padding:"20px 16px"}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sacramento&display=swap');
-        .ledgr-logo-scene{ opacity:0; animation:ledgr-logo-fade-in 1.2s ease-out forwards; }
-        .ledgr-logo-wheel{ animation:ledgr-logo-spin 24s linear infinite; }
-        .ledgr-logo-glow{ transform-origin:center; animation:ledgr-logo-glow 7s ease-in-out infinite; }
-        .ledgr-logo-mask circle{ transform-origin:center; animation:ledgr-logo-fill 7s ease-in-out infinite; }
-        .ledgr-logo-moon-0 .ledgr-logo-mask circle, .ledgr-logo-moon-0 .ledgr-logo-glow { animation-delay:0s; }
-        .ledgr-logo-moon-1 .ledgr-logo-mask circle, .ledgr-logo-moon-1 .ledgr-logo-glow { animation-delay:0.875s; }
-        .ledgr-logo-moon-2 .ledgr-logo-mask circle, .ledgr-logo-moon-2 .ledgr-logo-glow { animation-delay:1.75s; }
-        .ledgr-logo-moon-3 .ledgr-logo-mask circle, .ledgr-logo-moon-3 .ledgr-logo-glow { animation-delay:2.625s; }
-        .ledgr-logo-moon-4 .ledgr-logo-mask circle, .ledgr-logo-moon-4 .ledgr-logo-glow { animation-delay:3.5s; }
-        .ledgr-logo-moon-5 .ledgr-logo-mask circle, .ledgr-logo-moon-5 .ledgr-logo-glow { animation-delay:4.375s; }
-        .ledgr-logo-moon-6 .ledgr-logo-mask circle, .ledgr-logo-moon-6 .ledgr-logo-glow { animation-delay:5.25s; }
-        .ledgr-logo-moon-7 .ledgr-logo-mask circle, .ledgr-logo-moon-7 .ledgr-logo-glow { animation-delay:6.125s; }
-        @keyframes ledgr-logo-fill{ 0%{ transform:translateX(-32px); } 50%{ transform:translateX(0); } 100%{ transform:translateX(32px); } }
-        @keyframes ledgr-logo-glow{ 0%{ opacity:0; transform:scale(1); } 50%{ opacity:0.22; transform:scale(1.6); } 100%{ opacity:0; transform:scale(1); } }
-        @keyframes ledgr-logo-spin{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
-        @keyframes ledgr-logo-fade-in{ from{ opacity:0; transform:scale(0.96); } to{ opacity:1; transform:scale(1); } }
+        @keyframes teacherSkeletonWave{
+          0%{background-position:200% 0;}
+          100%{background-position:-200% 0;}
+        }
       `}</style>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-        <LedgrLogoMark size={232} animated />
-        <div style={{fontFamily:"'Sacramento', cursive",fontSize:48,lineHeight:0.95,color:"#1A2A52"}}>ledgr</div>
-        <div style={{fontSize:14,fontWeight:700,color:"#1A2A52",opacity:0.78,textAlign:"center"}}>{text}</div>
+      <div style={{maxWidth:430,margin:"0 auto"}}>
+        <div style={{background:G.heroBg,borderRadius:26,padding:"20px 18px 18px",boxShadow:G.shadowLg,marginBottom:18}}>
+          <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>{block("58%","14px",{borderRadius:999,background:"rgba(255,255,255,0.18)"})}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            {block("34%","46px",{borderRadius:18,background:"rgba(255,255,255,0.18)"})}
+            {block("24%","24px",{borderRadius:999,background:"rgba(255,255,255,0.15)"})}
+          </div>
+          {block("100%","8px",{borderRadius:999,background:"rgba(255,255,255,0.16)",marginBottom:10})}
+          <div style={{display:"flex",gap:8}}>
+            {block("30%","28px",{borderRadius:999,background:"rgba(255,255,255,0.14)"})}
+            {block("34%","28px",{borderRadius:999,background:"rgba(255,255,255,0.14)"})}
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:8,overflow:"hidden",marginBottom:18}}>
+          {[0,1,2].map(i=>(
+            <div key={i} style={{flex:i===0?0.7:1,height:38,borderRadius:999,background:G.surface,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
+              <div style={{width:"100%",height:"100%",...shimmer}}/>
+            </div>
+          ))}
+        </div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {[0,1,2].map(i=>(
+            <div key={i} style={{background:G.classCardBg,border:`1px solid ${G.border}`,borderRadius:22,padding:"15px 14px 14px",boxShadow:G.shadowSm}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:12,marginBottom:12}}>
+                <div style={{flex:1}}>
+                  {block(i===0?"48%":"42%","20px",{marginBottom:8})}
+                  {block(i===1?"68%":"74%","14px",{borderRadius:999})}
+                </div>
+                {block("26%","28px",{borderRadius:999})}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6,marginBottom:10}}>
+                {[0,1,2].map(idx=>block("100%","48px",{borderRadius:12,background:G.surfaceAlt}))}
+              </div>
+              {block(i===2?"54%":"62%","12px",{borderRadius:999})}
+            </div>
+          ))}
+        </div>
+
+        <div style={{textAlign:"center",marginTop:18,fontSize:13,color:G.textM}}>{text}</div>
       </div>
     </div>
   );

@@ -45,7 +45,7 @@ import {
   subscribeFeedbackThreads, subscribeFeedbackMessages,
   sendAdminFeedbackReply, markFeedbackThreadRead, setFeedbackThreadStatus,
 } from "./firebase";
-import { Avatar, LedgrLogoLockup, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
+import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const G = {
@@ -12269,13 +12269,13 @@ function AdminPanelInner({user}){
           </>
         ) : (
           <>
-            <LedgrLogoLockup
-              admin
-              markSize={32}
-              color="#FFFFFF"
-              subColor="rgba(255,255,255,0.36)"
-              style={{flexShrink:0}}
-            />
+            <div style={{display:"flex",alignItems:"center",gap:9}}>
+              <div style={{width:28,height:28,background:G.blueV,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
+              </div>
+              <span style={{fontFamily:G.display,fontSize:18,fontWeight:800,color:"#fff",letterSpacing:-0.4}}>Ledgr</span>
+              <span style={{fontSize:11,letterSpacing:2,color:"rgba(255,255,255,0.25)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</span>
+            </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setView("main")} style={{...pill("rgba(255,255,255,0.08)","rgba(255,255,255,0.6)","rgba(255,255,255,0.1)")}}>← Back</button>
               <button onClick={logout} style={{...pill("none","rgba(255,255,255,0.35)","rgba(255,255,255,0.15)")}}>Sign Out</button>
