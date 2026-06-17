@@ -2065,6 +2065,25 @@ function getInstituteGlancePeriodMeta(period = "daily", rangeStartKey = "", rang
       title:"Ledgr Report",
     };
   }
+  if(period === "yesterday"){
+    const yesterday = addDaysToDateKey(today, -1);
+    return {
+      key:"yesterday",
+      days:null,
+      startKey:yesterday,
+      endKey:yesterday,
+      filePart:"yesterday",
+      label:"Yesterday",
+      periodValue:"Yesterday",
+      updatedLabel:"Updated yesterday",
+      pendingLabel:"Pending yesterday",
+      activeLabel:"Teachers active yesterday",
+      submissionLabel:"Submission rate yesterday",
+      sectionsSubLabel:"yesterday",
+      hoursSubLabel:"logged yesterday",
+      title:"Ledgr Report",
+    };
+  }
   return {
     key:"daily",
     days:1,
@@ -4120,6 +4139,7 @@ function LedgrReportOptionsModal({
   };
   const periodOptions = [
     ["daily", "Daily"],
+    ["yesterday", "Yesterday"],
     ["weekly", "Weekly"],
     ["monthly", "Monthly"],
     ["range", "Range"],
@@ -4139,6 +4159,8 @@ function LedgrReportOptionsModal({
       : new Date(`${monthBoundsFromKey(draftMonth).startKey}T00:00:00`).toLocaleDateString("en-IN", { month:"long", year:"numeric" })
     : draftPeriod === "range"
       ? `${draftRangeStart || "Start"} to ${draftRangeEnd || "End"}`
+      : draftPeriod === "yesterday"
+        ? "Yesterday"
       : draftPeriod === "weekly"
         ? "Last 7 days"
         : "Today";
@@ -4285,7 +4307,7 @@ function LedgrReportOptionsModal({
 
           <div style={{marginBottom:20}}>
             <div style={sectionLabel}>Period</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(96px,1fr))",gap:8}}>
               {periodOptions.map(([key, label]) => {
                 const active = draftPeriod === key;
                 return (
@@ -7538,6 +7560,10 @@ function AdminPanelInner({user}){
     }
     if(resolved.period === "range"){
       return { rangeStartKey:resolved.rangeStart, rangeEndKey:resolved.rangeEnd };
+    }
+    if(resolved.period === "yesterday"){
+      const yesterday = addDaysToDateKey(todayKey(), -1);
+      return { rangeStartKey:yesterday, rangeEndKey:yesterday };
     }
     return { rangeStartKey:"", rangeEndKey:"" };
   }, [getInstituteGlanceConfig]);
