@@ -8,6 +8,7 @@ Date: 2026-06-17
 - Institute report pages now use a navy Ledgr header, compact teacher activity cards, daily-entry tables, and a compact syllabus tracker directly below the teacher when admin-published syllabus exists.
 - Covered chapters now render as individually checked, compact chapter items with a completion count instead of a long comma-separated sentence.
 - The chapter list keeps the approved teacher-activity report composition: a subtle two-column checklist inside the teacher card, without separate pill cards or a new page layout.
+- Teacher activity and syllabus tables are now constrained to the card width with fixed table layout and safe text wrapping, preventing right-edge overflow in rendered PDFs.
 - The combined report and Centre PDFs ZIP path both call the shared HTML report builder, so institute-wise ZIP PDFs should use the same visual language as the combined report.
 - Syllabus report rows are computed from admin-published syllabus and teacher syllabus progress entries, without showing syllabus blocks for teachers/classes where no syllabus is published.
 

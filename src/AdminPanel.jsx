@@ -3252,7 +3252,8 @@ const CENTRE_SUMMARY_CSS = `
   }
   .activity-table-wrap { padding: 12px 18px 14px; }
   .activity-table {
-    width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--rule-strong);
+    width: 100%; max-width: 100%; box-sizing: border-box; table-layout: fixed;
+    border-collapse: separate; border-spacing: 0; border: 1px solid var(--rule-strong);
     border-radius: 10px; overflow: hidden; background: #fff; font-size: 11.5px;
   }
   .activity-table th {
@@ -3261,6 +3262,7 @@ const CENTRE_SUMMARY_CSS = `
   }
   .activity-table td {
     padding: 11px 12px; border-bottom: 1px solid var(--rule); color: var(--ink-2); vertical-align: middle;
+    min-width: 0; overflow-wrap: anywhere; word-break: normal;
   }
   .activity-table tr:last-child td { border-bottom: none; }
   .activity-table .class-cell { font-weight: 800; color: var(--ink); white-space: nowrap; }
