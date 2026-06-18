@@ -7,6 +7,7 @@ Date: 2026-06-17
 - Integrated the preferred Ledgr Report PDF layout into `src/AdminPanel.jsx`.
 - Institute report pages now use a navy Ledgr header, compact teacher activity cards, daily-entry tables, and a compact syllabus tracker directly below the teacher when admin-published syllabus exists.
 - Covered chapters now render as individually checked, compact chapter items with a completion count instead of a long comma-separated sentence.
+- The chapter list keeps the approved teacher-activity report composition: a subtle two-column checklist inside the teacher card, without separate pill cards or a new page layout.
 - The combined report and Centre PDFs ZIP path both call the shared HTML report builder, so institute-wise ZIP PDFs should use the same visual language as the combined report.
 - Syllabus report rows are computed from admin-published syllabus and teacher syllabus progress entries, without showing syllabus blocks for teachers/classes where no syllabus is published.
 
@@ -14,6 +15,8 @@ Date: 2026-06-17
 
 - `output/pdf/ledgr-report-covered-chapters-prototype.pdf`
 - `output/pdf/ledgr-report-covered-chapters-prototype.page1.png`
+- `output/pdf/ledgr-report-teacher-activity-syllabus-prototype-v2.pdf`
+- `output/pdf/ledgr-report-teacher-activity-syllabus-prototype-v2.page1.png`
 
 ## Verified
 

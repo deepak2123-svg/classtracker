@@ -3283,16 +3283,18 @@ const CENTRE_SUMMARY_CSS = `
   .activity-covered-head {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
     color: var(--ink-2); font-size: 10.5px; font-weight: 900;
+    padding-bottom: 7px; border-bottom: 1px solid var(--rule);
   }
   .activity-covered-count {
-    color: #059669; background: #ecfdf5; border: 1px solid #bbf7d0;
-    border-radius: 999px; padding: 2px 8px; font-size: 9.5px; white-space: nowrap;
+    color: #059669; font-size: 9.5px; white-space: nowrap;
   }
-  .activity-covered-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+  .activity-covered-list {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 18px; row-gap: 6px; margin-top: 7px;
+  }
   .activity-chapter-chip {
-    display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
-    color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0;
-    border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 750;
+    display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+    color: #166534; padding: 1px 0; font-size: 10px; font-weight: 750;
   }
   .activity-chapter-check {
     width: 13px; height: 13px; border-radius: 4px; background: #059669; color: #fff;
