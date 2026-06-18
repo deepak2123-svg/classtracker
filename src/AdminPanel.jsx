@@ -1943,6 +1943,14 @@ function buildSyllabusReportRowsForClass({ publishedSyllabi = [], teacherUid = "
         const topicIds = (chapter.topics || []).map(topic => String(topic?.id || "").trim()).filter(Boolean);
         return topicIds.length > 0 && topicIds.every(id => progress.unitIds.has(id));
       });
+      const chapterTitles = published.chapters
+        .map(chapter => String(chapter?.title || "").trim())
+        .filter(Boolean);
+      const coveredChapterTitles = completed
+        .map(chapter => String(chapter?.title || "").trim())
+        .filter(Boolean);
+      const coveredKeys = new Set(coveredChapterTitles.map(syllabusReportNameKey));
+      const pendingChapterTitles = chapterTitles.filter(title => !coveredKeys.has(syllabusReportNameKey(title)));
       const totalCount = published.chapters.length;
       const coveredCount = completed.length;
       const status = coveredCount <= 0 ? "Not started" : coveredCount >= totalCount ? "Complete" : "In progress";
@@ -1954,6 +1962,9 @@ function buildSyllabusReportRowsForClass({ publishedSyllabi = [], teacherUid = "
         coveredCount,
         totalCount,
         status,
+        chapterTitles,
+        coveredChapterTitles,
+        pendingChapterTitles,
       };
     });
 }
@@ -3188,13 +3199,52 @@ const CENTRE_SUMMARY_CSS = `
   .time-str { color: var(--ink-3); font-size: 11.5px; }
   .topic { color: var(--ink-2); }
   .notes-str { color: var(--ink-4); font-size: 11px; text-align: right; }
-  .syllabus-mini { border-top: 0.5px solid var(--rule); background: #fbfefa; padding: 8px 14px 10px; }
+  .syllabus-mini { border-top: 0.5px solid var(--rule); background: #fbfefa; padding: 10px 14px 12px; }
   .syllabus-mini-title { color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: 0.65px; text-transform: uppercase; margin-bottom: 6px; }
-  .syllabus-mini-head, .syllabus-mini-row { display: grid; grid-template-columns: 90px 110px minmax(120px, 1fr) 88px; gap: 8px; align-items: center; }
-  .syllabus-mini-head { color: var(--ink-4); font-size: 9.5px; font-weight: 700; letter-spacing: 0.45px; text-transform: uppercase; padding: 4px 0; }
-  .syllabus-mini-row { color: var(--ink-2); font-size: 11.5px; padding: 5px 0; border-top: 0.5px solid #e8f4e9; }
-  .syllabus-mini-row .chapter { color: var(--ink); font-weight: 600; }
+  .syllabus-mini-headline {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-bottom: 8px;
+  }
+  .syllabus-mini-summary {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    color: var(--ink-3); font-size: 10px; font-weight: 700;
+  }
+  .syllabus-mini-summary strong { color: var(--ink); font-size: 11.5px; font-weight: 800; }
+  .syllabus-mini-grid {
+    display: grid; grid-template-columns: minmax(210px, 0.95fr) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px; align-items: stretch;
+  }
+  .syllabus-mini-table {
+    border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; background: #fff;
+  }
+  .syllabus-mini-head, .syllabus-mini-row { display: grid; grid-template-columns: 86px minmax(108px, 1fr) 88px; gap: 8px; align-items: center; }
+  .syllabus-mini-head { color: var(--ink-4); font-size: 9px; font-weight: 700; letter-spacing: 0.45px; text-transform: uppercase; padding: 7px 10px; background: #f8fbff; }
+  .syllabus-mini-row { color: var(--ink-2); font-size: 10.5px; padding: 8px 10px; border-top: 0.5px solid #e8eef8; background: #fff; }
+  .syllabus-mini-row .chapter { color: var(--ink); font-weight: 700; }
   .syllabus-mini-row .muted { color: var(--ink-3); }
+  .syllabus-chapter-panel {
+    border: 1px solid var(--rule); border-radius: 10px; background: #fff; padding: 9px 10px 10px;
+  }
+  .syllabus-chapter-panel h4 {
+    margin: 0 0 8px; font-size: 9.75px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .syllabus-chapter-panel.covered h4 { color: var(--green); }
+  .syllabus-chapter-panel.pending h4 { color: #7c889b; }
+  .syllabus-chapter-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .syllabus-chapter-chip {
+    display: inline-flex; align-items: center; gap: 5px; min-height: 24px;
+    padding: 5px 8px; border-radius: 999px; font-size: 9.75px; font-weight: 700; line-height: 1.2;
+    border: 1px solid transparent;
+  }
+  .syllabus-chapter-chip.covered { color: #166534; background: #e9faf3; border-color: #c7eddc; }
+  .syllabus-chapter-chip.pending { color: #64748b; background: #f6f8fc; border-color: #e2e8f0; }
+  .syllabus-chapter-mark {
+    width: 14px; height: 14px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 8px; font-weight: 900; line-height: 1; flex: 0 0 14px;
+  }
+  .syllabus-chapter-chip.covered .syllabus-chapter-mark { background: #059669; color: #fff; }
+  .syllabus-chapter-chip.pending .syllabus-chapter-mark { background: #e2e8f0; color: #94a3b8; }
+  .syllabus-chapter-empty { color: var(--ink-3); font-size: 10px; }
   .syllabus-status { display: inline-block; border-radius: 99px; background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); padding: 2px 8px; font-size: 10px; font-weight: 700; }
   .syllabus-status.progress { background: var(--teal-bg); color: var(--teal); border-color: var(--teal-border); }
   .syllabus-status.pending { background: var(--surface-3); color: var(--ink-3); border-color: var(--rule); }
@@ -3284,8 +3334,21 @@ const CENTRE_SUMMARY_CSS = `
   }
   .activity-syllabus-title { color: #059669; font-size: 11px; font-weight: 900; margin-bottom: 8px; }
   .activity-syllabus .activity-table th { background: #fbfefa; }
+  .activity-syllabus-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .activity-syllabus-summary {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    color: var(--ink-3); font-size: 10px; font-weight: 700;
+  }
+  .activity-syllabus-summary strong { color: var(--ink); font-size: 11.5px; font-weight: 800; }
+  .activity-syllabus-grid {
+    display: grid; grid-template-columns: minmax(210px, 0.95fr) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px; align-items: stretch;
+  }
   .activity-covered {
-    margin-top: 8px; padding: 9px 11px; background: #f8fafc; border: 1px solid var(--rule);
+    margin-top: 0; padding: 9px 11px; background: #f8fafc; border: 1px solid var(--rule);
     border-radius: 9px; page-break-inside: avoid; break-inside: avoid;
   }
   .activity-covered-head {
@@ -3304,8 +3367,14 @@ const CENTRE_SUMMARY_CSS = `
     display: inline-flex; align-items: center; gap: 6px; min-width: 0;
     color: #166534; padding: 1px 0; font-size: 10px; font-weight: 750;
   }
+  .activity-chapter-chip.pending { color: #64748b; }
   .activity-chapter-check {
     width: 13px; height: 13px; border-radius: 4px; background: #059669; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; flex: 0 0 13px;
+    font-size: 8px; font-weight: 900; line-height: 1;
+  }
+  .activity-chapter-mark {
+    width: 13px; height: 13px; border-radius: 999px; background: #e2e8f0; color: #94a3b8;
     display: inline-flex; align-items: center; justify-content: center; flex: 0 0 13px;
     font-size: 8px; font-weight: 900; line-height: 1;
   }
@@ -3521,37 +3590,52 @@ function buildInstituteGlanceActivityHtmlPage(row, generatedOnLabel, options = {
     })();
     const syllabusHtml = syllabusRows.length ? `
       <div class="activity-syllabus">
-        <div class="activity-syllabus-title">Syllabus tracker</div>
-        <table class="activity-table">
-          <thead><tr><th>Section</th><th>Syllabus</th><th>Covered</th><th>Pct</th><th>Status</th><th>Updated</th></tr></thead>
-          <tbody>
-            ${syllabusRows.map(item => {
-              const totalChapters = Math.max(0, Number(item.totalCount || 0));
-              const coveredChapters = Math.max(0, Number(item.coveredCount || 0));
-              const progressPct = totalChapters > 0 ? Math.round((coveredChapters / totalChapters) * 100) : 0;
-              const statusClass = item.status === "Complete" ? "completed" : item.status === "In progress" ? "progress" : "other";
-              return `<tr>
-                <td class="class-cell">${e(item.section || "-")}</td>
-                <td>${e(item.syllabusName || item.subject || subjectLabel || "-")}</td>
-                <td>${e(`${coveredChapters} of ${totalChapters} chapters`)}</td>
-                <td>${progressPct}%</td>
-                <td><span class="activity-status ${statusClass}">${e(item.status || "Not started")}</span></td>
-                <td class="time-cell">${e(syllabusUpdatedLabelForReport(teacher, item))}</td>
-              </tr>`;
-            }).join("")}
-          </tbody>
-        </table>
         ${syllabusRows.map(item => {
-          const titles = syllabusCoveredTitlesForReport(teacher, item);
-          return `<div class="activity-covered">
-            <div class="activity-covered-head">
-              <span>Covered chapters</span>
-              <span class="activity-covered-count">${e(`${titles.length} completed`)}</span>
+          const totalChapters = Math.max(0, Number(item.totalCount || 0));
+          const coveredChapters = Math.max(0, Number(item.coveredCount || 0));
+          const progressPct = totalChapters > 0 ? Math.round((coveredChapters / totalChapters) * 100) : 0;
+          const statusClass = item.status === "Complete" ? "completed" : item.status === "In progress" ? "progress" : "other";
+          const coveredTitles = Array.isArray(item.coveredChapterTitles) ? item.coveredChapterTitles : [];
+          const pendingTitles = Array.isArray(item.pendingChapterTitles) ? item.pendingChapterTitles : [];
+          return `
+            <div class="activity-syllabus-head">
+              <div class="activity-syllabus-title">Syllabus tracker</div>
+              <div class="activity-syllabus-summary">
+                <span><strong>${e(`${coveredChapters} of ${totalChapters}`)}</strong> chapters covered</span>
+                <span>${progressPct}%</span>
+                <span><span class="activity-status ${statusClass}">${e(item.status || "Not started")}</span></span>
+              </div>
             </div>
-            ${titles.length
-              ? `<div class="activity-covered-list">${titles.map(title => `<span class="activity-chapter-chip"><span class="activity-chapter-check">&#10003;</span><span>${e(title)}</span></span>`).join("")}</div>`
-              : `<div class="activity-covered-empty">No chapters marked covered yet.</div>`}
-          </div>`;
+            <div class="activity-syllabus-grid">
+              <table class="activity-table">
+                <thead><tr><th>Section</th><th>Syllabus</th><th>Updated</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td class="class-cell">${e(item.section || "-")}</td>
+                    <td>${e(item.syllabusName || item.subject || subjectLabel || "-")}</td>
+                    <td class="time-cell">${e(syllabusUpdatedLabelForReport(teacher, item))}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="activity-covered">
+                <div class="activity-covered-head">
+                  <span>Covered chapters</span>
+                  <span class="activity-covered-count">${e(`${coveredTitles.length} completed`)}</span>
+                </div>
+                ${coveredTitles.length
+                  ? `<div class="activity-covered-list">${coveredTitles.map(title => `<span class="activity-chapter-chip"><span class="activity-chapter-check">&#10003;</span><span>${e(title)}</span></span>`).join("")}</div>`
+                  : `<div class="activity-covered-empty">No chapters marked covered yet.</div>`}
+              </div>
+              <div class="activity-covered">
+                <div class="activity-covered-head">
+                  <span>Not covered yet</span>
+                  <span class="activity-covered-count">${e(`${pendingTitles.length} pending`)}</span>
+                </div>
+                ${pendingTitles.length
+                  ? `<div class="activity-covered-list">${pendingTitles.map(title => `<span class="activity-chapter-chip pending"><span class="activity-chapter-mark">&bull;</span><span>${e(title)}</span></span>`).join("")}</div>`
+                  : `<div class="activity-covered-empty">Every chapter is marked covered.</div>`}
+              </div>
+            </div>`;
         }).join("")}
       </div>` : "";
 
@@ -3664,18 +3748,46 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
       if(syllabusRows.length){
         rows += `
           <div class="syllabus-mini">
-            <div class="syllabus-mini-title">Syllabus tracker</div>
-            <div class="syllabus-mini-head">
-              <span>Section</span><span>Subject</span><span>Covered</span><span>Status</span>
-            </div>
             ${syllabusRows.map(item => {
+              const totalChapters = Math.max(0, Number(item.totalCount || 0));
+              const coveredChapters = Math.max(0, Number(item.coveredCount || 0));
+              const progressPct = totalChapters > 0 ? Math.round((coveredChapters / totalChapters) * 100) : 0;
               const statusClass = item.status === "Complete" ? "" : item.status === "In progress" ? " progress" : " pending";
-              return `<div class="syllabus-mini-row">
-                <span class="muted">${e(item.section || "—")}</span>
-                <span class="muted">${e(item.subject || subjectLabel || "—")}</span>
-                <span class="chapter">${e(`${item.coveredCount || 0} of ${item.totalCount || 0} chapters`)}</span>
-                <span><span class="syllabus-status${statusClass}">${e(item.status || "Not started")}</span></span>
-              </div>`;
+              const coveredTitles = Array.isArray(item.coveredChapterTitles) ? item.coveredChapterTitles : [];
+              const pendingTitles = Array.isArray(item.pendingChapterTitles) ? item.pendingChapterTitles : [];
+              return `
+                <div class="syllabus-mini-headline">
+                  <div class="syllabus-mini-title">Syllabus tracker</div>
+                  <div class="syllabus-mini-summary">
+                    <span><strong>${e(`${coveredChapters} of ${totalChapters}`)}</strong> chapters covered</span>
+                    <span>${progressPct}%</span>
+                    <span><span class="syllabus-status${statusClass}">${e(item.status || "Not started")}</span></span>
+                  </div>
+                </div>
+                <div class="syllabus-mini-grid">
+                  <div class="syllabus-mini-table">
+                    <div class="syllabus-mini-head">
+                      <span>Section</span><span>Syllabus</span><span>Updated</span>
+                    </div>
+                    <div class="syllabus-mini-row">
+                      <span class="muted">${e(item.section || "—")}</span>
+                      <span class="chapter">${e(item.syllabusName || item.subject || subjectLabel || "—")}</span>
+                      <span class="muted">${e(syllabusUpdatedLabelForReport(teacher, item))}</span>
+                    </div>
+                  </div>
+                  <div class="syllabus-chapter-panel covered">
+                    <h4>Covered chapters</h4>
+                    ${coveredTitles.length
+                      ? `<div class="syllabus-chapter-list">${coveredTitles.map(title => `<span class="syllabus-chapter-chip covered"><span class="syllabus-chapter-mark">&#10003;</span><span>${e(title)}</span></span>`).join("")}</div>`
+                      : `<div class="syllabus-chapter-empty">No chapters marked covered yet.</div>`}
+                  </div>
+                  <div class="syllabus-chapter-panel pending">
+                    <h4>Not covered yet</h4>
+                    ${pendingTitles.length
+                      ? `<div class="syllabus-chapter-list">${pendingTitles.map(title => `<span class="syllabus-chapter-chip pending"><span class="syllabus-chapter-mark">&bull;</span><span>${e(title)}</span></span>`).join("")}</div>`
+                      : `<div class="syllabus-chapter-empty">Every chapter is marked covered.</div>`}
+                  </div>
+                </div>`;
             }).join("")}
           </div>`;
       }
