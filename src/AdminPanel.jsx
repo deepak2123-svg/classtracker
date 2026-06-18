@@ -1389,6 +1389,7 @@ function formatAdminDateKey(dateKey, options = { month:"short", day:"numeric" })
 }
 function adminPeriodLabel(period, rangeStart = null, rangeEnd = null){
   if(period==="today") return "Today";
+  if(period==="yesterday") return "Yesterday";
   if(period==="week") return "This Week";
   if(period==="month") return "This Month";
   if(period==="range"){
@@ -1411,6 +1412,10 @@ function adminPeriodLabel(period, rangeStart = null, rangeEnd = null){
 }
 function getPeriodFilter(period, rangeStart = null, rangeEnd = null){
   if(period==="today") return {days:1,startKey:null,endKey:null};
+  if(period==="yesterday"){
+    const yesterday = addDaysToDateKey(todayKey(), -1);
+    return {days:null,startKey:yesterday,endKey:yesterday};
+  }
   if(period==="week") return {days:7,startKey:null,endKey:null};
   if(period==="month") return {days:30,startKey:null,endKey:null};
   if(period==="range"){
@@ -2418,7 +2423,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     untimedEntries,
   };
 }
-function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, syllabusTemplates = [], period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, syllabusTemplates = [], roles = {}, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   return institutes.map(inst => {
     const teacherRows = teachers
@@ -2432,7 +2437,8 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
         period,
         rangeStartKey,
         rangeEndKey,
-      }));
+      }))
+      .filter(item => roles[item.uid] !== "admin" || item.todayEntries > 0);
     const filledTeachers = teacherRows
       .filter(item => item.updatedToday)
       .sort((a, b) => {
@@ -3599,7 +3605,6 @@ function buildInstituteGlanceActivityHtmlPage(row, generatedOnLabel, options = {
 }
 
 function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
-  return buildInstituteGlanceActivityHtmlPage(row, generatedOnLabel, options);
   const e = escapeExportHtml;
   const { standalone = true, period = "daily", rangeStartKey = "", rangeEndKey = "" } = options;
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
@@ -4347,7 +4352,7 @@ function PeriodSelector({
   onChangeRangeEnd = ()=>{},
 }) {
   const accent = accentColor || G.navy;
-  const quickPills=[["today","Today"],["week","This Week"],["month","This Month"],["range","Range"]];
+  const quickPills=[["today","Today"],["yesterday","Yesterday"],["week","This Week"],["month","This Month"],["range","Range"]];
   const rangeActive=period==="range";
   const dateInputStyle={
     width:"100%",
@@ -7997,14 +8002,8 @@ function AdminPanelInner({user}){
   );
 
   const instituteGlanceTeacherList = useMemo(
-    () => teachers.filter(teacher => {
-      if(!teacher?.uid) return false;
-      if(roles[teacher.uid] !== "admin") return true;
-      if(Number(teacher.classCount || 0) > 0) return true;
-      const loadedClasses = fullData[teacher.uid]?.classes;
-      return Array.isArray(loadedClasses) && loadedClasses.length > 0;
-    }),
-    [fullData, roles, teachers]
+    () => teachers.filter(teacher => !!teacher?.uid),
+    [teachers]
   );
 
   const getInstituteTeacherUids = React.useCallback((inst) => {
@@ -8096,6 +8095,7 @@ function AdminPanelInner({user}){
       fullDataMap,
       resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
       syllabusTemplates,
+      roles,
       period:resolved.period,
       rangeStartKey,
       rangeEndKey,
@@ -8106,7 +8106,7 @@ function AdminPanelInner({user}){
       loadedInstitutes: rows.filter(row => row.ready).length,
       totalInstitutes: rows.length,
     };
-  }, [getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, institutes, syllabusTemplates]);
+  }, [getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, institutes, roles, syllabusTemplates]);
 
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
