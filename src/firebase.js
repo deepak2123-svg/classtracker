@@ -681,8 +681,14 @@ export async function promoteToAdmin(uid, grantedByUid) {
   });
 }
 
-export async function demoteToTeacher(uid) {
-  await setDoc(roleDocRef(uid), { role: "teacher", grantedAt: Date.now() });
+export async function demoteToTeacher(uid, demotedByUid = null) {
+  const now = Date.now();
+  await setDoc(roleDocRef(uid), {
+    role: "teacher",
+    demotedAt: now,
+    demotedBy: demotedByUid || null,
+    updatedAt: now,
+  }, { merge: true });
 }
 
 // ── Teacher index (for admin discovery) ───────────────────────────────────────

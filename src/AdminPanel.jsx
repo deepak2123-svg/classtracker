@@ -1791,6 +1791,167 @@ function isSyllabusProgressEntry(entry){
     /syllabus/i.test(notes)
   );
 }
+function syllabusReportArray(value){
+  if(Array.isArray(value)) return value.map(item => String(item || "").trim()).filter(Boolean);
+  if(typeof value === "string"){
+    const trimmed = value.trim();
+    if(!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if(Array.isArray(parsed)) return parsed.map(item => String(item || "").trim()).filter(Boolean);
+    } catch {}
+    return trimmed.split(",").map(item => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+function syllabusReportChapterMarker(chapterId){
+  const id = String(chapterId || "").trim();
+  return id ? `chapter:${id}` : "";
+}
+function syllabusReportNameKey(value){
+  return normaliseName(String(value || "").trim()).toLowerCase();
+}
+function getPublishedSyllabusPayload(template){
+  if(!template?.published || Number(template?.currentVersion || template?.published?.version || 0) <= 0) return null;
+  const published = template.published || {};
+  const chapters = (Array.isArray(published.chapters) ? published.chapters : [])
+    .map((chapter, index) => ({
+      id:String(chapter?.id || "").trim(),
+      title:String(chapter?.title || "").trim(),
+      topics:Array.isArray(chapter?.topics) ? chapter.topics : [],
+      order:index,
+    }))
+    .filter(chapter => chapter.title);
+  if(!chapters.length) return null;
+  return {
+    templateId:String(template.id || published.templateId || "").trim(),
+    version:Number(published.version || template.currentVersion || 0),
+    subjectName:String(published.subjectName || template.subjectName || "").trim(),
+    name:String(published.name || template.name || "").trim(),
+    scope:normaliseSyllabusScope(published.scope, published.instituteName, published.sectionName),
+    targets:Array.isArray(published.targets) ? published.targets : [],
+    chapters,
+  };
+}
+function publishedSyllabusMatchesClass(published, { teacherUid = "", classId = "", instituteName = "", sectionLabel = "", classSection = "", subject = "" } = {}){
+  if(!published) return false;
+  const cleanTeacherUid = String(teacherUid || "").trim();
+  const cleanClassId = String(classId || "").trim();
+  if(published.targets.some(target =>
+    String(target?.teacherUid || "").trim() === cleanTeacherUid
+    && String(target?.classId || "").trim() === cleanClassId
+  )) return true;
+
+  const classSubject = syllabusReportNameKey(subject);
+  const syllabusSubject = syllabusReportNameKey(published.subjectName);
+  if(!classSubject || !syllabusSubject || classSubject !== syllabusSubject) return false;
+
+  const sectionKeys = new Set([
+    syllabusReportNameKey(sectionLabel),
+    syllabusReportNameKey(classSection),
+  ].filter(Boolean));
+  return syllabusScopePairs(published.scope).some(pair =>
+    sameInstituteName(pair.instituteName, instituteName)
+    && sectionKeys.has(syllabusReportNameKey(pair.sectionName))
+  );
+}
+function collectSyllabusProgressForClass(classNotes = {}, templateId = "", endKey = ""){
+  const cleanTemplateId = String(templateId || "").trim();
+  let latestSnapshot = null;
+  const unitIds = new Set();
+  const chapterIds = new Set();
+  const chapterTitles = new Set();
+
+  Object.entries(classNotes || {}).forEach(([dateKey, entries]) => {
+    if(!Array.isArray(entries)) return;
+    if(endKey && dateKey > endKey) return;
+    entries.forEach(entry => {
+      if(!isSyllabusProgressEntry(entry)) return;
+      const entryTemplateId = String(entry?.syllabusTemplateId || entry?.syllabusId || "").trim();
+      if(cleanTemplateId && entryTemplateId && entryTemplateId !== cleanTemplateId) return;
+
+      const ids = syllabusReportArray(entry?.completedSyllabusTopicIds);
+      const directChapterIds = [
+        ...syllabusReportArray(entry?.completedSyllabusChapterIds),
+        ...syllabusReportArray(entry?.coveredSyllabusChapterIds),
+      ];
+      const title = getSyllabusProgressChapterTitle(entry);
+      const created = Number(entry?.created || entry?.createdAt || 0) || 0;
+      const snapshotTimeKey = `${dateKey || ""}:${String(created).padStart(16, "0")}`;
+      const isSnapshot = String(entry?.tag || "").trim() === "syllabus"
+        || /syllabus progress update/i.test(String(entry?.title || ""));
+
+      if(isSnapshot && (ids.length || directChapterIds.length)){
+        if(!latestSnapshot || snapshotTimeKey >= latestSnapshot.sortKey){
+          latestSnapshot = {
+            sortKey:snapshotTimeKey,
+            ids:[
+              ...ids,
+              ...directChapterIds.map(syllabusReportChapterMarker).filter(Boolean),
+            ],
+          };
+        }
+        return;
+      }
+
+      ids.forEach(id => unitIds.add(id));
+      directChapterIds.forEach(id => {
+        const marker = syllabusReportChapterMarker(id);
+        if(marker) unitIds.add(marker);
+        chapterIds.add(id);
+      });
+      if(entry?.syllabusChapterCompleted === true){
+        const marker = syllabusReportChapterMarker(entry?.syllabusChapterId);
+        if(marker) unitIds.add(marker);
+      }
+      if(entry?.syllabusChapterId) chapterIds.add(String(entry.syllabusChapterId).trim());
+      if(title && !/syllabus progress update/i.test(title)) chapterTitles.add(syllabusReportNameKey(title));
+    });
+  });
+
+  if(latestSnapshot){
+    return {
+      unitIds:new Set(latestSnapshot.ids),
+      chapterIds:new Set(),
+      chapterTitles:new Set(),
+    };
+  }
+  return { unitIds, chapterIds, chapterTitles };
+}
+function buildSyllabusReportRowsForClass({ publishedSyllabi = [], teacherUid = "", cls = {}, classNotes = {}, instituteName = "", sectionLabel = "", periodEndKey = "" } = {}){
+  return publishedSyllabi
+    .filter(published => publishedSyllabusMatchesClass(published, {
+      teacherUid,
+      classId:cls?.id,
+      instituteName,
+      sectionLabel,
+      classSection:cls?.section,
+      subject:cls?.subject,
+    }))
+    .map(published => {
+      const progress = collectSyllabusProgressForClass(classNotes, published.templateId, periodEndKey);
+      const completed = published.chapters.filter(chapter => {
+        const marker = syllabusReportChapterMarker(chapter.id);
+        if(marker && progress.unitIds.has(marker)) return true;
+        if(chapter.id && progress.chapterIds.has(chapter.id)) return true;
+        if(progress.chapterTitles.has(syllabusReportNameKey(chapter.title))) return true;
+        const topicIds = (chapter.topics || []).map(topic => String(topic?.id || "").trim()).filter(Boolean);
+        return topicIds.length > 0 && topicIds.every(id => progress.unitIds.has(id));
+      });
+      const totalCount = published.chapters.length;
+      const coveredCount = completed.length;
+      const status = coveredCount <= 0 ? "Not started" : coveredCount >= totalCount ? "Complete" : "In progress";
+      return {
+        key:`${published.templateId || published.name}::${sectionLabel}::${published.subjectName}`,
+        section:sectionLabel,
+        subject:published.subjectName || cls?.subject || "",
+        syllabusName:published.name || `${published.subjectName || cls?.subject || "Subject"} syllabus`,
+        coveredCount,
+        totalCount,
+        status,
+      };
+    });
+}
 function countTeachingEntriesForMonth(classNotes = {}, monthKey = currentMonthKey()){
   return Object.entries(classNotes || {}).reduce((sum, [dk, entries]) => {
     if(!dk.startsWith(monthKey) || !Array.isArray(entries)) return sum;
@@ -2101,7 +2262,7 @@ function getInstituteGlancePeriodMeta(period = "daily", rangeStartKey = "", rang
     title:"Ledgr Report",
   };
 }
-function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataMap = {}, resolveSectionName = null, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataMap = {}, resolveSectionName = null, syllabusTemplates = [], period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const data = fullDataMap?.[teacher?.uid];
   const classesHere = data
     ? (data.classes || []).filter(cls => sameInstituteName(cls?.institute, instituteName))
@@ -2110,6 +2271,10 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
   const monthKey = currentMonthKey();
   const sectionMap = new Map();
   const syllabusCoverageMap = new Map();
+  const syllabusDeclaredMap = new Map();
+  const publishedSyllabi = (Array.isArray(syllabusTemplates) ? syllabusTemplates : [])
+    .map(getPublishedSyllabusPayload)
+    .filter(Boolean);
   const todayDetails = [];
   let todayEntries = 0;
   let monthEntries = 0;
@@ -2130,6 +2295,19 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       entryCount:0,
       totalMinutes:0,
     };
+
+    buildSyllabusReportRowsForClass({
+      publishedSyllabi,
+      teacherUid:teacher?.uid,
+      cls,
+      classNotes,
+      instituteName,
+      sectionLabel,
+      periodEndKey:periodMeta.endKey,
+    }).forEach(item => {
+      const key = item.key || `${item.section}::${item.subject}::${item.syllabusName}`;
+      syllabusDeclaredMap.set(key, item);
+    });
 
     Object.entries(classNotes || {}).forEach(([dateKey, entries]) => {
       if(!Array.isArray(entries)) return;
@@ -2229,11 +2407,18 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       if(subjectCmp !== 0) return subjectCmp;
       return exportTextSorter.compare(a.chapterTitle || "", b.chapterTitle || "");
     }),
+    syllabusDeclaredRows: Array.from(syllabusDeclaredMap.values()).sort((a, b) => {
+      const sectionCmp = exportTextSorter.compare(a.section || "", b.section || "");
+      if(sectionCmp !== 0) return sectionCmp;
+      const subjectCmp = exportTextSorter.compare(a.subject || "", b.subject || "");
+      if(subjectCmp !== 0) return subjectCmp;
+      return exportTextSorter.compare(a.syllabusName || "", b.syllabusName || "");
+    }),
     totalMinutes,
     untimedEntries,
   };
 }
-function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, syllabusTemplates = [], period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   return institutes.map(inst => {
     const teacherRows = teachers
@@ -2243,6 +2428,7 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
         instituteName: inst,
         fullDataMap,
         resolveSectionName,
+        syllabusTemplates,
         period,
         rangeStartKey,
         rangeEndKey,
@@ -2996,9 +3182,16 @@ const CENTRE_SUMMARY_CSS = `
   .time-str { color: var(--ink-3); font-size: 11.5px; }
   .topic { color: var(--ink-2); }
   .notes-str { color: var(--ink-4); font-size: 11px; text-align: right; }
-  .session-row.syllabus-row { background: #fbfefa; }
-  .session-row.syllabus-row .topic { color: var(--ink); font-weight: 600; }
+  .syllabus-mini { border-top: 0.5px solid var(--rule); background: #fbfefa; padding: 8px 14px 10px; }
+  .syllabus-mini-title { color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: 0.65px; text-transform: uppercase; margin-bottom: 6px; }
+  .syllabus-mini-head, .syllabus-mini-row { display: grid; grid-template-columns: 90px 110px minmax(120px, 1fr) 88px; gap: 8px; align-items: center; }
+  .syllabus-mini-head { color: var(--ink-4); font-size: 9.5px; font-weight: 700; letter-spacing: 0.45px; text-transform: uppercase; padding: 4px 0; }
+  .syllabus-mini-row { color: var(--ink-2); font-size: 11.5px; padding: 5px 0; border-top: 0.5px solid #e8f4e9; }
+  .syllabus-mini-row .chapter { color: var(--ink); font-weight: 600; }
+  .syllabus-mini-row .muted { color: var(--ink-3); }
   .syllabus-status { display: inline-block; border-radius: 99px; background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); padding: 2px 8px; font-size: 10px; font-weight: 700; }
+  .syllabus-status.progress { background: var(--teal-bg); color: var(--teal); border-color: var(--teal-border); }
+  .syllabus-status.pending { background: var(--surface-3); color: var(--ink-3); border-color: var(--rule); }
   .empty-notice { background: var(--blue-bg); border: 0.5px solid var(--blue-border); border-radius: 8px; padding: 16px 18px; color: var(--blue); font-size: 12.5px; margin-bottom: 8px; }
   .empty-notice.green { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
   .pending-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px; overflow: hidden; font-size: 12px; }
@@ -3017,6 +3210,104 @@ const CENTRE_SUMMARY_CSS = `
   .badge-red   { background: var(--red-bg);   color: var(--red);   border: 0.5px solid var(--red-border); }
   .badge-amber { background: var(--amber-bg); color: var(--amber); border: 0.5px solid var(--amber-border); }
   .badge-green { background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); }
+  .teacher-activity-page { background: #f3f6fc; color: var(--ink); }
+  .activity-topbar {
+    background: var(--navy); color: #fff; margin: -30px -24px 26px; padding: 40px 66px;
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  }
+  .activity-brand { display: flex; align-items: center; gap: 18px; }
+  .activity-mark {
+    width: 58px; height: 58px; border-radius: 16px; background: #3478f6;
+    display: flex; align-items: center; justify-content: center; color: #fff;
+    font-size: 30px; font-weight: 800; letter-spacing: -0.4px;
+  }
+  .activity-brand-title { color: #fff; font-size: 30px; line-height: 1.05; font-weight: 800; letter-spacing: -0.6px; }
+  .activity-brand-sub { color: rgba(255,255,255,0.78); font-size: 13px; margin-top: 7px; }
+  .activity-period-pill {
+    background: rgba(59,130,246,0.22); color: #fff; border-radius: 999px; padding: 13px 34px;
+    min-width: 210px; text-align: center; font-size: 12.5px; font-weight: 800;
+  }
+  .activity-heading { margin: 0 0 26px; }
+  .activity-heading h1 { font-size: 30px; line-height: 1.05; font-weight: 800; letter-spacing: -0.65px; color: var(--ink); }
+  .activity-heading p { color: var(--ink-3); font-size: 13px; margin-top: 12px; max-width: 780px; }
+  .activity-centre-meta { color: var(--blue); font-weight: 800; margin-top: 9px; font-size: 12px; }
+  .activity-card-list { display: grid; gap: 18px; }
+  .activity-card {
+    background: #fff; border: 1px solid var(--rule-strong); border-radius: 14px; overflow: hidden;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  .activity-card-head {
+    background: #eaf0f7; display: flex; align-items: center; gap: 12px; padding: 9px 18px;
+  }
+  .activity-avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--blue-bg);
+    border: 1px solid #9cc3ff; color: var(--blue); display: flex; align-items: center;
+    justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0;
+  }
+  .activity-teacher-name { font-size: 14.5px; font-weight: 800; color: var(--ink); }
+  .activity-subject-pill {
+    margin-left: auto; background: var(--blue-bg); color: var(--blue); border: 1px solid #bfdbfe;
+    border-radius: 999px; padding: 4px 14px; font-size: 11px; font-weight: 800; max-width: 210px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .activity-table-wrap { padding: 12px 18px 14px; }
+  .activity-table {
+    width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--rule-strong);
+    border-radius: 10px; overflow: hidden; background: #fff; font-size: 11.5px;
+  }
+  .activity-table th {
+    background: #f8fafc; color: var(--ink-3); font-size: 10.5px; font-weight: 800; text-align: left;
+    padding: 9px 12px; border-bottom: 1px solid var(--rule);
+  }
+  .activity-table td {
+    padding: 11px 12px; border-bottom: 1px solid var(--rule); color: var(--ink-2); vertical-align: middle;
+  }
+  .activity-table tr:last-child td { border-bottom: none; }
+  .activity-table .class-cell { font-weight: 800; color: var(--ink); white-space: nowrap; }
+  .activity-table .time-cell { color: var(--ink-3); white-space: nowrap; }
+  .activity-table .notes-cell { color: var(--ink-3); max-width: 210px; }
+  .activity-status { font-weight: 800; white-space: nowrap; }
+  .activity-status.completed { color: #059669; }
+  .activity-status.progress { color: #a16207; }
+  .activity-status.started { color: var(--blue); }
+  .activity-status.other { color: var(--ink-3); }
+  .activity-syllabus {
+    margin: 0 18px 14px; padding-top: 2px; page-break-inside: avoid; break-inside: avoid;
+  }
+  .activity-syllabus-title { color: #059669; font-size: 11px; font-weight: 900; margin-bottom: 8px; }
+  .activity-syllabus .activity-table th { background: #fbfefa; }
+  .activity-covered {
+    margin-top: 8px; padding: 9px 11px; background: #f8fafc; border: 1px solid var(--rule);
+    border-radius: 9px; page-break-inside: avoid; break-inside: avoid;
+  }
+  .activity-covered-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    color: var(--ink-2); font-size: 10.5px; font-weight: 900;
+  }
+  .activity-covered-count {
+    color: #059669; background: #ecfdf5; border: 1px solid #bbf7d0;
+    border-radius: 999px; padding: 2px 8px; font-size: 9.5px; white-space: nowrap;
+  }
+  .activity-covered-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+  .activity-chapter-chip {
+    display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+    color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0;
+    border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 750;
+  }
+  .activity-chapter-check {
+    width: 13px; height: 13px; border-radius: 4px; background: #059669; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; flex: 0 0 13px;
+    font-size: 8px; font-weight: 900; line-height: 1;
+  }
+  .activity-covered-empty { color: var(--ink-3); font-size: 10.5px; margin-top: 6px; }
+  .activity-pending-note {
+    background: #fffbeb; border: 1px solid var(--amber-border); color: #92400e; border-radius: 12px;
+    padding: 12px 15px; font-size: 12px; font-weight: 700; page-break-inside: avoid; break-inside: avoid;
+  }
+  .activity-footer {
+    margin-top: 54px; color: var(--ink-3); display: flex; justify-content: space-between; gap: 18px;
+    font-size: 10.5px; border-top: 1px solid var(--rule); padding-top: 10px;
+  }
   .page-footer { margin-top: 36px; padding-top: 12px; border-top: 0.5px solid var(--rule); display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-4); }
   .institute-divider { border: none; margin: 0; page-break-before: always; }
   @media print {
@@ -3037,7 +3328,12 @@ const CENTRE_SUMMARY_CSS = `
       -webkit-box-decoration-break: clone;
     }
     body > .page-footer { margin: 0 1.2cm 1.1cm; }
-    .teacher-block { page-break-inside: avoid; break-inside: avoid; }
+    .teacher-block, .syllabus-mini { page-break-inside: avoid; break-inside: avoid; }
+    .teacher-activity-page { background: #f3f6fc !important; }
+    .teacher-activity-page .activity-topbar { margin: -1.1cm -1.2cm 26px; padding: 0.95cm 1.2cm; }
+    .teacher-activity-page .activity-card,
+    .teacher-activity-page .activity-syllabus,
+    .teacher-activity-page .activity-pending-note { page-break-inside: avoid; break-inside: avoid; }
     .pending-table tr { page-break-inside: avoid; break-inside: avoid; }
     .scorecard, .pending-breakdown, .progress-wrap, .centre-card, .executive-summary { page-break-inside: avoid; break-inside: avoid; }
     .section-title { page-break-after: avoid; break-after: avoid; }
@@ -3130,7 +3426,176 @@ function buildInstituteGlanceCentreCard(row, period = "daily", rangeStartKey = "
     </div>`;
 }
 
+function reportValueMatches(a, b){
+  const left = normaliseName(String(a || "").trim());
+  const right = normaliseName(String(b || "").trim());
+  if(!left || !right) return true;
+  return left === right;
+}
+
+function activityStatusMeta(detail = {}, fallbackLabel = ""){
+  const label = String(detail.statusLabel || fallbackLabel || detail.status || "Started").trim() || "Started";
+  const raw = String(detail.status || label).toLowerCase();
+  const labelLower = label.toLowerCase();
+  if(raw.includes("complete") || labelLower.includes("complete")) return { label, cls:"completed" };
+  if(raw.includes("progress") || labelLower.includes("progress")) return { label, cls:"progress" };
+  if(raw.includes("start") || labelLower.includes("start")) return { label, cls:"started" };
+  return { label, cls:"other" };
+}
+
+function syllabusCoveredTitlesForReport(teacher = {}, syllabusRow = {}){
+  const rows = Array.isArray(teacher.syllabusCoveredRows) ? teacher.syllabusCoveredRows : [];
+  const seen = new Set();
+  return rows
+    .filter(row => reportValueMatches(row.section, syllabusRow.section) && reportValueMatches(row.subject, syllabusRow.subject))
+    .map(row => String(row.chapterTitle || "").trim())
+    .filter(title => {
+      if(!title) return false;
+      const key = syllabusReportNameKey(title);
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function syllabusUpdatedLabelForReport(teacher = {}, syllabusRow = {}){
+  const rows = (Array.isArray(teacher.syllabusCoveredRows) ? teacher.syllabusCoveredRows : [])
+    .filter(row => reportValueMatches(row.section, syllabusRow.section) && reportValueMatches(row.subject, syllabusRow.subject))
+    .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")));
+  return rows[0]?.dateKey ? formatInstituteReportEntryDate(rows[0].dateKey) : "-";
+}
+
+function buildInstituteGlanceActivityHtmlPage(row, generatedOnLabel, options = {}){
+  const e = escapeExportHtml;
+  const { standalone = true, period = "daily", rangeStartKey = "", rangeEndKey = "" } = options;
+  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
+  const generatedParts = getInstituteGlanceGeneratedParts(generatedOnLabel);
+  const filled = row.filledTeacherRows || [];
+  const pending = row.pendingTeacherRows || [];
+  const total = row.totalTeachers || 0;
+  const filledCount = row.filledToday || 0;
+  const pct = total > 0 ? Math.round((filledCount / total) * 100) : 0;
+  const showEntryDates = periodMeta.key !== "daily";
+
+  const teacherCards = filled.length ? filled.map(teacher => {
+    const details = Array.isArray(teacher.todayDetails) ? teacher.todayDetails : [];
+    const syllabusRows = Array.isArray(teacher.syllabusDeclaredRows) ? teacher.syllabusDeclaredRows : [];
+    const subjectSet = [...new Set([
+      ...details.map(d => d.subject).filter(Boolean),
+      ...syllabusRows.map(d => d.subject).filter(Boolean),
+    ])];
+    const subjectLabel = subjectSet.join(", ") || "-";
+    const headCells = showEntryDates
+      ? ["Date", "Class", "Time", "Status", "Daily entry", "Notes"]
+      : ["Class", "Time", "Status", "Daily entry", "Notes"];
+    const bodyRows = details.length ? details.map(detail => {
+      const status = activityStatusMeta(detail);
+      return `<tr>
+        ${showEntryDates ? `<td class="time-cell">${e(formatInstituteReportEntryDate(detail.dateKey))}</td>` : ""}
+        <td class="class-cell">${e(detail.section || "-")}</td>
+        <td class="time-cell">${e(formatExportPdfTime(detail.timeStart, detail.timeEnd) || "-")}</td>
+        <td><span class="activity-status ${status.cls}">${e(status.label)}</span></td>
+        <td>${e(detail.title || detail.subject || "-")}</td>
+        <td class="notes-cell">${e(detail.notes || "-")}</td>
+      </tr>`;
+    }).join("") : (() => {
+      const status = activityStatusMeta({}, teacher.todayStatusLabel || periodMeta.updatedLabel);
+      return `<tr>
+        ${showEntryDates ? `<td class="time-cell">-</td>` : ""}
+        <td class="class-cell">${e(instituteGlanceTeacherSectionCaption(teacher))}</td>
+        <td class="time-cell">-</td>
+        <td><span class="activity-status ${status.cls}">${e(status.label)}</span></td>
+        <td>${e(`${teacher.todayEntries || 0} entr${teacher.todayEntries === 1 ? "y" : "ies"} uploaded`)}</td>
+        <td class="notes-cell">${e(instituteGlanceTeacherHoursLabel(teacher))}</td>
+      </tr>`;
+    })();
+    const syllabusHtml = syllabusRows.length ? `
+      <div class="activity-syllabus">
+        <div class="activity-syllabus-title">Syllabus tracker</div>
+        <table class="activity-table">
+          <thead><tr><th>Section</th><th>Syllabus</th><th>Covered</th><th>Pct</th><th>Status</th><th>Updated</th></tr></thead>
+          <tbody>
+            ${syllabusRows.map(item => {
+              const totalChapters = Math.max(0, Number(item.totalCount || 0));
+              const coveredChapters = Math.max(0, Number(item.coveredCount || 0));
+              const progressPct = totalChapters > 0 ? Math.round((coveredChapters / totalChapters) * 100) : 0;
+              const statusClass = item.status === "Complete" ? "completed" : item.status === "In progress" ? "progress" : "other";
+              return `<tr>
+                <td class="class-cell">${e(item.section || "-")}</td>
+                <td>${e(item.syllabusName || item.subject || subjectLabel || "-")}</td>
+                <td>${e(`${coveredChapters} of ${totalChapters} chapters`)}</td>
+                <td>${progressPct}%</td>
+                <td><span class="activity-status ${statusClass}">${e(item.status || "Not started")}</span></td>
+                <td class="time-cell">${e(syllabusUpdatedLabelForReport(teacher, item))}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+        ${syllabusRows.map(item => {
+          const titles = syllabusCoveredTitlesForReport(teacher, item);
+          return `<div class="activity-covered">
+            <div class="activity-covered-head">
+              <span>Covered chapters</span>
+              <span class="activity-covered-count">${e(`${titles.length} completed`)}</span>
+            </div>
+            ${titles.length
+              ? `<div class="activity-covered-list">${titles.map(title => `<span class="activity-chapter-chip"><span class="activity-chapter-check">&#10003;</span><span>${e(title)}</span></span>`).join("")}</div>`
+              : `<div class="activity-covered-empty">No chapters marked covered yet.</div>`}
+          </div>`;
+        }).join("")}
+      </div>` : "";
+
+    return `
+      <div class="activity-card">
+        <div class="activity-card-head">
+          <div class="activity-avatar">${e(_avatarInitials(teacher.name))}</div>
+          <div class="activity-teacher-name">${e(teacher.name || "Teacher")}</div>
+          <div class="activity-subject-pill">${e(subjectLabel)}</div>
+        </div>
+        <div class="activity-table-wrap">
+          <table class="activity-table">
+            <thead><tr>${headCells.map(label => `<th>${e(label)}</th>`).join("")}</tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
+        ${syllabusHtml}
+      </div>`;
+  }).join("") : `<div class="empty-notice">No teacher has uploaded during this ${e(periodMeta.label.toLowerCase())} period.</div>`;
+
+  const pendingHtml = pending.length
+    ? `<div class="activity-pending-note">${pending.length} teacher${pending.length === 1 ? "" : "s"} pending for this period: ${e(pending.slice(0, 8).map(item => item.name || "Teacher").join(", "))}${pending.length > 8 ? "..." : ""}</div>`
+    : "";
+
+  return `
+    ${standalone ? `<section class="report-page teacher-activity-page">` : `<div class="teacher-activity-page">`}
+      <div class="activity-topbar">
+        <div class="activity-brand">
+          <div class="activity-mark">L</div>
+          <div>
+            <div class="activity-brand-title">Ledgr Report</div>
+            <div class="activity-brand-sub">Teacher activity with syllabus tracker</div>
+          </div>
+        </div>
+        <div class="activity-period-pill">${e(periodMeta.label)} - ${e(generatedParts.date)}</div>
+      </div>
+      <div class="activity-heading">
+        <h1>Teacher activity</h1>
+        <p>Normal daily entries come first. Syllabus appears only for teachers where admin has published it.</p>
+        <div class="activity-centre-meta">${e(row.institute || "Institute")} - ${filledCount}/${total} teachers updated - ${pct}% submission rate</div>
+      </div>
+      <div class="activity-card-list">
+        ${teacherCards}
+        ${pendingHtml}
+      </div>
+      <div class="activity-footer">
+        <span>Rule: no published syllabus = daily entry table only. Published syllabus = compact tracker immediately below that teacher.</span>
+        <span>${e(generatedOnLabel)}</span>
+      </div>
+    ${standalone ? `</section>` : `</div>`}`;
+}
+
 function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
+  return buildInstituteGlanceActivityHtmlPage(row, generatedOnLabel, options);
   const e = escapeExportHtml;
   const { standalone = true, period = "daily", rangeStartKey = "", rangeEndKey = "" } = options;
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
@@ -3164,7 +3629,11 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
     filled.forEach(teacher => {
       const details = Array.isArray(teacher.todayDetails) ? teacher.todayDetails : [];
       const initials = _avatarInitials(teacher.name);
-      const subjectSet = [...new Set(details.map(d => d.subject).filter(Boolean))];
+      const declaredSyllabusRows = Array.isArray(teacher.syllabusDeclaredRows) ? teacher.syllabusDeclaredRows : [];
+      const subjectSet = [...new Set([
+        ...details.map(d => d.subject).filter(Boolean),
+        ...declaredSyllabusRows.map(d => d.subject).filter(Boolean),
+      ])];
       const subjectLabel = subjectSet.join(", ") || "—";
       let rows = "";
       if(!details.length){
@@ -3182,17 +3651,24 @@ function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}){
           </div>`
         ).join("");
       }
-      const syllabusRows = Array.isArray(teacher.syllabusCoveredRows) ? teacher.syllabusCoveredRows : [];
+      const syllabusRows = Array.isArray(teacher.syllabusDeclaredRows) ? teacher.syllabusDeclaredRows : [];
       if(syllabusRows.length){
-        rows += syllabusRows.map(item =>
-          `<div class="session-row syllabus-row${showEntryDates ? " multi-day" : ""}">
-            ${showEntryDates ? `<span class="date-str">${e(formatInstituteReportEntryDate(item.dateKey))}</span>` : ""}
-            <span class="section-name">${e(item.section || "—")}</span>
-            <span class="time-str">Syllabus</span>
-            <span class="topic">${e(item.chapterTitle || "—")}</span>
-            <span class="notes-str"><span class="syllabus-status">Covered</span></span>
-          </div>`
-        ).join("");
+        rows += `
+          <div class="syllabus-mini">
+            <div class="syllabus-mini-title">Syllabus tracker</div>
+            <div class="syllabus-mini-head">
+              <span>Section</span><span>Subject</span><span>Covered</span><span>Status</span>
+            </div>
+            ${syllabusRows.map(item => {
+              const statusClass = item.status === "Complete" ? "" : item.status === "In progress" ? " progress" : " pending";
+              return `<div class="syllabus-mini-row">
+                <span class="muted">${e(item.section || "—")}</span>
+                <span class="muted">${e(item.subject || subjectLabel || "—")}</span>
+                <span class="chapter">${e(`${item.coveredCount || 0} of ${item.totalCount || 0} chapters`)}</span>
+                <span><span class="syllabus-status${statusClass}">${e(item.status || "Not started")}</span></span>
+              </div>`;
+            }).join("")}
+          </div>`;
       }
       filledHtml += `
         <div class="teacher-block">
@@ -3417,7 +3893,16 @@ async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLab
   _printHtml(html, `${scopeFilePart}_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_${todayKey()}.pdf`);
 }
 async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
-  const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period, rangeStartKey, rangeEndKey);
+  const rows = row ? [row] : [];
+  const html = buildInstituteGlanceSummaryHtml({
+    rows,
+    summary:summariseInstituteGlanceRows(rows),
+    generatedOnLabel,
+    period,
+    rangeStartKey,
+    rangeEndKey,
+    scopeLabel:row?.institute || "Institute",
+  });
   _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey));
 }
 async function renderInstituteGlanceHtmlPdfBlob({ html, filename }){
@@ -3524,7 +4009,7 @@ async function buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, per
   } else {
     filledTeachers.forEach(teacher => {
       const details = Array.isArray(teacher.todayDetails) ? teacher.todayDetails : [];
-      const syllabusRows = Array.isArray(teacher.syllabusCoveredRows) ? teacher.syllabusCoveredRows : [];
+      const syllabusRows = Array.isArray(teacher.syllabusDeclaredRows) ? teacher.syllabusDeclaredRows : [];
       const subjectSet = [...new Set([
         ...details.map(d => d.subject).filter(Boolean),
         ...syllabusRows.map(d => d.subject).filter(Boolean),
@@ -3563,15 +4048,6 @@ async function buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, per
           d.notes || "-",
         ];
         entryRows.push(showEntryDates ? [formatInstituteReportEntryDate(d.dateKey), ...base] : base);
-      });
-      syllabusRows.forEach(item => {
-        const base = [
-          item.section || "-",
-          "Syllabus",
-          item.chapterTitle || "-",
-          "Covered",
-        ];
-        entryRows.push(showEntryDates ? [formatInstituteReportEntryDate(item.dateKey), ...base] : base);
       });
       if(!entryRows.length){
         const base = [
@@ -3619,6 +4095,36 @@ async function buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, per
         },
       });
       cursorY = (doc.lastAutoTable?.finalY || cursorY) + 13;
+
+      if(syllabusRows.length){
+        ensurePageSpace(68);
+        doc.setTextColor(...green);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text("Syllabus tracker", margin, cursorY);
+        autoTable(doc, {
+          startY: cursorY + 8,
+          head: [["Section", "Subject", "Covered", "Status"]],
+          body: syllabusRows.map(item => [
+            item.section || "-",
+            item.subject || subjectLabel || "-",
+            `${item.coveredCount || 0} of ${item.totalCount || 0} chapters`,
+            item.status || "Not started",
+          ]),
+          margin:{ left:margin, right:margin },
+          theme:"grid",
+          styles:{ font:"helvetica", fontSize:8.4, cellPadding:5, lineColor:[232,244,233], lineWidth:0.5, textColor:[31,41,55], overflow:"linebreak" },
+          headStyles:{ fillColor:[251,254,250], textColor:green, fontStyle:"bold" },
+          alternateRowStyles:{ fillColor:[255,255,255] },
+          columnStyles:{
+            0:{ cellWidth:70 },
+            1:{ cellWidth:88 },
+            2:{ cellWidth:118, fontStyle:"bold" },
+            3:{ cellWidth:pageWidth - margin * 2 - 70 - 88 - 118, textColor:green, fontStyle:"bold" },
+          },
+        });
+        cursorY = (doc.lastAutoTable?.finalY || cursorY) + 13;
+      }
     });
   }
 
@@ -3669,7 +4175,16 @@ async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, per
   const folder = zip.folder("Ledgr centre PDFs") || zip;
   for(const row of safeRows){
     const filename = instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey);
-    const html = buildInstituteGlanceInstituteHtml(row, generatedOnLabel, period, rangeStartKey, rangeEndKey);
+    const rows = [row];
+    const html = buildInstituteGlanceSummaryHtml({
+      rows,
+      summary:summariseInstituteGlanceRows(rows),
+      generatedOnLabel,
+      period,
+      rangeStartKey,
+      rangeEndKey,
+      scopeLabel:row?.institute || "Institute",
+    });
     const blob = await renderInstituteGlanceHtmlPdfBlob({ html, filename });
     folder.file(filename, blob);
   }
@@ -7576,6 +8091,7 @@ function AdminPanelInner({user}){
       teachers: instituteGlanceTeacherList,
       fullDataMap,
       resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
+      syllabusTemplates,
       period:resolved.period,
       rangeStartKey,
       rangeEndKey,
@@ -7586,7 +8102,7 @@ function AdminPanelInner({user}){
       loadedInstitutes: rows.filter(row => row.ready).length,
       totalInstitutes: rows.length,
     };
-  }, [getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, institutes]);
+  }, [getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, institutes, syllabusTemplates]);
 
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
@@ -10019,9 +10535,20 @@ function AdminPanelInner({user}){
     });
   };
   const handleDemote=async(uid)=>{
-    adminConfirmDialog("Remove admin access?","Remove Admin",async()=>{
-      await demoteToTeacher(uid);
-      setRoles(r=>({...r,[uid]:"teacher"}));
+    if(uid===user.uid){
+      showAdminToast("You cannot remove your own admin access.");
+      return;
+    }
+    const target = teachers.find(t=>t.uid===uid);
+    const targetName = target ? getTeacherDisplayName(target) : "this admin";
+    adminConfirmDialog(`Remove admin access for ${targetName}? They will remain a teacher account.`,"Remove Admin",async()=>{
+      try {
+        await demoteToTeacher(uid,user.uid);
+        setRoles(r=>({...r,[uid]:"teacher"}));
+        showAdminToast(`${targetName} is no longer an admin.`);
+      } catch(e) {
+        showAdminToast("Could not remove admin access: " + (e?.message || "Unknown error"));
+      }
     });
   };
 
@@ -11870,7 +12397,7 @@ function AdminPanelInner({user}){
       }}>
       <div style={{minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <span style={{fontSize:18,flexShrink:0}}>{icon}</span>
+          <AppIcon icon={icon} size={18} color={G.textM} style={{flexShrink:0}} />
           <span style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,minWidth:0}}>{title}</span>
         </div>
         <div style={{fontSize:13,color:G.textM,marginTop:5}}>
@@ -13024,6 +13551,59 @@ function AdminPanelInner({user}){
             .filter(Boolean)
             .sort(exportTextSorter.compare);
           const adminsWithoutInstitute = adminList.filter(t=>!getTeacherInstituteList(t).length && matchesAdmin(t));
+          const AdminCard = ({ t, currentInstitute = null }) => {
+            const name=getTeacherDisplayName(t);
+            const isMe=t.uid===user.uid;
+            const instituteList = getTeacherInstituteList(t);
+            const otherInstitutes = currentInstitute
+              ? instituteList.filter(value=>!sameInstituteName(value, currentInstitute))
+              : instituteList;
+            return(
+              <div style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:42,height:42,borderRadius:11,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:800,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
+                  {(name[0]||"?").toUpperCase()}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  {renamingTeacher?.uid===t.uid?(
+                    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                      <input value={renameVal} onChange={e=>setRenameVal(e.target.value)}
+                        onKeyDown={e=>e.key==="Enter"&&handleRenameTeacher(t.uid,renameVal)}
+                        placeholder="Admin name" autoFocus
+                        style={{flex:"1 1 220px",minWidth:0,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${G.blue}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
+                      <button onClick={()=>handleRenameTeacher(t.uid,renameVal)} style={{...pill(G.navy,"#fff","transparent"),fontSize:13,padding:"7px 14px"}}>Save</button>
+                      <button onClick={()=>setRenamingTeacher(null)} style={{...pill("none",G.textM,G.border),fontSize:13,padding:"7px 10px"}}>Cancel</button>
+                    </div>
+                  ):(
+                    <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      {name}
+                      {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
+                    </div>
+                  )}
+                  <div style={{fontSize:13,color:G.textM,marginTop:3,fontFamily:G.mono}}>
+                    {getTeacherEmail(t) || "Email not available"}
+                  </div>
+                  {otherInstitutes.length>0&&<AlsoAtInstitutes institutes={otherInstitutes} />}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,flexShrink:0}}>
+                  <span style={{background:G.blueL,color:G.blue,fontSize:12,fontWeight:800,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
+                    Admin
+                  </span>
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                    <button onClick={()=>{setRenamingTeacher({uid:t.uid,currentName:name});setRenameVal(name);}}
+                      style={{...pill(G.surface,G.textS,G.borderM),fontSize:13,flexShrink:0}}>
+                      Rename
+                    </button>
+                    {!isMe&&(
+                      <button onClick={()=>handleDemote(t.uid)}
+                        style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,flexShrink:0}}>
+                        Remove Admin
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          };
           return(
             <>
               {/* Invite link */}
@@ -13067,7 +13647,7 @@ function AdminPanelInner({user}){
                       return(
                         <div key={inst}>
                           {instituteAccordionHeader({
-                            icon:"👑",
+                            icon:IconSettings,
                             title:inst,
                             count:instAdmins.length,
                             countLabel:"admin",
@@ -13076,40 +13656,9 @@ function AdminPanelInner({user}){
                           })}
                           {isOpen&&(
                             <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
-                              {instAdmins.map(t=>{
-                                const name=getTeacherDisplayName(t);
-                                const isMe=t.uid===user.uid;
-                                const instituteList = getTeacherInstituteList(t);
-                                const otherInstitutes = instituteList.filter(value=>!sameInstituteName(value, inst));
-                                return(
-                                  <div key={`${inst}_${t.uid}`} style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:12}}>
-                                    <div style={{width:42,height:42,borderRadius:11,background:G.amberL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:G.amber,fontFamily:G.mono,flexShrink:0}}>
-                                      {(name[0]||"?").toUpperCase()}
-                                    </div>
-                                    <div style={{flex:1,minWidth:0}}>
-                                      <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                                      {name}
-                                      {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
-                                    </div>
-                                    <div style={{fontSize:13,color:G.textM,marginTop:3,fontFamily:G.mono}}>
-                                      {getTeacherEmail(t) || "Email not available"}
-                                    </div>
-                                    {otherInstitutes.length>0&&<AlsoAtInstitutes institutes={otherInstitutes} />}
-                                  </div>
-                                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,flexShrink:0}}>
-                                      <span style={{background:G.amberL,color:G.amber,fontSize:12,fontWeight:700,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
-                                        👑 Admin
-                                      </span>
-                                      {!isMe&&(
-                                        <button onClick={()=>handleDemote(t.uid)}
-                                          style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,flexShrink:0}}>
-                                          Remove Admin
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                              {instAdmins.map(t=>(
+                                <AdminCard key={`${inst}_${t.uid}`} t={t} currentInstitute={inst} />
+                              ))}
                             </div>
                           )}
                         </div>
@@ -13118,7 +13667,7 @@ function AdminPanelInner({user}){
                     {adminsWithoutInstitute.length>0&&(
                       <div>
                         {instituteAccordionHeader({
-                          icon:"👑",
+                          icon:IconSettings,
                           title:"No Institute Assigned",
                           count:adminsWithoutInstitute.length,
                           countLabel:"admin",
@@ -13127,32 +13676,9 @@ function AdminPanelInner({user}){
                         })}
                         {openAdminInstitute==="__no_inst__"&&(
                           <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
-                            {adminsWithoutInstitute.map(t=>{
-                              const name=getTeacherDisplayName(t);
-                              const isMe=t.uid===user.uid;
-                              return(
-                                <div key={`noinst_${t.uid}`} style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:12}}>
-                                  <div style={{width:42,height:42,borderRadius:11,background:G.amberL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:G.amber,fontFamily:G.mono,flexShrink:0}}>
-                                    {(name[0]||"?").toUpperCase()}
-                                  </div>
-                                  <div style={{flex:1,minWidth:0}}>
-                                    <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                                      {name}
-                                      {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
-                                    </div>
-                                    <div style={{fontSize:13,color:G.textM,marginTop:3,fontFamily:G.mono}}>
-                                      {getTeacherEmail(t) || "Email not available"}
-                                    </div>
-                                  </div>
-                                  {!isMe&&(
-                                    <button onClick={()=>handleDemote(t.uid)}
-                                      style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,flexShrink:0}}>
-                                      Remove Admin
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
+                            {adminsWithoutInstitute.map(t=>(
+                              <AdminCard key={`noinst_${t.uid}`} t={t} />
+                            ))}
                           </div>
                         )}
                       </div>
