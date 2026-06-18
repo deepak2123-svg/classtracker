@@ -7592,6 +7592,7 @@ function AdminPanelInner({user}){
   const [pendingSectionError, setPendingSectionError] = useState("");
   const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
   const fullDataRequestRef = React.useRef({});
+  const fullDataRef = React.useRef(fullData);
   const warmupJobRef = React.useRef(0);
   const instituteGlanceJobRef = React.useRef(0);
   const instituteGlanceDataRef = React.useRef({});
@@ -7616,6 +7617,10 @@ function AdminPanelInner({user}){
     skipClickInst:null,
     skipClickUntil:0,
   });
+
+  React.useEffect(() => {
+    fullDataRef.current = fullData;
+  }, [fullData]);
 
   const handlePeriodChange = React.useCallback((nextPeriod)=>{
     if(nextPeriod==="range"){
@@ -7923,12 +7928,17 @@ function AdminPanelInner({user}){
   // Lazy-load full data for a teacher only when needed
   const ensureFullData = React.useCallback(async (uid) => {
     if(!uid) return null;
-    if (fullData[uid]) return fullData[uid];
+    if (fullDataRef.current[uid]) return fullDataRef.current[uid];
     if (fullDataRequestRef.current[uid]) return fullDataRequestRef.current[uid];
     setLoadingUids(s=>s.has(uid)?s:new Set([...s,uid]));
     const pending = getTeacherFullData(uid)
       .then(d=>{
-        if (d) setFullData(prev=>prev[uid]?prev:{...prev,[uid]:d});
+        if (d){
+          if(!fullDataRef.current[uid]){
+            fullDataRef.current = { ...fullDataRef.current, [uid]: d };
+          }
+          setFullData(prev=>prev[uid]?prev:{...prev,[uid]:d});
+        }
         return d || null;
       })
       .finally(()=>{
@@ -7942,7 +7952,7 @@ function AdminPanelInner({user}){
       });
     fullDataRequestRef.current[uid] = pending;
     return pending;
-  },[fullData]);
+  },[]);
 
   const getTeacherInstituteList = React.useCallback((teacher) => {
     const list = [];
@@ -8007,15 +8017,17 @@ function AdminPanelInner({user}){
   );
 
   const getInstituteTeacherUids = React.useCallback((inst) => {
+    const snapshot = fullDataRef.current || {};
     return teachers
-      .filter(t => teacherBelongsToInstitute(t, inst))
+      .filter(t => teacherBelongsToInstituteFromMap(t, inst, snapshot))
       .map(t => t.uid);
-  }, [teacherBelongsToInstitute, teachers]);
+  }, [teachers]);
 
   const warmTeacherUids = React.useCallback(async (uids, instLabel = null) => {
-    const requestId = ++warmupJobRef.current;
+    const tracksInstituteProgress = !!instLabel;
+    const requestId = tracksInstituteProgress ? ++warmupJobRef.current : warmupJobRef.current;
     const unique = [...new Set((uids || []).filter(Boolean))];
-    const missing = unique.filter(uid => !fullData[uid]);
+    const missing = unique.filter(uid => !fullDataRef.current[uid]);
 
     if(instLabel){
       setInstWarmup({ inst:instLabel, total:missing.length, loaded:0 });
@@ -8026,9 +8038,9 @@ function AdminPanelInner({user}){
     }
 
     for(let i=0;i<missing.length;i+=1){
-      if(requestId!==warmupJobRef.current) return;
+      if(tracksInstituteProgress && requestId!==warmupJobRef.current) return;
       await ensureFullData(missing[i]);
-      if(requestId!==warmupJobRef.current) return;
+      if(tracksInstituteProgress && requestId!==warmupJobRef.current) return;
       if(instLabel){
         const loaded = i + 1;
         setInstWarmup(prev=>prev.inst===instLabel?{...prev,loaded}:prev);
@@ -8037,7 +8049,7 @@ function AdminPanelInner({user}){
         await new Promise(resolve=>window.setTimeout(resolve, 40));
       }
     }
-  }, [ensureFullData, fullData, isWeakDevice, mobileLiteMode]);
+  }, [ensureFullData, isWeakDevice, mobileLiteMode]);
 
   const warmInstitute = React.useCallback((inst) => {
     warmTeacherUids(getInstituteTeacherUids(inst), inst);
