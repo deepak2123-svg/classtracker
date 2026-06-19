@@ -57,6 +57,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -1143,6 +1144,7 @@ private fun HomeClassCard(
 ) {
     val tone = ledgrSectionTone(teacherClass.sectionName)
     val haptics = rememberLedgrHaptics()
+    val cardShape = RoundedCornerShape(18.dp)
     val revealDistancePx = with(LocalDensity.current) { 92.dp.toPx() }
     var revealState by rememberSaveable(teacherClass.id) { mutableStateOf(HomeClassRevealState.Center) }
     var dragDeltaPx by remember { mutableStateOf(0f) }
@@ -1167,140 +1169,149 @@ private fun HomeClassCard(
         animationSpec = spring(stiffness = 520f, dampingRatio = 0.86f),
         label = "homeClassCardShadow",
     )
+    val swipeRevealModifier = Modifier.pointerInput(teacherClass.id, isDragging, settledOffsetPx) {
+        if (!isDragging) {
+            detectHorizontalDragGestures(
+                onHorizontalDrag = { change, dragAmount ->
+                    change.consume()
+                    dragDeltaPx = (dragDeltaPx + dragAmount)
+                        .coerceIn(-revealDistancePx - settledOffsetPx, revealDistancePx - settledOffsetPx)
+                },
+                onDragEnd = {
+                    val nextState = when {
+                        currentOffsetPx >= revealDistancePx * 0.46f -> HomeClassRevealState.History
+                        currentOffsetPx <= -revealDistancePx * 0.46f -> HomeClassRevealState.Syllabus
+                        else -> HomeClassRevealState.Center
+                    }
+                    if (nextState != revealState) haptics.selection()
+                    revealState = nextState
+                    dragDeltaPx = 0f
+                },
+                onDragCancel = { dragDeltaPx = 0f },
+            )
+        }
+    }
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(70.dp)
+            .height(76.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            },
+            }
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            HomeClassActionPanel(
-                title = "History",
-                primary = "${historyPreview.entryCount}",
-                secondary = if (historyPreview.entryCount == 1) "entry" else "entries",
-                tertiary = if (historyPreview.entryCount > 0) {
-                    historyPreview.latestTitle
-                } else {
-                    "No past entries"
-                },
-                visible = revealState == HomeClassRevealState.History || swipeOffsetPx > 16f,
-                onClick = {
-                    revealState = HomeClassRevealState.Center
-                    dragDeltaPx = 0f
-                    onHistoryClick()
-                },
-                modifier = Modifier.padding(end = 10.dp),
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            HomeClassActionPanel(
-                title = "Syllabus",
-                primary = if (syllabusPreview.available) "${syllabusPreview.percent}%" else "--",
-                secondary = if (syllabusPreview.available) {
-                    "${syllabusPreview.completedChapters}/${syllabusPreview.totalChapters}"
-                } else {
-                    "No plan"
-                },
-                tertiary = syllabusPreview.nextChapter?.let { "Next: $it" } ?: "Open coverage",
-                visible = revealState == HomeClassRevealState.Syllabus || swipeOffsetPx < -16f,
-                onClick = {
-                    revealState = HomeClassRevealState.Center
-                    dragDeltaPx = 0f
-                    onSyllabusClick()
-                },
-                modifier = Modifier.padding(start = 10.dp),
-            )
-        }
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .offset { IntOffset(swipeOffsetPx.roundToInt(), 0) }
-                .pointerInput(teacherClass.id, isDragging, settledOffsetPx) {
-                    if (!isDragging) {
-                        detectHorizontalDragGestures(
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                dragDeltaPx = (dragDeltaPx + dragAmount)
-                                    .coerceIn(-revealDistancePx - settledOffsetPx, revealDistancePx - settledOffsetPx)
-                            },
-                            onDragEnd = {
-                                val nextState = when {
-                                    currentOffsetPx >= revealDistancePx * 0.46f -> HomeClassRevealState.History
-                                    currentOffsetPx <= -revealDistancePx * 0.46f -> HomeClassRevealState.Syllabus
-                                    else -> HomeClassRevealState.Center
-                                }
-                                if (nextState != revealState) haptics.selection()
-                                revealState = nextState
-                                dragDeltaPx = 0f
-                            },
-                            onDragCancel = { dragDeltaPx = 0f },
-                        )
-                    }
-                }
-                .clickable {
-                    if (revealState == HomeClassRevealState.Center) {
-                        onClick()
-                    } else {
-                        revealState = HomeClassRevealState.Center
-                        dragDeltaPx = 0f
-                    }
-                },
-            color = tone.surface,
-            contentColor = tone.text,
-            shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.2.dp, homeClassBorderColor()),
-            shadowElevation = shadowElevation,
+                .clip(cardShape),
         ) {
             Row(
-                modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 9.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = teacherClass.sectionName,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 18.sp,
-                            lineHeight = 20.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = homeStrongTextColor(),
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        MiniHomePill(
-                            text = teacherClass.instituteName.ifBlank { "No institute" },
-                            dotColor = tone.accent,
-                            prominent = true,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        if (teacherClass.subjectName.isNotBlank()) {
-                            MiniHomePill(
-                                text = teacherClass.subjectName,
-                                dotColor = null,
-                            )
+                HomeClassActionPanel(
+                    title = "History",
+                    primary = "${historyPreview.entryCount}",
+                    secondary = if (historyPreview.entryCount == 1) "entry" else "entries",
+                    tertiary = if (historyPreview.entryCount > 0) {
+                        historyPreview.latestTitle
+                    } else {
+                        "No past entries"
+                    },
+                    visible = revealState == HomeClassRevealState.History || swipeOffsetPx > 16f,
+                    onClick = {
+                        revealState = HomeClassRevealState.Center
+                        dragDeltaPx = 0f
+                        onHistoryClick()
+                    },
+                    modifier = Modifier.padding(end = 10.dp),
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                HomeClassActionPanel(
+                    title = "Syllabus",
+                    primary = if (syllabusPreview.available) "${syllabusPreview.percent}%" else "--",
+                    secondary = if (syllabusPreview.available) {
+                        "${syllabusPreview.completedChapters}/${syllabusPreview.totalChapters}"
+                    } else {
+                        "No plan"
+                    },
+                    tertiary = syllabusPreview.nextChapter?.let { "Next: $it" } ?: "Open coverage",
+                    visible = revealState == HomeClassRevealState.Syllabus || swipeOffsetPx < -16f,
+                    onClick = {
+                        revealState = HomeClassRevealState.Center
+                        dragDeltaPx = 0f
+                        onSyllabusClick()
+                    },
+                    modifier = Modifier.padding(start = 10.dp),
+                )
+            }
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset { IntOffset(swipeOffsetPx.roundToInt(), 0) }
+                    .clickable {
+                        if (revealState == HomeClassRevealState.Center) {
+                            onClick()
+                        } else {
+                            revealState = HomeClassRevealState.Center
+                            dragDeltaPx = 0f
                         }
-                    }
-                }
+                    },
+                color = tone.surface,
+                contentColor = tone.text,
+                shape = cardShape,
+                border = BorderStroke(1.dp, homeClassBorderColor()),
+                shadowElevation = shadowElevation,
+            ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    modifier = Modifier.padding(start = 16.dp, top = 11.dp, end = 14.dp, bottom = 11.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    DragHandleAffordance(modifier = reorderHandleModifier)
-                    LoggedClassIndicator(loggedToday = loggedToday)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = teacherClass.sectionName,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 18.sp,
+                                lineHeight = 20.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = homeStrongTextColor(),
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            MiniHomePill(
+                                text = teacherClass.instituteName.ifBlank { "No institute" },
+                                dotColor = tone.accent,
+                                prominent = true,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (teacherClass.subjectName.isNotBlank()) {
+                                MiniHomePill(
+                                    text = teacherClass.subjectName,
+                                    dotColor = null,
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        DragHandleAffordance(modifier = reorderHandleModifier)
+                        LoggedClassIndicator(
+                            loggedToday = loggedToday,
+                            modifier = swipeRevealModifier,
+                        )
+                    }
                 }
             }
         }
@@ -1399,7 +1410,10 @@ private fun DragHandleAffordance(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun LoggedClassIndicator(loggedToday: Boolean) {
+private fun LoggedClassIndicator(
+    loggedToday: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val active = homeLoggedIndicatorColor()
     val inactive = if (LedgrTheme.isDark) {
         MaterialTheme.colorScheme.outlineVariant
@@ -1408,7 +1422,7 @@ private fun LoggedClassIndicator(loggedToday: Boolean) {
     }
 
     Box(
-        modifier = Modifier.size(28.dp),
+        modifier = modifier.size(28.dp),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
