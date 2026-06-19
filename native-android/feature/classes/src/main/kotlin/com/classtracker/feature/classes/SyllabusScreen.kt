@@ -50,7 +50,7 @@ import com.classtracker.core.model.completedSyllabusUnitIds
 import com.classtracker.core.model.progressForCompletedUnitIds
 import com.classtracker.core.model.syllabusChapterCompletionMarker
 
-private val SyllabusLightCanvas = Color(0xFFEFEEE8)
+private val SyllabusLightCanvas = Color(0xFFEAF4FF)
 private val SyllabusInk = Color(0xFF10204A)
 private val SyllabusMuted = Color(0xFF85837D)
 private val SyllabusGreen = Color(0xFF0F7D6F)
@@ -112,7 +112,7 @@ fun SyllabusScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = "SYLLABUS",
                     style = MaterialTheme.typography.labelLarge.copy(
@@ -122,8 +122,10 @@ fun SyllabusScreen(
                     color = syllabusMutedColor(),
                 )
                 Text(
-                    text = "Published by your admin",
-                    style = MaterialTheme.typography.headlineMedium.copy(
+                    text = "Syllabus",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 21.sp,
+                        lineHeight = 25.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = syllabusInkColor(),
                     ),
@@ -209,25 +211,28 @@ private fun SyllabusClassCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = teacherClass.sectionName,
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontSize = 23.sp,
-                            lineHeight = 27.sp,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 19.sp,
+                            lineHeight = 23.sp,
                         ),
                         fontWeight = FontWeight.ExtraBold,
                         color = syllabusInkColor(),
                     )
                     Text(
                         text = "${teacherClass.instituteName} · ${teacherClass.subjectName}",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 14.sp,
+                            lineHeight = 18.sp,
+                        ),
                         fontWeight = FontWeight.Bold,
                         color = syllabusMutedColor(),
                     )
                 }
                 Text(
                     text = "${progress.percent}%",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = 27.sp,
-                        lineHeight = 30.sp,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 23.sp,
+                        lineHeight = 27.sp,
                     ),
                     fontWeight = FontWeight.ExtraBold,
                     color = syllabusAccentColor(),

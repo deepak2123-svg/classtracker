@@ -1,9 +1,15 @@
 package com.classtracker.feature.today
 
 import android.content.Context
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,13 +18,17 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -56,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -65,23 +76,32 @@ import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.designsystem.ledgrSectionTone
 import com.classtracker.core.designsystem.rememberLedgrHaptics
+import com.classtracker.core.model.PublishedSyllabus
 import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherDashboard
 import com.classtracker.core.model.TeacherEntry
+import com.classtracker.core.model.completedSyllabusUnitIds
+import com.classtracker.core.model.progressForCompletedUnitIds
+import com.classtracker.core.model.syllabusChapterCompletionMarker
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private const val AllInstitutes = "All Classes"
 private const val HomeClassOrderPrefs = "ledgr_home_class_order"
 private const val HomeClassOrderDelimiter = "|"
-private val HomeCanvas = Color(0xFFEFEEE8)
+private val HomeCanvas = Color(0xFFEAF4FF)
 private val HomeInk = Color(0xFF10204A)
 private val HomeMuted = Color(0xFF85837D)
 private val HomeBorder = Color(0xFFD4D0C7)
 private val HomeChip = Color(0xFFECEAE4)
 private val HomeWarning = Color(0xFFFFF0BF)
+private val HomePanelSurface = Color(0xFFDCE7FF)
+private val HomePanelBorder = Color(0xFFB4C7F3)
+private val HomeHeroPanelBorder = Color(0xFF324A86)
+private val HomeHeroTextMuted = Color(0xFFD4E0FF)
 
 @Composable
 private fun homeCanvasColor() =
@@ -90,6 +110,10 @@ private fun homeCanvasColor() =
 @Composable
 private fun homeSurfaceColor() =
     if (LedgrTheme.isDark) MaterialTheme.colorScheme.surface else Color.White
+
+@Composable
+private fun homePanelSurfaceColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surface else HomePanelSurface
 
 @Composable
 private fun homeInkColor() =
@@ -104,12 +128,32 @@ private fun homeBorderColor() =
     if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else HomeBorder
 
 @Composable
+private fun homePanelBorderColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else HomePanelBorder
+
+@Composable
 private fun homeChipColor() =
     if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else HomeChip
 
 @Composable
 private fun homeWarningColor() =
     if (LedgrTheme.isDark) colors.warningSurface else HomeWarning
+
+@Composable
+private fun homeHeroPanelSurfaceColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surface else HomeInk
+
+@Composable
+private fun homeHeroPanelBorderColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else HomeHeroPanelBorder
+
+@Composable
+private fun homeHeroTextColor() =
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else Color.White
+
+@Composable
+private fun homeHeroMutedColor() =
+    if (LedgrTheme.isDark) colors.textMuted else HomeHeroTextMuted
 
 @Composable
 private fun homeStrongTextColor() =
@@ -132,7 +176,11 @@ fun HomeScreen(
     dashboard: TeacherDashboard,
     classes: List<TeacherClass>,
     entries: List<TeacherEntry>,
+    publishedSyllabi: List<PublishedSyllabus> = emptyList(),
+    teacherUid: String = "",
     onClassClick: (TeacherClass) -> Unit,
+    onClassHistoryClick: (TeacherClass) -> Unit = {},
+    onClassSyllabusClick: (TeacherClass) -> Unit = {},
     classCreateEnabled: Boolean,
     onAddClassClick: () -> Unit,
     orderStorageKey: String? = null,
@@ -308,61 +356,83 @@ fun HomeScreen(
                 key = TeacherClass::id,
             ) { teacherClass ->
                 val isDragging = draggingClassId == teacherClass.id
+                val historyPreview = remember(entries, teacherClass.id) {
+                    buildHomeClassHistoryPreview(
+                        teacherClass = teacherClass,
+                        entries = entries,
+                    )
+                }
+                val syllabusPreview = remember(
+                    entries,
+                    publishedSyllabi,
+                    teacherUid,
+                    teacherClass.id,
+                ) {
+                    buildHomeClassSyllabusPreview(
+                        teacherUid = teacherUid,
+                        teacherClass = teacherClass,
+                        syllabi = publishedSyllabi,
+                        entries = entries,
+                    )
+                }
                 HomeClassCard(
                     teacherClass = teacherClass,
                     loggedToday = teacherClass.id in dashboard.loggedClassIdsToday,
+                    isDragging = isDragging,
+                    historyPreview = historyPreview,
+                    syllabusPreview = syllabusPreview,
                     onClick = { onClassClick(teacherClass) },
+                    onHistoryClick = { onClassHistoryClick(teacherClass) },
+                    onSyllabusClick = { onClassSyllabusClick(teacherClass) },
+                    reorderHandleModifier = Modifier.pointerInput(teacherClass.id, dragStepPx) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                draggingClassId = teacherClass.id
+                                dragOffsetY = 0f
+                                dragMoved = false
+                                haptics.dragStart()
+                            },
+                            onDragCancel = {
+                                draggingClassId = null
+                                dragOffsetY = 0f
+                                dragMoved = false
+                            },
+                            onDragEnd = {
+                                if (dragMoved) haptics.dragDrop()
+                                draggingClassId = null
+                                dragOffsetY = 0f
+                                dragMoved = false
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragOffsetY += dragAmount.y
+                                while (dragOffsetY > dragStepPx) {
+                                    if (moveVisibleClass.value(teacherClass.id, 1)) {
+                                        dragOffsetY -= dragStepPx
+                                        dragMoved = true
+                                        haptics.selection()
+                                    } else {
+                                        dragOffsetY = dragStepPx
+                                        break
+                                    }
+                                }
+                                while (dragOffsetY < -dragStepPx) {
+                                    if (moveVisibleClass.value(teacherClass.id, -1)) {
+                                        dragOffsetY += dragStepPx
+                                        dragMoved = true
+                                        haptics.selection()
+                                    } else {
+                                        dragOffsetY = -dragStepPx
+                                        break
+                                    }
+                                }
+                            },
+                        )
+                    },
                     modifier = Modifier
                         .zIndex(if (isDragging) 1f else 0f)
                         .graphicsLayer {
                             translationY = if (isDragging) dragOffsetY else 0f
-                            scaleX = if (isDragging) 1.015f else 1f
-                            scaleY = if (isDragging) 1.015f else 1f
-                        }
-                        .pointerInput(teacherClass.id, dragStepPx) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = {
-                                    draggingClassId = teacherClass.id
-                                    dragOffsetY = 0f
-                                    dragMoved = false
-                                    haptics.dragStart()
-                                },
-                                onDragCancel = {
-                                    draggingClassId = null
-                                    dragOffsetY = 0f
-                                    dragMoved = false
-                                },
-                                onDragEnd = {
-                                    if (dragMoved) haptics.dragDrop()
-                                    draggingClassId = null
-                                    dragOffsetY = 0f
-                                    dragMoved = false
-                                },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    dragOffsetY += dragAmount.y
-                                    while (dragOffsetY > dragStepPx) {
-                                        if (moveVisibleClass.value(teacherClass.id, 1)) {
-                                            dragOffsetY -= dragStepPx
-                                            dragMoved = true
-                                            haptics.selection()
-                                        } else {
-                                            dragOffsetY = dragStepPx
-                                            break
-                                        }
-                                    }
-                                    while (dragOffsetY < -dragStepPx) {
-                                        if (moveVisibleClass.value(teacherClass.id, -1)) {
-                                            dragOffsetY += dragStepPx
-                                            dragMoved = true
-                                            haptics.selection()
-                                        } else {
-                                            dragOffsetY = -dragStepPx
-                                            break
-                                        }
-                                    }
-                                },
-                            )
                         },
                 )
             }
@@ -386,6 +456,26 @@ fun HomeScreen(
             )
         }
     }
+}
+
+private data class HomeClassHistoryPreview(
+    val entryCount: Int,
+    val latestTitle: String,
+    val latestDateLabel: String,
+)
+
+private data class HomeClassSyllabusPreview(
+    val available: Boolean,
+    val percent: Int,
+    val completedChapters: Int,
+    val totalChapters: Int,
+    val nextChapter: String?,
+)
+
+private enum class HomeClassRevealState {
+    Center,
+    History,
+    Syllabus,
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -707,9 +797,9 @@ private fun AddClassCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surface,
+        color = homePanelSurfaceColor(),
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(2.dp, MaterialTheme.colorScheme.outline),
+        border = BorderStroke(1.dp, homePanelBorderColor()),
         shadowElevation = 2.dp,
     ) {
         Row(
@@ -740,7 +830,7 @@ private fun AddClassCard(
                     fontWeight = FontWeight.ExtraBold,
                 )
                 Text(
-                    text = "Add a class like the web app.",
+                    text = "Add a class.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.textSecondary,
                 )
@@ -761,11 +851,31 @@ private fun HomeSummaryCard(
     monthEntries: Int,
     notLoggedToday: Int,
 ) {
+    val animatedVisibleCount by animateIntAsState(
+        targetValue = visibleCount,
+        animationSpec = spring(stiffness = 380f, dampingRatio = 0.92f),
+        label = "homeVisibleCount",
+    )
+    val animatedLoggedToday by animateIntAsState(
+        targetValue = loggedToday,
+        animationSpec = spring(stiffness = 380f, dampingRatio = 0.92f),
+        label = "homeLoggedToday",
+    )
+    val animatedMonthEntries by animateIntAsState(
+        targetValue = monthEntries,
+        animationSpec = spring(stiffness = 380f, dampingRatio = 0.92f),
+        label = "homeMonthEntries",
+    )
+    val animatedNotLoggedToday by animateIntAsState(
+        targetValue = notLoggedToday,
+        animationSpec = spring(stiffness = 380f, dampingRatio = 0.92f),
+        label = "homeNotLoggedToday",
+    )
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = homeSurfaceColor(),
+        color = homeHeroPanelSurfaceColor(),
         shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(1.dp, homeBorderColor()),
+        border = BorderStroke(1.dp, homeHeroPanelBorderColor()),
         shadowElevation = 0.dp,
     ) {
         Column(
@@ -781,7 +891,7 @@ private fun HomeSummaryCard(
                     Text(
                         text = "TODAY",
                         style = sectionLabelStyle(),
-                        color = homeMutedColor(),
+                        color = homeHeroMutedColor(),
                     )
                     Text(
                         text = currentDateLabel().replace(", ", ",\n"),
@@ -789,7 +899,7 @@ private fun HomeSummaryCard(
                             fontSize = 23.sp,
                             lineHeight = 26.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = homeInkColor(),
+                            color = homeHeroTextColor(),
                         ),
                     )
                 }
@@ -797,14 +907,14 @@ private fun HomeSummaryCard(
                     Text(
                         text = "VISIBLE",
                         style = sectionLabelStyle(),
-                        color = homeMutedColor(),
+                        color = homeHeroMutedColor(),
                     )
                     Text(
-                        text = visibleCount.toString(),
+                        text = animatedVisibleCount.toString(),
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontSize = 32.sp,
                             lineHeight = 33.sp,
-                            color = homeInkColor(),
+                            color = homeHeroTextColor(),
                         ),
                     )
                 }
@@ -813,11 +923,11 @@ private fun HomeSummaryCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                SummaryPill("$loggedToday logged today")
-                SummaryPill("$monthEntries entries this month")
+                SummaryPill("$animatedLoggedToday logged today")
+                SummaryPill("$animatedMonthEntries entries this month")
                 SummaryPill(
-                    text = "$notLoggedToday not logged today",
-                    warning = notLoggedToday > 0,
+                    text = "$animatedNotLoggedToday not logged today",
+                    warning = animatedNotLoggedToday > 0,
                 )
             }
         }
@@ -877,9 +987,9 @@ private fun InstituteFilterCard(
     val options = listOf(AllInstitutes) + institutes
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = homeSurfaceColor(),
+        color = homeHeroPanelSurfaceColor(),
         shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(1.dp, homeBorderColor()),
+        border = BorderStroke(1.dp, homeHeroPanelBorderColor()),
         shadowElevation = 0.dp,
     ) {
         Column(
@@ -889,7 +999,7 @@ private fun InstituteFilterCard(
             Text(
                 text = "INSTITUTE FILTER",
                 style = sectionLabelStyle(),
-                color = homeMutedColor(),
+                color = homeHeroMutedColor(),
                 modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp),
             )
             options.chunked(2).forEach { rowOptions ->
@@ -928,22 +1038,52 @@ private fun InstituteOption(
 ) {
     val allClasses = label == AllInstitutes
     val tone = ledgrSectionTone(toneSeed)
-    val background = if (allClasses) {
+    val targetBackground = if (allClasses) {
         homeSurfaceColor()
     } else {
         tone.surface
     }
+    val targetBorderColor = homeClassBorderColor()
+    val targetScale = if (selected) 1.015f else 1f
+    val animatedBackground by animateColorAsState(
+        targetValue = targetBackground,
+        animationSpec = spring(stiffness = 420f, dampingRatio = 0.94f),
+        label = "instituteChipBackground",
+    )
+    val animatedBorderColor by animateColorAsState(
+        targetValue = targetBorderColor,
+        animationSpec = spring(stiffness = 420f, dampingRatio = 0.94f),
+        label = "instituteChipBorder",
+    )
+    val animatedScale by animateFloatAsState(
+        targetValue = targetScale,
+        animationSpec = spring(stiffness = 460f, dampingRatio = 0.88f),
+        label = "instituteChipScale",
+    )
+    val animatedBorderWidth by animateDpAsState(
+        targetValue = if (selected) 1.35.dp else 1.05.dp,
+        animationSpec = spring(stiffness = 460f, dampingRatio = 0.9f),
+        label = "instituteChipBorderWidth",
+    )
+    val animatedDotScale by animateFloatAsState(
+        targetValue = if (selected) 1.08f else 1f,
+        animationSpec = spring(stiffness = 480f, dampingRatio = 0.88f),
+        label = "instituteChipDotScale",
+    )
     val textColor = homeStrongTextColor()
-    val borderColor = homeClassBorderColor()
 
     Surface(
         modifier = modifier
             .height(42.dp)
+            .graphicsLayer {
+                scaleX = animatedScale
+                scaleY = animatedScale
+            }
             .clickable(onClick = onClick),
-        color = background,
+        color = animatedBackground,
         contentColor = textColor,
         shape = RoundedCornerShape(15.dp),
-        border = BorderStroke(if (selected) 1.7.dp else 1.5.dp, borderColor),
+        border = BorderStroke(animatedBorderWidth, animatedBorderColor),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -955,7 +1095,12 @@ private fun InstituteOption(
                 contentAlignment = Alignment.Center,
             ) {
                 Surface(
-                    modifier = Modifier.size(10.dp),
+                    modifier = Modifier
+                        .size(10.dp)
+                        .graphicsLayer {
+                            scaleX = animatedDotScale
+                            scaleY = animatedDotScale
+                        },
                     shape = CircleShape,
                     color = if (allClasses) {
                         if (selected) colors.textSecondary else Color.Transparent
@@ -987,83 +1132,268 @@ private fun InstituteOption(
 private fun HomeClassCard(
     teacherClass: TeacherClass,
     loggedToday: Boolean,
+    isDragging: Boolean,
+    historyPreview: HomeClassHistoryPreview,
+    syllabusPreview: HomeClassSyllabusPreview,
     onClick: () -> Unit,
+    onHistoryClick: () -> Unit,
+    onSyllabusClick: () -> Unit,
+    reorderHandleModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val tone = ledgrSectionTone(teacherClass.sectionName)
-    Surface(
+    val haptics = rememberLedgrHaptics()
+    val revealDistancePx = with(LocalDensity.current) { 92.dp.toPx() }
+    var revealState by rememberSaveable(teacherClass.id) { mutableStateOf(HomeClassRevealState.Center) }
+    var dragDeltaPx by remember { mutableStateOf(0f) }
+    val settledOffsetPx = when (revealState) {
+        HomeClassRevealState.Center -> 0f
+        HomeClassRevealState.History -> revealDistancePx
+        HomeClassRevealState.Syllabus -> -revealDistancePx
+    }
+    val currentOffsetPx = (settledOffsetPx + dragDeltaPx).coerceIn(-revealDistancePx, revealDistancePx)
+    val swipeOffsetPx by animateFloatAsState(
+        targetValue = currentOffsetPx,
+        animationSpec = spring(stiffness = 560f, dampingRatio = 0.88f),
+        label = "homeClassCardSwipeOffset",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (isDragging) 1.018f else 1f,
+        animationSpec = spring(stiffness = 540f, dampingRatio = 0.84f),
+        label = "homeClassCardScale",
+    )
+    val shadowElevation by animateDpAsState(
+        targetValue = if (isDragging) 8.dp else 0.dp,
+        animationSpec = spring(stiffness = 520f, dampingRatio = 0.86f),
+        label = "homeClassCardShadow",
+    )
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .height(70.dp)
-            .clickable(onClick = onClick),
-        color = tone.surface,
-        contentColor = tone.text,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.6.dp, homeClassBorderColor()),
-        shadowElevation = 0.dp,
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
     ) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 9.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = teacherClass.sectionName,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 18.sp,
-                        lineHeight = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = homeStrongTextColor(),
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    MiniHomePill(
-                        text = teacherClass.instituteName.ifBlank { "No institute" },
-                        dotColor = tone.accent,
-                        prominent = true,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (teacherClass.subjectName.isNotBlank()) {
-                        MiniHomePill(
-                            text = teacherClass.subjectName,
-                            dotColor = null,
+            HomeClassActionPanel(
+                title = "History",
+                primary = "${historyPreview.entryCount}",
+                secondary = if (historyPreview.entryCount == 1) "entry" else "entries",
+                tertiary = if (historyPreview.entryCount > 0) {
+                    historyPreview.latestTitle
+                } else {
+                    "No past entries"
+                },
+                visible = revealState == HomeClassRevealState.History || swipeOffsetPx > 16f,
+                onClick = {
+                    revealState = HomeClassRevealState.Center
+                    dragDeltaPx = 0f
+                    onHistoryClick()
+                },
+                modifier = Modifier.padding(end = 10.dp),
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            HomeClassActionPanel(
+                title = "Syllabus",
+                primary = if (syllabusPreview.available) "${syllabusPreview.percent}%" else "--",
+                secondary = if (syllabusPreview.available) {
+                    "${syllabusPreview.completedChapters}/${syllabusPreview.totalChapters}"
+                } else {
+                    "No plan"
+                },
+                tertiary = syllabusPreview.nextChapter?.let { "Next: $it" } ?: "Open coverage",
+                visible = revealState == HomeClassRevealState.Syllabus || swipeOffsetPx < -16f,
+                onClick = {
+                    revealState = HomeClassRevealState.Center
+                    dragDeltaPx = 0f
+                    onSyllabusClick()
+                },
+                modifier = Modifier.padding(start = 10.dp),
+            )
+        }
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .offset { IntOffset(swipeOffsetPx.roundToInt(), 0) }
+                .pointerInput(teacherClass.id, isDragging, settledOffsetPx) {
+                    if (!isDragging) {
+                        detectHorizontalDragGestures(
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                dragDeltaPx = (dragDeltaPx + dragAmount)
+                                    .coerceIn(-revealDistancePx - settledOffsetPx, revealDistancePx - settledOffsetPx)
+                            },
+                            onDragEnd = {
+                                val nextState = when {
+                                    currentOffsetPx >= revealDistancePx * 0.46f -> HomeClassRevealState.History
+                                    currentOffsetPx <= -revealDistancePx * 0.46f -> HomeClassRevealState.Syllabus
+                                    else -> HomeClassRevealState.Center
+                                }
+                                if (nextState != revealState) haptics.selection()
+                                revealState = nextState
+                                dragDeltaPx = 0f
+                            },
+                            onDragCancel = { dragDeltaPx = 0f },
                         )
                     }
                 }
-            }
+                .clickable {
+                    if (revealState == HomeClassRevealState.Center) {
+                        onClick()
+                    } else {
+                        revealState = HomeClassRevealState.Center
+                        dragDeltaPx = 0f
+                    }
+                },
+            color = tone.surface,
+            contentColor = tone.text,
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.2.dp, homeClassBorderColor()),
+            shadowElevation = shadowElevation,
+        ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 9.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                DragHandleAffordance()
-                LoggedClassIndicator(loggedToday = loggedToday)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = teacherClass.sectionName,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 18.sp,
+                            lineHeight = 20.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = homeStrongTextColor(),
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        MiniHomePill(
+                            text = teacherClass.instituteName.ifBlank { "No institute" },
+                            dotColor = tone.accent,
+                            prominent = true,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (teacherClass.subjectName.isNotBlank()) {
+                            MiniHomePill(
+                                text = teacherClass.subjectName,
+                                dotColor = null,
+                            )
+                        }
+                    }
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DragHandleAffordance(modifier = reorderHandleModifier)
+                    LoggedClassIndicator(loggedToday = loggedToday)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DragHandleAffordance(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+private fun HomeClassActionPanel(
+    title: String,
+    primary: String,
+    secondary: String,
+    tertiary: String,
+    visible: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .width(96.dp)
+            .fillMaxHeight()
+            .clickable(enabled = visible, onClick = onClick),
+        color = homeHeroPanelSurfaceColor(),
+        contentColor = homeHeroTextColor(),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, homeHeroPanelBorderColor()),
     ) {
-        repeat(3) {
-            Surface(
-                modifier = Modifier.size(width = 16.dp, height = 3.dp),
-                shape = RoundedCornerShape(999.dp),
-                color = homeDragHandleColor(),
-            ) {}
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = homeHeroMutedColor(),
+                ),
+                maxLines = 1,
+            )
+            Text(
+                text = primary,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 17.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = homeHeroTextColor(),
+                ),
+                maxLines = 1,
+            )
+            Text(
+                text = secondary,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = homeHeroTextColor(),
+                ),
+                maxLines = 1,
+            )
+            Text(
+                text = tertiary,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.sp,
+                    lineHeight = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = homeHeroMutedColor(),
+                ),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DragHandleAffordance(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.size(width = 28.dp, height = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            repeat(3) {
+                Surface(
+                    modifier = Modifier.size(width = 16.dp, height = 3.dp),
+                    shape = RoundedCornerShape(999.dp),
+                    color = homeDragHandleColor(),
+                ) {}
+            }
         }
     }
 }
@@ -1085,7 +1415,7 @@ private fun LoggedClassIndicator(loggedToday: Boolean) {
             modifier = Modifier.size(25.dp),
             shape = CircleShape,
             color = if (loggedToday) active.copy(alpha = 0.14f) else Color.Transparent,
-            border = BorderStroke(if (loggedToday) 2.2.dp else 1.8.dp, if (loggedToday) active else inactive),
+            border = BorderStroke(if (loggedToday) 1.8.dp else 1.4.dp, if (loggedToday) active else inactive),
         ) {}
         if (loggedToday) {
             Surface(
@@ -1170,6 +1500,62 @@ private fun readHomeClassOrder(
         ?.split(HomeClassOrderDelimiter)
         ?.filter(String::isNotBlank)
         .orEmpty()
+
+private fun buildHomeClassHistoryPreview(
+    teacherClass: TeacherClass,
+    entries: List<TeacherEntry>,
+): HomeClassHistoryPreview {
+    val classEntries = entries
+        .asSequence()
+        .filter { it.classId == teacherClass.id }
+        .sortedWith(
+            compareByDescending<TeacherEntry> { it.dateKey }
+                .thenByDescending { it.createdAt }
+                .thenByDescending { it.timeStart.orEmpty() },
+        )
+        .toList()
+    val latestEntry = classEntries.firstOrNull()
+    return HomeClassHistoryPreview(
+        entryCount = classEntries.size,
+        latestTitle = latestEntry?.title?.takeIf(String::isNotBlank) ?: "No past entries",
+        latestDateLabel = latestEntry?.dateKey.orEmpty(),
+    )
+}
+
+private fun buildHomeClassSyllabusPreview(
+    teacherUid: String,
+    teacherClass: TeacherClass,
+    syllabi: List<PublishedSyllabus>,
+    entries: List<TeacherEntry>,
+): HomeClassSyllabusPreview {
+    val syllabus = syllabi
+        .filter { it.appliesTo(teacherUid, teacherClass.id) }
+        .maxByOrNull(PublishedSyllabus::version)
+        ?: return HomeClassSyllabusPreview(
+            available = false,
+            percent = 0,
+            completedChapters = 0,
+            totalChapters = 0,
+            nextChapter = null,
+        )
+    val relevantEntries = entries.filter {
+        it.syllabusTemplateId == syllabus.templateId && it.syllabusVersion <= syllabus.version
+    }
+    val completedUnitIds = completedSyllabusUnitIds(relevantEntries)
+    val progress = syllabus.progressForCompletedUnitIds(completedUnitIds)
+    val nextChapter = syllabus.chapters.firstOrNull { chapter ->
+        val chapterCompleted = syllabusChapterCompletionMarker(chapter.id) in completedUnitIds ||
+            (chapter.topics.isNotEmpty() && chapter.topics.all { it.id in completedUnitIds })
+        !chapterCompleted
+    }?.title
+    return HomeClassSyllabusPreview(
+        available = true,
+        percent = progress.percent,
+        completedChapters = progress.completedChapters,
+        totalChapters = progress.totalChapters,
+        nextChapter = nextChapter,
+    )
+}
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable

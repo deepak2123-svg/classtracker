@@ -138,13 +138,15 @@ private const val RecycleBinRoute = "recycle-bin"
 private const val ReportsRoute = "reports"
 private const val FeedbackRoute = "feedback"
 private const val ClassPagerSnapMillis = 170
-private const val ClassPagerPositionalThreshold = 0.72f
+private const val ClassPagerPositionalThreshold = 0.82f
+private const val EntrySaveHandoffMillis = 180L
+private const val EntrySaveSuccessRevealMillis = 220L
 private const val AddClassRoute = "add-class"
 private const val ManageClassesRoute = "manage-classes"
 private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
 private const val EditEntryRoute = "entry/edit/{classId}/{entryId}"
 private const val DuplicateEntryRoute = "entry/duplicate/{classId}/{entryId}"
-private val HomeCanvas = Color(0xFFEFEEE8)
+private val HomeCanvas = Color(0xFFEAF4FF)
 private val HomeInk = Color(0xFF10204A)
 
 @Composable
@@ -162,6 +164,39 @@ private fun appTopButtonSurfaceColor() =
 @Composable
 private fun appTopButtonBorderColor() =
     if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFD4D0C7)
+
+private data class DraftResolution(
+    val draft: TeacherEntryDraft,
+    val recoveredVisible: Boolean,
+    val clearStoredDraft: Boolean,
+)
+
+private fun resolveDraftForEntry(
+    baseDraft: TeacherEntryDraft,
+    recovered: StoredEntryDraft?,
+    todayKey: String,
+    allowStaleRecovery: Boolean,
+): DraftResolution {
+    if (recovered == null) {
+        return DraftResolution(
+            draft = baseDraft,
+            recoveredVisible = false,
+            clearStoredDraft = false,
+        )
+    }
+    if (allowStaleRecovery || recovered.draft.dateKey == todayKey) {
+        return DraftResolution(
+            draft = recovered.draft,
+            recoveredVisible = true,
+            clearStoredDraft = false,
+        )
+    }
+    return DraftResolution(
+        draft = baseDraft,
+        recoveredVisible = false,
+        clearStoredDraft = true,
+    )
+}
 
 @Composable
 fun LedgrApp(
@@ -516,7 +551,7 @@ private fun TeacherApp(
                         )
                     } else if (isClassHistory) {
                         Text(
-                            text = "Class detail",
+                            text = "Past entries",
                             style = MaterialTheme.typography.titleLarge,
                         )
                     } else {
@@ -700,9 +735,17 @@ private fun TeacherApp(
                             dashboard = dashboard,
                             classes = snapshot.classes,
                             entries = snapshot.entries,
+                            publishedSyllabi = publishedSyllabi,
+                            teacherUid = teacher.uid,
                             orderStorageKey = teacher.uid,
                             onClassClick = { teacherClass ->
                                 navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
+                            },
+                            onClassHistoryClick = { teacherClass ->
+                                navController.navigate("class/${Uri.encode(teacherClass.id)}")
+                            },
+                            onClassSyllabusClick = {
+                                navController.navigate(AppDestination.Syllabus.route)
                             },
                             classCreateEnabled = BuildConfig.NATIVE_CLASS_CREATE_ENABLED,
                             onAddClassClick = {
@@ -899,9 +942,8 @@ private fun TeacherApp(
                                 todayKey = todayKey,
                                 onNavigateToClass = { targetClassId ->
                                     navController.navigate(
-                                        "class-entry/${Uri.encode(targetClassId)}",
+                                        "class/${Uri.encode(targetClassId)}",
                                     ) {
-                                        popUpTo(ClassEntryRoute) { inclusive = true }
                                         launchSingleTop = true
                                     }
                                 },
@@ -1343,6 +1385,7 @@ private fun ClassEntryPagerRoute(
 ) {
     val initialPage = snapshot.classes.indexOfFirst { it.id == initialClassId }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = initialPage) { snapshot.classes.size }
+    var pagerSwipeEnabled by rememberSaveable { mutableStateOf(false) }
     val classIds = remember(snapshot.classes) { snapshot.classes.map(TeacherClass::id) }
     val recoveredDraftsByClass = remember(teacher.uid, classIds) {
         classIds.associateWith { classId ->
@@ -1360,6 +1403,7 @@ private fun ClassEntryPagerRoute(
 
     HorizontalPager(
         state = pagerState,
+        userScrollEnabled = pagerSwipeEnabled,
         modifier = modifier.fillMaxSize(),
         key = { page -> snapshot.classes[page].id },
         contentPadding = PaddingValues(0.dp),
@@ -1396,17 +1440,38 @@ private fun ClassEntryPagerRoute(
                 )
             }
             val recovered = recoveredDraftsByClass[pageClass.id]
+            val resolvedDraft = remember(recovered, todayKey, pageClass.id) {
+                resolveDraftForEntry(
+                    baseDraft = baseDraft,
+                    recovered = recovered,
+                    todayKey = todayKey,
+                    allowStaleRecovery = false,
+                )
+            }
             var draft by remember(teacher.uid, pageClass.id) {
-                mutableStateOf(recovered?.draft ?: baseDraft)
+                mutableStateOf(resolvedDraft.draft)
             }
             var editorVisible by rememberSaveable(teacher.uid, pageClass.id) {
                 mutableStateOf(true)
             }
             var recoveredDraftVisible by rememberSaveable(teacher.uid, pageClass.id) {
-                mutableStateOf(recovered != null)
+                mutableStateOf(resolvedDraft.recoveredVisible)
+            }
+            var saveCompletedVisible by rememberSaveable(teacher.uid, pageClass.id) {
+                mutableStateOf(false)
             }
             val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
             val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+
+            LaunchedEffect(resolvedDraft.clearStoredDraft, teacher.uid, pageClass.id) {
+                if (resolvedDraft.clearStoredDraft) {
+                    draftStore.clear(
+                        uid = teacher.uid,
+                        classId = pageClass.id,
+                        entryId = draftKeyEntryId,
+                    )
+                }
+            }
 
             LaunchedEffect(entrySaved, pageClass.id, pagerState.currentPage) {
                 if (entrySaved && pagerState.currentPage == page) {
@@ -1415,13 +1480,23 @@ private fun ClassEntryPagerRoute(
                         classId = pageClass.id,
                         entryId = draftKeyEntryId,
                     )
-                    draft = baseDraft.copy(mutationId = "native_${UUID.randomUUID()}")
                     focusManager.clearFocus(force = true)
                     keyboardController?.hide()
                     recoveredDraftVisible = false
+                    saveCompletedVisible = true
+                    delay(EntrySaveSuccessRevealMillis)
                     editorVisible = false
+                    draft = baseDraft.copy(mutationId = "native_${UUID.randomUUID()}")
+                    saveCompletedVisible = false
+                    delay(EntrySaveHandoffMillis)
                     onConsumeEntrySaved()
                     onSaved()
+                }
+            }
+
+            LaunchedEffect(editorVisible, pagerState.currentPage, page) {
+                if (pagerState.currentPage == page) {
+                    pagerSwipeEnabled = !editorVisible
                 }
             }
 
@@ -1431,6 +1506,7 @@ private fun ClassEntryPagerRoute(
                 trashedEntries = classTrashedEntries,
                 draft = draft,
                 saving = savingEntry,
+                saveCompleted = saveCompletedVisible,
                 recoveredDraft = recoveredDraftVisible,
                 createEnabled = createEnabled,
                 editEnabled = editEnabled,
@@ -1447,6 +1523,9 @@ private fun ClassEntryPagerRoute(
                 },
                 onSave = onSaveEntry,
                 onAddAnotherEntry = { editorVisible = true },
+                onOpenPastEntries = {
+                    onNavigateToClass(pageClass.id)
+                },
                 onEditEntry = { entry -> onEditEntry(pageClass.id, entry) },
                 onDuplicateEntry = { entry -> onDuplicateEntry(pageClass.id, entry) },
                 onDeleteEntry = { entry -> onDeleteEntry(entry, pageClass) },
@@ -1604,8 +1683,26 @@ private fun EntryEditorRoute(
             entryId = draftKeyEntryId,
         )
     }
+    val resolvedDraft = remember(recovered, teacherClass.id, initialDateKey, initialDraft, existingEntry) {
+        resolveDraftForEntry(
+            baseDraft = baseDraft,
+            recovered = recovered,
+            todayKey = initialDateKey.ifBlank { todayKey() },
+            allowStaleRecovery = existingEntry != null || initialDraft != null,
+        )
+    }
     var draft by remember(teacher.uid, teacherClass.id, draftKeyEntryId) {
-        mutableStateOf(recovered?.draft ?: baseDraft)
+        mutableStateOf(resolvedDraft.draft)
+    }
+
+    LaunchedEffect(resolvedDraft.clearStoredDraft, teacher.uid, teacherClass.id, draftKeyEntryId) {
+        if (resolvedDraft.clearStoredDraft) {
+            draftStore.clear(
+                uid = teacher.uid,
+                classId = teacherClass.id,
+                entryId = draftKeyEntryId,
+            )
+        }
     }
 
     LaunchedEffect(entrySaved) {
@@ -1615,6 +1712,7 @@ private fun EntryEditorRoute(
                 classId = teacherClass.id,
                 entryId = draftKeyEntryId,
             )
+            delay(EntrySaveHandoffMillis)
             onConsumeEntrySaved()
             onSaved()
         }
@@ -1713,7 +1811,7 @@ private fun FullScreenLoading(
             navigationBarStyle = SystemBarStyle.light(loadingBackground.toArgb(), loadingBackground.toArgb()),
         )
         onDispose {
-            val restored = if (restoreDarkBars) Color(0xFF08111B) else Color(0xFFEFEEE8)
+            val restored = if (restoreDarkBars) Color(0xFF08111B) else Color(0xFFEAF4FF)
             val restoredStyle = if (restoreDarkBars) {
                 SystemBarStyle.dark(restored.toArgb())
             } else {

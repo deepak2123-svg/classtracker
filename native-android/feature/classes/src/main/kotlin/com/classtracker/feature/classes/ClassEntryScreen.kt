@@ -1,5 +1,11 @@
 package com.classtracker.feature.classes
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -23,18 +29,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.RestoreFromTrash
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -59,13 +60,8 @@ import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
-import com.classtracker.core.model.TeacherEntryStatus
-import com.classtracker.core.model.TeacherEntrySyncState
 import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.PublishedSyllabus
-import com.classtracker.core.model.filterTeacherEntries
-import com.classtracker.core.model.isTeacherEntryDateWithinWindow
-import com.classtracker.core.model.sortTeacherEntriesNewestFirst
 import com.classtracker.core.model.validateTeacherEntryDraft
 import com.classtracker.feature.entries.EntryEditorColumn
 
@@ -73,7 +69,8 @@ import com.classtracker.feature.entries.EntryEditorColumn
  * Combined class entry screen — Phase 4 checkpoint 10.
  *
  * Replaces the three-screen flow (home → class detail → add entry) with a
- * single screen: sticky class header + inline entry editor + full history.
+ * single screen: sticky class header + inline entry editor, while past entries
+ * live in a separate archive view.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -83,6 +80,7 @@ fun ClassEntryScreen(
     trashedEntries: List<TeacherTrashedEntry> = emptyList(),
     draft: TeacherEntryDraft,
     saving: Boolean,
+    saveCompleted: Boolean = false,
     recoveredDraft: Boolean,
     createEnabled: Boolean = false,
     editEnabled: Boolean = false,
@@ -92,6 +90,7 @@ fun ClassEntryScreen(
     onDraftChanged: (TeacherEntryDraft) -> Unit,
     onSave: (TeacherEntryDraft) -> Unit,
     onAddAnotherEntry: () -> Unit = {},
+    onOpenPastEntries: () -> Unit = {},
     onEditEntry: (TeacherEntry) -> Unit = {},
     onDuplicateEntry: (TeacherEntry) -> Unit = {},
     onDeleteEntry: (TeacherEntry) -> Unit = {},
@@ -113,29 +112,8 @@ fun ClassEntryScreen(
         validateTeacherEntryDraft(draft, entries)
     }
     var deleteCandidate by remember { mutableStateOf<TeacherEntry?>(null) }
-    var historyQuery by rememberSaveable(teacherClass.id, "entry-history-query") {
-        mutableStateOf("")
-    }
-    var selectedStatusFilter by rememberSaveable(teacherClass.id, "entry-history-status") {
-        mutableStateOf(AllStatusFilter)
-    }
-    val filteredHistoryEntries = remember(entries, historyQuery, selectedStatusFilter) {
-        sortTeacherEntriesNewestFirst(
-            filterTeacherEntries(
-                entries = entries,
-                query = historyQuery,
-                status = selectedStatusFilter,
-            ),
-        )
-    }
-    val historyFilterActive = historyQuery.isNotBlank() || selectedStatusFilter.isNotBlank()
+    val hasHistoryContent = entries.isNotEmpty() || trashedEntries.isNotEmpty()
     val listState = rememberLazyListState()
-
-    androidx.compose.runtime.LaunchedEffect(editorVisible, entries.size) {
-        if (!editorVisible && entries.isNotEmpty()) {
-            listState.animateScrollToItem(1)
-        }
-    }
 
     LazyColumn(
         state = listState,
@@ -167,26 +145,24 @@ fun ClassEntryScreen(
         }
 
         // ── Inline entry editor ───────────────────────────────────────────────
-        if (editorVisible) {
-            item(key = "entry-editor") {
+        item(key = "entry-editor") {
+            AnimatedVisibility(
+                visible = editorVisible,
+                enter = expandVertically(animationSpec = tween(durationMillis = 180)) +
+                    fadeIn(animationSpec = tween(durationMillis = 180)),
+                exit = shrinkVertically(animationSpec = tween(durationMillis = 220)) +
+                    fadeOut(animationSpec = tween(durationMillis = 180)),
+            ) {
                 EntryEditorColumn(
                     draft = draft,
                     existingEntries = entries,
                     timeSlots = teacherClass.timeSlots,
                     saving = saving,
+                    saveCompleted = saveCompleted,
                     validation = validation,
                     syllabus = syllabus,
                     onDraftChanged = onDraftChanged,
                     onSave = onSave,
-                )
-            }
-        }
-
-        if (entries.isNotEmpty()) {
-            item(key = "history-section-break") {
-                ClassHistorySectionBreak(
-                    count = entries.size,
-                    modifier = Modifier.padding(top = 14.dp),
                 )
             }
         }
@@ -214,115 +190,31 @@ fun ClassEntryScreen(
             }
         }
 
-        // ── History filter card ───────────────────────────────────────────────
-        if (entries.isNotEmpty()) {
-            item(key = "history-filter") {
-                ClassEntryHistoryFilterCard(
-                    query = historyQuery,
-                    selectedStatus = selectedStatusFilter,
-                    filteredCount = filteredHistoryEntries.size,
-                    totalCount = entries.size,
-                    onQueryChange = { historyQuery = it },
-                    onStatusSelected = { selectedStatusFilter = it },
-                    onClear = {
-                        historyQuery = ""
-                        selectedStatusFilter = AllStatusFilter
-                    },
-                )
-            }
-        }
-
-        // ── All history heading ───────────────────────────────────────────────
-        item(key = "history-heading") {
-            LedgrSectionHeading(
-                title = "Entries",
-                supportingText = if (historyFilterActive) {
-                    "${filteredHistoryEntries.size} of ${entries.size} shown"
-                } else {
-                    "Newest first"
-                },
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-
-        // ── History entries ───────────────────────────────────────────────────
-        if (entries.isEmpty()) {
-            item(key = "history-empty") {
-                LedgrEmptyState(
-                    title = "No history yet",
-                    message = "Teaching entries for this class will appear here.",
-                    icon = Icons.Outlined.History,
-                )
-            }
-        } else if (filteredHistoryEntries.isEmpty()) {
-            item(key = "history-no-match") {
-                LedgrEmptyState(
-                    title = "No matching entries",
-                    message = "Try another search or status.",
-                    icon = Icons.Outlined.Search,
-                )
-            }
-        } else {
-            items(
-                items = filteredHistoryEntries,
-                key = { "history-${it.id}" },
-            ) { entry ->
-                val canMutateEntry = isTeacherEntryDateWithinWindow(entry.dateKey) &&
-                    entry.syncState != TeacherEntrySyncState.Syncing
-                EntryCard(
-                    entry = entry,
-                    showDate = true,
-                    editEnabled = editEnabled && canMutateEntry,
-                    duplicateEnabled = createEnabled && canMutateEntry,
-                    deleteEnabled = deleteEnabled &&
-                        entry.syncState == TeacherEntrySyncState.Synced,
-                    onEdit = {
+        if (hasHistoryContent) {
+            item(key = "history-toggle") {
+                Button(
+                    onClick = {
                         haptics.selection()
-                        onEditEntry(entry)
+                        onOpenPastEntries()
                     },
-                    onDuplicate = {
-                        haptics.selection()
-                        onDuplicateEntry(entry)
-                    },
-                    onDelete = {
-                        haptics.warning()
-                        deleteCandidate = entry
-                    },
-                )
-            }
-        }
-
-        // ── Recycle bin ───────────────────────────────────────────────────────
-        if (trashedEntries.isNotEmpty()) {
-            item(key = "recycle-heading") {
-                LedgrSectionHeading(
-                    title = "Recycle bin",
-                    supportingText = "${trashedEntries.size} deleted " +
-                        if (trashedEntries.size == 1) "entry" else "entries",
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            items(
-                items = trashedEntries,
-                key = { "trash-${it.id}" },
-            ) { entry ->
-                TrashedEntryCard(
-                    entry = entry,
-                    restoreEnabled = deleteEnabled &&
-                        entry.syncState != TeacherEntrySyncState.Syncing,
-                    onRestore = {
-                        haptics.confirm()
-                        onRestoreEntry(entry)
-                    },
-                )
-            }
-        } else if (deleteEnabled) {
-            item(key = "recycle-empty") {
-                LedgrEmptyState(
-                    title = "Recycle bin is empty",
-                    message = "Deleted entries from this class will appear here.",
-                    icon = Icons.Outlined.RestoreFromTrash,
-                )
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.teal.copy(alpha = 0.14f),
+                        contentColor = colors.teal,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.History,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                    Text(
+                        text = "View history",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
     }
@@ -379,198 +271,6 @@ private fun RecoveredDraftBanner() {
     }
 }
 
-// ── History filter card ───────────────────────────────────────────────────────
-
-@Composable
-private fun ClassEntryHistoryFilterCard(
-    query: String,
-    selectedStatus: String,
-    filteredCount: Int,
-    totalCount: Int,
-    onQueryChange: (String) -> Unit,
-    onStatusSelected: (String) -> Unit,
-    onClear: () -> Unit,
-) {
-    val active = query.isNotBlank() || selectedStatus.isNotBlank()
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        shadowElevation = 1.dp,
-    ) {
-        androidx.compose.foundation.layout.Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(11.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.foundation.layout.Column(
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = "FILTERS",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.textSubtle,
-                    )
-                    Text(
-                        text = "$filteredCount of $totalCount entries",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (active) colors.teal else colors.textMuted,
-                    )
-                }
-                if (active) {
-                    TextButton(onClick = onClear) { Text("Clear") }
-                }
-            }
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search history") },
-                singleLine = true,
-                leadingIcon = {
-                    Icon(imageVector = Icons.Outlined.Search, contentDescription = null)
-                },
-                trailingIcon = {
-                    if (query.isNotBlank()) {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Close,
-                                contentDescription = "Clear search",
-                            )
-                        }
-                    }
-                },
-            )
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 1.dp),
-            ) {
-                items(ClassEntryHistoryStatusFilters, key = { it.value }) { filter ->
-                    ClassEntryHistoryStatusChip(
-                        label = filter.label,
-                        selected = selectedStatus == filter.value,
-                        onClick = { onStatusSelected(filter.value) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ClassEntryHistoryStatusChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val containerColor by animateColorAsState(
-        targetValue = if (selected) colors.forest else colors.surfaceAlt,
-        label = "class-entry-chip-container",
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (selected) Color.White else colors.textSecondary,
-        label = "class-entry-chip-content",
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (selected) colors.forest else MaterialTheme.colorScheme.outline,
-        label = "class-entry-chip-border",
-    )
-    val scale by animateFloatAsState(
-        targetValue = if (selected) 1.03f else 1f,
-        animationSpec = spring(stiffness = 460f, dampingRatio = 0.82f),
-        label = "class-entry-chip-scale",
-    )
-    Surface(
-        modifier = Modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .size(width = 112.dp, height = 42.dp)
-            .clickable(onClick = onClick),
-        color = containerColor,
-        contentColor = contentColor,
-        shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(
-            width = if (selected) 2.dp else 1.dp,
-            color = borderColor,
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-// ── Status filter data ────────────────────────────────────────────────────────
-
-private data class ClassEntryHistoryStatusFilter(val value: String, val label: String)
-private const val AllStatusFilter = ""
-private val ClassEntryHistoryStatusFilters = listOf(
-    ClassEntryHistoryStatusFilter(AllStatusFilter, "All"),
-    ClassEntryHistoryStatusFilter(
-        TeacherEntryStatus.Started.storageValue,
-        TeacherEntryStatus.Started.label,
-    ),
-    ClassEntryHistoryStatusFilter(
-        TeacherEntryStatus.InProgress.storageValue,
-        TeacherEntryStatus.InProgress.label,
-    ),
-    ClassEntryHistoryStatusFilter(
-        TeacherEntryStatus.Completed.storageValue,
-        TeacherEntryStatus.Completed.label,
-    ),
-    ClassEntryHistoryStatusFilter(
-        TeacherEntryStatus.Doubts.storageValue,
-        TeacherEntryStatus.Doubts.label,
-    ),
-)
-
-@Composable
-private fun ClassHistorySectionBreak(
-    count: Int,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = "CLASS HISTORY",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                ),
-                color = colors.textMuted,
-            )
-            Text(
-                text = "$count ${if (count == 1) "entry" else "entries"} saved",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
-}
-
 @Composable
 private fun classEntryCanvasColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else Color(0xFFEFEEE8)
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else Color(0xFFEAF4FF)

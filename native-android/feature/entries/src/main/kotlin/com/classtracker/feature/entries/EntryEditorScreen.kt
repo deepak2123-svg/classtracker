@@ -65,6 +65,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -90,7 +92,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-private val EntryCanvas = Color(0xFFEFEEE8)
+private val EntryCanvas = Color(0xFFEAF4FF)
 private val EntryInk = Color(0xFF202A55)
 private val EntryMuted = Color(0xFF85837D)
 private val EntryBorder = Color(0xFFD6D2CA)
@@ -523,7 +525,7 @@ private fun TimetableSlots(
             style = MaterialTheme.typography.labelLarge.copy(
                 fontSize = 14.sp,
                 lineHeight = 18.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = FontWeight.Normal,
             ),
             color = entryMutedColor(),
         )
@@ -1099,56 +1101,95 @@ private fun StatusChip(
 private fun EntryTextAndSavePanel(
     draft: TeacherEntryDraft,
     saving: Boolean,
+    saveCompleted: Boolean,
     validation: TeacherEntryValidation,
     showInvalid: Boolean,
     onDraftChanged: (TeacherEntryDraft) -> Unit,
     onSaveClick: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val requestBringIntoView: () -> Unit = {
+        scope.launch {
+            delay(240)
+            bringIntoViewRequester.bringIntoView()
+        }
+        Unit
+    }
+    val buttonScale by animateFloatAsState(
+        targetValue = when {
+            saveCompleted -> 1.012f
+            saving -> 0.988f
+            else -> 1f
+        },
+        animationSpec = spring(stiffness = 420f, dampingRatio = 0.92f),
+        label = "entrySaveButtonScale",
+    )
+    val buttonContainerColor by animateColorAsState(
+        targetValue = if (saveCompleted) EntryGreen else entryPrimaryControlColor(),
+        animationSpec = spring(stiffness = 520f, dampingRatio = 0.92f),
+        label = "entrySaveButtonContainer",
+    )
+    val buttonContentColor by animateColorAsState(
+        targetValue = if (saveCompleted) Color.White else entryPrimaryControlContentColor(),
+        animationSpec = spring(stiffness = 520f, dampingRatio = 0.92f),
+        label = "entrySaveButtonContent",
+    )
+
+    Column(
+        modifier = Modifier
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .animateContentSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Text(
-            text = "TOPIC / TITLE",
+            text = "Topic",
             style = MaterialTheme.typography.labelLarge.copy(
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 lineHeight = 16.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = FontWeight.Medium,
             ),
             color = entryInkColor(),
         )
         EntryTextBox(
             value = draft.title,
             onValueChange = { onDraftChanged(draft.copy(title = it)) },
-            placeholder = "e.g. Quadratic equations",
+            placeholder = "What did you cover?",
             icon = Icons.Outlined.MenuBook,
             singleLine = true,
+            onFocused = requestBringIntoView,
         )
         Text(
             text = if (showInvalid) {
-                "* ${(validation as TeacherEntryValidation.Invalid).message}"
+                (validation as TeacherEntryValidation.Invalid).message
             } else {
-                "* Required"
+                "Required"
             },
-            color = Color(0xFFFF3B3B),
+            color = if (showInvalid) Color(0xFFFF3B3B) else entrySubtleTextColor(),
             style = MaterialTheme.typography.labelLarge.copy(
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 lineHeight = 16.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = if (showInvalid) FontWeight.Bold else FontWeight.Medium,
             ),
         )
         Text(
-            text = "NOTES",
+            text = "Notes (optional)",
             style = MaterialTheme.typography.labelLarge.copy(
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 lineHeight = 16.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = FontWeight.Medium,
             ),
             color = entryInkColor(),
         )
         EntryTextBox(
             value = draft.body,
             onValueChange = { onDraftChanged(draft.copy(body = it)) },
-            placeholder = "Homework, doubts covered,\nobservations...",
+            placeholder = "Add a short note, if needed",
             icon = Icons.Outlined.Notes,
             singleLine = false,
+            onFocused = requestBringIntoView,
         )
         if (validation is TeacherEntryValidation.Overlap) {
             Surface(
@@ -1165,26 +1206,64 @@ private fun EntryTextAndSavePanel(
             }
         }
         Button(
-            onClick = onSaveClick,
-            enabled = !saving,
+            onClick = {
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+                onSaveClick()
+            },
+            enabled = !saving && !saveCompleted,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp),
+                .height(54.dp)
+                .graphicsLayer {
+                    scaleX = buttonScale
+                    scaleY = buttonScale
+                },
             contentPadding = PaddingValues(vertical = 12.dp),
             shape = RoundedCornerShape(16.dp),
             colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                containerColor = entryPrimaryControlColor(),
-                contentColor = entryPrimaryControlContentColor(),
-                disabledContainerColor = entryPrimaryControlColor().copy(alpha = 0.45f),
-                disabledContentColor = entryPrimaryControlContentColor().copy(alpha = 0.75f),
+                containerColor = buttonContainerColor,
+                contentColor = buttonContentColor,
+                disabledContainerColor = buttonContainerColor.copy(alpha = 0.5f),
+                disabledContentColor = buttonContentColor.copy(alpha = 0.82f),
             ),
         ) {
-            if (saving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = entryPrimaryControlContentColor(),
-                    strokeWidth = 2.dp,
-                )
+            if (saveCompleted) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = "Saved",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
+                    )
+                }
+            } else if (saving) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = entryPrimaryControlContentColor(),
+                        strokeWidth = 2.dp,
+                    )
+                    Text(
+                        text = "Saving...",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
+                    )
+                }
             } else {
                 Icon(
                     imageVector = Icons.Outlined.Check,
@@ -1211,6 +1290,7 @@ private fun EntryTextBox(
     placeholder: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     singleLine: Boolean,
+    onFocused: () -> Unit = {},
 ) {
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
@@ -1252,8 +1332,9 @@ private fun EntryTextBox(
                         .padding(horizontal = 14.dp, vertical = if (singleLine) 0.dp else 12.dp)
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused) {
+                                onFocused()
                                 scope.launch {
-                                    delay(180)
+                                    delay(260)
                                     bringIntoViewRequester.bringIntoView()
                                 }
                             }
@@ -1701,6 +1782,7 @@ fun EntryEditorColumn(
     existingEntries: List<TeacherEntry>,
     timeSlots: List<TeacherTimeSlot> = emptyList(),
     saving: Boolean,
+    saveCompleted: Boolean = false,
     validation: TeacherEntryValidation,
     syllabus: PublishedSyllabus? = null,
     onDraftChanged: (TeacherEntryDraft) -> Unit,
@@ -1797,6 +1879,7 @@ fun EntryEditorColumn(
         EntryTextAndSavePanel(
             draft = draft,
             saving = saving,
+            saveCompleted = saveCompleted,
             validation = validation,
             showInvalid = saveAttempted && validation is TeacherEntryValidation.Invalid,
             onDraftChanged = onDraftChanged,

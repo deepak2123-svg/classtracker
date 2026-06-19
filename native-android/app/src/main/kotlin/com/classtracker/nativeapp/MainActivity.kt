@@ -116,4 +116,4 @@ private fun ApplySystemBarContrast(themeMode: LedgrThemeMode) {
 }
 
 private val DarkSystemBarColor = Color.parseColor("#08111B")
-private val LightSystemBarColor = Color.parseColor("#EFEEE8")
+private val LightSystemBarColor = Color.parseColor("#EAF4FF")
