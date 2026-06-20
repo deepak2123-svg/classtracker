@@ -5261,11 +5261,6 @@ function LedgrTelegramDashboardModal({
   }, [config?.updatedAt, config?.schemaVersion, institutes.length]);
 
   const actionBusy = !!loading || !!saving;
-  const sendNowDisabled = actionBusy
-    || !!sendBusy
-    || !enabled
-    || !onDemandEnabled
-    || activeRecipients.length === 0;
   const recipientOptions = React.useMemo(() => {
     const ordered = [];
     const pushInstitute = (value) => {
@@ -5281,6 +5276,11 @@ function LedgrTelegramDashboardModal({
 
   const configuredRecipients = recipients.filter(item => item.institute && normaliseTelegramChatId(item.chatId));
   const activeRecipients = configuredRecipients.filter(item => item.enabled);
+  const sendNowDisabled = actionBusy
+    || !!sendBusy
+    || !enabled
+    || !onDemandEnabled
+    || activeRecipients.length === 0;
   const coveredInstitutes = activeRecipients.reduce((acc, item) => {
     if(!acc.some(existing => sameInstituteName(existing, item.institute))) acc.push(item.institute);
     return acc;
@@ -5510,10 +5510,10 @@ function LedgrTelegramDashboardModal({
                 <AppIcon icon={IconSend} size={26} color={G.blue} />
               </div>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>Ledgr delivery</div>
-                <div style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.04,marginTop:6}}>Telegram integration</div>
+                <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>Messenger feature</div>
+                <div style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.04,marginTop:6}}>Messenger delivery</div>
                 <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:760}}>
-                  Secure routing, institute mapping, schedule linkage, and delivery health for Telegram report distribution.
+                  Telegram routing is live now, with schedule linkage, institute mapping, and delivery health ready for a broader Messenger surface that can also absorb WhatsApp next.
                 </div>
               </div>
             </div>
@@ -5801,7 +5801,7 @@ function LedgrTelegramDashboardModal({
             ) : (
               <div style={{fontSize:12,color:G.textM,lineHeight:1.5}}>
                 {loading
-                  ? "Loading Telegram dashboard..."
+                  ? "Loading messenger dashboard..."
                   : `${configuredRecipients.length} saved route${configuredRecipients.length === 1 ? "" : "s"} ready for future manual and scheduled delivery.`}
               </div>
             )}
@@ -5811,7 +5811,7 @@ function LedgrTelegramDashboardModal({
               Cancel
             </button>
             <button type="button" onClick={save} disabled={actionBusy} style={{height:48,padding:"0 18px",borderRadius:14,border:"none",background:actionBusy ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:14,fontWeight:900,fontFamily:G.sans,cursor:actionBusy?"not-allowed":"pointer"}}>
-              {saving ? "Saving..." : "Save Telegram dashboard"}
+              {saving ? "Saving..." : "Save messenger dashboard"}
             </button>
           </div>
         </div>
@@ -9276,10 +9276,10 @@ function AdminPanelInner({user}){
     try {
       const saved = await saveLedgrTelegramConfig(nextConfig, user?.uid || "");
       setLedgrTelegramConfig(current => ({ ...(current || {}), ...saved }));
-      showAdminToast("Telegram delivery dashboard saved.");
+      showAdminToast("Messenger dashboard saved.");
     } catch (error) {
       console.error("save Telegram dashboard failed", error);
-      showAdminToast(error?.message || "Telegram delivery dashboard could not be saved.");
+      showAdminToast(error?.message || "Messenger dashboard could not be saved.");
     } finally {
       setLedgrTelegramSaving(false);
     }
@@ -9301,11 +9301,11 @@ function AdminPanelInner({user}){
         return;
       }
       if(ledgrTelegramConfig?.enabled === false){
-        showAdminToast("Telegram delivery is paused in the dashboard.");
+        showAdminToast("Messenger delivery is paused in the dashboard.");
         return;
       }
       if(ledgrTelegramConfig?.delivery?.onDemandEnabled === false){
-        showAdminToast("On-demand Telegram sends are paused.");
+        showAdminToast("On-demand messenger sends are paused.");
         return;
       }
 
@@ -13962,7 +13962,7 @@ function AdminPanelInner({user}){
                 onClick={openLedgrTelegramDashboard}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:telegramDashboardOpen?"#EEF4FF":"transparent",color:telegramDashboardOpen?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
                 <AppIcon icon={IconSend} size={15} color={telegramDashboardOpen?G.blue:G.textL}/>
-                Telegram Delivery
+                Messenger
                 <span style={{marginLeft:"auto",background:ledgrTelegramRecipientStats.active?G.blueL:"#F3F4F6",color:ledgrTelegramRecipientStats.active?G.blue:G.textL,borderRadius:999,padding:"2px 7px",fontSize:10.5,fontWeight:850,fontFamily:G.mono}}>
                   {ledgrTelegramLoading ? "..." : ledgrTelegramRecipientStats.active || "setup"}
                 </span>
@@ -15189,8 +15189,8 @@ function AdminPanelInner({user}){
           />
           <MobileProfileAction
             icon={IconSend}
-            title="Telegram Delivery"
-            subtitle="Institute routing, send now, and schedule linkage."
+            title="Messenger"
+            subtitle="Telegram live now, WhatsApp next, plus routing and schedule linkage."
             onClick={openLedgrTelegramDashboard}
             badge={ledgrTelegramLoading
               ? null
@@ -16180,7 +16180,7 @@ function AdminPanelInner({user}){
           </div>
           <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Workspace</div>
           {profileAction({icon:IconChartBar,title:"Ledgr Report",subtitle:"Reports, PDFs, and centre summaries",onClick:()=>{setProfileOpen(false);openInstituteGlancePanel();},badge:instituteGlanceReport.ready?"Ready":null})}
-          {profileAction({icon:IconSend,title:"Telegram Delivery",subtitle:"Institute routing, send now, and schedule linkage",onClick:openLedgrTelegramDashboard,badge:ledgrTelegramLoading?null:(ledgrTelegramRecipientStats.active?`${ledgrTelegramRecipientStats.active} live`: "Setup")})}
+          {profileAction({icon:IconSend,title:"Messenger",subtitle:"Telegram live now, WhatsApp next, plus routing and schedule linkage",onClick:openLedgrTelegramDashboard,badge:ledgrTelegramLoading?null:(ledgrTelegramRecipientStats.active?`${ledgrTelegramRecipientStats.active} live`: "Setup")})}
           {profileAction({icon:IconSettings,title:"Control Centre",subtitle:"Institutes, teachers, syllabus, and access",onClick:()=>{setProfileOpen(false);openManageTab("teachers");}})}
           <div style={{height:1,background:G.border,margin:"8px 0"}}/>
           <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Support</div>
@@ -16336,9 +16336,9 @@ function AdminPanelInner({user}){
                       <AppIcon icon={IconSend} size={16} color="#93C5FD" />
                     </div>
                     <div style={{minWidth:0,flex:1}}>
-                      <div style={{fontSize:13.5,fontWeight:800,color:"rgba(255,255,255,0.92)"}}>Telegram Delivery</div>
+                      <div style={{fontSize:13.5,fontWeight:800,color:"rgba(255,255,255,0.92)"}}>Messenger</div>
                       <div style={{fontSize:11.5,color:"rgba(255,255,255,0.44)",fontWeight:500,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                        Institute routing, send now, and schedule linkage
+                        Telegram live now, WhatsApp next, plus routing and schedule linkage
                       </div>
                     </div>
                     <span style={{marginLeft:"auto",background:ledgrTelegramRecipientStats.active?"rgba(59,130,246,0.16)":"rgba(255,255,255,0.06)",border:`1px solid ${ledgrTelegramRecipientStats.active?"rgba(96,165,250,0.22)":"rgba(255,255,255,0.08)"}`,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,color:ledgrTelegramRecipientStats.active?"#BFDBFE":"rgba(255,255,255,0.46)",flexShrink:0}}>
