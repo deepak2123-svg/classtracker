@@ -42,8 +42,10 @@ import {
   deleteInstituteCompletely, deleteInstituteAndMigrate,
   getAdminBin, saveAdminBin,
   getLedgrReportSchedule, saveLedgrReportSchedule,
+  getLedgrTelegramConfig, saveLedgrTelegramConfig,
   subscribeFeedbackThreads, subscribeFeedbackMessages,
   sendAdminFeedbackReply, markFeedbackThreadRead, setFeedbackThreadStatus,
+  auth,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
 
@@ -116,6 +118,53 @@ async function loadInstituteGlanceExportRuntime(){
     }));
   }
   return instituteGlanceExportRuntimePromise;
+}
+
+function normaliseTelegramBotUsername(value) {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+  return clean.startsWith("@") ? clean : `@${clean}`;
+}
+
+function normaliseTelegramChatId(value) {
+  return String(value || "").trim().replace(/\s+/g, "");
+}
+
+function buildTelegramRecipientDraft(institute = "") {
+  const cleanInstitute = String(institute || "").trim();
+  return {
+    id: `telegram_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    institute: cleanInstitute,
+    destinationType: "channel",
+    chatId: "",
+    label: cleanInstitute ? `${cleanInstitute} reports` : "",
+    enabled: true,
+    notes: "",
+  };
+}
+
+function normaliseTelegramRecipientsForUi(list = []) {
+  return (list || []).map(item => ({
+    id: String(item?.id || buildTelegramRecipientDraft(item?.institute).id),
+    institute: String(item?.institute || "").trim(),
+    destinationType: ["channel", "group", "private"].includes(item?.destinationType)
+      ? item.destinationType
+      : "channel",
+    chatId: normaliseTelegramChatId(item?.chatId),
+    label: String(item?.label || "").trim(),
+    enabled: item?.enabled !== false,
+    notes: String(item?.notes || "").trim(),
+  }));
+}
+
+function buildTelegramDashboardDraft(config = null) {
+  return {
+    enabled: config?.enabled !== false,
+    botUsername: normaliseTelegramBotUsername(config?.botUsername || "@ledgrapp_bot"),
+    scheduledEnabled: config?.delivery?.scheduledEnabled !== false,
+    onDemandEnabled: config?.delivery?.onDemandEnabled !== false,
+    recipients: normaliseTelegramRecipientsForUi(config?.recipients || []),
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2147,8 +2196,13 @@ function drawCanvasPill(ctx, { x, y, label, bg, border, color, font = "700 20px 
 function triggerBlobDownload(blob, filename){
   const url = URL.createObjectURL(blob);
   const anchor = Object.assign(document.createElement("a"), { href:url, download:filename });
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
   anchor.click();
-  window.setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  window.setTimeout(()=>{
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }, 60000);
 }
 function getTeacherInstituteListFromMap(teacher, fullDataMap){
   const list = [];
@@ -4027,13 +4081,24 @@ async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel, peri
   _printHtml(html, instituteGlancePdfFilename(row?.institute || "institute", period, rangeStartKey, rangeEndKey));
 }
 async function renderInstituteGlanceHtmlPdfBlob({ html, filename }){
-  const response = await fetch("/api/render-ledgr-pdf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ html, filename }),
-  });
+  let response;
+  try{
+    response = await fetch("/api/render-ledgr-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html, filename }),
+    });
+  } catch(error){
+    const localHint = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+      ? " Centre PDFs ZIP needs the Admin app with the `/api/render-ledgr-pdf` endpoint enabled, such as deployed Admin or `vercel dev`."
+      : "";
+    throw new Error(`Could not reach the PDF renderer.${localHint}`);
+  }
   if(!response.ok){
     let message = "Could not render institute PDF.";
+    if(response.status === 404){
+      message = "The PDF renderer route `/api/render-ledgr-pdf` is unavailable. Centre PDFs ZIP works from deployed Admin or `vercel dev`, not plain Vite preview.";
+    }
     try{
       const payload = await response.json();
       if(payload?.error) message = payload.error;
@@ -4047,6 +4112,10 @@ async function renderInstituteGlanceHtmlPdfBlob({ html, filename }){
     throw new Error("The PDF renderer returned an empty file.");
   }
   return new Blob([blob], { type: "application/pdf" });
+}
+async function verifyInstituteZipRenderer(){
+  const probeHtml = "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>probe</title></head><body>Ledgr ZIP probe</body></html>";
+  await renderInstituteGlanceHtmlPdfBlob({ html:probeHtml, filename:"ledgr-zip-probe.pdf" });
 }
 async function buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const { jsPDF, autoTable } = await loadInstituteGlanceExportRuntime();
@@ -4292,6 +4361,7 @@ async function buildInstituteGlanceInstitutePdfBlob({ row, generatedOnLabel, per
 async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const { JSZip } = await loadInstituteGlanceExportRuntime();
   const safeRows = Array.isArray(rows) ? rows : [];
+  await verifyInstituteZipRenderer();
   const zip = new JSZip();
   const folder = zip.folder("Ledgr centre PDFs") || zip;
   for(const row of safeRows){
@@ -4307,7 +4377,7 @@ async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, per
       scopeLabel:row?.institute || "Institute",
     });
     const blob = await renderInstituteGlanceHtmlPdfBlob({ html, filename });
-    folder.file(filename, blob);
+    folder.file(filename, await blob.arrayBuffer());
   }
   const readme = [
     "Ledgr Centre PDFs",
@@ -4326,6 +4396,9 @@ async function downloadInstituteGlanceInstituteZip({ rows, generatedOnLabel, per
     compression:"DEFLATE",
     compressionOptions:{ level:6 },
   });
+  if(!zipBlob || zipBlob.size === 0){
+    throw new Error("The Centre PDFs ZIP was empty. Please try again.");
+  }
   triggerBlobDownload(
     new Blob([zipBlob], { type:"application/zip" }),
     instituteGlanceZipFilename(period, rangeStartKey, rangeEndKey, safeRows.length),
@@ -5144,6 +5217,603 @@ function LedgrReportOptionsModal({
           <button type="button" onClick={apply} disabled={actionDisabled} style={{flex:1,height:50,borderRadius:14,border:"none",background:actionDisabled ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:15,fontWeight:900,fontFamily:G.sans,cursor:actionDisabled ? "not-allowed" : "pointer"}}>
             {busy ? (actionMode === "schedule" ? "Saving..." : "Preparing...") : actionMode === "schedule" ? "Save schedule" : "Export"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LedgrTelegramDashboardModal({
+  institutes,
+  schedule,
+  config,
+  loading,
+  saving,
+  sendBusy,
+  onClose,
+  onSave,
+  onOpenSchedule,
+  onSendNow,
+}) {
+  const [enabled, setEnabled] = React.useState(true);
+  const [botUsername, setBotUsername] = React.useState("@ledgrapp_bot");
+  const [scheduledEnabled, setScheduledEnabled] = React.useState(true);
+  const [onDemandEnabled, setOnDemandEnabled] = React.useState(true);
+  const [recipients, setRecipients] = React.useState([]);
+  const [draftError, setDraftError] = React.useState("");
+
+  React.useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const draft = buildTelegramDashboardDraft(config);
+    setEnabled(draft.enabled);
+    setBotUsername(draft.botUsername);
+    setScheduledEnabled(draft.scheduledEnabled);
+    setOnDemandEnabled(draft.onDemandEnabled);
+    setRecipients(draft.recipients);
+    setDraftError("");
+  }, [config?.updatedAt, config?.schemaVersion, institutes.length]);
+
+  const actionBusy = !!loading || !!saving;
+  const sendNowDisabled = actionBusy
+    || !!sendBusy
+    || !enabled
+    || !onDemandEnabled
+    || activeRecipients.length === 0;
+  const recipientOptions = React.useMemo(() => {
+    const ordered = [];
+    const pushInstitute = (value) => {
+      const clean = String(value || "").trim();
+      if(!clean) return;
+      if(ordered.some(item => sameInstituteName(item, clean))) return;
+      ordered.push(clean);
+    };
+    (institutes || []).forEach(pushInstitute);
+    recipients.forEach(item => pushInstitute(item.institute));
+    return ordered;
+  }, [institutes, recipients]);
+
+  const configuredRecipients = recipients.filter(item => item.institute && normaliseTelegramChatId(item.chatId));
+  const activeRecipients = configuredRecipients.filter(item => item.enabled);
+  const coveredInstitutes = activeRecipients.reduce((acc, item) => {
+    if(!acc.some(existing => sameInstituteName(existing, item.institute))) acc.push(item.institute);
+    return acc;
+  }, []);
+  const lastSuccessAt = Number(config?.execution?.lastSuccessAt || 0);
+  const lastAttemptAt = Number(config?.execution?.lastAttemptAt || 0);
+  const lastErrorMessage = String(config?.execution?.lastErrorMessage || config?.execution?.lastError || "").trim();
+  const runnerLastSeenAt = Number(schedule?.execution?.lastRunAt || schedule?.lastRunAt || 0);
+  const manualRouteReady = !!config?.health?.manualEndpointReady;
+  const scheduleRouteReady = !!config?.health?.scheduledEndpointReady;
+  const scheduleTimes = Array.isArray(schedule?.times) ? schedule.times.filter(Boolean) : [];
+  const missingInstituteCount = (institutes || []).filter(inst =>
+    !recipients.some(item => sameInstituteName(item.institute, inst))
+  ).length;
+
+  const sectionCardStyle = {
+    border:"1px solid #E2E8F0",
+    borderRadius:22,
+    background:"#FFFFFF",
+    padding:"18px 18px 19px",
+    boxShadow:"0 10px 26px rgba(15,23,42,0.06)",
+  };
+  const smallStatStyle = {
+    border:"1px solid #E2E8F0",
+    borderRadius:18,
+    background:"#F8FAFC",
+    padding:"16px 15px",
+    minHeight:110,
+  };
+  const labelStyle = {
+    fontSize:11,
+    fontWeight:800,
+    color:G.textL,
+    textTransform:"uppercase",
+    letterSpacing:0.9,
+    fontFamily:G.mono,
+    marginBottom:8,
+  };
+  const inputStyle = {
+    width:"100%",
+    height:44,
+    borderRadius:12,
+    border:"1px solid #DDE3ED",
+    background:"#FFFFFF",
+    color:G.text,
+    fontSize:14,
+    fontWeight:700,
+    fontFamily:G.sans,
+    padding:"0 12px",
+    boxSizing:"border-box",
+    outline:"none",
+  };
+  const textAreaStyle = {
+    ...inputStyle,
+    height:84,
+    padding:"10px 12px",
+    resize:"vertical",
+    lineHeight:1.5,
+  };
+  const secondaryButtonStyle = {
+    height:42,
+    padding:"0 14px",
+    borderRadius:12,
+    border:`1px solid ${G.border}`,
+    background:"#FFFFFF",
+    color:G.text,
+    fontSize:12.5,
+    fontWeight:800,
+    fontFamily:G.sans,
+    cursor:actionBusy ? "not-allowed" : "pointer",
+    display:"inline-flex",
+    alignItems:"center",
+    gap:7,
+  };
+  const primaryButtonStyle = {
+    height:46,
+    padding:"0 16px",
+    borderRadius:14,
+    border:"none",
+    background:G.navy,
+    color:"#FFFFFF",
+    fontSize:14,
+    fontWeight:900,
+    fontFamily:G.sans,
+    cursor:actionBusy ? "not-allowed" : "pointer",
+    display:"inline-flex",
+    alignItems:"center",
+    gap:8,
+  };
+
+  const updateRecipient = (id, patch) => {
+    setRecipients(current => current.map(item => item.id === id ? { ...item, ...patch } : item));
+  };
+
+  const addRecipient = (instituteName = "") => {
+    setRecipients(current => [...current, buildTelegramRecipientDraft(instituteName)]);
+  };
+
+  const addMissingInstitutes = () => {
+    const missing = (institutes || []).filter(inst => !recipients.some(item => sameInstituteName(item.institute, inst)));
+    if(!missing.length) return;
+    setRecipients(current => [...current, ...missing.map(inst => buildTelegramRecipientDraft(inst))]);
+  };
+
+  const removeRecipient = (id) => {
+    setRecipients(current => current.filter(item => item.id !== id));
+  };
+
+  const save = () => {
+    const cleanedRecipients = recipients.map(item => ({
+      ...item,
+      institute:String(item.institute || "").trim(),
+      label:String(item.label || "").trim(),
+      chatId:normaliseTelegramChatId(item.chatId),
+      notes:String(item.notes || "").trim(),
+    }));
+    const incomplete = cleanedRecipients.find(item => {
+      const touched = item.institute || item.label || item.chatId || item.notes;
+      if(!touched) return false;
+      return !item.institute || !item.chatId;
+    });
+    if(incomplete){
+      setDraftError("Complete both institute and chat id for every Telegram destination before saving.");
+      return;
+    }
+    const invalidChat = cleanedRecipients.find(item => item.chatId && !/^-?\d{5,}$/.test(item.chatId));
+    if(invalidChat){
+      setDraftError(`Telegram chat id for ${invalidChat.institute || "the selected route"} looks invalid.`);
+      return;
+    }
+    const seen = new Set();
+    for(const item of cleanedRecipients){
+      if(!item.institute || !item.chatId) continue;
+      const key = `${item.institute.toLowerCase()}__${item.chatId}`;
+      if(seen.has(key)){
+        setDraftError(`Duplicate Telegram route found for ${item.institute}.`);
+        return;
+      }
+      seen.add(key);
+    }
+    setDraftError("");
+    onSave({
+      enabled,
+      botUsername: normaliseTelegramBotUsername(botUsername),
+      delivery: {
+        scheduledEnabled,
+        onDemandEnabled,
+      },
+      recipients: cleanedRecipients.filter(item =>
+        item.institute || item.label || item.chatId || item.notes
+      ),
+    });
+  };
+
+  const summaryCards = [
+    {
+      label:"Configured routes",
+      value:String(configuredRecipients.length),
+      hint:`${activeRecipients.length} active`,
+      tone:"#DBEAFE",
+      accent:G.blue,
+    },
+    {
+      label:"Institutes covered",
+      value:String(coveredInstitutes.length),
+      hint:`${Math.max((institutes || []).length - coveredInstitutes.length, 0)} pending`,
+      tone:"#E8F8EF",
+      accent:"#198754",
+    },
+    {
+      label:"Schedule link",
+      value:scheduledEnabled && schedule?.enabled
+        ? `${scheduleTimes.length || 0} run${scheduleTimes.length === 1 ? "" : "s"}`
+        : scheduledEnabled
+          ? "Waiting"
+          : "Paused",
+      hint:schedule?.enabled ? "Uses the Ledgr report schedule" : "No active report schedule yet",
+      tone:"#FEF3C7",
+      accent:G.amber,
+    },
+    {
+      label:"Last delivery",
+      value:lastSuccessAt
+        ? new Date(lastSuccessAt).toLocaleDateString("en-IN", { day:"numeric", month:"short" })
+        : "Not yet",
+      hint:lastSuccessAt
+        ? new Date(lastSuccessAt).toLocaleTimeString("en-IN", { hour:"numeric", minute:"2-digit" })
+        : "Backend send hook pending",
+      tone:"#F3E8FF",
+      accent:"#7C3AED",
+    },
+  ];
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.64)",zIndex:10020,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+      <style>{`
+        @media (max-width: 900px) {
+          .ledgr-telegram-dashboard-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .ledgr-telegram-summary-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .ledgr-telegram-modal {
+            max-height: calc(100dvh - 16px) !important;
+            border-radius: 20px !important;
+          }
+          .ledgr-telegram-scroll {
+            padding: 20px 16px 10px !important;
+          }
+          .ledgr-telegram-summary-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .ledgr-telegram-footer {
+            padding: 12px 16px max(14px, env(safe-area-inset-bottom, 0px)) !important;
+            flex-direction: column !important;
+          }
+        }
+      `}</style>
+      <div className="ledgr-telegram-modal" style={{width:"100%",maxWidth:1120,background:"#F8FAFC",borderRadius:28,boxShadow:"0 34px 90px rgba(15,23,42,0.30)",maxHeight:"calc(100dvh - 32px)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div className="ledgr-telegram-scroll" style={{overflowY:"auto",minHeight:0,flex:1,padding:"24px 24px 14px"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:18}}>
+            <div style={{display:"flex",gap:14,minWidth:0,flex:1}}>
+              <div style={{width:56,height:56,borderRadius:18,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <AppIcon icon={IconSend} size={26} color={G.blue} />
+              </div>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>Ledgr delivery</div>
+                <div style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.04,marginTop:6}}>Telegram integration</div>
+                <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:760}}>
+                  Secure routing, institute mapping, schedule linkage, and delivery health for Telegram report distribution.
+                </div>
+              </div>
+            </div>
+            <button type="button" onClick={onClose} disabled={!!saving} style={{height:42,padding:"0 14px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:13,fontWeight:800,fontFamily:G.sans,cursor:saving?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:7,flexShrink:0}}>
+              <AppIcon icon={IconX} size={16} color={G.text} />
+              Close
+            </button>
+          </div>
+
+          <div className="ledgr-telegram-summary-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:16}}>
+            {summaryCards.map(card => (
+              <div key={card.label} style={smallStatStyle}>
+                <div style={{display:"inline-flex",alignItems:"center",gap:7,padding:"5px 9px",borderRadius:999,background:card.tone,color:card.accent,fontSize:10.5,fontWeight:800,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6}}>
+                  {card.label}
+                </div>
+                <div style={{fontSize:24,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:14}}>{card.value}</div>
+                <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5,marginTop:8}}>{card.hint}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="ledgr-telegram-dashboard-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,1.1fr) minmax(0,0.9fr)",gap:14,marginBottom:14}}>
+            <div style={sectionCardStyle}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14}}>
+                <div>
+                  <div style={labelStyle}>Integration control</div>
+                  <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Ops defaults</div>
+                </div>
+                <span style={{background:enabled ? "#DCFCE7" : "#F3F4F6",color:enabled ? "#166534" : G.textM,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>
+                  {enabled ? "Active" : "Paused"}
+                </span>
+              </div>
+
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:12}}>
+                <div style={{gridColumn:"1 / -1"}}>
+                  <div style={labelStyle}>Bot username</div>
+                  <input value={botUsername} onChange={event=>setBotUsername(event.target.value)} disabled={actionBusy} placeholder="@ledgrapp_bot" style={inputStyle} />
+                  <div style={{fontSize:11.5,color:G.textL,lineHeight:1.5,marginTop:8}}>
+                    Store the Telegram bot token in the server environment. This dashboard only stores routing and operational metadata.
+                  </div>
+                </div>
+
+                {[
+                  {
+                    key:"enabled",
+                    title:"Delivery active",
+                    value:enabled,
+                    onChange:setEnabled,
+                    help:"Master switch for Telegram sends across scheduled and manual flows.",
+                  },
+                  {
+                    key:"scheduled",
+                    title:"Scheduled sends",
+                    value:scheduledEnabled,
+                    onChange:setScheduledEnabled,
+                    help:"Allows the background runner to push the saved Ledgr report schedule.",
+                  },
+                  {
+                    key:"manual",
+                    title:"On-demand sends",
+                    value:onDemandEnabled,
+                    onChange:setOnDemandEnabled,
+                    help:"Keeps the admin-triggered send-now path available once the server endpoint is live.",
+                  },
+                ].map(item => (
+                  <label key={item.key} style={{display:"flex",alignItems:"flex-start",gap:10,border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 13px 12px",cursor:actionBusy?"not-allowed":"pointer"}}>
+                    <input type="checkbox" checked={item.value} disabled={actionBusy} onChange={event=>item.onChange(event.target.checked)} style={{width:18,height:18,marginTop:2,accentColor:G.blue,flexShrink:0}} />
+                    <span style={{minWidth:0}}>
+                      <span style={{display:"block",fontSize:13.5,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.25}}>{item.title}</span>
+                      <span style={{display:"block",fontSize:11.5,color:G.textM,lineHeight:1.45,marginTop:5}}>{item.help}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={sectionCardStyle}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14}}>
+                <div>
+                  <div style={labelStyle}>Health</div>
+                  <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Backend posture</div>
+                </div>
+                <span style={{background:runnerLastSeenAt ? "#DCFCE7" : "#FEF3C7",color:runnerLastSeenAt ? "#166534" : "#92400E",borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>
+                  {runnerLastSeenAt ? "Runner seen" : "Pending"}
+                </span>
+              </div>
+
+              <div style={{display:"grid",gap:10}}>
+                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Report scheduler</div>
+                  <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
+                    {schedule?.enabled
+                      ? scheduleTimes.length
+                        ? `Linked to ${scheduleTimes.length} saved run${scheduleTimes.length === 1 ? "" : "s"}${runnerLastSeenAt ? `; last runner activity ${new Date(runnerLastSeenAt).toLocaleString("en-IN")}.` : "."}`
+                        : "Schedule is active but no run time has been saved yet."
+                      : "No active Ledgr report schedule is linked yet."}
+                  </div>
+                </div>
+                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Delivery endpoint</div>
+                  <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
+                    {manualRouteReady || scheduleRouteReady
+                      ? "Server delivery hooks are reporting readiness."
+                      : "Dashboard is ready; secure send-now and scheduled delivery endpoints still need to be wired on the server."}
+                  </div>
+                </div>
+                <div style={{border:`1px solid ${lastErrorMessage ? "#FECACA" : "#E2E8F0"}`,borderRadius:16,background:lastErrorMessage ? "#FEF2F2" : "#F8FAFC",padding:"13px 14px"}}>
+                  <div style={{fontSize:12,fontWeight:800,color:lastErrorMessage ? "#991B1B" : G.text,fontFamily:G.sans}}>Recent delivery health</div>
+                  <div style={{fontSize:12,color:lastErrorMessage ? "#991B1B" : G.textM,lineHeight:1.55,marginTop:6}}>
+                    {lastErrorMessage
+                      ? lastErrorMessage
+                      : lastSuccessAt
+                        ? `Last successful Telegram delivery ran on ${new Date(lastSuccessAt).toLocaleString("en-IN")}.`
+                        : lastAttemptAt
+                          ? `Last attempt ran on ${new Date(lastAttemptAt).toLocaleString("en-IN")}.`
+                          : "No Telegram delivery attempts have been recorded yet."}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{...sectionCardStyle,marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
+              <div>
+                <div style={labelStyle}>Institute routing</div>
+                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Telegram destinations</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8,maxWidth:760}}>
+                  Map each institute to the exact Telegram chat id that should receive Ledgr reports. Channels and groups usually use negative ids like <strong style={{color:G.text}}>-100...</strong>; private chats are usually positive.
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button type="button" onClick={addMissingInstitutes} disabled={actionBusy || missingInstituteCount === 0} style={secondaryButtonStyle}>
+                  <AppIcon icon={IconPlus} size={15} color={G.text} />
+                  {missingInstituteCount > 0 ? `Add ${missingInstituteCount} missing institute${missingInstituteCount === 1 ? "" : "s"}` : "All institutes added"}
+                </button>
+                <button type="button" onClick={()=>addRecipient()} disabled={actionBusy} style={primaryButtonStyle}>
+                  <AppIcon icon={IconPlus} size={16} color="#FFFFFF" />
+                  Add destination
+                </button>
+              </div>
+            </div>
+
+            {recipients.length === 0 ? (
+              <div style={{border:"1px dashed #BFDBFE",borderRadius:18,background:"#F8FBFF",padding:"22px 20px",textAlign:"center"}}>
+                <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display}}>No Telegram destinations saved yet</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8,maxWidth:560,marginLeft:"auto",marginRight:"auto"}}>
+                  Start with one pilot institute route, confirm the chat id, then fill out the remaining centres. This keeps the rollout controlled and auditable.
+                </div>
+                <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:16}}>
+                  <button type="button" onClick={addMissingInstitutes} disabled={actionBusy || missingInstituteCount === 0} style={secondaryButtonStyle}>Add current institutes</button>
+                  <button type="button" onClick={()=>addRecipient()} disabled={actionBusy} style={primaryButtonStyle}>Add first destination</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{display:"grid",gap:12}}>
+                {recipients.map((item, index) => {
+                  const currentInstituteValue = item.institute && !recipientOptions.some(option => sameInstituteName(option, item.institute))
+                    ? [item.institute, ...recipientOptions]
+                    : recipientOptions;
+                  return (
+                    <div key={item.id} style={{border:"1px solid #E2E8F0",borderRadius:18,background:"#F8FAFC",padding:"14px 14px 15px"}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:12}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                          <span style={{width:32,height:32,borderRadius:12,background:item.enabled ? "#DBEAFE" : "#E5E7EB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:item.enabled ? G.blue : G.textM,fontFamily:G.mono,flexShrink:0}}>
+                            {index + 1}
+                          </span>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:14,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.2}}>
+                              {item.institute || "Unassigned institute"}
+                            </div>
+                            <div style={{fontSize:11.5,color:G.textM,lineHeight:1.45,marginTop:4}}>
+                              {item.destinationType === "channel" ? "Channel route" : item.destinationType === "group" ? "Group route" : "Private route"}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                          <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,fontWeight:800,color:item.enabled ? G.blue : G.textM,fontFamily:G.sans}}>
+                            <input type="checkbox" checked={item.enabled} disabled={actionBusy} onChange={event=>updateRecipient(item.id, { enabled:event.target.checked })} style={{width:17,height:17,accentColor:G.blue}} />
+                            {item.enabled ? "Active" : "Paused"}
+                          </label>
+                          <button type="button" onClick={()=>removeRecipient(item.id)} disabled={actionBusy} style={{width:38,height:38,borderRadius:12,border:"1px solid #FECACA",background:"#FFFFFF",color:G.red,cursor:actionBusy?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
+                            <AppIcon icon={IconTrash} size={16} color={G.red} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:12}}>
+                        <div>
+                          <div style={labelStyle}>Institute</div>
+                          <select value={item.institute} disabled={actionBusy} onChange={event=>updateRecipient(item.id, { institute:event.target.value })} style={inputStyle}>
+                            <option value="">Select institute</option>
+                            {currentInstituteValue.map(option => (
+                              <option key={`${item.id}_${option}`} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <div style={labelStyle}>Route type</div>
+                          <select value={item.destinationType} disabled={actionBusy} onChange={event=>updateRecipient(item.id, { destinationType:event.target.value })} style={inputStyle}>
+                            <option value="channel">Channel</option>
+                            <option value="group">Group</option>
+                            <option value="private">Private chat</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div style={labelStyle}>Chat id</div>
+                          <input value={item.chatId} onChange={event=>updateRecipient(item.id, { chatId:event.target.value })} disabled={actionBusy} placeholder="-1004343564758" style={inputStyle} />
+                        </div>
+                        <div>
+                          <div style={labelStyle}>Display label</div>
+                          <input value={item.label} onChange={event=>updateRecipient(item.id, { label:event.target.value })} disabled={actionBusy} placeholder="KIS SIP reports" style={inputStyle} />
+                        </div>
+                        <div style={{gridColumn:"1 / -1"}}>
+                          <div style={labelStyle}>Notes</div>
+                          <textarea value={item.notes} onChange={event=>updateRecipient(item.id, { notes:event.target.value })} disabled={actionBusy} placeholder="Optional operator notes, fallback contact, or rollout comments." style={textAreaStyle} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="ledgr-telegram-dashboard-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:14}}>
+            <div style={sectionCardStyle}>
+              <div style={labelStyle}>Operations</div>
+              <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Send now and automation</div>
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8}}>
+                Manual sends and scheduled sends should call the same server delivery path so audit trails, retries, and PDF rendering stay consistent.
+              </div>
+              <div style={{display:"grid",gap:10,marginTop:14}}>
+                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>On-demand send</div>
+                  <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
+                    {onDemandEnabled
+                      ? manualRouteReady
+                        ? "Server endpoint is reporting readiness for manual sends."
+                        : "Dashboard toggle is ready. Wire the secure send-now endpoint next."
+                      : "On-demand sends are paused from the dashboard."}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <button type="button" onClick={onSendNow} disabled={sendNowDisabled} style={{...primaryButtonStyle,opacity:sendNowDisabled ? 0.55 : 1,cursor:sendNowDisabled ? "not-allowed" : "pointer"}}>
+                    <AppIcon icon={IconSend} size={16} color="#FFFFFF" />
+                    {sendBusy ? "Sending..." : "Send now"}
+                  </button>
+                  <button type="button" onClick={onOpenSchedule} disabled={actionBusy} style={secondaryButtonStyle}>
+                    <AppIcon icon={IconClock} size={15} color={G.text} />
+                    Open report schedule
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={sectionCardStyle}>
+              <div style={labelStyle}>Security</div>
+              <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Server-managed secret model</div>
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8}}>
+                Keep the Telegram bot token in a server environment variable. The admin web app should only manage bot identity, routing, and execution telemetry.
+              </div>
+              <div style={{marginTop:14,display:"grid",gap:10}}>
+                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Recommended server envs</div>
+                  <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:6}}>
+                    <code style={{fontFamily:G.mono,color:G.text}}>TELEGRAM_BOT_TOKEN</code>, plus a protected admin delivery route that can render the Ledgr PDF and call Telegram <code style={{fontFamily:G.mono,color:G.text}}>sendDocument</code>.
+                  </div>
+                </div>
+                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Saved here today</div>
+                  <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:6}}>
+                    Bot username, institute chat routing, delivery toggles, and future execution metadata. No Telegram secret is persisted from this screen.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="ledgr-telegram-footer" style={{flexShrink:0,padding:"14px 24px 22px",borderTop:"1px solid #E5E7EB",background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <div style={{minWidth:0,flex:1}}>
+            {draftError ? (
+              <div style={{fontSize:12.5,color:"#991B1B",fontWeight:700,lineHeight:1.5}}>{draftError}</div>
+            ) : (
+              <div style={{fontSize:12,color:G.textM,lineHeight:1.5}}>
+                {loading
+                  ? "Loading Telegram dashboard..."
+                  : `${configuredRecipients.length} saved route${configuredRecipients.length === 1 ? "" : "s"} ready for future manual and scheduled delivery.`}
+              </div>
+            )}
+          </div>
+          <div style={{display:"flex",gap:10,flexShrink:0}}>
+            <button type="button" onClick={onClose} disabled={!!saving} style={{height:48,padding:"0 16px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:14,fontWeight:800,fontFamily:G.sans,cursor:saving?"not-allowed":"pointer"}}>
+              Cancel
+            </button>
+            <button type="button" onClick={save} disabled={actionBusy} style={{height:48,padding:"0 18px",borderRadius:14,border:"none",background:actionBusy ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:14,fontWeight:900,fontFamily:G.sans,cursor:actionBusy?"not-allowed":"pointer"}}>
+              {saving ? "Saving..." : "Save Telegram dashboard"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -7626,6 +8296,11 @@ function AdminPanelInner({user}){
   const [ledgrReportSchedule, setLedgrReportSchedule] = useState(null);
   const [ledgrReportScheduleLoading, setLedgrReportScheduleLoading] = useState(true);
   const [ledgrReportScheduleSaving, setLedgrReportScheduleSaving] = useState(false);
+  const [telegramDashboardOpen, setTelegramDashboardOpen] = useState(false);
+  const [ledgrTelegramConfig, setLedgrTelegramConfig] = useState(null);
+  const [ledgrTelegramLoading, setLedgrTelegramLoading] = useState(true);
+  const [ledgrTelegramSaving, setLedgrTelegramSaving] = useState(false);
+  const [ledgrTelegramSending, setLedgrTelegramSending] = useState(false);
   const [instituteGlanceReport, setInstituteGlanceReport] = useState(() => ({
     configKey: "",
     rows: [],
@@ -7864,7 +8539,7 @@ function AdminPanelInner({user}){
   useEffect(()=>{
     (async()=>{
       // Load index + roles + global institutes list in parallel
-      const [t,r,gInst,gSubjects,gSyllabi,gDeleted,savedBin,savedLedgrSchedule]=await Promise.all([
+      const [t,r,gInst,gSubjects,gSyllabi,gDeleted,savedBin,savedLedgrSchedule,savedTelegramConfig]=await Promise.all([
         getAllTeachers(),
         getAllRoles(),
         getGlobalInstitutes(),
@@ -7873,12 +8548,15 @@ function AdminPanelInner({user}){
         getDeletedInstitutesList(),
         getAdminBin(),
         getLedgrReportSchedule(),
+        getLedgrTelegramConfig(),
       ]);
       setTeachers(t); setRoles(r);
       setGlobalSubjects(gSubjects);
       setSyllabusTemplates(gSyllabi);
       setLedgrReportSchedule(savedLedgrSchedule);
       setLedgrReportScheduleLoading(false);
+      setLedgrTelegramConfig(savedTelegramConfig);
+      setLedgrTelegramLoading(false);
       // Restore persisted deleted-institutes set so page refresh doesn't un-hide them
       if(gDeleted.length>0) setDeletedInstitutes(new Set(gDeleted.map(i=>i.trim())));
       // Restore persisted admin recycle bin
@@ -8012,6 +8690,7 @@ function AdminPanelInner({user}){
   const closeAdminOverlay = React.useCallback(() => {
     if(exportOpen){ setExportOpen(false); return true; }
     if(instituteGlanceOptionsOpen){ setInstituteGlanceOptionsOpen(false); return true; }
+    if(telegramDashboardOpen){ setTelegramDashboardOpen(false); return true; }
     if(instituteGlanceOpen){ setInstituteGlanceOpen(false); return true; }
     if(profileOpen){ setProfileOpen(false); return true; }
     if(adminConfirm){ setAdminConfirm(null); return true; }
@@ -8021,7 +8700,7 @@ function AdminPanelInner({user}){
     if(copyGroupModal){ setCopyGroupModal(null); return true; }
     if(legacySectionRepair){ setLegacySectionRepair(null); return true; }
     return false;
-  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, instituteGlanceOpen, instituteGlanceOptionsOpen, legacySectionRepair, profileOpen]);
+  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, instituteGlanceOpen, instituteGlanceOptionsOpen, legacySectionRepair, profileOpen, telegramDashboardOpen]);
   useEffect(() => {
     if(!Capacitor.isNativePlatform()) return undefined;
     const listenerPromise = CapacitorApp.addListener("backButton", () => {
@@ -8579,6 +9258,153 @@ function AdminPanelInner({user}){
       setLedgrReportScheduleSaving(false);
     }
   }, [ledgrReportScheduleSaving, showAdminToast, user?.uid]);
+
+  const openLedgrTelegramDashboard = React.useCallback(() => {
+    setProfileOpen(false);
+    setInstituteGlanceOptionsOpen(false);
+    setTelegramDashboardOpen(true);
+  }, []);
+
+  const openLedgrTelegramSchedule = React.useCallback(() => {
+    setTelegramDashboardOpen(false);
+    setInstituteGlanceOptionsOpen(true);
+  }, []);
+
+  const saveLedgrTelegramDashboard = React.useCallback(async (nextConfig) => {
+    if(ledgrTelegramSaving) return;
+    setLedgrTelegramSaving(true);
+    try {
+      const saved = await saveLedgrTelegramConfig(nextConfig, user?.uid || "");
+      setLedgrTelegramConfig(current => ({ ...(current || {}), ...saved }));
+      showAdminToast("Telegram delivery dashboard saved.");
+    } catch (error) {
+      console.error("save Telegram dashboard failed", error);
+      showAdminToast(error?.message || "Telegram delivery dashboard could not be saved.");
+    } finally {
+      setLedgrTelegramSaving(false);
+    }
+  }, [ledgrTelegramSaving, showAdminToast, user?.uid]);
+
+  const ledgrTelegramRecipientStats = React.useMemo(() => {
+    const recipients = Array.isArray(ledgrTelegramConfig?.recipients) ? ledgrTelegramConfig.recipients : [];
+    const configured = recipients.filter(item => normaliseTelegramChatId(item?.chatId)).length;
+    const active = recipients.filter(item => item?.enabled !== false && normaliseTelegramChatId(item?.chatId)).length;
+    return { configured, active };
+  }, [ledgrTelegramConfig]);
+
+  const sendLedgrTelegramNow = React.useCallback(async () => {
+    if(ledgrTelegramSending) return;
+    try {
+      const currentUser = auth.currentUser;
+      if(!currentUser){
+        showAdminToast("Sign in again before sending Telegram reports.");
+        return;
+      }
+      if(ledgrTelegramConfig?.enabled === false){
+        showAdminToast("Telegram delivery is paused in the dashboard.");
+        return;
+      }
+      if(ledgrTelegramConfig?.delivery?.onDemandEnabled === false){
+        showAdminToast("On-demand Telegram sends are paused.");
+        return;
+      }
+
+      const activeRecipients = (ledgrTelegramConfig?.recipients || [])
+        .filter(item => item?.enabled !== false && item?.institute && normaliseTelegramChatId(item?.chatId));
+      if(!activeRecipients.length){
+        showAdminToast("Add at least one active Telegram route before sending.");
+        return;
+      }
+
+      setLedgrTelegramSending(true);
+      const config = {
+        period: instituteGlancePeriod,
+        month: instituteGlanceMonth,
+        rangeStart: instituteGlanceRangeStart,
+        rangeEnd: instituteGlanceRangeEnd,
+      };
+      const report = await loadInstituteGlanceReport({ config });
+      if(!report?.ready){
+        throw new Error("The Ledgr report is still preparing. Please wait until all centres are ready.");
+      }
+
+      const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange(config);
+      const generatedOnLabel = getInstituteGlanceGeneratedOnLabel();
+      const jobs = activeRecipients.map(recipient => {
+        const row = (report.rows || []).find(item => sameInstituteName(item?.institute, recipient.institute));
+        if(!row){
+          throw new Error(`Could not find the current report row for ${recipient.institute}.`);
+        }
+        const rows = [row];
+        const summary = summariseInstituteGlanceRows(rows);
+        return {
+          recipientId: recipient.id,
+          html: buildInstituteGlanceSummaryHtml({
+            rows,
+            summary,
+            generatedOnLabel,
+            period: config.period,
+            rangeStartKey,
+            rangeEndKey,
+            scopeLabel: row.institute || recipient.institute,
+          }),
+          filename: instituteGlancePdfFilename(row.institute || recipient.institute, config.period, rangeStartKey, rangeEndKey),
+          caption: `Ledgr Report | ${row.institute || recipient.institute}`,
+        };
+      });
+
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch("/api/send-ledgr-telegram", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ jobs }),
+      });
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+      if(!response.ok){
+        throw new Error(payload?.error || "Telegram delivery failed.");
+      }
+
+      if(payload?.execution || payload?.health){
+        setLedgrTelegramConfig(current => ({
+          ...(current || {}),
+          execution: payload?.execution || current?.execution,
+          health: payload?.health || current?.health,
+        }));
+      }
+
+      const delivered = Number(payload?.execution?.lastDeliveredCount || 0);
+      const failed = Number(payload?.execution?.lastFailureCount || 0);
+      showAdminToast(
+        failed > 0
+          ? `Telegram sent ${delivered} report${delivered === 1 ? "" : "s"}; ${failed} failed.`
+          : `Telegram sent ${delivered} report${delivered === 1 ? "" : "s"} successfully.`
+      );
+    } catch (error) {
+      console.error("send Telegram reports failed", error);
+      showAdminToast(error?.message || "Telegram reports could not be sent.");
+    } finally {
+      setLedgrTelegramSending(false);
+    }
+  }, [
+    getInstituteGlanceGeneratedOnLabel,
+    getInstituteGlancePeriodRange,
+    instituteGlanceMonth,
+    instituteGlancePeriod,
+    instituteGlanceRangeEnd,
+    instituteGlanceRangeStart,
+    ledgrTelegramConfig,
+    ledgrTelegramSending,
+    loadInstituteGlanceReport,
+    showAdminToast,
+  ]);
 
   const openLegacySectionRepairForInstitute = React.useCallback(async (instituteName, { silent = false } = {}) => {
     try {
@@ -12841,6 +13667,20 @@ function AdminPanelInner({user}){
               onSaveSchedule={saveInstituteGlanceSchedule}
             />
           )}
+          {telegramDashboardOpen&&(
+            <LedgrTelegramDashboardModal
+              institutes={institutes}
+              schedule={ledgrReportSchedule}
+              config={ledgrTelegramConfig}
+              loading={ledgrTelegramLoading}
+              saving={ledgrTelegramSaving}
+              sendBusy={ledgrTelegramSending}
+              onClose={()=>!ledgrTelegramSaving&&setTelegramDashboardOpen(false)}
+              onSave={saveLedgrTelegramDashboard}
+              onOpenSchedule={openLedgrTelegramSchedule}
+              onSendNow={sendLedgrTelegramNow}
+            />
+          )}
           <AdminToastBanner message={adminToast} />
         </div>
       );
@@ -13118,6 +13958,15 @@ function AdminPanelInner({user}){
                   <AppIcon icon={item.icon} size={15} color={!manageScopeInstitute&&manageTab===item.key?G.blue:G.textL}/>{item.label}
                 </button>
               ))}
+              <button
+                onClick={openLedgrTelegramDashboard}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:telegramDashboardOpen?"#EEF4FF":"transparent",color:telegramDashboardOpen?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
+                <AppIcon icon={IconSend} size={15} color={telegramDashboardOpen?G.blue:G.textL}/>
+                Telegram Delivery
+                <span style={{marginLeft:"auto",background:ledgrTelegramRecipientStats.active?G.blueL:"#F3F4F6",color:ledgrTelegramRecipientStats.active?G.blue:G.textL,borderRadius:999,padding:"2px 7px",fontSize:10.5,fontWeight:850,fontFamily:G.mono}}>
+                  {ledgrTelegramLoading ? "..." : ledgrTelegramRecipientStats.active || "setup"}
+                </span>
+              </button>
 
               <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"10px 8px 7px",borderTop:`1px solid ${G.border}`}}>Support & recovery</div>
               <button onClick={openFeedbackInbox} style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:"transparent",color:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
@@ -14211,6 +15060,20 @@ function AdminPanelInner({user}){
             onSaveSchedule={saveInstituteGlanceSchedule}
           />
         )}
+        {telegramDashboardOpen&&(
+          <LedgrTelegramDashboardModal
+            institutes={institutes}
+            schedule={ledgrReportSchedule}
+            config={ledgrTelegramConfig}
+            loading={ledgrTelegramLoading}
+            saving={ledgrTelegramSaving}
+            sendBusy={ledgrTelegramSending}
+            onClose={()=>!ledgrTelegramSaving&&setTelegramDashboardOpen(false)}
+            onSave={saveLedgrTelegramDashboard}
+            onOpenSchedule={openLedgrTelegramSchedule}
+            onSendNow={sendLedgrTelegramNow}
+          />
+        )}
         <AdminToastBanner message={adminToast} />
         <MobileNav/>
         <div style={mobilePageInnerStyle}>
@@ -14323,6 +15186,17 @@ function AdminPanelInner({user}){
               : instituteGlanceReport.ready
                 ? "Ready"
                 : null}
+          />
+          <MobileProfileAction
+            icon={IconSend}
+            title="Telegram Delivery"
+            subtitle="Institute routing, send now, and schedule linkage."
+            onClick={openLedgrTelegramDashboard}
+            badge={ledgrTelegramLoading
+              ? null
+              : ledgrTelegramRecipientStats.active
+                ? `${ledgrTelegramRecipientStats.active} live`
+                : "Setup"}
           />
 
           <div style={{...mobileWorkspaceCardStyle,marginBottom:12}}>
@@ -15306,6 +16180,7 @@ function AdminPanelInner({user}){
           </div>
           <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Workspace</div>
           {profileAction({icon:IconChartBar,title:"Ledgr Report",subtitle:"Reports, PDFs, and centre summaries",onClick:()=>{setProfileOpen(false);openInstituteGlancePanel();},badge:instituteGlanceReport.ready?"Ready":null})}
+          {profileAction({icon:IconSend,title:"Telegram Delivery",subtitle:"Institute routing, send now, and schedule linkage",onClick:openLedgrTelegramDashboard,badge:ledgrTelegramLoading?null:(ledgrTelegramRecipientStats.active?`${ledgrTelegramRecipientStats.active} live`: "Setup")})}
           {profileAction({icon:IconSettings,title:"Control Centre",subtitle:"Institutes, teachers, syllabus, and access",onClick:()=>{setProfileOpen(false);openManageTab("teachers");}})}
           <div style={{height:1,background:G.border,margin:"8px 0"}}/>
           <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Support</div>
@@ -15453,6 +16328,24 @@ function AdminPanelInner({user}){
                     )}
                     <AppIcon icon={IconChevronRight} size={13} color="rgba(255,255,255,0.3)" style={{marginLeft:instituteGlanceReport.ready?0:"auto",flexShrink:0}} />
                   </button>
+                  <button onClick={openLedgrTelegramDashboard}
+                    style={{width:"100%",marginBottom:10,padding:"12px 13px",background:"rgba(37,99,235,0.10)",border:"1px solid rgba(96,165,250,0.22)",borderRadius:13,cursor:"pointer",display:"flex",alignItems:"center",gap:11,color:"rgba(255,255,255,0.88)",fontSize:13,fontFamily:G.sans,fontWeight:700,textAlign:"left",transition:"background 0.15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(37,99,235,0.16)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="rgba(37,99,235,0.10)"}>
+                    <div style={{width:34,height:34,borderRadius:11,background:"rgba(59,130,246,0.18)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <AppIcon icon={IconSend} size={16} color="#93C5FD" />
+                    </div>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:13.5,fontWeight:800,color:"rgba(255,255,255,0.92)"}}>Telegram Delivery</div>
+                      <div style={{fontSize:11.5,color:"rgba(255,255,255,0.44)",fontWeight:500,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                        Institute routing, send now, and schedule linkage
+                      </div>
+                    </div>
+                    <span style={{marginLeft:"auto",background:ledgrTelegramRecipientStats.active?"rgba(59,130,246,0.16)":"rgba(255,255,255,0.06)",border:`1px solid ${ledgrTelegramRecipientStats.active?"rgba(96,165,250,0.22)":"rgba(255,255,255,0.08)"}`,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,color:ledgrTelegramRecipientStats.active?"#BFDBFE":"rgba(255,255,255,0.46)",flexShrink:0}}>
+                      {ledgrTelegramLoading ? "..." : ledgrTelegramRecipientStats.active ? `${ledgrTelegramRecipientStats.active} live` : "setup"}
+                    </span>
+                    <AppIcon icon={IconChevronRight} size={13} color="rgba(255,255,255,0.3)" style={{flexShrink:0}} />
+                  </button>
                   <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",color:"rgba(255,255,255,0.36)",fontFamily:G.mono,margin:"4px 4px 8px"}}>Manage</div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:10}}>
                   <button onClick={()=>{setProfileOpen(false);openManageTab("teachers");}}
@@ -15577,6 +16470,20 @@ function AdminPanelInner({user}){
           onClose={()=>!instituteGlanceExportBusy&&!ledgrReportScheduleSaving&&setInstituteGlanceOptionsOpen(false)}
           onApply={applyInstituteGlanceOptions}
           onSaveSchedule={saveInstituteGlanceSchedule}
+        />
+      )}
+      {telegramDashboardOpen&&(
+        <LedgrTelegramDashboardModal
+          institutes={institutes}
+          schedule={ledgrReportSchedule}
+          config={ledgrTelegramConfig}
+          loading={ledgrTelegramLoading}
+          saving={ledgrTelegramSaving}
+          sendBusy={ledgrTelegramSending}
+          onClose={()=>!ledgrTelegramSaving&&setTelegramDashboardOpen(false)}
+          onSave={saveLedgrTelegramDashboard}
+          onOpenSchedule={openLedgrTelegramSchedule}
+          onSendNow={sendLedgrTelegramNow}
         />
       )}
       {instituteGlanceOpen && !isMobile ? (

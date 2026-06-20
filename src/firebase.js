@@ -1457,6 +1457,51 @@ function normaliseLedgrScheduleTimes(times) {
     .sort((a, b) => a.localeCompare(b));
 }
 
+function normaliseTelegramChatId(value) {
+  return String(value || "").trim().replace(/\s+/g, "");
+}
+
+function normaliseLedgrTelegramRecipients(list) {
+  const seen = new Set();
+  return (list || [])
+    .map((item, index) => {
+      const institute = String(item?.institute || "").trim().replace(/\s+/g, " ");
+      const label = String(item?.label || "").trim();
+      const chatId = normaliseTelegramChatId(item?.chatId);
+      const notes = String(item?.notes || "").trim();
+      const destinationType = ["channel", "group", "private"].includes(item?.destinationType)
+        ? item.destinationType
+        : "channel";
+      const enabled = item?.enabled !== false;
+      const touched = institute || label || chatId || notes;
+      if (!touched) return null;
+      if (!institute) {
+        throw new Error(`Telegram destination ${index + 1} is missing an institute.`);
+      }
+      if (!chatId) {
+        throw new Error(`Telegram destination for ${institute} is missing a chat id.`);
+      }
+      if (!/^-?\d{5,}$/.test(chatId)) {
+        throw new Error(`Telegram chat id for ${institute} looks invalid.`);
+      }
+      const dedupeKey = `${institute.toLowerCase()}__${chatId}`;
+      if (seen.has(dedupeKey)) return null;
+      seen.add(dedupeKey);
+      return {
+        id: String(item?.id || `${institute}_${chatId}_${index + 1}`)
+          .trim()
+          .replace(/\s+/g, "_"),
+        institute,
+        label,
+        chatId,
+        notes,
+        destinationType,
+        enabled,
+      };
+    })
+    .filter(Boolean);
+}
+
 export async function getLedgrReportSchedule() {
   try {
     const snap = await getDoc(doc(db, "config", "ledgrReportSchedule"));
@@ -1508,6 +1553,46 @@ export async function saveLedgrReportSchedule(schedule = {}, updatedBy = "") {
   };
 
   await setDoc(doc(db, "config", "ledgrReportSchedule"), payload, { merge: true });
+  return payload;
+}
+
+export async function getLedgrTelegramConfig() {
+  try {
+    const snap = await getDoc(doc(db, "config", "ledgrTelegramDelivery"));
+    return snap.exists() ? snap.data() : null;
+  } catch (error) {
+    console.error("getLedgrTelegramConfig", error);
+    return null;
+  }
+}
+
+export async function saveLedgrTelegramConfig(config = {}, updatedBy = "") {
+  const botUsernameRaw = String(config.botUsername || "").trim();
+  if (botUsernameRaw && !/^@?[A-Za-z0-9_]{5,}$/.test(botUsernameRaw)) {
+    throw new Error("Enter a valid Telegram bot username.");
+  }
+  const botUsername = botUsernameRaw
+    ? (botUsernameRaw.startsWith("@") ? botUsernameRaw : `@${botUsernameRaw}`)
+    : "";
+  const recipients = normaliseLedgrTelegramRecipients(config.recipients);
+
+  const payload = {
+    schemaVersion: 1,
+    transport: "telegram",
+    tokenMode: "server_env",
+    enabled: config.enabled !== false,
+    botUsername,
+    delivery: {
+      scheduledEnabled: config.delivery?.scheduledEnabled !== false,
+      onDemandEnabled: config.delivery?.onDemandEnabled !== false,
+      reportFormat: "pdf",
+    },
+    recipients,
+    updatedAt: Date.now(),
+    updatedBy: String(updatedBy || "").trim(),
+  };
+
+  await setDoc(doc(db, "config", "ledgrTelegramDelivery"), payload, { merge: true });
   return payload;
 }
 
