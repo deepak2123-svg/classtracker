@@ -133,6 +133,38 @@ export function adminDb() {
   return getFirestore(ensureAdminApp());
 }
 
+async function readAdminRoleFromServerDb(uid) {
+  try {
+    const roleSnap = await adminDb().doc(`roles/${uid}`).get();
+    return roleSnap.exists ? String(roleSnap.data()?.role || "").trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+async function readAdminRoleFromClientProject({ token, projectId, uid }) {
+  if (!token || !projectId || !uid) return "";
+
+  try {
+    const response = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/roles/${uid}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+
+    if (!response.ok) return "";
+
+    const payload = await response.json();
+    return String(payload?.fields?.role?.stringValue || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 export async function requireAdminUser(req) {
   const authHeader = String(req.headers.authorization || req.headers.Authorization || "").trim();
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
@@ -143,8 +175,16 @@ export async function requireAdminUser(req) {
   }
 
   const decoded = await verifyFirebaseIdToken(token);
-  const roleSnap = await adminDb().doc(`roles/${decoded.uid}`).get();
-  const role = roleSnap.exists ? roleSnap.data()?.role : "teacher";
+  const projectId = getFirebaseProjectId();
+  let role = await readAdminRoleFromServerDb(decoded.uid);
+  if (role !== "admin") {
+    const clientProjectRole = await readAdminRoleFromClientProject({
+      token,
+      projectId,
+      uid: decoded.uid,
+    });
+    if (clientProjectRole) role = clientProjectRole;
+  }
   if (role !== "admin") {
     const error = new Error("Admin access is required.");
     error.statusCode = 403;
