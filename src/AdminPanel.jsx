@@ -167,18 +167,6 @@ function buildTelegramDashboardDraft(config = null) {
   };
 }
 
-async function blobToBase64(blob) {
-  const arrayBuffer = await blob.arrayBuffer();
-  let binary = "";
-  const bytes = new Uint8Array(arrayBuffer);
-  const chunkSize = 0x8000;
-  for(let index = 0; index < bytes.length; index += chunkSize){
-    const chunk = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return window.btoa(binary);
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function currentSession(){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;
@@ -9692,16 +9680,19 @@ function AdminPanelInner({user}){
         if(!row){
           throw new Error(`Could not find the current report row for ${recipient.institute}.`);
         }
-        const pdfBlob = await buildInstituteGlanceInstitutePdfBlob({
-          row,
+        const rows = [row];
+        const html = buildInstituteGlanceSummaryHtml({
+          rows,
+          summary: summariseInstituteGlanceRows(rows),
           generatedOnLabel,
           period: config.period,
           rangeStartKey,
           rangeEndKey,
+          scopeLabel: row.institute || recipient.institute,
         });
         return {
           recipientId: recipient.id,
-          pdfBase64: await blobToBase64(pdfBlob),
+          html,
           filename: instituteGlancePdfFilename(row.institute || recipient.institute, config.period, rangeStartKey, rangeEndKey),
           caption: `Ledgr Report | ${row.institute || recipient.institute}`,
         };
@@ -9791,7 +9782,6 @@ function AdminPanelInner({user}){
     instituteGlancePeriod,
     instituteGlanceRangeEnd,
     instituteGlanceRangeStart,
-    buildInstituteGlanceInstitutePdfBlob,
     buildTargetedInstituteGlanceReport,
     ledgrTelegramConfig,
     ledgrTelegramSending,
