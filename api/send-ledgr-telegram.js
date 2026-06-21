@@ -1,5 +1,4 @@
 import { requireAdminUser, adminDb } from "./_lib/firebaseAdmin.js";
-import { renderLedgrPdfBuffer, safePdfFilename } from "./_lib/renderLedgrPdf.js";
 
 export const maxDuration = 120;
 
@@ -20,6 +19,14 @@ function sendJson(res, status, payload) {
 function trimCaption(value) {
   const clean = String(value || "").trim();
   return clean.length > 1000 ? `${clean.slice(0, 997)}...` : clean;
+}
+
+function safePdfFilename(value) {
+  const name = String(value || "ledgr-report.pdf")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+  return name.toLowerCase().endsWith(".pdf") ? name : `${name || "ledgr-report"}.pdf`;
 }
 
 function parseBody(req) {
@@ -104,6 +111,8 @@ export default async function handler(req, res) {
     if (jobs.length > 25) {
       return sendJson(res, 400, { error: "Too many Telegram delivery jobs in one request." });
     }
+
+    const { renderLedgrPdfBuffer } = await import("./_lib/renderLedgrPdf.js");
 
     const configRef = adminDb().doc("config/ledgrTelegramDelivery");
     const configSnap = await configRef.get();
