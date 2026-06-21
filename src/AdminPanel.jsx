@@ -5684,6 +5684,31 @@ function LedgrTelegramDashboardModal({
       destinationType: user?.destinationType || "private",
     });
   };
+  const removeKnownUserFromInstitute = (instituteName, user) => {
+    const chatId = normaliseTelegramChatId(user?.chatId);
+    const usernameKey = telegramUsernameKey(user?.username);
+    if(!chatId && !usernameKey) return;
+    setRecipients(current => current.filter(item => {
+      if(!sameInstituteName(item?.institute, instituteName)) return true;
+      const itemChatId = normaliseTelegramChatId(item?.chatId);
+      const itemUsernameKey = telegramUsernameKey(item?.username);
+      const sameChatId = chatId && itemChatId === chatId;
+      const sameUsername = usernameKey && itemUsernameKey && itemUsernameKey === usernameKey;
+      return !(sameChatId || (!itemChatId && sameUsername));
+    }));
+  };
+  const removeKnownUserFromFullReport = (user) => {
+    const chatId = normaliseTelegramChatId(user?.chatId);
+    const usernameKey = telegramUsernameKey(user?.username);
+    if(!chatId && !usernameKey) return;
+    setFullReportRecipients(current => current.filter(item => {
+      const itemChatId = normaliseTelegramChatId(item?.chatId);
+      const itemUsernameKey = telegramUsernameKey(item?.username);
+      const sameChatId = chatId && itemChatId === chatId;
+      const sameUsername = usernameKey && itemUsernameKey && itemUsernameKey === usernameKey;
+      return !(sameChatId || (!itemChatId && sameUsername));
+    }));
+  };
 
   const buildDraftPayload = () => {
     const cleanedRouteCandidates = recipients.map(item => {
@@ -5859,6 +5884,7 @@ function LedgrTelegramDashboardModal({
   const renderRowEditor = (row) => {
     const isFullReport = row.kind === "full_report";
     const rowRecipients = row.recipients || [];
+    const resolvedRowRecipients = rowRecipients.map(resolveRecipientIdentity);
     const updateCurrentRecipient = isFullReport ? updateFullReportRecipient : updateRecipient;
     const removeCurrentRecipient = isFullReport ? removeFullReportRecipient : removeRecipient;
     const addManualRecipient = () => {
@@ -5875,13 +5901,43 @@ function LedgrTelegramDashboardModal({
         addKnownUserToInstitute(row.institute, user);
       }
     };
+    const removeKnownUser = (user) => {
+      if(isFullReport){
+        removeKnownUserFromFullReport(user);
+      } else {
+        removeKnownUserFromInstitute(row.institute, user);
+      }
+    };
+    const mappedKnownUserChatIds = new Set(
+      resolvedRowRecipients
+        .filter(item => item?.destinationType === "private")
+        .map(item => normaliseTelegramChatId(item?.chatId))
+        .filter(chatId => !!chatId && knownUserMap.has(chatId))
+    );
+    const toggleKnownUser = (user) => {
+      const chatId = normaliseTelegramChatId(user?.chatId);
+      if(!chatId) return;
+      if(mappedKnownUserChatIds.has(chatId)){
+        removeKnownUser(user);
+      } else {
+        addKnownUser(user);
+      }
+    };
+    const mappedKnownRecipients = resolvedRowRecipients.filter(item => {
+      const chatId = normaliseTelegramChatId(item?.chatId);
+      return item?.destinationType === "private" && !!chatId && knownUserMap.has(chatId);
+    });
+    const manualRecipients = resolvedRowRecipients.filter(item => {
+      const chatId = normaliseTelegramChatId(item?.chatId);
+      return !(item?.destinationType === "private" && !!chatId && knownUserMap.has(chatId));
+    });
     return (
       <div style={{display:"grid",gap:14,padding:"16px 18px 18px",background:"#F8FAFC"}}>
         <div className="ledgr-telegram-editor-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,0.95fr) minmax(0,1.05fr)",gap:14}}>
           <div style={{border:`1px solid ${G.border}`,borderRadius:16,background:"#FFFFFF",padding:"13px 14px"}}>
             <div style={{...labelStyle,marginBottom:8}}>Started bot users</div>
             <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginBottom:10}}>
-              Ask the user to start <strong style={{color:G.text}}>{normaliseTelegramBotUsername(botUsername) || "@ledgrapp_bot"}</strong>, then refresh here and tap their name.
+              Ask the user to start <strong style={{color:G.text}}>{normaliseTelegramBotUsername(botUsername) || "@ledgrapp_bot"}</strong>, then refresh here and tick their name.
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
               <button type="button" onClick={()=>{ void loadKnownUsers(); }} disabled={knownUsersBusy} style={actionButtonStyle(false, knownUsersBusy)}>
@@ -5895,17 +5951,52 @@ function LedgrTelegramDashboardModal({
             {knownUsersError ? (
               <div style={{fontSize:12,color:"#991B1B",lineHeight:1.55}}>{knownUsersError}</div>
             ) : knownUsers.length ? (
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {knownUsers.map(user => (
-                  <button
-                    key={`known_${user.chatId}`}
-                    type="button"
-                    onClick={()=>addKnownUser(user)}
-                    style={{height:34,padding:"0 10px",borderRadius:999,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:12,fontWeight:800,fontFamily:G.sans,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
-                    <AppIcon icon={IconPlus} size={12} color={G.blue} />
-                    {getTelegramRecipientDisplayName(user)}
-                  </button>
-                ))}
+              <div style={{display:"grid",gap:8}}>
+                {knownUsers.map(user => {
+                  const chatId = normaliseTelegramChatId(user?.chatId);
+                  const isMapped = !!chatId && mappedKnownUserChatIds.has(chatId);
+                  const displayName = getTelegramRecipientDisplayName(user);
+                  const username = normaliseTelegramUsername(user?.username);
+                  const label = String(user?.label || "").trim();
+                  const metaParts = [];
+                  if(label && label !== displayName) metaParts.push(label);
+                  metaParts.push(username ? "Username available" : "No username needed");
+                  if(chatId) metaParts.push(`...${chatId.slice(-4)}`);
+                  return (
+                    <label
+                      key={`known_${user.chatId}`}
+                      style={{
+                        display:"grid",
+                        gridTemplateColumns:"auto minmax(0,1fr) auto",
+                        alignItems:"center",
+                        gap:10,
+                        padding:"11px 12px",
+                        borderRadius:14,
+                        border:`1px solid ${isMapped ? "#BFDBFE" : G.border}`,
+                        background:isMapped ? "#EFF6FF" : "#FFFFFF",
+                        cursor:actionBusy ? "not-allowed" : "pointer",
+                      }}>
+                      <input
+                        type="checkbox"
+                        checked={isMapped}
+                        disabled={actionBusy}
+                        onChange={()=>toggleKnownUser(user)}
+                        style={{width:18,height:18,accentColor:G.blue}}
+                      />
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.25,wordBreak:"break-word"}}>
+                          {displayName}
+                        </div>
+                        <div style={{fontSize:12,color:G.textM,lineHeight:1.5,marginTop:3,wordBreak:"break-word"}}>
+                          {metaParts.join(" · ")}
+                        </div>
+                      </div>
+                      <span style={pillStyle(isMapped ? "#DCFCE7" : "#F3F4F6", isMapped ? "#166534" : G.textM)}>
+                        {isMapped ? "Mapped" : "Select"}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             ) : (
               <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
@@ -5916,51 +6007,39 @@ function LedgrTelegramDashboardModal({
 
           <div style={{border:`1px solid ${G.border}`,borderRadius:16,background:"#FFFFFF",padding:"13px 14px"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
-              <div style={labelStyle}>Mapped users</div>
-              <button type="button" onClick={addManualRecipient} disabled={actionBusy} style={actionButtonStyle(false, actionBusy)}>
-                <AppIcon icon={IconPlus} size={14} color={G.blue} />
-                Add user
-              </button>
+              <div style={labelStyle}>{isFullReport ? "Mapped users" : "Selected for this institute"}</div>
+              <span style={pillStyle(rowRecipients.length ? "#EEF2FF" : "#F3F4F6", rowRecipients.length ? G.blue : G.textM)}>
+                {rowRecipients.length} selected
+              </span>
             </div>
             <div style={{display:"grid",gap:10}}>
-              {rowRecipients.length ? rowRecipients.map(recipient => {
-                const resolvedRecipient = resolveRecipientIdentity(recipient);
-                const resolvedChatId = normaliseTelegramChatId(resolvedRecipient?.chatId);
-                const matchedUser = resolvedRecipient?.matchedUser;
+              {resolvedRowRecipients.length ? resolvedRowRecipients.map(recipient => {
+                const resolvedChatId = normaliseTelegramChatId(recipient?.chatId);
+                const matchedKnownUser = knownUserMap.get(resolvedChatId) || recipient?.matchedUser || null;
+                const displayName = getTelegramRecipientDisplayName({
+                  ...recipient,
+                  username: recipient?.username || matchedKnownUser?.username,
+                  label: recipient?.label || matchedKnownUser?.label,
+                });
+                const isKnownRecipient = recipient?.destinationType === "private" && !!matchedKnownUser;
                 return (
-                  <div key={recipient.id} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr) 130px auto auto",gap:8,alignItems:"center"}}>
-                    <input
-                      value={recipient.username || ""}
-                      onChange={event=>updateCurrentRecipient(recipient.id,{ username:event.target.value, label:String(recipient.label || "").trim() || event.target.value })}
-                      disabled={actionBusy}
-                      placeholder="@username"
-                      style={inputStyle}
-                    />
-                    <div style={{display:"grid",gap:6}}>
-                      <input
-                        value={recipient.chatId || resolvedChatId || ""}
-                        onChange={event=>updateCurrentRecipient(recipient.id,{ chatId:event.target.value })}
-                        disabled={actionBusy}
-                        placeholder="Chat ID"
-                        style={inputStyle}
-                      />
-                      <div style={{fontSize:11.5,color:resolvedChatId ? "#166534" : G.textL,lineHeight:1.45}}>
-                        {matchedUser
-                          ? `Resolved from ${getTelegramRecipientDisplayName(matchedUser)}`
-                          : resolvedChatId
-                            ? "Chat ID ready"
-                            : "Ask this user to start the bot, then refresh users."}
+                  <div key={recipient.id} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",gap:10,alignItems:"center",padding:"11px 12px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF"}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:800,color:G.text,lineHeight:1.25,wordBreak:"break-word"}}>
+                        {displayName}
+                      </div>
+                      <div style={{fontSize:12,color:G.textM,lineHeight:1.5,marginTop:3,wordBreak:"break-word"}}>
+                        {[
+                          isKnownRecipient ? "Started bot user" : "Manual destination",
+                          recipient?.destinationType === "channel"
+                            ? "Channel"
+                            : recipient?.destinationType === "group"
+                              ? "Group"
+                              : "Private",
+                          resolvedChatId ? `...${resolvedChatId.slice(-4)}` : "Needs chat ID",
+                        ].join(" · ")}
                       </div>
                     </div>
-                    <select
-                      value={recipient.destinationType || "private"}
-                      onChange={event=>updateCurrentRecipient(recipient.id,{ destinationType:event.target.value })}
-                      disabled={actionBusy}
-                      style={inputStyle}>
-                      <option value="private">Private</option>
-                      <option value="channel">Channel</option>
-                      <option value="group">Group</option>
-                    </select>
                     <label style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:800,color:recipient.enabled !== false ? G.blue : G.textM,fontFamily:G.sans,cursor:actionBusy ? "not-allowed" : "pointer"}}>
                       <input
                         type="checkbox"
@@ -5978,7 +6057,89 @@ function LedgrTelegramDashboardModal({
                 );
               }) : (
                 <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55}}>
-                  No Telegram users are mapped yet.
+                  Tick one or more started users on the left to map them here.
+                </div>
+              )}
+            </div>
+
+            <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${G.border}`}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
+                <div>
+                  <div style={labelStyle}>Other destinations</div>
+                  <div style={{fontSize:12,color:G.textM,lineHeight:1.5,marginTop:4}}>
+                    Use this only for channels, groups, or a raw chat ID.
+                  </div>
+                </div>
+                <button type="button" onClick={addManualRecipient} disabled={actionBusy} style={actionButtonStyle(false, actionBusy)}>
+                  <AppIcon icon={IconPlus} size={14} color={G.blue} />
+                  Add manual
+                </button>
+              </div>
+              {manualRecipients.length ? (
+                <div style={{display:"grid",gap:10}}>
+                  {manualRecipients.map(recipient => {
+                    const resolvedRecipient = resolveRecipientIdentity(recipient);
+                    const resolvedChatId = normaliseTelegramChatId(resolvedRecipient?.chatId);
+                    const matchedUser = resolvedRecipient?.matchedUser;
+                    return (
+                      <div key={recipient.id} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr) 130px auto auto",gap:8,alignItems:"center"}}>
+                        <input
+                          value={recipient.username || ""}
+                          onChange={event=>updateCurrentRecipient(recipient.id,{ username:event.target.value, label:String(recipient.label || "").trim() || event.target.value })}
+                          disabled={actionBusy}
+                          placeholder="@username"
+                          style={inputStyle}
+                        />
+                        <div style={{display:"grid",gap:6}}>
+                          <input
+                            value={recipient.chatId || resolvedChatId || ""}
+                            onChange={event=>updateCurrentRecipient(recipient.id,{ chatId:event.target.value })}
+                            disabled={actionBusy}
+                            placeholder="Chat ID"
+                            style={inputStyle}
+                          />
+                          <div style={{fontSize:11.5,color:resolvedChatId ? "#166534" : G.textL,lineHeight:1.45}}>
+                            {matchedUser
+                              ? `Resolved from ${getTelegramRecipientDisplayName(matchedUser)}`
+                              : resolvedChatId
+                                ? "Chat ID ready"
+                                : "Add the chat ID directly."}
+                          </div>
+                        </div>
+                        <select
+                          value={recipient.destinationType || "private"}
+                          onChange={event=>updateCurrentRecipient(recipient.id,{ destinationType:event.target.value })}
+                          disabled={actionBusy}
+                          style={inputStyle}>
+                          <option value="private">Private</option>
+                          <option value="channel">Channel</option>
+                          <option value="group">Group</option>
+                        </select>
+                        <label style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:800,color:recipient.enabled !== false ? G.blue : G.textM,fontFamily:G.sans,cursor:actionBusy ? "not-allowed" : "pointer"}}>
+                          <input
+                            type="checkbox"
+                            checked={recipient.enabled !== false}
+                            disabled={actionBusy}
+                            onChange={event=>updateCurrentRecipient(recipient.id,{ enabled:event.target.checked })}
+                            style={{width:16,height:16,accentColor:G.blue}}
+                          />
+                          Active
+                        </label>
+                        <button type="button" onClick={()=>removeCurrentRecipient(recipient.id)} disabled={actionBusy} style={actionButtonStyle(false, actionBusy)}>
+                          <AppIcon icon={IconTrash} size={14} color="#DC2626" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55}}>
+                  No manual destinations added. Most teams can leave this empty and just tick started users.
+                </div>
+              )}
+              {!!mappedKnownRecipients.length && (
+                <div style={{fontSize:11.5,color:G.textL,lineHeight:1.5,marginTop:10}}>
+                  Known users can be removed anytime by unticking them on the left.
                 </div>
               )}
             </div>
