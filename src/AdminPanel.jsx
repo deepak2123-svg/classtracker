@@ -16504,6 +16504,9 @@ function AdminPanelInner({user}){
           <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Quick access</div>
           {profileAction({icon:IconSend,title:"Messenger",subtitle:"Routing, test sends, and daily delivery",onClick:openLedgrTelegramDashboard,badge:ledgrTelegramLoading?null:(ledgrTelegramRecipientStats.active?`${ledgrTelegramRecipientStats.active} live`: "Setup")})}
           <div style={{height:1,background:G.border,margin:"8px 0"}}/>
+          <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Control panel</div>
+          {profileAction({icon:IconSettings,title:"Open Control Panel",subtitle:"Teachers, institutes, syllabus, sections, admins, and reports",onClick:()=>{setProfileOpen(false);openManageTab("teachers");}})}
+          <div style={{height:1,background:G.border,margin:"8px 0"}}/>
           <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Support</div>
           {profileAction({icon:IconMessageCircle,title:"Teacher Feedback",subtitle:"Read issues and send replies",onClick:()=>{setProfileOpen(false);openFeedbackInbox();},badge:feedbackUnreadCount})}
           {profileAction({icon:IconTrash,title:"Recycle Bin",subtitle:"Review deleted workspace records",onClick:()=>{setProfileOpen(false);setBinView(true);},badge:adminBin.length})}
