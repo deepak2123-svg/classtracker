@@ -9166,6 +9166,92 @@ function AdminPanelInner({user}){
     };
   }, [getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, institutes, roles, syllabusTemplates]);
 
+  const buildTargetedInstituteGlanceReport = React.useCallback(async (instituteNames = [], config = {}) => {
+    const requestedInstitutes = [...new Set((instituteNames || []).map(name => String(name || "").trim()).filter(Boolean))];
+    if(!requestedInstitutes.length){
+      return {
+        rows: [],
+        summary: EMPTY_INSTITUTE_GLANCE_SUMMARY,
+        loadedInstitutes: 0,
+        totalInstitutes: 0,
+        ready: false,
+      };
+    }
+
+    const resolved = getInstituteGlanceConfig(config);
+    const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange(resolved);
+    const hydratedFullData = {
+      ...(fullDataRef.current || {}),
+      ...instituteGlanceDataRef.current,
+      ...fullData,
+    };
+
+    let relevantTeachers = instituteGlanceTeacherList.filter(teacher =>
+      requestedInstitutes.some(inst => teacherBelongsToInstituteFromMap(teacher, inst, hydratedFullData))
+    );
+
+    const pendingUids = relevantTeachers
+      .map(teacher => teacher?.uid)
+      .filter(Boolean)
+      .filter(uid => !hydratedFullData[uid]);
+
+    if(pendingUids.length){
+      let nextPendingIndex = 0;
+      const maxConcurrentLoads = Math.max(
+        1,
+        Math.min(
+          pendingUids.length,
+          isMobile
+            ? (isWeakDevice || mobileLiteMode ? 3 : 4)
+            : (isWeakDevice ? 5 : 8)
+        )
+      );
+
+      const worker = async () => {
+        while(true){
+          const pendingIndex = nextPendingIndex;
+          nextPendingIndex += 1;
+          if(pendingIndex >= pendingUids.length) return;
+
+          const uid = pendingUids[pendingIndex];
+          const data = await ensureFullData(uid);
+          if(data){
+            hydratedFullData[uid] = data;
+            instituteGlanceDataRef.current[uid] = data;
+          }
+        }
+      };
+
+      await Promise.all(
+        Array.from({ length:maxConcurrentLoads }, () => worker())
+      );
+
+      relevantTeachers = instituteGlanceTeacherList.filter(teacher =>
+        requestedInstitutes.some(inst => teacherBelongsToInstituteFromMap(teacher, inst, hydratedFullData))
+      );
+    }
+
+    const rows = buildInstituteGlanceRows({
+      institutes: requestedInstitutes,
+      teachers: relevantTeachers,
+      fullDataMap: hydratedFullData,
+      resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
+      syllabusTemplates,
+      roles,
+      period:resolved.period,
+      rangeStartKey,
+      rangeEndKey,
+    });
+
+    return {
+      rows,
+      summary: summariseInstituteGlanceRows(rows),
+      loadedInstitutes: rows.filter(row => row.ready).length,
+      totalInstitutes: rows.length,
+      ready: rows.every(row => row.ready),
+    };
+  }, [ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, roles, syllabusTemplates]);
+
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
     if(typeof React.startTransition === "function"){
@@ -9581,9 +9667,10 @@ function AdminPanelInner({user}){
         rangeStart: instituteGlanceRangeStart,
         rangeEnd: instituteGlanceRangeEnd,
       };
-      const report = await loadInstituteGlanceReport({ config });
+      const requestedInstitutes = [...new Set(activeRecipients.map(recipient => recipient.institute).filter(Boolean))];
+      const report = await buildTargetedInstituteGlanceReport(requestedInstitutes, config);
       if(!report?.ready){
-        throw new Error("The Ledgr report is still preparing. Please wait until all centres are ready.");
+        throw new Error("The selected Ledgr report is still preparing. Please try again in a moment.");
       }
 
       const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange(config);
@@ -9612,14 +9699,27 @@ function AdminPanelInner({user}){
       });
 
       const idToken = await currentUser.getIdToken();
-      const response = await fetch("/api/send-ledgr-telegram", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ jobs }),
-      });
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 90000);
+      let response;
+      try {
+        response = await fetch("/api/send-ledgr-telegram", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ jobs }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if(error?.name === "AbortError"){
+          throw new Error("Telegram send timed out. Please try again.");
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       let payload = null;
       try {
         payload = await response.json();
@@ -9667,9 +9767,9 @@ function AdminPanelInner({user}){
     instituteGlancePeriod,
     instituteGlanceRangeEnd,
     instituteGlanceRangeStart,
+    buildTargetedInstituteGlanceReport,
     ledgrTelegramConfig,
     ledgrTelegramSending,
-    loadInstituteGlanceReport,
     showAdminToast,
   ]);
 
