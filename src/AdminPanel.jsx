@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, Component } from "react";
+import { createPortal } from "react-dom";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import {
@@ -4928,7 +4929,7 @@ function LedgrReportOptionsModal({
     onApply({ ...reportConfig, format, selectedInstitutes:effectiveInstitutes });
   };
 
-  return (
+  const modal = (
     <div className="ledgr-report-modal-overlay" style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.58)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",overflow:"hidden"}}>
       <style>{`
         .ledgr-report-modal-overlay {
@@ -5189,6 +5190,10 @@ function LedgrReportOptionsModal({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined"
+    ? createPortal(modal, document.body)
+    : modal;
 }
 
 function LedgrTelegramDashboardModal({
@@ -10294,6 +10299,7 @@ function AdminPanelInner({user}){
     return (
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
         <button
+          type="button"
           className="admin-mobile-touch"
           onClick={()=>openInstituteGlanceOptions("export")}
           disabled={!!instituteGlanceAnyExportBusy}
@@ -10317,6 +10323,7 @@ function AdminPanelInner({user}){
           </span>
         </button>
         <button
+          type="button"
           className="admin-mobile-touch"
           onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)}
           style={baseButtonStyle}>
