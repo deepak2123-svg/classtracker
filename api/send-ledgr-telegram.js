@@ -50,6 +50,13 @@ function normaliseRouteRecipient(item, index = 0) {
   };
 }
 
+function readJobPdfBuffer(job) {
+  const pdfBase64 = String(job?.pdfBase64 || "").trim();
+  if (!pdfBase64) return null;
+  const buffer = Buffer.from(pdfBase64, "base64");
+  return buffer.length ? buffer : null;
+}
+
 async function sendTelegramDocument({ token, chatId, filename, caption, pdfBuffer }) {
   const form = new FormData();
   form.set("chat_id", String(chatId));
@@ -144,8 +151,6 @@ export default async function handler(req, res) {
       return sendJson(res, 400, { error: "Too many Telegram delivery jobs in one request." });
     }
 
-    const { renderLedgrPdfBuffer } = await import("./_lib/renderLedgrPdf.js");
-
     const configRef = adminDb().doc("config/ledgrTelegramDelivery");
     const configSnap = await configRef.get();
     const savedConfig = configSnap.exists ? (configSnap.data() || {}) : {};
@@ -175,6 +180,7 @@ export default async function handler(req, res) {
     for (const [index, job] of jobs.entries()) {
       const recipientId = String(job?.recipientId || "").trim();
       const html = typeof job?.html === "string" ? job.html : "";
+      const pdfBufferFromJob = readJobPdfBuffer(job);
       if (!recipientId) {
         results.push({ ok: false, error: `Job ${index + 1} is missing recipientId.` });
         continue;
@@ -188,17 +194,24 @@ export default async function handler(req, res) {
         results.push({ recipientId, ok: false, error: "Telegram route is paused." });
         continue;
       }
-      if (!html || !html.includes("<html")) {
-        results.push({ recipientId, ok: false, error: "A complete report HTML document is required." });
+      if (!pdfBufferFromJob && (!html || !html.includes("<html"))) {
+        results.push({ recipientId, ok: false, error: "A report PDF or complete HTML document is required." });
         continue;
       }
-      if (Buffer.byteLength(html, "utf8") > 10 * 1024 * 1024) {
+      if (pdfBufferFromJob && pdfBufferFromJob.byteLength > 10 * 1024 * 1024) {
+        results.push({ recipientId, ok: false, error: "Report PDF is too large to send." });
+        continue;
+      }
+      if (!pdfBufferFromJob && Buffer.byteLength(html, "utf8") > 10 * 1024 * 1024) {
         results.push({ recipientId, ok: false, error: "Report HTML is too large to render." });
         continue;
       }
 
       try {
-        const pdfBuffer = await renderLedgrPdfBuffer(html);
+        const pdfBuffer = pdfBufferFromJob || await (async () => {
+          const { renderLedgrPdfBuffer } = await import("./_lib/renderLedgrPdf.js");
+          return renderLedgrPdfBuffer(html);
+        })();
         const telegramResult = await sendTelegramDocument({
           token,
           chatId: recipient.chatId,

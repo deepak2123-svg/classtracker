@@ -167,6 +167,18 @@ function buildTelegramDashboardDraft(config = null) {
   };
 }
 
+async function blobToBase64(blob) {
+  const arrayBuffer = await blob.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(arrayBuffer);
+  const chunkSize = 0x8000;
+  for(let index = 0; index < bytes.length; index += chunkSize){
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return window.btoa(binary);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function currentSession(){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;
@@ -9675,28 +9687,25 @@ function AdminPanelInner({user}){
 
       const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange(config);
       const generatedOnLabel = getInstituteGlanceGeneratedOnLabel();
-      const jobs = activeRecipients.map(recipient => {
+      const jobs = await Promise.all(activeRecipients.map(async recipient => {
         const row = (report.rows || []).find(item => sameInstituteName(item?.institute, recipient.institute));
         if(!row){
           throw new Error(`Could not find the current report row for ${recipient.institute}.`);
         }
-        const rows = [row];
-        const summary = summariseInstituteGlanceRows(rows);
+        const pdfBlob = await buildInstituteGlanceInstitutePdfBlob({
+          row,
+          generatedOnLabel,
+          period: config.period,
+          rangeStartKey,
+          rangeEndKey,
+        });
         return {
           recipientId: recipient.id,
-          html: buildInstituteGlanceSummaryHtml({
-            rows,
-            summary,
-            generatedOnLabel,
-            period: config.period,
-            rangeStartKey,
-            rangeEndKey,
-            scopeLabel: row.institute || recipient.institute,
-          }),
+          pdfBase64: await blobToBase64(pdfBlob),
           filename: instituteGlancePdfFilename(row.institute || recipient.institute, config.period, rangeStartKey, rangeEndKey),
           caption: `Ledgr Report | ${row.institute || recipient.institute}`,
         };
-      });
+      }));
 
       const idToken = await currentUser.getIdToken();
       const controller = new AbortController();
@@ -9782,6 +9791,7 @@ function AdminPanelInner({user}){
     instituteGlancePeriod,
     instituteGlanceRangeEnd,
     instituteGlanceRangeStart,
+    buildInstituteGlanceInstitutePdfBlob,
     buildTargetedInstituteGlanceReport,
     ledgrTelegramConfig,
     ledgrTelegramSending,
