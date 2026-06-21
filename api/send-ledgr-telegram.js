@@ -65,24 +65,37 @@ async function sendTelegramDocument({ token, chatId, filename, caption, pdfBuffe
 export default async function handler(req, res) {
   if (req.method === "GET") {
     try {
-      const { requireAdminUser, adminDb } = await import("./_lib/firebaseAdmin.js");
-      await requireAdminUser(req);
       const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
-      const configRef = adminDb().doc("config/ledgrTelegramDelivery");
-      const configSnap = await configRef.get();
-      const savedConfig = configSnap.exists ? (configSnap.data() || {}) : {};
+      let savedConfig = {};
+      let firebaseAdminReady = false;
+      let firebaseAdminError = "";
+      try {
+        const { adminDb } = await import("./_lib/firebaseAdmin.js");
+        const configRef = adminDb().doc("config/ledgrTelegramDelivery");
+        const configSnap = await configRef.get();
+        savedConfig = configSnap.exists ? (configSnap.data() || {}) : {};
+        firebaseAdminReady = true;
+      } catch (error) {
+        firebaseAdminReady = false;
+        firebaseAdminError = error?.message || "Firebase Admin is not ready on the server.";
+      }
       const health = {
         ...(savedConfig.health || {}),
-        manualEndpointReady: !!token,
+        manualEndpointReady: !!token && firebaseAdminReady,
         manualEndpointReachable: true,
-        scheduledEndpointReady: !!savedConfig?.health?.scheduledEndpointReady,
+        scheduledEndpointReady: !!savedConfig?.health?.scheduledEndpointReady && firebaseAdminReady,
         tokenPresent: !!token,
+        firebaseAdminReady,
         lastProbeAt: Date.now(),
       };
       return sendJson(res, 200, {
-        ok: !!token,
+        ok: !!token && firebaseAdminReady,
         health,
-        warning: token ? "" : "Missing TELEGRAM_BOT_TOKEN on the server.",
+        warning: !token
+          ? "Missing TELEGRAM_BOT_TOKEN on the server."
+          : firebaseAdminReady
+            ? ""
+            : firebaseAdminError,
       });
     } catch (error) {
       const status = Number(error?.statusCode || 500);
