@@ -5513,7 +5513,7 @@ function LedgrTelegramDashboardModal({
     setRecipients(current => current.filter(item => item.id !== id));
   };
 
-  const save = () => {
+  const buildDraftPayload = () => {
     const cleanedRecipients = recipients.map(item => ({
       ...item,
       institute:String(item.institute || "").trim(),
@@ -5546,7 +5546,7 @@ function LedgrTelegramDashboardModal({
       seen.add(key);
     }
     setDraftError("");
-    onSave({
+    return {
       enabled,
       botUsername: normaliseTelegramBotUsername(botUsername),
       delivery: {
@@ -5556,7 +5556,24 @@ function LedgrTelegramDashboardModal({
       recipients: cleanedRecipients.filter(item =>
         item.institute || item.label || item.chatId || item.notes
       ),
-    });
+    };
+  };
+
+  const save = async () => {
+    const nextConfig = buildDraftPayload();
+    if(!nextConfig) return null;
+    try {
+      await onSave(nextConfig);
+      return nextConfig;
+    } catch {
+      return null;
+    }
+  };
+
+  const saveAndSendNow = async () => {
+    const nextConfig = await save();
+    if(!nextConfig) return;
+    await onSendNow(nextConfig);
   };
 
   const routeCount = configuredRecipients.length;
@@ -5789,7 +5806,7 @@ function LedgrTelegramDashboardModal({
                             : tokenMissingOnServer
                               ? "Blocked until TELEGRAM_BOT_TOKEN is added on the server."
                               : manualRouteReady
-                                ? "Ready for a test send."
+                                ? "Ready for a test send. Use Send now."
                                 : "Not verified yet."
                         : "Manual send is paused."}
                     </div>
@@ -5811,9 +5828,11 @@ function LedgrTelegramDashboardModal({
                         ? lastErrorMessage
                         : lastSuccessAt
                           ? `Sent successfully on ${new Date(lastSuccessAt).toLocaleString("en-IN")}.`
-                          : lastAttemptAt
-                            ? `Last attempt was on ${new Date(lastAttemptAt).toLocaleString("en-IN")}.`
-                            : "No send attempts yet."}
+                            : lastAttemptAt
+                              ? `Last attempt was on ${new Date(lastAttemptAt).toLocaleString("en-IN")}.`
+                              : manualSendReady
+                                ? "No send attempts yet. Use Send now to test the channel."
+                                : "No send attempts yet."}
                     </div>
                   </div>
                   <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#FFFFFF",padding:"13px 14px"}}>
@@ -5987,7 +6006,7 @@ function LedgrTelegramDashboardModal({
                     </div>
                   </div>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                    <button type="button" onClick={onSendNow} disabled={sendNowDisabled} style={{...primaryButtonStyle,opacity:sendNowDisabled ? 0.55 : 1,cursor:sendNowDisabled ? "not-allowed" : "pointer"}}>
+                    <button type="button" onClick={()=>{ void saveAndSendNow(); }} disabled={sendNowDisabled} style={{...primaryButtonStyle,opacity:sendNowDisabled ? 0.55 : 1,cursor:sendNowDisabled ? "not-allowed" : "pointer"}}>
                       <AppIcon icon={IconSend} size={16} color="#FFFFFF" />
                       {sendBusy ? "Sending..." : "Send now"}
                     </button>
@@ -6041,7 +6060,11 @@ function LedgrTelegramDashboardModal({
             <button type="button" onClick={onClose} disabled={!!saving} style={{height:48,padding:"0 16px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:14,fontWeight:800,fontFamily:G.sans,cursor:saving?"not-allowed":"pointer"}}>
               Cancel
             </button>
-            <button type="button" onClick={save} disabled={actionBusy} style={{height:48,padding:"0 18px",borderRadius:14,border:"none",background:actionBusy ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:14,fontWeight:900,fontFamily:G.sans,cursor:actionBusy?"not-allowed":"pointer"}}>
+            <button type="button" onClick={()=>{ void saveAndSendNow(); }} disabled={sendNowDisabled} style={{height:48,padding:"0 18px",borderRadius:14,border:`1px solid ${G.blue}`,background:"#EFF6FF",color:G.blue,fontSize:14,fontWeight:900,fontFamily:G.sans,cursor:sendNowDisabled?"not-allowed":"pointer",opacity:sendNowDisabled ? 0.55 : 1,display:"inline-flex",alignItems:"center",gap:8}}>
+              <AppIcon icon={IconSend} size={15} color={G.blue} />
+              {sendBusy ? "Sending..." : "Send now"}
+            </button>
+            <button type="button" onClick={()=>{ void save(); }} disabled={actionBusy} style={{height:48,padding:"0 18px",borderRadius:14,border:"none",background:actionBusy ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:14,fontWeight:900,fontFamily:G.sans,cursor:actionBusy?"not-allowed":"pointer"}}>
               {saving ? "Saving..." : "Save messenger dashboard"}
             </button>
           </div>
@@ -9503,15 +9526,17 @@ function AdminPanelInner({user}){
   }, []);
 
   const saveLedgrTelegramDashboard = React.useCallback(async (nextConfig) => {
-    if(ledgrTelegramSaving) return;
+    if(ledgrTelegramSaving) return null;
     setLedgrTelegramSaving(true);
     try {
       const saved = await saveLedgrTelegramConfig(nextConfig, user?.uid || "");
       setLedgrTelegramConfig(current => ({ ...(current || {}), ...saved }));
       showAdminToast("Messenger dashboard saved.");
+      return saved;
     } catch (error) {
       console.error("save Telegram dashboard failed", error);
       showAdminToast(error?.message || "Messenger dashboard could not be saved.");
+      throw error;
     } finally {
       setLedgrTelegramSaving(false);
     }
@@ -9524,24 +9549,25 @@ function AdminPanelInner({user}){
     return { configured, active };
   }, [ledgrTelegramConfig]);
 
-  const sendLedgrTelegramNow = React.useCallback(async () => {
+  const sendLedgrTelegramNow = React.useCallback(async (configOverride = null) => {
     if(ledgrTelegramSending) return;
     try {
+      const effectiveConfig = configOverride || ledgrTelegramConfig || {};
       const currentUser = auth.currentUser;
       if(!currentUser){
         showAdminToast("Sign in again before sending Telegram reports.");
         return;
       }
-      if(ledgrTelegramConfig?.enabled === false){
+      if(effectiveConfig?.enabled === false){
         showAdminToast("Messenger delivery is paused in the dashboard.");
         return;
       }
-      if(ledgrTelegramConfig?.delivery?.onDemandEnabled === false){
+      if(effectiveConfig?.delivery?.onDemandEnabled === false){
         showAdminToast("On-demand messenger sends are paused.");
         return;
       }
 
-      const activeRecipients = (ledgrTelegramConfig?.recipients || [])
+      const activeRecipients = (effectiveConfig?.recipients || [])
         .filter(item => item?.enabled !== false && item?.institute && normaliseTelegramChatId(item?.chatId));
       if(!activeRecipients.length){
         showAdminToast("Add at least one active Telegram route before sending.");
@@ -9607,6 +9633,15 @@ function AdminPanelInner({user}){
       if(payload?.execution || payload?.health){
         setLedgrTelegramConfig(current => ({
           ...(current || {}),
+          ...(configOverride ? {
+            enabled: effectiveConfig?.enabled !== false,
+            botUsername: effectiveConfig?.botUsername || current?.botUsername || "",
+            delivery: {
+              ...(current?.delivery || {}),
+              ...(effectiveConfig?.delivery || {}),
+            },
+            recipients: Array.isArray(effectiveConfig?.recipients) ? effectiveConfig.recipients : (current?.recipients || []),
+          } : {}),
           execution: payload?.execution || current?.execution,
           health: payload?.health || current?.health,
         }));
