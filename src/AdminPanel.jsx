@@ -8617,6 +8617,8 @@ function SyllabusBuilder({
   const [selectedId,setSelectedId] = useState(initialTemplate.id || "__new");
   const [chapterInput,setChapterInput] = useState("");
   const [topicInputs,setTopicInputs] = useState({});
+  const [showBulkChapterInput,setShowBulkChapterInput] = useState(false);
+  const [bulkChapterInput,setBulkChapterInput] = useState("");
 
   const draft = working.draft || emptySyllabusDraft(subject).draft;
   const draftScope=normaliseSyllabusScope(draft.scope,draft.instituteName,draft.sectionName);
@@ -8676,6 +8678,8 @@ function SyllabusBuilder({
     setWorking(next);
     setChapterInput("");
     setTopicInputs({});
+    setShowBulkChapterInput(false);
+    setBulkChapterInput("");
   };
   const addChapter = () => {
     const title = chapterInput.trim();
@@ -8687,6 +8691,32 @@ function SyllabusBuilder({
     };
     updateDraft({chapters:[...draft.chapters,chapter]});
     setChapterInput("");
+  };
+  const addBulkChapters = () => {
+    const titles = bulkChapterInput
+      .split(/\r?\n|;/)
+      .map(item=>item.trim())
+      .filter(Boolean);
+    if(!titles.length) return;
+    const knownTitles = new Set(
+      draft.chapters
+        .map(chapter=>String(chapter?.title || "").trim().toLowerCase())
+        .filter(Boolean)
+    );
+    const nextChapters = [...draft.chapters];
+    titles.forEach(title => {
+      const key = title.toLowerCase();
+      if(knownTitles.has(key)) return;
+      knownTitles.add(key);
+      nextChapters.push({
+        id:makeSyllabusLocalId("chapter"),
+        title,
+        topics:[],
+      });
+    });
+    updateDraft({ chapters:nextChapters });
+    setBulkChapterInput("");
+    setShowBulkChapterInput(false);
   };
   const moveChapter = (index,direction) => {
     const nextIndex = index + direction;
@@ -8732,6 +8762,8 @@ function SyllabusBuilder({
     setSelectedId("__new");
     setChapterInput("");
     setTopicInputs({});
+    setShowBulkChapterInput(false);
+    setBulkChapterInput("");
   };
 
   return (
@@ -8894,8 +8926,14 @@ function SyllabusBuilder({
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginTop:24,marginBottom:12}}>
           <div>
             <div style={{fontSize:19,fontWeight:850,color:G.text,fontFamily:G.display}}>Chapters</div>
-            <div style={{fontSize:13,color:G.textM,marginTop:3}}>Type a chapter name and press Enter. Add topics only where needed.</div>
+            <div style={{fontSize:13,color:G.textM,marginTop:3}}>Add one chapter quickly, or paste the full chapter list at once.</div>
           </div>
+          <button
+            onClick={()=>setShowBulkChapterInput(current=>!current)}
+            style={{...pill(showBulkChapterInput?G.navy:"#FFFFFF",showBulkChapterInput?"#FFFFFF":G.textS,showBulkChapterInput?G.navy:G.borderM),padding:"8px 12px",fontSize:12.5,fontWeight:800}}
+          >
+            {showBulkChapterInput ? "Hide paste list" : "Paste chapter list"}
+          </button>
         </div>
 
         <div style={{display:"flex",flexDirection:isMobile?"column":"row",gap:9,alignItems:"stretch",marginBottom:12}}>
@@ -8915,6 +8953,29 @@ function SyllabusBuilder({
             <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={16}/> Add</span>
           </button>
         </div>
+
+        {showBulkChapterInput&&(
+          <div style={{marginBottom:12,padding:"12px 13px",border:`1px solid ${G.border}`,borderRadius:12,background:"#F8FAFD"}}>
+            <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans,marginBottom:6}}>Paste one chapter per line</div>
+            <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginBottom:10}}>
+              Useful when you already have the chapter list. Duplicate titles are skipped automatically.
+            </div>
+            <textarea
+              value={bulkChapterInput}
+              onChange={event=>setBulkChapterInput(event.target.value)}
+              placeholder={"Chapter 1\nChapter 2\nChapter 3"}
+              style={{...fieldStyle,minHeight:118,resize:"vertical",lineHeight:1.5}}
+            />
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:10,flexWrap:"wrap"}}>
+              <button onClick={()=>{setBulkChapterInput("");setShowBulkChapterInput(false);}} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:750}}>
+                Cancel
+              </button>
+              <button onClick={addBulkChapters} disabled={!bulkChapterInput.trim()} style={{...pill(bulkChapterInput.trim()?G.navy:G.bg,"#FFFFFF",bulkChapterInput.trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
+                Add all chapters
+              </button>
+            </div>
+          </div>
+        )}
 
         {draft.chapters.length===0 ? (
           <div style={{border:`2px dashed ${G.borderM}`,borderRadius:12,padding:"30px 18px",textAlign:"center",color:G.textM}}>
@@ -9572,6 +9633,35 @@ function ClassBoundSyllabusFlow({
       {selected&&<AppIcon icon={IconCheck} size={15} color="#FFFFFF"/>}
     </span>
   );
+  const compactTableWrapStyle = {
+    border:`1px solid ${G.border}`,
+    borderRadius:12,
+    overflow:"hidden",
+    background:"#FFFFFF",
+  };
+  const compactTableHeadStyle = {
+    display:"grid",
+    gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2.1fr) 112px 104px",
+    gap:12,
+    alignItems:"center",
+    padding:isMobile?"10px 12px":"10px 14px",
+    background:"#F8FAFD",
+    borderBottom:`1px solid ${G.border}`,
+    fontSize:11,
+    fontWeight:800,
+    color:G.textL,
+    letterSpacing:0.7,
+    textTransform:"uppercase",
+  };
+  const compactRowStyle = selected => ({
+    display:"grid",
+    gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2.1fr) 112px 104px",
+    gap:12,
+    alignItems:"center",
+    padding:isMobile?"12px":"12px 14px",
+    borderTop:`1px solid ${G.border}`,
+    background:selected?"#F8FBFF":"#FFFFFF",
+  });
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
@@ -9586,27 +9676,37 @@ function ClassBoundSyllabusFlow({
         <div style={{padding:isMobile?"15px":"18px 20px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
           <div>
             <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>1. Select institutes</div>
-            <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Choose one or several institutes.</div>
+            <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Start with the institutes that should share this syllabus.</div>
           </div>
           <span style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:800}}>{selectedInstitutes.length} selected</span>
         </div>
         <div style={{padding:isMobile?14:18}}>
           <input value={instituteSearch} onChange={event=>setInstituteSearch(event.target.value)} placeholder="Filter institutes" style={{width:"100%",boxSizing:"border-box",border:`1px solid ${G.borderM}`,borderRadius:10,padding:"10px 12px",fontFamily:G.sans,fontSize:13,color:G.text,outline:"none",marginBottom:12}}/>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:9}}>
+          <div style={compactTableWrapStyle}>
+            <div style={compactTableHeadStyle}>
+              <span>Institute</span>
+              {!isMobile&&<span>Sections</span>}
+              <span style={{textAlign:"right"}}>Select</span>
+            </div>
             {visibleInstitutes.map(institute=>{
               const selected=selectedInstitutes.includes(institute);
-              const sectionCount=sectionOptionsByInstitute[institute]?.length || uniqueSectionNames([
-                ...((getInstituteSectionConfig(instituteSections,institute)?.gradeGroups||[]).flatMap(group=>group.sections||[])),
-                ...(getInstituteSectionConfig(instituteSections,institute)?.extraSections||[]),
-              ]).length;
+              const sectionCount = sectionCountsByInstitute[institute] || 0;
               return (
-                <button key={institute} onClick={()=>toggleInstitute(institute)} style={selectionCard(selected)}>
-                  {checkBox(selected)}
-                  <span style={{minWidth:0,flex:1}}>
-                    <span style={{display:"block",fontSize:13.5,fontWeight:850,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{institute}</span>
-                    <span style={{display:"block",fontSize:11.5,color:G.textM,marginTop:3}}>{sectionCount} configured section{sectionCount===1?"":"s"}</span>
-                  </span>
-                </button>
+                <div key={institute} style={compactRowStyle(selected)}>
+                  <button onClick={()=>toggleInstitute(institute)} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:11,minWidth:0,cursor:"pointer",textAlign:"left"}}>
+                    {checkBox(selected)}
+                    <span style={{minWidth:0,flex:1}}>
+                      <span style={{display:"block",fontSize:14,fontWeight:850,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:G.text}}>{institute}</span>
+                      <span style={{display:"block",fontSize:11.5,color:G.textM,marginTop:3}}>{sectionCount} configured section{sectionCount===1?"":"s"}</span>
+                    </span>
+                  </button>
+                  {!isMobile&&<div style={{fontSize:13.5,fontWeight:800,color:G.text}}>{sectionCount}</div>}
+                  <div style={{display:"flex",justifyContent:"flex-end"}}>
+                    <button onClick={()=>toggleInstitute(institute)} style={{...pill(selected?G.blue:"#FFFFFF",selected?"#FFFFFF":G.textS,selected?G.blue:G.borderM),padding:"7px 11px",fontSize:12,fontWeight:800,minWidth:82,justifyContent:"center"}}>
+                      {selected ? "Selected" : "Pick"}
+                    </button>
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -9617,9 +9717,9 @@ function ClassBoundSyllabusFlow({
         <div style={{padding:isMobile?"15px":"18px 20px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
           <div>
             <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>2. Select sections</div>
-            <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Only sections from the selected institutes are shown.</div>
+            <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Pick only the sections that should receive the same syllabus.</div>
           </div>
-          <span style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:800}}>{selectedPairs.length} selected</span>
+          <span style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:800}}>{selectedSectionsCount} selected</span>
         </div>
         <div style={{padding:isMobile?14:18,display:"flex",flexDirection:"column",gap:15}}>
           {!selectedInstitutes.length&&<div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM}}>Select an institute first.</div>}
@@ -9628,7 +9728,10 @@ function ClassBoundSyllabusFlow({
             return (
               <div key={instituteName}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
-                  <div style={{fontSize:12,fontWeight:850,color:G.textM,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{instituteName}</div>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13.5,fontWeight:850,color:G.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{instituteName}</div>
+                    <div style={{fontSize:11.5,color:G.textM,marginTop:2}}>{(selectedSections[instituteName]||[]).length}/{sections.length} selected</div>
+                  </div>
                   {!!sections.length&&(
                     <button onClick={()=>{
                       setSelectedSubject(null);
@@ -9643,14 +9746,27 @@ function ClassBoundSyllabusFlow({
                   )}
                 </div>
                 {sections.length?(
-                  <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:9}}>
+                  <div style={compactTableWrapStyle}>
+                    {!isMobile&&(
+                      <div style={{...compactTableHeadStyle,gridTemplateColumns:"minmax(0,2.2fr) 104px"}}>
+                        <span>Section</span>
+                        <span style={{textAlign:"right"}}>Select</span>
+                      </div>
+                    )}
                     {sections.map(sectionName=>{
                       const selected=(selectedSections[instituteName]||[]).includes(sectionName);
                       return (
-                        <button key={sectionName} onClick={()=>toggleSection(instituteName,sectionName)} style={selectionCard(selected)}>
-                          {checkBox(selected)}
-                          <span style={{fontSize:13.5,fontWeight:850,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sectionName}</span>
-                        </button>
+                        <div key={sectionName} style={{display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2.2fr) 104px",gap:12,alignItems:"center",padding:isMobile?"11px 12px":"11px 14px",borderTop:`1px solid ${G.border}`,background:selected?"#F8FBFF":"#FFFFFF"}}>
+                          <button onClick={()=>toggleSection(instituteName,sectionName)} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:11,cursor:"pointer",textAlign:"left",minWidth:0}}>
+                            {checkBox(selected)}
+                            <span style={{fontSize:13.5,fontWeight:850,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:G.text}}>{sectionName}</span>
+                          </button>
+                          <div style={{display:"flex",justifyContent:"flex-end"}}>
+                            <button onClick={()=>toggleSection(instituteName,sectionName)} style={{...pill(selected?G.blue:"#FFFFFF",selected?"#FFFFFF":G.textS,selected?G.blue:G.borderM),padding:"7px 11px",fontSize:12,fontWeight:800,minWidth:82,justifyContent:"center"}}>
+                              {selected ? "Added" : "Add"}
+                            </button>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -9666,7 +9782,7 @@ function ClassBoundSyllabusFlow({
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden",opacity:selectedPairs.length?1:0.65}}>
         <div style={{padding:isMobile?"15px":"18px 20px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD"}}>
           <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>3. Select an existing subject</div>
-          <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>These names come directly from teacher-created classes in the selected sections.</div>
+          <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>These names come directly from teacher-created classes, so you do not need to type the subject again.</div>
         </div>
         <div style={{padding:isMobile?14:18}}>
           {!selectedPairs.length?(
@@ -9674,24 +9790,38 @@ function ClassBoundSyllabusFlow({
           ):availableSubjects.length===0?(
             <div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM,lineHeight:1.55}}>No teacher class with a subject was found in the selected sections.</div>
           ):(
-            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:9}}>
+            <div style={compactTableWrapStyle}>
+              <div style={{...compactTableHeadStyle,gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2fr) 108px 108px 104px"}}>
+                <span>Subject</span>
+                {!isMobile&&<span>Teachers</span>}
+                {!isMobile&&<span>Classes</span>}
+                <span style={{textAlign:"right"}}>Use</span>
+              </div>
               {availableSubjects.map(subject=>{
                 const selected=selectedSubject?.id===subject.id;
                 const matching=templates.filter(item=>item.subjectId===subject.id&&syllabusScopeKey(syllabusTemplateScope(item))===syllabusScopeKey(selectedScope));
                 const published=matching.some(item=>item.currentVersion>0);
                 return (
-                  <button key={subject.id} onClick={()=>setSelectedSubject(subject)} style={selectionCard(selected)}>
-                    <span style={{width:34,height:34,borderRadius:10,background:selected?G.navy:G.blueL,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <AppIcon icon={IconBooks} size={17} color={selected?"#FFFFFF":G.blue}/>
-                    </span>
-                    <span style={{minWidth:0,flex:1}}>
-                      <span style={{display:"block",fontSize:13.5,fontWeight:850,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{subject.name}</span>
-                      <span style={{display:"block",fontSize:11.5,color:published?"#137A45":G.textM,fontWeight:700,marginTop:3}}>
-                        {subject.teacherCount} teacher{subject.teacherCount===1?"":"s"} · {subject.targets.length} class{subject.targets.length===1?"":"es"}{published?" · Published":""}
+                  <div key={subject.id} style={{display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2fr) 108px 108px 104px",gap:12,alignItems:"center",padding:isMobile?"12px":"12px 14px",borderTop:`1px solid ${G.border}`,background:selected?"#F8FBFF":"#FFFFFF"}}>
+                    <button onClick={()=>setSelectedSubject(subject)} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:11,cursor:"pointer",textAlign:"left",minWidth:0}}>
+                      <span style={{width:34,height:34,borderRadius:10,background:selected?G.navy:G.blueL,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <AppIcon icon={IconBooks} size={17} color={selected?"#FFFFFF":G.blue}/>
                       </span>
-                    </span>
-                    <AppIcon icon={selected?IconCheck:IconChevronRight} size={16} color={selected?G.blue:G.textL}/>
-                  </button>
+                      <span style={{minWidth:0,flex:1}}>
+                        <span style={{display:"block",fontSize:13.5,fontWeight:850,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:G.text}}>{subject.name}</span>
+                        <span style={{display:"block",fontSize:11.5,color:published?"#137A45":G.textM,fontWeight:700,marginTop:3}}>
+                          {published ? "Published syllabus ready" : "Ready to build"}
+                        </span>
+                      </span>
+                    </button>
+                    {!isMobile&&<div style={{fontSize:13.5,fontWeight:800,color:G.text}}>{subject.teacherCount}</div>}
+                    {!isMobile&&<div style={{fontSize:13.5,fontWeight:800,color:G.text}}>{subject.targets.length}</div>}
+                    <div style={{display:"flex",justifyContent:"flex-end"}}>
+                      <button onClick={()=>setSelectedSubject(subject)} style={{...pill(selected?G.blue:"#FFFFFF",selected?"#FFFFFF":G.textS,selected?G.blue:G.borderM),padding:"7px 11px",fontSize:12,fontWeight:800,minWidth:82,justifyContent:"center"}}>
+                        {selected ? "Chosen" : "Use"}
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -16220,6 +16350,26 @@ function AdminPanelInner({user}){
             onSave={saveLedgrTelegramDashboard}
             onOpenSchedule={openLedgrTelegramSchedule}
             onSendNow={sendLedgrTelegramNow}
+          />
+        )}
+
+        {!isMobile&&instituteGlanceOptionsOpen&&(
+          <LedgrReportOptionsModal
+            institutes={institutes}
+            period={instituteGlancePeriod}
+            month={instituteGlanceMonth}
+            rangeStart={instituteGlanceRangeStart}
+            rangeEnd={instituteGlanceRangeEnd}
+            schedule={ledgrReportSchedule}
+            scheduleLoading={ledgrReportScheduleLoading}
+            scheduleSaving={ledgrReportScheduleSaving}
+            exportDisabled={instituteGlanceExportDisabled}
+            busyFormat={instituteGlanceExportBusy}
+            initialMode={instituteGlanceOptionsMode}
+            context={instituteGlanceOptionsContext}
+            onClose={()=>!instituteGlanceExportBusy&&!ledgrReportScheduleSaving&&setInstituteGlanceOptionsOpen(false)}
+            onApply={applyInstituteGlanceOptions}
+            onSaveSchedule={saveInstituteGlanceSchedule}
           />
         )}
 
