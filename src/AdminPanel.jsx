@@ -5234,6 +5234,7 @@ function LedgrTelegramDashboardModal({
   onSave,
   onOpenSchedule,
   onSendNow,
+  embedded = false,
 }) {
   const [enabled, setEnabled] = React.useState(true);
   const [botUsername, setBotUsername] = React.useState("@ledgrapp_bot");
@@ -5251,12 +5252,13 @@ function LedgrTelegramDashboardModal({
   });
 
   React.useEffect(() => {
+    if(embedded) return undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, []);
+  }, [embedded]);
 
   React.useEffect(() => {
     const draft = buildTelegramDashboardDraft(config);
@@ -5642,7 +5644,9 @@ function LedgrTelegramDashboardModal({
   });
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.64)",zIndex:10020,display:"flex",alignItems:"stretch",justifyContent:"stretch",padding:0,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+    <div style={embedded
+      ? {width:"100%"}
+      : {position:"fixed",inset:0,background:"rgba(15,23,42,0.64)",zIndex:10020,display:"flex",alignItems:"stretch",justifyContent:"stretch",padding:0,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
       <style>{`
         @media (max-width: 1120px) {
           .ledgr-telegram-settings-grid {
@@ -5671,8 +5675,12 @@ function LedgrTelegramDashboardModal({
           }
         }
       `}</style>
-      <div className="ledgr-telegram-modal" style={{width:"100vw",height:"100dvh",maxWidth:"100vw",background:"#F8FAFC",borderRadius:0,boxShadow:"none",maxHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <div className="ledgr-telegram-scroll" style={{overflowY:"auto",minHeight:0,flex:1,padding:"24px 24px 14px"}}>
+      <div className="ledgr-telegram-modal" style={embedded
+        ? {width:"100%",background:"transparent",borderRadius:0,boxShadow:"none",display:"flex",flexDirection:"column",overflow:"visible"}
+        : {width:"100vw",height:"100dvh",maxWidth:"100vw",background:"#F8FAFC",borderRadius:0,boxShadow:"none",maxHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div className="ledgr-telegram-scroll" style={embedded
+          ? {overflow:"visible",minHeight:0,flex:1,padding:0}
+          : {overflowY:"auto",minHeight:0,flex:1,padding:"24px 24px 14px"}}>
           <div style={{width:"100%",maxWidth:1480,margin:"0 auto"}}>
             <div className="ledgr-telegram-topbar" style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:16}}>
               <div style={{display:"flex",gap:14,minWidth:0,flex:1}}>
@@ -5691,10 +5699,12 @@ function LedgrTelegramDashboardModal({
                 <span style={{background:headerStatus.background,color:headerStatus.color,borderRadius:999,padding:"10px 14px",fontSize:12,fontWeight:800,fontFamily:G.sans}}>
                   {headerStatus.label}
                 </span>
-                <button type="button" onClick={onClose} disabled={!!saving} style={{height:42,padding:"0 14px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:13,fontWeight:800,fontFamily:G.sans,cursor:saving?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
-                  <AppIcon icon={IconX} size={16} color={G.text} />
-                  Close
-                </button>
+                {!embedded&&(
+                  <button type="button" onClick={onClose} disabled={!!saving} style={{height:42,padding:"0 14px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:13,fontWeight:800,fontFamily:G.sans,cursor:saving?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
+                    <AppIcon icon={IconX} size={16} color={G.text} />
+                    Close
+                  </button>
+                )}
               </div>
             </div>
 
@@ -5978,7 +5988,9 @@ function LedgrTelegramDashboardModal({
           </div>
         </div>
 
-        <div className="ledgr-telegram-footer" style={{flexShrink:0,padding:"14px 24px 22px",borderTop:"1px solid #E5E7EB",background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+        <div className="ledgr-telegram-footer" style={embedded
+          ? {flexShrink:0,padding:"14px 0 0",background:"transparent",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}
+          : {flexShrink:0,padding:"14px 24px 22px",borderTop:"1px solid #E5E7EB",background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
           <div style={{width:"100%",maxWidth:1480,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <div style={{minWidth:0,flex:1}}>
               {draftError ? (
@@ -5992,9 +6004,11 @@ function LedgrTelegramDashboardModal({
               )}
             </div>
             <div className="ledgr-telegram-footer-actions" style={{display:"flex",gap:10,flexShrink:0}}>
-              <button type="button" onClick={onClose} disabled={!!saving} style={{height:48,padding:"0 16px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:14,fontWeight:800,fontFamily:G.sans,cursor:saving?"not-allowed":"pointer"}}>
-                Cancel
-              </button>
+              {!embedded&&(
+                <button type="button" onClick={onClose} disabled={!!saving} style={{height:48,padding:"0 16px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:14,fontWeight:800,fontFamily:G.sans,cursor:saving?"not-allowed":"pointer"}}>
+                  Cancel
+                </button>
+              )}
               <button type="button" onClick={()=>{ void saveAndSendNow(); }} disabled={sendNowDisabled} style={{height:48,padding:"0 18px",borderRadius:14,border:`1px solid ${G.blue}`,background:"#EFF6FF",color:G.blue,fontSize:14,fontWeight:900,fontFamily:G.sans,cursor:sendNowDisabled?"not-allowed":"pointer",opacity:sendNowDisabled ? 0.55 : 1,display:"inline-flex",alignItems:"center",gap:8}}>
                 <AppIcon icon={IconSend} size={15} color={G.blue} />
                 {sendBusy ? "Sending..." : "Send all active"}
@@ -8511,7 +8525,7 @@ function AdminPanelInner({user}){
   const [reduceEffects,setReduceEffects]= useState(false);
   const [mobileLiteMode,setMobileLiteMode] = useState(false);
   const [coarsePointer, setCoarsePointer] = useState(false);
-  const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections
+  const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections | report | messenger
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
   const [manageTeacherSort, setManageTeacherSort] = useState("count");
   const [manageAdminSearch, setManageAdminSearch] = useState("");
@@ -9367,7 +9381,15 @@ function AdminPanelInner({user}){
       return;
     }
     setProfileOpen(false);
-    setInstituteGlanceOpen(true);
+    setInstituteGlanceOptionsOpen(false);
+    setTelegramDashboardOpen(false);
+    setInstituteGlanceOpen(false);
+    setManageScopeInstitute("");
+    setOpenTeacherInstitute(null);
+    setOpenAdminInstitute(null);
+    setInstDetailView(null);
+    setManageTab("report");
+    setView("manage");
     loadInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure);
   }, [handleInstituteGlanceLoadFailure, isMobile, loadInstituteGlanceReport, openMobileCentreSummary]);
 
@@ -9395,7 +9417,15 @@ function AdminPanelInner({user}){
       setMobileStep(0);
       return;
     }
-    setInstituteGlanceOpen(true);
+    setInstituteGlanceOptionsOpen(false);
+    setTelegramDashboardOpen(false);
+    setInstituteGlanceOpen(false);
+    setManageScopeInstitute("");
+    setOpenTeacherInstitute(null);
+    setOpenAdminInstitute(null);
+    setInstDetailView(null);
+    setManageTab("report");
+    setView("manage");
   }, [isMobile]);
 
   const openInstituteFromGlance = React.useCallback((row) => {
@@ -9538,8 +9568,19 @@ function AdminPanelInner({user}){
   const openLedgrTelegramDashboard = React.useCallback(() => {
     setProfileOpen(false);
     setInstituteGlanceOptionsOpen(false);
-    setTelegramDashboardOpen(true);
-  }, []);
+    if(isMobile){
+      setTelegramDashboardOpen(true);
+      return;
+    }
+    setInstituteGlanceOpen(false);
+    setTelegramDashboardOpen(false);
+    setManageScopeInstitute("");
+    setOpenTeacherInstitute(null);
+    setOpenAdminInstitute(null);
+    setInstDetailView(null);
+    setManageTab("messenger");
+    setView("manage");
+  }, [isMobile]);
 
   const openLedgrTelegramSchedule = React.useCallback(() => {
     setTelegramDashboardOpen(false);
@@ -10702,35 +10743,39 @@ function AdminPanelInner({user}){
     );
   };
 
-  const renderDesktopCentreSummaryPage = () => {
-    if(isMobile || !instituteGlanceOpen) return null;
+  const renderDesktopCentreSummaryPage = ({ embedded = false } = {}) => {
+    if(isMobile || (!embedded && !instituteGlanceOpen)) return null;
     return (
-      <div style={{flex:1,overflowY:"auto",background:"linear-gradient(180deg,#F2F6FC 0%,#F8FAFC 100%)",padding:"22px 24px 28px"}}>
-        <div style={{maxWidth:1500,margin:"0 auto"}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:16}}>
-            <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>All institutes</div>
-              <h1 style={{fontSize:34,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.02}}>Ledgr Report</h1>
-              <div style={{fontSize:14,color:G.textM,lineHeight:1.65,marginTop:10,maxWidth:980}}>
-                Submissions, pending teachers, sections, and hours.
+      <div style={embedded
+        ? {display:"flex",flexDirection:"column",gap:16}
+        : {flex:1,overflowY:"auto",background:"linear-gradient(180deg,#F2F6FC 0%,#F8FAFC 100%)",padding:"22px 24px 28px"}}>
+        <div style={{maxWidth:embedded ? "none" : 1500,margin:embedded ? 0 : "0 auto"}}>
+          {!embedded&&(
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:16}}>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>All institutes</div>
+                <h1 style={{fontSize:34,fontWeight:800,color:G.text,fontFamily:G.display,margin:"8px 0 0",lineHeight:1.02}}>Ledgr Report</h1>
+                <div style={{fontSize:14,color:G.textM,lineHeight:1.65,marginTop:10,maxWidth:980}}>
+                  Submissions, pending teachers, sections, and hours.
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={closeInstituteGlancePanel}
+                style={{height:42,padding:"0 16px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:13,fontWeight:800,fontFamily:G.sans,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:8,boxShadow:G.shadowSm,flexShrink:0}}>
+                <AppIcon icon={IconChevronLeft} size={15} color={G.text} />
+                Back to admin
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={closeInstituteGlancePanel}
-              style={{height:42,padding:"0 16px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:13,fontWeight:800,fontFamily:G.sans,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:8,boxShadow:G.shadowSm,flexShrink:0}}>
-              <AppIcon icon={IconChevronLeft} size={15} color={G.text} />
-              Back to admin
-            </button>
-          </div>
+          )}
 
           <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:26,padding:"18px 18px 20px",boxShadow:"0 18px 48px rgba(15,23,42,0.08)"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Workspace</div>
-                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.08}}>All institutes</div>
+                <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>{embedded ? "Ledgr Report" : "Workspace"}</div>
+                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.08}}>{embedded ? "All institutes report" : "All institutes"}</div>
                 <div style={{fontSize:13,color:G.textM,lineHeight:1.65,marginTop:8,maxWidth:920}}>
-                  Compact centre boxes with export actions.
+                  {embedded ? "Submissions, pending teachers, sections, hours, and export actions without leaving the control panel." : "Compact centre boxes with export actions."}
                 </div>
               </div>
               {instituteGlanceReport.loading&&(
@@ -12050,7 +12095,14 @@ function AdminPanelInner({user}){
   }, [selInst]);
 
   const openManageTab = React.useCallback((target, options = {}) => {
-    const { detailInstitute = null } = options;
+    const { detailInstitute = null, scopeInstitute = "" } = options;
+    setProfileOpen(false);
+    setInstituteGlanceOpen(false);
+    setInstituteGlanceOptionsOpen(false);
+    setTelegramDashboardOpen(false);
+    setManageScopeInstitute(scopeInstitute);
+    setOpenTeacherInstitute(target === "teachers" && scopeInstitute ? scopeInstitute : null);
+    setOpenAdminInstitute(target === "admins" && scopeInstitute ? scopeInstitute : null);
     setManageTab(target);
     if(target === "sections"){
       setInstDetailView(detailInstitute);
@@ -12058,7 +12110,10 @@ function AdminPanelInner({user}){
       setInstDetailView(null);
     }
     setView("manage");
-  }, []);
+    if(target === "report"){
+      loadInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure);
+    }
+  }, [handleInstituteGlanceLoadFailure, loadInstituteGlanceReport]);
 
   // Keep touch/scroll institute selection logic below the values it depends on.
   // These callbacks read institutes, saveInstOrder, and onSelectInstitute in
@@ -14012,7 +14067,8 @@ function AdminPanelInner({user}){
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
       { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
     ];
-    const manageTitle = manageTabItems.find(item=>item.key===manageTab)?.label || "Control Centre";
+    const manageTitle = manageTabItems.find(item=>item.key===manageTab)?.label
+      || (manageTab === "report" ? "Ledgr Report" : manageTab === "messenger" ? "Messenger" : "Control Centre");
     const getSyllabusAffectedSummary = (scope,subjectOverride) => {
       const activeSubject=subjectOverride;
       const scopePairs=syllabusScopePairs(scope);
@@ -14239,26 +14295,20 @@ function AdminPanelInner({user}){
 
               <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"0 8px 7px"}}>Workspace</div>
               {manageTabItems.map(item=>(
-                <button key={item.key} onClick={()=>{
-                  setManageScopeInstitute("");
-                  setInstDetailView(null);
-                  setOpenTeacherInstitute(null);
-                  setOpenAdminInstitute(null);
-                  setManageTab(item.key);
-                }} style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:!manageScopeInstitute&&manageTab===item.key?"#EEF4FF":"transparent",color:!manageScopeInstitute&&manageTab===item.key?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
+                <button key={item.key} onClick={()=>openManageTab(item.key)} style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:!manageScopeInstitute&&manageTab===item.key?"#EEF4FF":"transparent",color:!manageScopeInstitute&&manageTab===item.key?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
                   <AppIcon icon={item.icon} size={15} color={!manageScopeInstitute&&manageTab===item.key?G.blue:G.textL}/>{item.label}
                 </button>
               ))}
               <button
-                onClick={openInstituteGlancePanel}
-                style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:instituteGlanceOptionsOpen?"#EEF4FF":"transparent",color:instituteGlanceOptionsOpen?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
-                <AppIcon icon={IconFileText} size={15} color={instituteGlanceOptionsOpen?G.blue:G.textL}/>
+                onClick={()=>openManageTab("report")}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:manageTab==="report"?"#EEF4FF":"transparent",color:manageTab==="report"?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
+                <AppIcon icon={IconFileText} size={15} color={manageTab==="report"?G.blue:G.textL}/>
                 Ledgr Report
               </button>
               <button
-                onClick={openLedgrTelegramDashboard}
-                style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:telegramDashboardOpen?"#EEF4FF":"transparent",color:telegramDashboardOpen?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
-                <AppIcon icon={IconSend} size={15} color={telegramDashboardOpen?G.blue:G.textL}/>
+                onClick={()=>openManageTab("messenger")}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:manageTab==="messenger"?"#EEF4FF":"transparent",color:manageTab==="messenger"?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
+                <AppIcon icon={IconSend} size={15} color={manageTab==="messenger"?G.blue:G.textL}/>
                 Messenger
                 <span style={{marginLeft:"auto",background:ledgrTelegramRecipientStats.active?G.blueL:"#F3F4F6",color:ledgrTelegramRecipientStats.active?G.blue:G.textL,borderRadius:999,padding:"2px 7px",fontSize:10.5,fontWeight:850,fontFamily:G.mono}}>
                   {ledgrTelegramLoading ? "..." : ledgrTelegramRecipientStats.active || "setup"}
@@ -14486,7 +14536,7 @@ function AdminPanelInner({user}){
           );
         })():(<>
 
-        <div style={{marginBottom:isMobile?8:20,display:isMobile?"none":"block"}}>
+        {!["report","messenger"].includes(manageTab)&&<div style={{marginBottom:isMobile?8:20,display:isMobile?"none":"block"}}>
           <div style={{fontSize:11,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1}}>Control centre</div>
           <h2 style={{fontSize:isMobile?22:28,fontWeight:850,color:G.text,fontFamily:G.display,margin:"5px 0 0",lineHeight:1.15}}>
             {manageScopeInstitute||manageTitle}
@@ -14496,7 +14546,7 @@ function AdminPanelInner({user}){
               Manage this institute's {manageTab==="subjects"?"syllabus":manageTab}.
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Tab switcher */}
         {isMobile&&<div style={{position:"sticky",top:61,zIndex:65,margin:"-10px -12px 14px",padding:"9px 12px 10px",background:"rgba(245,247,250,0.96)",borderBottom:`1px solid ${G.border}`,backdropFilter:"blur(12px)",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
@@ -14538,6 +14588,24 @@ function AdminPanelInner({user}){
           ))}
           </div>
         </div>}
+
+        {manageTab==="report"&&renderDesktopCentreSummaryPage({ embedded:true })}
+
+        {manageTab==="messenger"&&(
+          <LedgrTelegramDashboardModal
+            embedded
+            institutes={institutes}
+            schedule={ledgrReportSchedule}
+            config={ledgrTelegramConfig}
+            loading={ledgrTelegramLoading}
+            saving={ledgrTelegramSaving}
+            sendBusy={ledgrTelegramSending}
+            onClose={()=>openManageTab("teachers")}
+            onSave={saveLedgrTelegramDashboard}
+            onOpenSchedule={openLedgrTelegramSchedule}
+            onSendNow={sendLedgrTelegramNow}
+          />
+        )}
 
         {manageTab==="subjects"&&(
           <ClassBoundSyllabusFlow
