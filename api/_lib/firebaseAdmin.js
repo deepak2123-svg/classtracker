@@ -117,11 +117,26 @@ async function verifyFirebaseIdToken(token) {
   }
 
   try {
-    return jwt.verify(token, cert, {
+    const verified = jwt.verify(token, cert, {
       algorithms: ["RS256"],
       audience: projectId,
       issuer: `https://securetoken.google.com/${projectId}`,
     });
+    const uid = String(
+      verified?.uid
+      || verified?.user_id
+      || verified?.sub
+      || ""
+    ).trim();
+    if (!uid) {
+      const error = new Error("Firebase ID token is missing a user id.");
+      error.statusCode = 401;
+      throw error;
+    }
+    return {
+      ...verified,
+      uid,
+    };
   } catch (verifyError) {
     const error = new Error(verifyError?.message || "Invalid Firebase ID token.");
     error.statusCode = 401;
