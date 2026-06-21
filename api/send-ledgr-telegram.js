@@ -1,5 +1,3 @@
-import { requireAdminUser, adminDb } from "./_lib/firebaseAdmin.js";
-
 export const maxDuration = 120;
 
 export const config = {
@@ -67,6 +65,7 @@ async function sendTelegramDocument({ token, chatId, filename, caption, pdfBuffe
 export default async function handler(req, res) {
   if (req.method === "GET") {
     try {
+      const { requireAdminUser, adminDb } = await import("./_lib/firebaseAdmin.js");
       await requireAdminUser(req);
       const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
       const configRef = adminDb().doc("config/ledgrTelegramDelivery");
@@ -97,6 +96,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    const { requireAdminUser, adminDb } = await import("./_lib/firebaseAdmin.js");
     const adminUser = await requireAdminUser(req);
     const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
     if (!token) {
