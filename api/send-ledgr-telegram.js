@@ -31,6 +31,25 @@ function parseBody(req) {
   return typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
 }
 
+function normaliseRouteRecipient(item, index = 0) {
+  const id = String(item?.id || item?.recipientId || "").trim();
+  const institute = String(item?.institute || "").trim();
+  const chatId = String(item?.chatId || "").trim().replace(/\s+/g, "");
+  if (!id || !institute || !chatId) return null;
+  return {
+    id,
+    institute,
+    label: String(item?.label || "").trim(),
+    chatId,
+    notes: String(item?.notes || "").trim(),
+    destinationType: ["channel", "group", "private"].includes(item?.destinationType)
+      ? item.destinationType
+      : "channel",
+    enabled: item?.enabled !== false,
+    sortIndex: index,
+  };
+}
+
 async function sendTelegramDocument({ token, chatId, filename, caption, pdfBuffer }) {
   const form = new FormData();
   form.set("chat_id", String(chatId));
@@ -131,7 +150,24 @@ export default async function handler(req, res) {
     const configSnap = await configRef.get();
     const savedConfig = configSnap.exists ? (configSnap.data() || {}) : {};
     const savedRecipients = Array.isArray(savedConfig.recipients) ? savedConfig.recipients : [];
-    const recipientMap = new Map(savedRecipients.map(item => [String(item?.id || ""), item]));
+    const requestRecipients = Array.isArray(body.recipients)
+      ? body.recipients
+          .map((item, index) => normaliseRouteRecipient(item, index))
+          .filter(Boolean)
+      : [];
+    const mergedRecipients = [...savedRecipients];
+    requestRecipients.forEach(item => {
+      const index = mergedRecipients.findIndex(saved => String(saved?.id || "").trim() === item.id);
+      if (index >= 0) {
+        mergedRecipients[index] = {
+          ...mergedRecipients[index],
+          ...item,
+        };
+      } else {
+        mergedRecipients.push(item);
+      }
+    });
+    const recipientMap = new Map(mergedRecipients.map(item => [String(item?.id || "").trim(), item]));
 
     const now = Date.now();
     const results = [];

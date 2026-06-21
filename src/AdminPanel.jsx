@@ -9709,7 +9709,18 @@ function AdminPanelInner({user}){
             "Content-Type": "application/json",
             Authorization: `Bearer ${idToken}`,
           },
-          body: JSON.stringify({ jobs }),
+          body: JSON.stringify({
+            jobs,
+            recipients: activeRecipients.map(recipient => ({
+              id: recipient.id,
+              institute: recipient.institute,
+              label: recipient.label,
+              chatId: normaliseTelegramChatId(recipient.chatId),
+              notes: recipient.notes || "",
+              destinationType: recipient.destinationType || "channel",
+              enabled: recipient.enabled !== false,
+            })),
+          }),
           signal: controller.signal,
         });
       } catch (error) {
@@ -9726,10 +9737,6 @@ function AdminPanelInner({user}){
       } catch {
         payload = null;
       }
-      if(!response.ok){
-        throw new Error(payload?.error || "Telegram delivery failed.");
-      }
-
       if(payload?.execution || payload?.health){
         setLedgrTelegramConfig(current => ({
           ...(current || {}),
@@ -9745,6 +9752,14 @@ function AdminPanelInner({user}){
           execution: payload?.execution || current?.execution,
           health: payload?.health || current?.health,
         }));
+      }
+      if(!response.ok){
+        throw new Error(
+          payload?.error
+          || payload?.execution?.lastErrorMessage
+          || payload?.results?.find(item => item && item.ok === false)?.error
+          || "Telegram delivery failed."
+        );
       }
 
       const delivered = Number(payload?.execution?.lastDeliveredCount || 0);
