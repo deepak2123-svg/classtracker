@@ -4786,6 +4786,7 @@ function LedgrReportOptionsModal({
   scheduleSaving,
   exportDisabled,
   busyFormat,
+  initialMode = "export",
   onClose,
   onApply,
   onSaveSchedule,
@@ -4794,7 +4795,7 @@ function LedgrReportOptionsModal({
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
     []
   );
-  const [actionMode, setActionMode] = React.useState("export");
+  const [actionMode, setActionMode] = React.useState(initialMode === "schedule" ? "schedule" : "export");
   const [draftPeriod, setDraftPeriod] = React.useState(period || "daily");
   const [draftMonth, setDraftMonth] = React.useState(month || currentMonthKey());
   const [draftRangeStart, setDraftRangeStart] = React.useState(rangeStart || addDaysToDateKey(todayKey(), -6));
@@ -4822,6 +4823,10 @@ function LedgrReportOptionsModal({
     setScheduleTimes(schedule.times?.length ? [...schedule.times] : ["09:00"]);
     setScheduleTimezone(schedule.timezone || browserTimezone);
   }, [browserTimezone, schedule?.updatedAt]);
+
+  React.useEffect(() => {
+    setActionMode(initialMode === "schedule" ? "schedule" : "export");
+  }, [initialMode]);
 
   const inputStyle = {
     width:"100%",
@@ -4880,10 +4885,8 @@ function LedgrReportOptionsModal({
     || (actionMode === "export" && exportDisabled)
     || (actionMode === "schedule" && scheduleEnabled && validScheduleTimes.length === 0);
 
-  const selectActionMode = (nextMode) => {
-    if(busy || nextMode === actionMode) return;
-    setActionMode(nextMode);
-    if(nextMode !== "schedule") return;
+  React.useEffect(() => {
+    if(actionMode !== "schedule") return;
     setFormat("pdf");
     if(!schedule) return;
     const savedReport = schedule.report || {};
@@ -4896,6 +4899,11 @@ function LedgrReportOptionsModal({
     setSelectedInstitutes(savedScope === "selected"
       ? (schedule.scope?.institutes || []).filter(saved => allInstitutes.some(institute => sameInstituteName(saved, institute)))
       : [...allInstitutes]);
+  }, [actionMode, allInstitutes, schedule]);
+
+  const selectActionMode = (nextMode) => {
+    if(busy || nextMode === actionMode) return;
+    setActionMode(nextMode);
   };
 
   const addScheduleTime = () => {
@@ -8491,6 +8499,7 @@ function AdminPanelInner({user}){
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
   const [instituteGlanceOptionsOpen, setInstituteGlanceOptionsOpen] = useState(false);
+  const [instituteGlanceOptionsMode, setInstituteGlanceOptionsMode] = useState("export");
   const [instituteGlancePeriod, setInstituteGlancePeriod] = useState("daily");
   const [instituteGlanceMonth, setInstituteGlanceMonth] = useState(() => currentMonthKey());
   const [instituteGlanceRangeStart, setInstituteGlanceRangeStart] = useState(() => addDaysToDateKey(todayKey(), -6));
@@ -9565,6 +9574,12 @@ function AdminPanelInner({user}){
     }
   }, [ledgrReportScheduleSaving, showAdminToast, user?.uid]);
 
+  const openInstituteGlanceOptions = React.useCallback((mode = "export") => {
+    setProfileOpen(false);
+    setInstituteGlanceOptionsMode(mode === "schedule" ? "schedule" : "export");
+    setInstituteGlanceOptionsOpen(true);
+  }, []);
+
   const openLedgrTelegramDashboard = React.useCallback(() => {
     setProfileOpen(false);
     setInstituteGlanceOptionsOpen(false);
@@ -9583,9 +9598,20 @@ function AdminPanelInner({user}){
   }, [isMobile]);
 
   const openLedgrTelegramSchedule = React.useCallback(() => {
+    setProfileOpen(false);
     setTelegramDashboardOpen(false);
-    setInstituteGlanceOptionsOpen(true);
-  }, []);
+    if(!isMobile && view === "manage"){
+      setInstituteGlanceOpen(false);
+      setManageScopeInstitute("");
+      setOpenTeacherInstitute(null);
+      setOpenAdminInstitute(null);
+      setInstDetailView(null);
+      setManageTab("report");
+      setView("manage");
+      loadInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure);
+    }
+    openInstituteGlanceOptions("schedule");
+  }, [handleInstituteGlanceLoadFailure, isMobile, loadInstituteGlanceReport, openInstituteGlanceOptions, view]);
 
   const saveLedgrTelegramDashboard = React.useCallback(async (nextConfig) => {
     if(ledgrTelegramSaving) return null;
@@ -10323,7 +10349,7 @@ function AdminPanelInner({user}){
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
         <button
           className="admin-mobile-touch"
-          onClick={()=>setInstituteGlanceOptionsOpen(true)}
+          onClick={()=>openInstituteGlanceOptions("export")}
           disabled={!!instituteGlanceAnyExportBusy}
           style={{
             ...baseButtonStyle,
@@ -14034,6 +14060,7 @@ function AdminPanelInner({user}){
               scheduleSaving={ledgrReportScheduleSaving}
               exportDisabled={instituteGlanceExportDisabled}
               busyFormat={instituteGlanceExportBusy}
+              initialMode={instituteGlanceOptionsMode}
               onClose={()=>!instituteGlanceExportBusy&&!ledgrReportScheduleSaving&&setInstituteGlanceOptionsOpen(false)}
               onApply={applyInstituteGlanceOptions}
               onSaveSchedule={saveInstituteGlanceSchedule}
@@ -15454,6 +15481,7 @@ function AdminPanelInner({user}){
             scheduleSaving={ledgrReportScheduleSaving}
             exportDisabled={instituteGlanceExportDisabled}
             busyFormat={instituteGlanceExportBusy}
+            initialMode={instituteGlanceOptionsMode}
             onClose={()=>!instituteGlanceExportBusy&&!ledgrReportScheduleSaving&&setInstituteGlanceOptionsOpen(false)}
             onApply={applyInstituteGlanceOptions}
             onSaveSchedule={saveInstituteGlanceSchedule}
@@ -16859,6 +16887,7 @@ function AdminPanelInner({user}){
           scheduleSaving={ledgrReportScheduleSaving}
           exportDisabled={instituteGlanceExportDisabled}
           busyFormat={instituteGlanceExportBusy}
+          initialMode={instituteGlanceOptionsMode}
           onClose={()=>!instituteGlanceExportBusy&&!ledgrReportScheduleSaving&&setInstituteGlanceOptionsOpen(false)}
           onApply={applyInstituteGlanceOptions}
           onSaveSchedule={saveInstituteGlanceSchedule}
