@@ -8513,11 +8513,10 @@ function AdminPanelInner({user}){
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
-  const [manageTeacherSort, setManageTeacherSort] = useState("name");
+  const [manageTeacherSort, setManageTeacherSort] = useState("count");
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [manageSectionSearch, setManageSectionSearch] = useState("");
   const [manageInstituteFilter, setManageInstituteFilter] = useState("");
-  const [manageInstitutesExpanded, setManageInstitutesExpanded] = useState(true);
   const [manageScopeInstitute, setManageScopeInstitute] = useState("");
   const [openTeacherInstitute, setOpenTeacherInstitute] = useState(null);
   const [openAdminInstitute, setOpenAdminInstitute] = useState(null);
@@ -14008,9 +14007,9 @@ function AdminPanelInner({user}){
     const teacherOnlyList = teachers.filter(t=>roles[t.uid]!=="admin");
     const manageTabItems = [
       { key:"teachers", label:"Teachers", icon:IconUsersGroup, count:teacherOnlyList.length, hint:"Accounts & classes" },
+      { key:"institutes", label:"Institutes", icon:IconBuilding, count:institutes.length, hint:"Names & structure" },
       { key:"subjects", label:"Syllabus", icon:IconBooks, count:syllabusTemplates.length, hint:"Chapters & topics" },
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
-      { key:"institutes", label:"Institutes", icon:IconBuilding, count:institutes.length, hint:"Names & structure" },
       { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
     ];
     const manageTitle = manageTabItems.find(item=>item.key===manageTab)?.label || "Control Centre";
@@ -14211,62 +14210,34 @@ function AdminPanelInner({user}){
               <input value={manageInstituteFilter} onChange={event=>setManageInstituteFilter(event.target.value)} placeholder="Filter institutes" style={{width:"100%",boxSizing:"border-box",border:`1px solid ${G.borderM}`,borderRadius:11,padding:"10px 12px",fontFamily:G.sans,fontSize:13,color:G.text,outline:"none"}}/>
             </div>
             <div style={{padding:"12px 10px",overflowY:"auto",minHeight:0}}>
-              <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"0 8px 7px"}}>Overview</div>
-              {[
-                {key:"dashboard",label:"Dashboard",icon:IconChartBar,onClick:()=>setView("main")},
-                {key:"report",label:"Ledgr Report",icon:IconFileText,onClick:openInstituteGlancePanel},
-              ].map(item=>(
-                <button key={item.key} onClick={item.onClick} style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:"transparent",color:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
-                  <AppIcon icon={item.icon} size={15} color={G.textL}/>{item.label}
-                </button>
-              ))}
-
-              <button onClick={()=>setManageInstitutesExpanded(value=>!value)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,border:"none",borderRadius:10,padding:"10px 8px",marginTop:8,background:manageInstitutesExpanded?"#E8F0FF":"transparent",color:G.navy,fontFamily:G.sans,cursor:"pointer",textAlign:"left"}}>
-                <span style={{display:"inline-flex",alignItems:"center",gap:9,fontSize:11,fontWeight:850,textTransform:"uppercase",letterSpacing:0.9}}>
-                  <AppIcon icon={IconBuilding} size={15} color={G.blue}/> Browse institutes
-                </span>
-                <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
-                  <span style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:800,color:G.textM}}>{institutes.length}</span>
-                  <span style={{transform:manageInstitutesExpanded?"rotate(90deg)":"none",transition:"transform 0.16s"}}><AppIcon icon={IconChevronRight} size={14} color={G.textL}/></span>
-                </span>
+              <button onClick={()=>setView("main")} style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:"transparent",color:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
+                <AppIcon icon={IconChartBar} size={15} color={G.textL}/> Dashboard
               </button>
+              <div style={{height:1,background:G.border,margin:"8px 8px 10px"}}/>
 
-              {manageInstitutesExpanded&&(
-                <div style={{margin:"4px 0 8px 9px",paddingLeft:7,borderLeft:`2px solid ${G.border}`,display:"flex",flexDirection:"column",gap:3}}>
-                  {sidebarInstitutes.map((institute,index)=>{
-                    const selected=manageScopeInstitute===institute;
-                    const teacherCount=instituteStats[institute]?.teacherCount||teachers.filter(teacher=>teacherBelongsToInstitute(teacher,institute)).length;
-                    const tones=["#2563EB","#0F9F78","#7C3AED","#DB2777","#C45A07"];
-                    const tone=tones[index%tones.length];
-                    return (
-                      <div key={institute}>
-                        <button onClick={()=>openInstituteArea(institute,"sections")} style={{width:"100%",display:"grid",gridTemplateColumns:"12px minmax(0,1fr) auto",alignItems:"center",gap:8,border:"none",borderRadius:9,padding:"8px 8px",background:selected?"#DCE9FF":"transparent",color:G.text,fontFamily:G.sans,cursor:"pointer",textAlign:"left"}}>
+              {manageInstituteFilter.trim()&&(
+                <div style={{padding:"0 2px 10px"}}>
+                  <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"0 8px 7px"}}>Institute matches</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                    {sidebarInstitutes.slice(0,8).map((institute,index)=>{
+                      const teacherCount=instituteStats[institute]?.teacherCount||teachers.filter(teacher=>teacherBelongsToInstitute(teacher,institute)).length;
+                      const tones=["#2563EB","#0F9F78","#7C3AED","#DB2777","#C45A07"];
+                      const tone=tones[index%tones.length];
+                      return (
+                        <button key={institute} onClick={()=>openInstituteArea(institute,"teachers")} style={{width:"100%",display:"grid",gridTemplateColumns:"12px minmax(0,1fr) auto",alignItems:"center",gap:8,border:"none",borderRadius:9,padding:"8px 8px",background:manageScopeInstitute===institute?"#EEF4FF":"transparent",color:manageScopeInstitute===institute?G.navy:G.text,fontFamily:G.sans,cursor:"pointer",textAlign:"left"}}>
                           <span style={{width:8,height:8,borderRadius:"50%",background:tone}}/>
-                          <span style={{fontSize:12.25,fontWeight:selected?850:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{institute}</span>
+                          <span style={{fontSize:12.25,fontWeight:manageScopeInstitute===institute?850:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{institute}</span>
                           <span style={{fontSize:11,fontWeight:800,color:G.textL}}>{teacherCount}</span>
                         </button>
-                        {selected&&(
-                          <div style={{margin:"3px 0 5px 18px",paddingLeft:8,borderLeft:`2px solid #B8CCF7`,display:"flex",flexDirection:"column",gap:3}}>
-                            {[
-                              {key:"teachers",label:"Teachers",icon:IconUsersGroup},
-                              {key:"sections",label:"Sections",icon:IconSchool},
-                              {key:"subjects",label:"Syllabus",icon:IconBooks},
-                              {key:"institutes",label:"Institute settings",icon:IconSettings},
-                            ].map(item=>(
-                              <button key={item.key} onClick={()=>openInstituteArea(institute,item.key)} style={{display:"flex",alignItems:"center",gap:8,border:"none",borderRadius:8,padding:"7px 9px",background:manageTab===item.key?"#FFFFFF":"transparent",color:manageTab===item.key?G.navy:G.textM,fontFamily:G.sans,fontSize:12,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
-                                <AppIcon icon={item.icon} size={14} color={manageTab===item.key?G.blue:G.textL}/>{item.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {sidebarInstitutes.length===0&&<div style={{padding:"16px 8px",fontSize:12.5,color:G.textM,textAlign:"center"}}>No institutes match.</div>}
+                      );
+                    })}
+                    {sidebarInstitutes.length===0&&<div style={{padding:"10px 8px",fontSize:12,color:G.textM,textAlign:"center"}}>No institutes match.</div>}
+                  </div>
+                  <div style={{height:1,background:G.border,margin:"10px 6px 0"}}/>
                 </div>
               )}
 
-              <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"10px 8px 7px",borderTop:`1px solid ${G.border}`}}>Workspace</div>
+              <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"0 8px 7px"}}>Workspace</div>
               {manageTabItems.map(item=>(
                 <button key={item.key} onClick={()=>{
                   setManageScopeInstitute("");
@@ -14278,6 +14249,12 @@ function AdminPanelInner({user}){
                   <AppIcon icon={item.icon} size={15} color={!manageScopeInstitute&&manageTab===item.key?G.blue:G.textL}/>{item.label}
                 </button>
               ))}
+              <button
+                onClick={openInstituteGlancePanel}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:instituteGlanceOptionsOpen?"#EEF4FF":"transparent",color:instituteGlanceOptionsOpen?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
+                <AppIcon icon={IconFileText} size={15} color={instituteGlanceOptionsOpen?G.blue:G.textL}/>
+                Ledgr Report
+              </button>
               <button
                 onClick={openLedgrTelegramDashboard}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:telegramDashboardOpen?"#EEF4FF":"transparent",color:telegramDashboardOpen?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
@@ -15025,6 +15002,7 @@ function AdminPanelInner({user}){
             ? []
             : scopedTeacherOnlyList.filter(t=>!getTeacherInstituteList(t).length && matchesTeacher(t));
           const hasInstituteMatches = teacherInstituteGroups.length>0;
+          const maxTeacherCount = Math.max(1, ...teacherInstituteGroups.map(group=>group.teachers.length));
 
           const TeacherCard = ({ t, currentInstitute = null }) => {
             const d = fullData[t.uid] || {};
@@ -15156,50 +15134,63 @@ function AdminPanelInner({user}){
               <div style={{fontSize:14,color:G.textM,marginBottom:10}}>
                 {manageScopeInstitute
                   ? "Manage the teacher accounts, assigned subjects, and classes connected to this institute."
-                  : "Click an institute to expand its teachers. Search by name, email, or institute."}
+                  : `${teacherInstituteGroups.length} institutes${teacherInstituteGroups.length ? ` · ${manageTeacherSort==="count" ? "sorted by teacher count" : "sorted A-Z"}` : ""}`}
               </div>
               {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search teachers by name, email, or institute")}
               {!manageScopeInstitute&&(
-                <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-                  <label style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12.5,fontWeight:800,color:G.textM,fontFamily:G.sans}}>
-                    Sort by
-                    <select value={manageTeacherSort} onChange={event=>setManageTeacherSort(event.target.value)} style={{border:`1px solid ${G.borderM}`,borderRadius:10,padding:"8px 10px",fontFamily:G.sans,fontSize:13,color:G.text,background:"#FFFFFF",outline:"none"}}>
-                      <option value="name">Name</option>
-                      <option value="count">Teacher count</option>
-                    </select>
-                  </label>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+                  {[
+                    {key:"count",label:"Most teachers"},
+                    {key:"name",label:"Name A-Z"},
+                  ].map(item=>(
+                    <button key={item.key} onClick={()=>setManageTeacherSort(item.key)} style={{border:`1px solid ${manageTeacherSort===item.key?G.navy:G.border}`,borderRadius:999,padding:"6px 12px",background:manageTeacherSort===item.key?G.navy:"#FFFFFF",color:manageTeacherSort===item.key?"#FFFFFF":G.textM,fontFamily:G.sans,fontSize:11.5,fontWeight:850,cursor:"pointer"}}>
+                      {item.label}
+                    </button>
+                  ))}
                 </div>
               )}
 
               {scopedTeacherOnlyList.length===0
                 ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>{manageScopeInstitute ? "No teachers are connected to this institute yet." : "No teachers found yet."}</div>
                 :<div style={{display:"flex",flexDirection:"column",gap:12}}>
-                  {teacherInstituteGroups.map(({ inst, teachers: instTeachers })=>{
-                    const isOpen = manageScopeInstitute ? true : openTeacherInstitute===inst;
-                    return(
-                      <div key={inst}>
-                        {instituteAccordionHeader({
-                          icon:IconBuilding,
-                          title:inst,
-                          count:instTeachers.length,
-                          countLabel:"teacher",
-                          isOpen,
-                          onClick:()=>{
-                            if(manageScopeInstitute) return;
-                            if(!isOpen) warmTeacherUids(instTeachers.map(t=>t.uid), inst);
-                            setOpenTeacherInstitute(curr=>curr===inst?null:inst);
-                          },
-                        })}
-                        {isOpen&&(
-                          <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
-                            {instTeachers.map(t=>(
-                              <TeacherCard key={`${inst}_${t.uid}`} t={t} currentInstitute={inst} />
-                            ))}
-                          </div>
-                        )}
+                  {!manageScopeInstitute&&teacherInstituteGroups.length>0&&(
+                    <div style={{border:`1px solid ${G.border}`,borderRadius:12,overflow:"hidden",background:"#FFFFFF"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.9fr) 80px 140px 90px",gap:12,padding:"0 10px 8px",borderBottom:`1px solid ${G.border}`,fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.6,fontFamily:G.mono}}>
+                        <div>Institute</div>
+                        <div>Teachers</div>
+                        <div></div>
+                        <div></div>
                       </div>
-                    );
-                  })}
+                      {teacherInstituteGroups.map(({ inst, teachers: instTeachers }, index)=>{
+                        const fillWidth = Math.max(3, Math.round((instTeachers.length / maxTeacherCount) * 100));
+                        return (
+                          <button key={inst} onClick={()=>{
+                            warmTeacherUids(instTeachers.map(t=>t.uid), inst);
+                            openInstituteArea(inst, "teachers");
+                          }} style={{width:"100%",display:"grid",gridTemplateColumns:"minmax(0,1.9fr) 80px 140px 90px",alignItems:"center",gap:12,border:"none",borderTop:index===0?"none":`1px solid #EEF1F6`,padding:"12px 10px",background:"#FFFFFF",fontFamily:G.sans,cursor:"pointer",textAlign:"left"}}>
+                            <span style={{fontSize:13.5,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{inst}</span>
+                            <span style={{fontSize:13,fontWeight:800,color:G.text}}>{instTeachers.length}</span>
+                            <span style={{display:"inline-flex",alignItems:"center"}}>
+                              <span style={{width:"100%",maxWidth:120,height:6,background:G.border,borderRadius:999,overflow:"hidden"}}>
+                                <span style={{display:"block",width:`${fillWidth}%`,height:"100%",background:G.blueV,borderRadius:999}}/>
+                              </span>
+                            </span>
+                            <span style={{justifySelf:"end",fontSize:12.5,fontWeight:800,color:G.textL}}>Open &#8250;</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {manageScopeInstitute&&teacherInstituteGroups.map(({ inst, teachers: instTeachers })=>(
+                    <div key={inst}>
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {instTeachers.map(t=>(
+                          <TeacherCard key={`${inst}_${t.uid}`} t={t} currentInstitute={inst} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
 
                   {teachersWithoutInstitute.length>0&&(
                     <div>
