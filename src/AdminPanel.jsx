@@ -5241,6 +5241,14 @@ function LedgrTelegramDashboardModal({
   const [onDemandEnabled, setOnDemandEnabled] = React.useState(true);
   const [recipients, setRecipients] = React.useState([]);
   const [draftError, setDraftError] = React.useState("");
+  const [deliveryProbe, setDeliveryProbe] = React.useState({
+    checking: true,
+    routeReachable: false,
+    manualReady: false,
+    scheduledReady: false,
+    tokenPresent: null,
+    error: "",
+  });
 
   React.useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -5260,6 +5268,78 @@ function LedgrTelegramDashboardModal({
     setDraftError("");
   }, [config?.updatedAt, config?.schemaVersion, institutes.length]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    async function probeMessengerDelivery() {
+      setDeliveryProbe({
+        checking: true,
+        routeReachable: false,
+        manualReady: false,
+        scheduledReady: false,
+        tokenPresent: null,
+        error: "",
+      });
+      try {
+        const currentUser = auth.currentUser;
+        if(!currentUser){
+          throw new Error("Sign in again to verify messenger delivery.");
+        }
+        const idToken = await currentUser.getIdToken();
+        const response = await fetch("/api/send-ledgr-telegram", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        });
+        const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+        if(!contentType.includes("application/json")){
+          throw new Error("This deployment is not serving `/api/send-ledgr-telegram` as an API route.");
+        }
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+        if(cancelled) return;
+        if(!response.ok){
+          setDeliveryProbe({
+            checking: false,
+            routeReachable: true,
+            manualReady: false,
+            scheduledReady: false,
+            tokenPresent: false,
+            error: payload?.error || "Could not verify messenger delivery.",
+          });
+          return;
+        }
+        const health = payload?.health || {};
+        setDeliveryProbe({
+          checking: false,
+          routeReachable: true,
+          manualReady: !!health?.manualEndpointReady,
+          scheduledReady: !!health?.scheduledEndpointReady,
+          tokenPresent: health?.tokenPresent !== false,
+          error: payload?.warning || "",
+        });
+      } catch (error) {
+        if(cancelled) return;
+        setDeliveryProbe({
+          checking: false,
+          routeReachable: false,
+          manualReady: false,
+          scheduledReady: false,
+          tokenPresent: null,
+          error: error?.message || "Could not reach the messenger delivery route.",
+        });
+      }
+    }
+    probeMessengerDelivery();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const actionBusy = !!loading || !!saving;
   const recipientOptions = React.useMemo(() => {
     const ordered = [];
@@ -5276,10 +5356,23 @@ function LedgrTelegramDashboardModal({
 
   const configuredRecipients = recipients.filter(item => item.institute && normaliseTelegramChatId(item.chatId));
   const activeRecipients = configuredRecipients.filter(item => item.enabled);
+  const manualRouteReady = deliveryProbe.routeReachable
+    ? deliveryProbe.manualReady
+    : !!config?.health?.manualEndpointReady;
+  const scheduleRouteReady = deliveryProbe.routeReachable
+    ? deliveryProbe.scheduledReady
+    : !!config?.health?.scheduledEndpointReady;
+  const routeIssue = !deliveryProbe.checking && !deliveryProbe.routeReachable && !!deliveryProbe.error;
+  const tokenMissingOnServer = deliveryProbe.routeReachable && deliveryProbe.tokenPresent === false;
+  const backgroundRunnerReady = !!(scheduleRouteReady || schedule?.execution?.lastRunAt || schedule?.lastRunAt);
   const sendNowDisabled = actionBusy
     || !!sendBusy
+    || !!deliveryProbe.checking
     || !enabled
     || !onDemandEnabled
+    || routeIssue
+    || tokenMissingOnServer
+    || !manualRouteReady
     || activeRecipients.length === 0;
   const coveredInstitutes = activeRecipients.reduce((acc, item) => {
     if(!acc.some(existing => sameInstituteName(existing, item.institute))) acc.push(item.institute);
@@ -5289,12 +5382,43 @@ function LedgrTelegramDashboardModal({
   const lastAttemptAt = Number(config?.execution?.lastAttemptAt || 0);
   const lastErrorMessage = String(config?.execution?.lastErrorMessage || config?.execution?.lastError || "").trim();
   const runnerLastSeenAt = Number(schedule?.execution?.lastRunAt || schedule?.lastRunAt || 0);
-  const manualRouteReady = !!config?.health?.manualEndpointReady;
-  const scheduleRouteReady = !!config?.health?.scheduledEndpointReady;
   const scheduleTimes = Array.isArray(schedule?.times) ? schedule.times.filter(Boolean) : [];
   const missingInstituteCount = (institutes || []).filter(inst =>
     !recipients.some(item => sameInstituteName(item.institute, inst))
   ).length;
+  const backendStatus = deliveryProbe.checking
+    ? { label:"Checking", background:"#DBEAFE", color:G.blue }
+    : routeIssue
+      ? { label:"Route issue", background:"#FEE2E2", color:"#B91C1C" }
+      : tokenMissingOnServer
+        ? { label:"Token missing", background:"#FEF3C7", color:"#B45309" }
+        : manualRouteReady && backgroundRunnerReady
+          ? { label:"Ready", background:"#DCFCE7", color:"#166534" }
+          : manualRouteReady
+            ? { label:"Manual live", background:"#DBEAFE", color:G.blue }
+            : { label:"Pending", background:"#F3F4F6", color:G.textM };
+  const endpointMessage = deliveryProbe.checking
+    ? "Checking the deployed messenger delivery route now."
+    : routeIssue
+      ? `${deliveryProbe.error} This usually means the deployed app is not exposing the serverless API route.`
+      : tokenMissingOnServer
+        ? "The manual route is reachable, but TELEGRAM_BOT_TOKEN is missing on the deployed server."
+        : manualRouteReady && backgroundRunnerReady
+          ? "Manual send and background automation are both reporting readiness."
+          : manualRouteReady
+            ? "Manual send route is live. Scheduled automation still needs a background runner deployment."
+            : "The messenger delivery route has not been verified yet.";
+  const lastDeliveryHint = lastSuccessAt
+    ? new Date(lastSuccessAt).toLocaleTimeString("en-IN", { hour:"numeric", minute:"2-digit" })
+    : deliveryProbe.checking
+      ? "Checking endpoint"
+      : routeIssue
+        ? "API route unavailable"
+        : tokenMissingOnServer
+          ? "Server token missing"
+          : manualRouteReady
+            ? "Ready for first send"
+            : "Not verified yet";
 
   const sectionCardStyle = {
     border:"1px solid #E2E8F0",
@@ -5457,7 +5581,11 @@ function LedgrTelegramDashboardModal({
         : scheduledEnabled
           ? "Waiting"
           : "Paused",
-      hint:schedule?.enabled ? "Uses the Ledgr report schedule" : "No active report schedule yet",
+      hint:schedule?.enabled
+        ? backgroundRunnerReady
+          ? "Uses the Ledgr report schedule"
+          : "Schedule saved; runner not connected yet"
+        : "No active report schedule yet",
       tone:"#FEF3C7",
       accent:G.amber,
     },
@@ -5466,16 +5594,14 @@ function LedgrTelegramDashboardModal({
       value:lastSuccessAt
         ? new Date(lastSuccessAt).toLocaleDateString("en-IN", { day:"numeric", month:"short" })
         : "Not yet",
-      hint:lastSuccessAt
-        ? new Date(lastSuccessAt).toLocaleTimeString("en-IN", { hour:"numeric", minute:"2-digit" })
-        : "Backend send hook pending",
+      hint:lastDeliveryHint,
       tone:"#F3E8FF",
       accent:"#7C3AED",
     },
   ];
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.64)",zIndex:10020,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.64)",zIndex:10020,display:"flex",alignItems:"stretch",justifyContent:"stretch",padding:0,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
       <style>{`
         @media (max-width: 900px) {
           .ledgr-telegram-dashboard-grid {
@@ -5486,10 +5612,6 @@ function LedgrTelegramDashboardModal({
           }
         }
         @media (max-width: 640px) {
-          .ledgr-telegram-modal {
-            max-height: calc(100dvh - 16px) !important;
-            border-radius: 20px !important;
-          }
           .ledgr-telegram-scroll {
             padding: 20px 16px 10px !important;
           }
@@ -5502,8 +5624,9 @@ function LedgrTelegramDashboardModal({
           }
         }
       `}</style>
-      <div className="ledgr-telegram-modal" style={{width:"100%",maxWidth:1120,background:"#F8FAFC",borderRadius:28,boxShadow:"0 34px 90px rgba(15,23,42,0.30)",maxHeight:"calc(100dvh - 32px)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div className="ledgr-telegram-modal" style={{width:"100vw",height:"100dvh",maxWidth:"100vw",background:"#F8FAFC",borderRadius:0,boxShadow:"none",maxHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div className="ledgr-telegram-scroll" style={{overflowY:"auto",minHeight:0,flex:1,padding:"24px 24px 14px"}}>
+          <div style={{width:"100%",maxWidth:1480,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:18}}>
             <div style={{display:"flex",gap:14,minWidth:0,flex:1}}>
               <div style={{width:56,height:56,borderRadius:18,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -5596,8 +5719,8 @@ function LedgrTelegramDashboardModal({
                   <div style={labelStyle}>Health</div>
                   <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Backend posture</div>
                 </div>
-                <span style={{background:runnerLastSeenAt ? "#DCFCE7" : "#FEF3C7",color:runnerLastSeenAt ? "#166534" : "#92400E",borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>
-                  {runnerLastSeenAt ? "Runner seen" : "Pending"}
+                <span style={{background:backendStatus.background,color:backendStatus.color,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>
+                  {backendStatus.label}
                 </span>
               </div>
 
@@ -5615,9 +5738,7 @@ function LedgrTelegramDashboardModal({
                 <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
                   <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Delivery endpoint</div>
                   <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
-                    {manualRouteReady || scheduleRouteReady
-                      ? "Server delivery hooks are reporting readiness."
-                      : "Dashboard is ready; secure send-now and scheduled delivery endpoints still need to be wired on the server."}
+                    {endpointMessage}
                   </div>
                 </div>
                 <div style={{border:`1px solid ${lastErrorMessage ? "#FECACA" : "#E2E8F0"}`,borderRadius:16,background:lastErrorMessage ? "#FEF2F2" : "#F8FAFC",padding:"13px 14px"}}>
@@ -5751,9 +5872,15 @@ function LedgrTelegramDashboardModal({
                   <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>On-demand send</div>
                   <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
                     {onDemandEnabled
-                      ? manualRouteReady
-                        ? "Server endpoint is reporting readiness for manual sends."
-                        : "Dashboard toggle is ready. Wire the secure send-now endpoint next."
+                      ? deliveryProbe.checking
+                        ? "Checking whether this deployment can send reports right now."
+                        : routeIssue
+                          ? "Manual send is blocked because this deployment is not exposing the messenger API route."
+                          : tokenMissingOnServer
+                            ? "Manual send is blocked until TELEGRAM_BOT_TOKEN is added on the deployed server."
+                            : manualRouteReady
+                              ? "Manual send is live and ready."
+                              : "Manual send has not been verified yet."
                       : "On-demand sends are paused from the dashboard."}
                   </div>
                 </div>
@@ -5792,9 +5919,11 @@ function LedgrTelegramDashboardModal({
               </div>
             </div>
           </div>
+          </div>
         </div>
 
         <div className="ledgr-telegram-footer" style={{flexShrink:0,padding:"14px 24px 22px",borderTop:"1px solid #E5E7EB",background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <div style={{width:"100%",maxWidth:1480,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
           <div style={{minWidth:0,flex:1}}>
             {draftError ? (
               <div style={{fontSize:12.5,color:"#991B1B",fontWeight:700,lineHeight:1.5}}>{draftError}</div>
@@ -5813,6 +5942,7 @@ function LedgrTelegramDashboardModal({
             <button type="button" onClick={save} disabled={actionBusy} style={{height:48,padding:"0 18px",borderRadius:14,border:"none",background:actionBusy ? "#CBD5E1" : G.navy,color:"#FFFFFF",fontSize:14,fontWeight:900,fontFamily:G.sans,cursor:actionBusy?"not-allowed":"pointer"}}>
               {saving ? "Saving..." : "Save messenger dashboard"}
             </button>
+          </div>
           </div>
         </div>
       </div>

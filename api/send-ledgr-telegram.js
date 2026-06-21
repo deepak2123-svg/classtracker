@@ -58,9 +58,35 @@ async function sendTelegramDocument({ token, chatId, filename, caption, pdfBuffe
 }
 
 export default async function handler(req, res) {
+  if (req.method === "GET") {
+    try {
+      await requireAdminUser(req);
+      const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+      const configRef = adminDb().doc("config/ledgrTelegramDelivery");
+      const configSnap = await configRef.get();
+      const savedConfig = configSnap.exists ? (configSnap.data() || {}) : {};
+      const health = {
+        ...(savedConfig.health || {}),
+        manualEndpointReady: !!token,
+        manualEndpointReachable: true,
+        scheduledEndpointReady: !!savedConfig?.health?.scheduledEndpointReady,
+        tokenPresent: !!token,
+        lastProbeAt: Date.now(),
+      };
+      return sendJson(res, 200, {
+        ok: !!token,
+        health,
+        warning: token ? "" : "Missing TELEGRAM_BOT_TOKEN on the server.",
+      });
+    } catch (error) {
+      const status = Number(error?.statusCode || 500);
+      return sendJson(res, status, { error: error?.message || "Could not verify messenger delivery." });
+    }
+  }
+
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return sendJson(res, 405, { error: "Use POST to send Ledgr reports to Telegram." });
+    res.setHeader("Allow", "GET, POST");
+    return sendJson(res, 405, { error: "Use GET to inspect or POST to send Ledgr reports to Telegram." });
   }
 
   try {
@@ -161,6 +187,8 @@ export default async function handler(req, res) {
     const health = {
       ...(savedConfig.health || {}),
       manualEndpointReady: true,
+      manualEndpointReachable: true,
+      tokenPresent: true,
       lastVerifiedAt: now,
     };
 
