@@ -9520,7 +9520,7 @@ function AdminPanelInner({user}){
       setLedgrReportSchedule(current => ({ ...(current || {}), ...saved }));
       setInstituteGlanceOptionsOpen(false);
       showAdminToast(saved.enabled
-        ? `Ledgr schedule saved for ${saved.times.length} daily time${saved.times.length === 1 ? "" : "s"}.`
+        ? "Ledgr schedule saved for the daily 8 PM batch."
         : "Ledgr report schedule paused.");
     } catch(error) {
       console.error("save Ledgr report schedule failed", error);
@@ -9556,18 +9556,8 @@ function AdminPanelInner({user}){
   const openLedgrTelegramSchedule = React.useCallback(() => {
     setProfileOpen(false);
     setTelegramDashboardOpen(false);
-    if(!isMobile && view === "manage"){
-      setInstituteGlanceOpen(false);
-      setManageScopeInstitute("");
-      setOpenTeacherInstitute(null);
-      setOpenAdminInstitute(null);
-      setInstDetailView(null);
-      setManageTab("report");
-      setView("manage");
-      loadInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure);
-    }
     openInstituteGlanceOptions("schedule");
-  }, [handleInstituteGlanceLoadFailure, isMobile, loadInstituteGlanceReport, openInstituteGlanceOptions, view]);
+  }, [openInstituteGlanceOptions]);
 
   const saveLedgrTelegramDashboard = React.useCallback(async (nextConfig) => {
     if(ledgrTelegramSaving) return null;
@@ -10338,19 +10328,22 @@ function AdminPanelInner({user}){
 
   const renderInstituteGlanceProgressBlock = (compact = false) => (
     <div style={{marginTop:14,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:compact ? "12px 12px 13px" : "15px 16px 16px"}}>
-      <style>{`@keyframes ledgrReportPulse{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}`}</style>
+      <style>{`
+        @keyframes ledgrReportPulse{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+        @keyframes ledgrReportSkeletonShift{0%{background-position:200% 0}100%{background-position:-200% 0}}
+      `}</style>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
         <div>
           <div style={{fontSize:13,fontWeight:700,color:G.text,fontFamily:G.sans}}>
             {instituteGlanceReport.loading
-              ? instituteGlanceReport.ready ? "Updating in background" : "Preparing report in background"
+              ? instituteGlanceReport.ready ? "Updating the Ledgr report" : "Building the Ledgr report"
               : "Centres ready"}
           </div>
           <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:4}}>
             {instituteGlanceReport.loading
               ? instituteGlanceReport.ready
                 ? "The current report stays available while fresh data is synced."
-                : "You can continue using the admin panel while teacher records are prepared."
+                : "Teacher records are syncing first. Centre cards appear as soon as the first pass completes."
               : "All institute data is ready."}
           </div>
         </div>
@@ -10379,6 +10372,97 @@ function AdminPanelInner({user}){
       )}
     </div>
   );
+
+  const renderInstituteGlanceLoadingDeck = (compact = false) => {
+    if(!instituteGlanceReport.loading || instituteGlanceReport.rows.length) return null;
+    const queuedCentres = Math.max(
+      instituteGlanceReport.totalInstitutes || 0,
+      instituteGlanceReport.summary.totalInstitutes || 0,
+      institutes.length || 0
+    );
+    const shimmer = (width, height = 12, borderRadius = 999) => ({
+      width,
+      height,
+      borderRadius,
+      background:"linear-gradient(90deg,#E2E8F0 0%,#F8FAFC 50%,#E2E8F0 100%)",
+      backgroundSize:"220% 100%",
+      animation:"ledgrReportSkeletonShift 1.35s linear infinite",
+    });
+    const loadingStats = [
+      {
+        label:"Teacher records",
+        value:`${Math.min(instituteGlanceReport.loaded, instituteGlanceReport.total)}/${Math.max(instituteGlanceReport.total, instituteGlanceReport.loaded)}`,
+        help:"Synced into the report",
+      },
+      {
+        label:"Centres ready",
+        value:`${instituteGlanceReadyCount}/${queuedCentres || 0}`,
+        help:"Visible once the first pass lands",
+      },
+      {
+        label:"Next up",
+        value:"Centre cards",
+        help:"Then PDF export and drill-in stay stable",
+      },
+    ];
+    const skeletonCount = compact ? 3 : 4;
+    return (
+      <div style={{marginTop:14,border:`1px solid ${G.border}`,borderRadius:18,background:"linear-gradient(180deg,#FFFFFF 0%,#F8FAFC 100%)",padding:compact ? "14px 14px 15px" : "18px 18px 20px",boxShadow:"0 14px 32px rgba(15,23,42,0.05)"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase"}}>Loading state</div>
+            <div style={{fontSize:compact ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08,marginTop:7}}>Preparing the Ledgr report</div>
+            <div style={{fontSize:12.5,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:680}}>
+              We keep the workspace usable while the report assembles in the background. Once the first pass finishes, the centre grid and exports appear in place.
+            </div>
+          </div>
+          <span style={{background:"#EEF2FF",color:G.blue,borderRadius:999,padding:"7px 11px",fontSize:11,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+            {queuedCentres} centre{queuedCentres === 1 ? "" : "s"} in queue
+          </span>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:compact ? "1fr" : "repeat(3,minmax(0,1fr))",gap:10,marginTop:14}}>
+          {loadingStats.map(item => (
+            <div key={item.label} style={{border:`1px solid ${G.border}`,borderRadius:14,background:"#FFFFFF",padding:"12px 13px"}}>
+              <div style={{fontSize:10.5,color:G.textL,fontFamily:G.mono,letterSpacing:0.6,textTransform:"uppercase"}}>{item.label}</div>
+              <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:8}}>{item.value}</div>
+              <div style={{fontSize:11.5,color:G.textM,lineHeight:1.5,marginTop:6}}>{item.help}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:compact ? "1fr" : "repeat(2,minmax(0,1fr))",gap:12,marginTop:14}}>
+          {Array.from({ length:skeletonCount }).map((_, index) => (
+            <div key={`skeleton_${index}`} style={{border:`1px solid ${G.border}`,borderRadius:16,background:"#FFFFFF",padding:"14px 14px 15px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                <div style={shimmer(index % 2 === 0 ? "58%" : "64%", 14)} />
+                <div style={shimmer("74px", 26)} />
+              </div>
+              <div style={{display:"grid",gap:8,marginTop:14}}>
+                <div style={shimmer("100%", 11)} />
+                <div style={shimmer("86%", 11)} />
+                <div style={shimmer("70%", 11)} />
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:14}}>
+                <div style={{borderRadius:12,background:"#F8FAFC",padding:"10px 10px 11px"}}>
+                  <div style={shimmer("56px", 9)} />
+                  <div style={{marginTop:8,...shimmer("42px", 16, 8)}} />
+                </div>
+                <div style={{borderRadius:12,background:"#F8FAFC",padding:"10px 10px 11px"}}>
+                  <div style={shimmer("48px", 9)} />
+                  <div style={{marginTop:8,...shimmer("38px", 16, 8)}} />
+                </div>
+                <div style={{borderRadius:12,background:"#F8FAFC",padding:"10px 10px 11px"}}>
+                  <div style={shimmer("44px", 9)} />
+                  <div style={{marginTop:8,...shimmer("36px", 16, 8)}} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const getInstituteGlanceTeacherHoursLabel = (teacher) => (
     teacher?.totalMinutes > 0
@@ -10547,14 +10631,7 @@ function AdminPanelInner({user}){
     );
   };
 
-  const renderInstituteGlanceMobileLoadingNotice = () => (
-    <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 15px"}}>
-      <div style={{fontSize:12.5,fontWeight:800,color:G.text,fontFamily:G.sans}}>Preparing the centre tables</div>
-      <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:6}}>
-        The report keeps loading in the background, but on mobile we wait to show the full centre list until it is ready so the screen stays steady instead of constantly reflowing.
-      </div>
-    </div>
-  );
+  const renderInstituteGlanceMobileLoadingNotice = () => renderInstituteGlanceLoadingDeck(true);
 
   const renderSharedInstituteGlanceList = ({ maxRows = null, interactive = false } = {}) => {
     const rows = maxRows ? instituteGlanceReport.rows.slice(0, maxRows) : instituteGlanceReport.rows;
@@ -10784,9 +10861,13 @@ function AdminPanelInner({user}){
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(false)}
             {renderInstituteGlanceActions(false)}
 
-            <div style={{marginTop:16}}>
-              {renderSharedInstituteGlanceList({ interactive:true })}
-            </div>
+            {instituteGlanceReport.loading && !instituteGlanceReport.rows.length ? (
+              renderInstituteGlanceLoadingDeck(false)
+            ) : (
+              <div style={{marginTop:16}}>
+                {renderSharedInstituteGlanceList({ interactive:true })}
+              </div>
+            )}
           </div>
         </div>
       </div>
