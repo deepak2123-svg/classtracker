@@ -1,3 +1,5 @@
+import { safePdfFilename, sendTelegramDocument } from "./_lib/telegramDelivery.js";
+
 export const maxDuration = 120;
 
 export const config = {
@@ -12,19 +14,6 @@ function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify(payload));
-}
-
-function trimCaption(value) {
-  const clean = String(value || "").trim();
-  return clean.length > 1000 ? `${clean.slice(0, 997)}...` : clean;
-}
-
-function safePdfFilename(value) {
-  const name = String(value || "ledgr-report.pdf")
-    .replace(/[\\/:*?"<>|]+/g, "_")
-    .replace(/\s+/g, " ")
-    .trim();
-  return name.toLowerCase().endsWith(".pdf") ? name : `${name || "ledgr-report"}.pdf`;
 }
 
 function parseBody(req) {
@@ -57,37 +46,6 @@ function readJobPdfBuffer(job) {
   return buffer.length ? buffer : null;
 }
 
-async function sendTelegramDocument({ token, chatId, filename, caption, pdfBuffer }) {
-  const form = new FormData();
-  form.set("chat_id", String(chatId));
-  if (caption) form.set("caption", trimCaption(caption));
-  form.set(
-    "document",
-    new Blob([pdfBuffer], { type: "application/pdf" }),
-    safePdfFilename(filename),
-  );
-
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
-    method: "POST",
-    body: form,
-  });
-
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok || !payload?.ok) {
-    const error = new Error(payload?.description || "Telegram rejected the PDF send.");
-    error.statusCode = response.status || 502;
-    throw error;
-  }
-
-  return payload.result || {};
-}
-
 export default async function handler(req, res) {
   if (req.method === "GET") {
     try {
@@ -109,7 +67,7 @@ export default async function handler(req, res) {
         ...(savedConfig.health || {}),
         manualEndpointReady: !!token && firebaseAdminReady,
         manualEndpointReachable: true,
-        scheduledEndpointReady: !!savedConfig?.health?.scheduledEndpointReady && firebaseAdminReady,
+        scheduledEndpointReady: !!token && firebaseAdminReady,
         tokenPresent: !!token,
         firebaseAdminReady,
         lastProbeAt: Date.now(),
