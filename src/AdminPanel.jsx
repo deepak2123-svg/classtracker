@@ -8513,6 +8513,7 @@ function AdminPanelInner({user}){
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
+  const [manageTeacherSort, setManageTeacherSort] = useState("name");
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [manageSectionSearch, setManageSectionSearch] = useState("");
   const [manageInstituteFilter, setManageInstituteFilter] = useState("");
@@ -14222,7 +14223,7 @@ function AdminPanelInner({user}){
 
               <button onClick={()=>setManageInstitutesExpanded(value=>!value)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,border:"none",borderRadius:10,padding:"10px 8px",marginTop:8,background:manageInstitutesExpanded?"#E8F0FF":"transparent",color:G.navy,fontFamily:G.sans,cursor:"pointer",textAlign:"left"}}>
                 <span style={{display:"inline-flex",alignItems:"center",gap:9,fontSize:11,fontWeight:850,textTransform:"uppercase",letterSpacing:0.9}}>
-                  <AppIcon icon={IconBuilding} size={15} color={G.blue}/> Institutes
+                  <AppIcon icon={IconBuilding} size={15} color={G.blue}/> Browse institutes
                 </span>
                 <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
                   <span style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:800,color:G.textM}}>{institutes.length}</span>
@@ -14266,12 +14267,14 @@ function AdminPanelInner({user}){
               )}
 
               <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"10px 8px 7px",borderTop:`1px solid ${G.border}`}}>Workspace</div>
-              {[
-                {key:"teachers",label:"All Teachers",icon:IconUsersGroup},
-                {key:"institutes",label:"Institute Directory",icon:IconBuilding},
-                {key:"admins",label:"Admins",icon:IconSettings},
-              ].map(item=>(
-                <button key={item.key} onClick={()=>{setManageScopeInstitute("");setInstDetailView(null);setManageTab(item.key);}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:!manageScopeInstitute&&manageTab===item.key?"#EEF4FF":"transparent",color:!manageScopeInstitute&&manageTab===item.key?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
+              {manageTabItems.map(item=>(
+                <button key={item.key} onClick={()=>{
+                  setManageScopeInstitute("");
+                  setInstDetailView(null);
+                  setOpenTeacherInstitute(null);
+                  setOpenAdminInstitute(null);
+                  setManageTab(item.key);
+                }} style={{width:"100%",display:"flex",alignItems:"center",gap:9,border:"none",borderRadius:9,padding:"9px 10px",background:!manageScopeInstitute&&manageTab===item.key?"#EEF4FF":"transparent",color:!manageScopeInstitute&&manageTab===item.key?G.navy:G.textM,fontFamily:G.sans,fontSize:12.5,fontWeight:800,cursor:"pointer",textAlign:"left"}}>
                   <AppIcon icon={item.icon} size={15} color={!manageScopeInstitute&&manageTab===item.key?G.blue:G.textL}/>{item.label}
                 </button>
               ))}
@@ -14702,11 +14705,11 @@ function AdminPanelInner({user}){
         {!isMobile&&<div style={{background:`linear-gradient(135deg,${G.navy},${G.navyS})`,borderRadius:14,padding:"20px",marginBottom:20,display:"flex",alignItems:"center",gap:14}}>
           <div style={{width:48,height:48,borderRadius:14,background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>📚</div>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:17,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:3}}>{manageScopeInstitute ? "Institute settings" : "Institute directory"}</div>
+            <div style={{fontSize:17,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:3}}>{manageScopeInstitute ? "Institute settings" : "Institutes"}</div>
             <div style={{fontSize:13,color:"rgba(255,255,255,0.6)",lineHeight:1.5}}>
               {manageScopeInstitute
                 ? `Manage the identity, structure, and lifecycle of ${manageScopeInstitute}.`
-                : "Create institutes and maintain the workspace-wide institute directory."}
+                : "Create institutes and maintain the workspace-wide institute list."}
             </div>
           </div>
         </div>}
@@ -15005,12 +15008,23 @@ function AdminPanelInner({user}){
             ...(manageScopeInstitute ? [manageScopeInstitute] : institutes),
             ...scopedTeacherOnlyList.flatMap(t=>getTeacherInstituteList(t)),
           ])]
-            .filter(Boolean)
-            .sort(exportTextSorter.compare);
+            .filter(Boolean);
+          const teacherInstituteGroups = teacherInstitutes
+            .map(inst=>({
+              inst,
+              teachers:scopedTeacherOnlyList.filter(t=>teacherBelongsToInstitute(t, inst) && matchesTeacher(t)),
+            }))
+            .filter(group=>group.teachers.length>0)
+            .sort((a,b)=>{
+              if(manageTeacherSort==="count"){
+                return (b.teachers.length-a.teachers.length) || exportTextSorter.compare(a.inst, b.inst);
+              }
+              return exportTextSorter.compare(a.inst, b.inst);
+            });
           const teachersWithoutInstitute = manageScopeInstitute
             ? []
             : scopedTeacherOnlyList.filter(t=>!getTeacherInstituteList(t).length && matchesTeacher(t));
-          const hasInstituteMatches = teacherInstitutes.some(inst => scopedTeacherOnlyList.some(t => teacherBelongsToInstitute(t, inst) && matchesTeacher(t)));
+          const hasInstituteMatches = teacherInstituteGroups.length>0;
 
           const TeacherCard = ({ t, currentInstitute = null }) => {
             const d = fullData[t.uid] || {};
@@ -15145,18 +15159,27 @@ function AdminPanelInner({user}){
                   : "Click an institute to expand its teachers. Search by name, email, or institute."}
               </div>
               {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search teachers by name, email, or institute")}
+              {!manageScopeInstitute&&(
+                <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+                  <label style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12.5,fontWeight:800,color:G.textM,fontFamily:G.sans}}>
+                    Sort by
+                    <select value={manageTeacherSort} onChange={event=>setManageTeacherSort(event.target.value)} style={{border:`1px solid ${G.borderM}`,borderRadius:10,padding:"8px 10px",fontFamily:G.sans,fontSize:13,color:G.text,background:"#FFFFFF",outline:"none"}}>
+                      <option value="name">Name</option>
+                      <option value="count">Teacher count</option>
+                    </select>
+                  </label>
+                </div>
+              )}
 
               {scopedTeacherOnlyList.length===0
                 ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>{manageScopeInstitute ? "No teachers are connected to this institute yet." : "No teachers found yet."}</div>
                 :<div style={{display:"flex",flexDirection:"column",gap:12}}>
-                  {teacherInstitutes.map(inst=>{
-                    const instTeachers = scopedTeacherOnlyList.filter(t=>teacherBelongsToInstitute(t, inst) && matchesTeacher(t));
-                    if(!instTeachers.length) return null;
+                  {teacherInstituteGroups.map(({ inst, teachers: instTeachers })=>{
                     const isOpen = manageScopeInstitute ? true : openTeacherInstitute===inst;
                     return(
                       <div key={inst}>
                         {instituteAccordionHeader({
-                          icon:"🏫",
+                          icon:IconBuilding,
                           title:inst,
                           count:instTeachers.length,
                           countLabel:"teacher",
@@ -15181,7 +15204,7 @@ function AdminPanelInner({user}){
                   {teachersWithoutInstitute.length>0&&(
                     <div>
                       {instituteAccordionHeader({
-                        icon:"🏫",
+                        icon:IconBuilding,
                         title:"No Institute Assigned",
                         count:teachersWithoutInstitute.length,
                         countLabel:"teacher",
@@ -16442,7 +16465,7 @@ function AdminPanelInner({user}){
     );
 
   const renderDesktopProfileMenu = () => {
-    const profileAction = ({ icon, title, subtitle, onClick, danger = false, badge = null }) => (
+    const profileAction = ({ icon, title, subtitle = "", onClick, danger = false, badge = null }) => (
       <button
         type="button"
         onClick={onClick}
@@ -16464,7 +16487,7 @@ function AdminPanelInner({user}){
         </span>
         <span style={{minWidth:0,flex:1}}>
           <span style={{display:"block",fontSize:13.5,fontWeight:800,color:danger?G.red:G.text}}>{title}</span>
-          <span style={{display:"block",fontSize:11.5,color:danger?"#A94444":G.textM,lineHeight:1.4,marginTop:2}}>{subtitle}</span>
+          {subtitle&&<span style={{display:"block",fontSize:11.5,color:danger?"#A94444":G.textM,lineHeight:1.4,marginTop:2}}>{subtitle}</span>}
         </span>
         {badge!=null&&badge!==0&&(
           <span style={{background:danger?G.redL:G.blueL,color:danger?G.red:G.blue,borderRadius:999,padding:"4px 8px",fontSize:10.5,fontWeight:850,fontFamily:G.mono,flexShrink:0}}>{badge}</span>
@@ -16487,24 +16510,14 @@ function AdminPanelInner({user}){
           </div>
         </div>
         <div style={{padding:"12px"}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:7,marginBottom:10}}>
-            {adminWorkspaceStats.map(item=>(
-              <div key={item.key} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:11,padding:"9px 8px",minWidth:0}}>
-                <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
-                <div style={{fontSize:8.5,fontWeight:800,color:G.textL,textTransform:"uppercase",letterSpacing:0.35,fontFamily:G.mono,marginTop:6,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Workspace</div>
-          {profileAction({icon:IconChartBar,title:"Ledgr Report",subtitle:"Reports, PDFs, and centre summaries",onClick:()=>{setProfileOpen(false);openInstituteGlancePanel();},badge:instituteGlanceReport.ready?"Ready":null})}
-          {profileAction({icon:IconSend,title:"Messenger",subtitle:"Telegram live now, WhatsApp next, plus routing and schedule linkage",onClick:openLedgrTelegramDashboard,badge:ledgrTelegramLoading?null:(ledgrTelegramRecipientStats.active?`${ledgrTelegramRecipientStats.active} live`: "Setup")})}
-          {profileAction({icon:IconSettings,title:"Control Centre",subtitle:"Institutes, teachers, syllabus, and access",onClick:()=>{setProfileOpen(false);openManageTab("teachers");}})}
+          <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Quick access</div>
+          {profileAction({icon:IconSend,title:"Messenger",subtitle:"Routing, test sends, and daily delivery",onClick:openLedgrTelegramDashboard,badge:ledgrTelegramLoading?null:(ledgrTelegramRecipientStats.active?`${ledgrTelegramRecipientStats.active} live`: "Setup")})}
           <div style={{height:1,background:G.border,margin:"8px 0"}}/>
           <div style={{fontSize:9.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1,fontFamily:G.mono,padding:"4px 10px 5px"}}>Support</div>
           {profileAction({icon:IconMessageCircle,title:"Teacher Feedback",subtitle:"Read issues and send replies",onClick:()=>{setProfileOpen(false);openFeedbackInbox();},badge:feedbackUnreadCount})}
           {profileAction({icon:IconTrash,title:"Recycle Bin",subtitle:"Review deleted workspace records",onClick:()=>{setProfileOpen(false);setBinView(true);},badge:adminBin.length})}
           <div style={{height:1,background:G.border,margin:"8px 0"}}/>
-          {profileAction({icon:IconLogout,title:"Sign Out",subtitle:"Leave this admin session",onClick:()=>{setProfileOpen(false);logout();},danger:true})}
+          {profileAction({icon:IconLogout,title:"Sign Out",onClick:()=>{setProfileOpen(false);logout();},danger:true})}
         </div>
       </div>
     );
