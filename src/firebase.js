@@ -1457,6 +1457,9 @@ function normaliseLedgrScheduleTimes(times) {
     .sort((a, b) => a.localeCompare(b));
 }
 
+const LEDGR_HOBBY_BATCH_TIME = "20:00";
+const LEDGR_HOBBY_BATCH_TIMEZONE = "Asia/Kolkata";
+
 function normaliseTelegramChatId(value) {
   return String(value || "").trim().replace(/\s+/g, "");
 }
@@ -1513,11 +1516,8 @@ export async function getLedgrReportSchedule() {
 }
 
 export async function saveLedgrReportSchedule(schedule = {}, updatedBy = "") {
-  const times = normaliseLedgrScheduleTimes(schedule.times);
+  const times = [LEDGR_HOBBY_BATCH_TIME];
   const enabled = !!schedule.enabled;
-  if (enabled && !times.length) {
-    throw new Error("Add at least one valid report time.");
-  }
 
   const scopeType = schedule.scope?.type === "selected" ? "selected" : "all";
   const selectedInstitutes = scopeType === "selected"
@@ -1529,9 +1529,10 @@ export async function saveLedgrReportSchedule(schedule = {}, updatedBy = "") {
 
   const payload = {
     schemaVersion: 1,
+    mode: "daily_batch",
     enabled,
     times,
-    timezone: String(schedule.timezone || "Asia/Kolkata").trim() || "Asia/Kolkata",
+    timezone: LEDGR_HOBBY_BATCH_TIMEZONE,
     report: {
       period: ["daily", "weekly", "monthly", "range"].includes(schedule.report?.period)
         ? schedule.report.period

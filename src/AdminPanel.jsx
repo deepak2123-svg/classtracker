@@ -4791,10 +4791,8 @@ function LedgrReportOptionsModal({
   onApply,
   onSaveSchedule,
 }) {
-  const browserTimezone = React.useMemo(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
-    []
-  );
+  const hobbyBatchTime = "20:00";
+  const hobbyBatchTimezone = "Asia/Kolkata";
   const [actionMode, setActionMode] = React.useState(initialMode === "schedule" ? "schedule" : "export");
   const [draftPeriod, setDraftPeriod] = React.useState(period || "daily");
   const [draftMonth, setDraftMonth] = React.useState(month || currentMonthKey());
@@ -4804,8 +4802,8 @@ function LedgrReportOptionsModal({
   const [selectedInstitutes, setSelectedInstitutes] = React.useState(() => [...(institutes || [])]);
   const [format, setFormat] = React.useState("pdf");
   const [scheduleEnabled, setScheduleEnabled] = React.useState(schedule?.enabled !== false);
-  const [scheduleTimes, setScheduleTimes] = React.useState(() => schedule?.times?.length ? [...schedule.times] : ["09:00"]);
-  const [scheduleTimezone, setScheduleTimezone] = React.useState(schedule?.timezone || browserTimezone);
+  const [scheduleTimes, setScheduleTimes] = React.useState(() => schedule?.times?.length ? [...schedule.times] : [hobbyBatchTime]);
+  const [scheduleTimezone, setScheduleTimezone] = React.useState(schedule?.timezone || hobbyBatchTimezone);
   const busy = actionMode === "schedule" ? !!scheduleSaving : !!busyFormat;
   const allInstitutes = institutes || [];
 
@@ -4820,9 +4818,9 @@ function LedgrReportOptionsModal({
   React.useEffect(() => {
     if(!schedule) return;
     setScheduleEnabled(schedule.enabled !== false);
-    setScheduleTimes(schedule.times?.length ? [...schedule.times] : ["09:00"]);
-    setScheduleTimezone(schedule.timezone || browserTimezone);
-  }, [browserTimezone, schedule?.updatedAt]);
+    setScheduleTimes(schedule.times?.length ? [...schedule.times] : [hobbyBatchTime]);
+    setScheduleTimezone(schedule.timezone || hobbyBatchTimezone);
+  }, [hobbyBatchTime, hobbyBatchTimezone, schedule?.updatedAt]);
 
   React.useEffect(() => {
     setActionMode(initialMode === "schedule" ? "schedule" : "export");
@@ -4878,12 +4876,10 @@ function LedgrReportOptionsModal({
       : draftPeriod === "weekly"
         ? "Last 7 days"
         : "Today";
-  const validScheduleTimes = [...new Set(scheduleTimes.filter(value => /^([01]\d|2[0-3]):[0-5]\d$/.test(value)))].sort((a, b) => a.localeCompare(b));
   const scheduleLastRunAt = Number(schedule?.execution?.lastRunAt || schedule?.lastRunAt || 0);
   const actionDisabled = busy
     || effectiveInstitutes.length === 0
-    || (actionMode === "export" && exportDisabled)
-    || (actionMode === "schedule" && scheduleEnabled && validScheduleTimes.length === 0);
+    || (actionMode === "export" && exportDisabled);
 
   React.useEffect(() => {
     if(actionMode !== "schedule") return;
@@ -4906,21 +4902,6 @@ function LedgrReportOptionsModal({
     setActionMode(nextMode);
   };
 
-  const addScheduleTime = () => {
-    if(scheduleTimes.length >= 6) return;
-    const used = new Set(scheduleTimes);
-    const last = scheduleTimes[scheduleTimes.length - 1] || "08:00";
-    const [hours, minutes] = last.split(":").map(Number);
-    let candidateMinutes = ((Number.isFinite(hours) ? hours : 8) * 60 + (Number.isFinite(minutes) ? minutes : 0) + 60) % 1440;
-    let candidate = "";
-    for(let attempt = 0; attempt < 24; attempt += 1){
-      candidate = `${String(Math.floor(candidateMinutes / 60)).padStart(2, "0")}:${String(candidateMinutes % 60).padStart(2, "0")}`;
-      if(!used.has(candidate)) break;
-      candidateMinutes = (candidateMinutes + 60) % 1440;
-    }
-    setScheduleTimes(current => [...current, candidate || "09:00"]);
-  };
-
   const apply = () => {
     const safeStart = draftRangeStart && draftRangeEnd && draftRangeStart > draftRangeEnd ? draftRangeEnd : draftRangeStart;
     const safeEnd = draftRangeStart && draftRangeEnd && draftRangeStart > draftRangeEnd ? draftRangeStart : draftRangeEnd;
@@ -4933,8 +4914,8 @@ function LedgrReportOptionsModal({
     if(actionMode === "schedule"){
       onSaveSchedule({
         enabled:scheduleEnabled,
-        times:validScheduleTimes,
-        timezone:scheduleTimezone || browserTimezone,
+        times:[hobbyBatchTime],
+        timezone:hobbyBatchTimezone,
         report:reportConfig,
         scope:{
           type:scope,
@@ -4986,7 +4967,7 @@ function LedgrReportOptionsModal({
             </div>
             <div style={{minWidth:0}}>
               <div style={{fontSize:22,fontWeight:800,color:"#111827",fontFamily:G.display,lineHeight:1.1}}>Ledgr Report</div>
-              <div style={{fontSize:15,color:"#6B7280",fontFamily:G.sans,lineHeight:1.45,marginTop:4}}>{actionMode === "schedule" ? "Choose when this report should run" : "Choose period and output"}</div>
+              <div style={{fontSize:15,color:"#6B7280",fontFamily:G.sans,lineHeight:1.45,marginTop:4}}>{actionMode === "schedule" ? "Review the once-daily 8 PM batch" : "Choose period and output"}</div>
               <div style={{fontSize:12.5,color:G.blue,fontFamily:G.sans,fontWeight:800,lineHeight:1.4,marginTop:5}}>Institutes: {scopeLabel}</div>
             </div>
             <button type="button" onClick={onClose} disabled={busy} style={{marginLeft:"auto",border:"none",background:"transparent",color:"#9CA3AF",fontSize:28,lineHeight:1,cursor:busy?"not-allowed":"pointer",padding:2}}>×</button>
@@ -5152,7 +5133,7 @@ function LedgrReportOptionsModal({
             </div>
             {actionMode === "schedule" && (
               <div style={{fontSize:11.5,color:G.textL,lineHeight:1.45,marginTop:8}}>
-                Scheduled automation generates the executive PDF.
+                The scheduler sends one PDF batch per day for the selected institutes.
               </div>
             )}
           </div>
@@ -5160,41 +5141,20 @@ function LedgrReportOptionsModal({
           {actionMode === "schedule" && (
             <div style={{marginBottom:20}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10}}>
-                <div style={{...sectionLabel,marginBottom:0}}>Daily Times</div>
+                <div style={{...sectionLabel,marginBottom:0}}>Daily Batch</div>
                 <label style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800,color:scheduleEnabled?G.blue:G.textM,fontFamily:G.sans,cursor:busy?"not-allowed":"pointer"}}>
                   <input type="checkbox" checked={scheduleEnabled} onChange={event=>setScheduleEnabled(event.target.checked)} disabled={busy} style={{width:17,height:17,accentColor:G.blue}} />
                   {scheduleEnabled ? "Active" : "Paused"}
                 </label>
               </div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                {scheduleTimes.map((time, index) => (
-                  <div key={`${index}-${time}`} style={{display:"flex",alignItems:"center",gap:4,border:"1px solid #DDE3ED",borderRadius:12,background:"#F8FAFC",padding:"4px 5px 4px 9px"}}>
-                    <AppIcon icon={IconClock} size={16} color={G.blue} />
-                    <input
-                      type="time"
-                      value={time}
-                      disabled={busy}
-                      aria-label={`Report time ${index + 1}`}
-                      onChange={event=>setScheduleTimes(current=>current.map((item, itemIndex)=>itemIndex===index?event.target.value:item))}
-                      style={{width:112,height:34,border:"none",outline:"none",background:"transparent",color:G.text,fontSize:14,fontWeight:800,fontFamily:G.sans}}
-                    />
-                    <button
-                      type="button"
-                      title="Remove time"
-                      aria-label={`Remove report time ${index + 1}`}
-                      onClick={()=>setScheduleTimes(current=>current.filter((_, itemIndex)=>itemIndex!==index))}
-                      disabled={busy || scheduleTimes.length === 1}
-                      style={{width:32,height:32,border:"none",borderRadius:9,background:"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:busy||scheduleTimes.length===1?"not-allowed":"pointer",opacity:scheduleTimes.length===1?0.35:1}}>
-                      <AppIcon icon={IconTrash} size={16} color={G.red} />
-                    </button>
-                  </div>
-                ))}
-                {scheduleTimes.length < 6 && (
-                  <button type="button" onClick={addScheduleTime} disabled={busy} style={{height:44,border:"1px dashed #93C5FD",borderRadius:12,background:"#EFF6FF",color:G.blue,padding:"0 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:800,fontFamily:G.sans,cursor:busy?"not-allowed":"pointer"}}>
-                    <AppIcon icon={IconPlus} size={16} color={G.blue} />
-                    Add time
-                  </button>
-                )}
+              <div style={{border:"1px solid #DDE3ED",borderRadius:14,background:"#F8FAFC",padding:"12px 13px"}}>
+                <div style={{display:"inline-flex",alignItems:"center",gap:8,borderRadius:999,background:"#EEF2FF",color:G.blue,padding:"7px 12px",fontSize:12.5,fontWeight:800,fontFamily:G.sans}}>
+                  <AppIcon icon={IconClock} size={15} color={G.blue} />
+                  Around 8:00 PM daily
+                </div>
+                <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:10}}>
+                  Vercel Hobby runs this once during the 8 PM hour, then the batch sends one exact Ledgr PDF per active institute route.
+                </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,color:G.textL,lineHeight:1.45,marginTop:9}}>
                 <AppIcon icon={IconClock} size={15} color={G.textL} />
@@ -5205,7 +5165,7 @@ function LedgrReportOptionsModal({
                   ? "Loading the saved schedule..."
                   : scheduleLastRunAt
                     ? `Background runner connected. Last generated ${new Date(scheduleLastRunAt).toLocaleString("en-IN")}.`
-                    : "This saves the automation schedule. Background generation begins after the Firebase server runner is deployed."}
+                    : "This saves the once-daily 8 PM batch. Background generation begins after the admin deployment is live."}
               </div>
             </div>
           )}
@@ -5213,7 +5173,7 @@ function LedgrReportOptionsModal({
           <div style={{background:"#F8FAFC",borderRadius:14,padding:"12px 14px",fontSize:14,color:"#374151",fontFamily:G.sans,lineHeight:1.35}}>
             <AppIcon icon={actionMode === "schedule" ? IconClock : IconCalendar} size={16} color={G.blue} style={{display:"inline-flex",verticalAlign:"-3px",marginRight:7}} />
             <strong>{scopeLabel}</strong> · {rangeLabel} · {actionMode === "schedule"
-              ? `${scheduleEnabled ? validScheduleTimes.length : 0} daily run${validScheduleTimes.length === 1 ? "" : "s"}`
+              ? (scheduleEnabled ? "Daily batch around 8 PM" : "Schedule paused")
               : format === "pdf" ? "opens print dialog" : format === "png" ? "downloads image" : "downloads centre ZIP"}
           </div>
         </div>
@@ -5579,11 +5539,7 @@ function LedgrTelegramDashboardModal({
   const missingInstituteCount = missingInstitutes.length;
   const scheduleSummary = !scheduledEnabled
     ? "Schedule off"
-    : scheduleTimes.length === 0
-      ? "Schedule not set"
-      : scheduleTimes.length === 1
-        ? `Daily at ${scheduleTimes[0]}`
-        : `${scheduleTimes.length} daily slots`;
+    : "Daily 8 PM batch";
   const headerStatus = deliveryProbe.checking
     ? { label:"Checking route", background:"#DBEAFE", color:G.blue }
     : routeIssue
@@ -5901,10 +5857,10 @@ function LedgrTelegramDashboardModal({
                     },
                     {
                       key:"scheduled",
-                      title:"Use daily schedule",
+                      title:"Use daily 8 PM batch",
                       value:scheduledEnabled,
                       onChange:setScheduledEnabled,
-                      help:"Lets the saved Ledgr schedule send automatically.",
+                      help:"Sends one daily Telegram batch for all active institute routes.",
                     },
                     {
                       key:"manual",
@@ -5953,13 +5909,13 @@ function LedgrTelegramDashboardModal({
                     </div>
                   </div>
                   <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
-                    <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Daily schedule</div>
+                    <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Daily batch</div>
                     <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
                       {scheduleSaved
                         ? backgroundRunnerReady
-                          ? `Saved and linked to ${scheduleTimes.length} run${scheduleTimes.length === 1 ? "" : "s"}.`
-                          : "Saved, but the scheduler runner is not connected yet."
-                        : "No daily schedule saved yet."}
+                          ? "Saved and linked to the 8 PM daily batch."
+                          : "Saved, but the once-daily batch runner is not connected yet."
+                        : "No daily batch saved yet."}
                     </div>
                   </div>
                   <div style={{border:`1px solid ${lastErrorMessage ? "#FECACA" : "#E2E8F0"}`,borderRadius:16,background:lastErrorMessage ? "#FEF2F2" : "#F8FAFC",padding:"13px 14px"}}>
@@ -5977,7 +5933,7 @@ function LedgrTelegramDashboardModal({
                   <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#FFFFFF",padding:"13px 14px"}}>
                     <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Open report schedule</div>
                     <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6,marginBottom:10}}>
-                      Use the same Ledgr schedule that already drives report generation.
+                      Review the once-daily 8 PM batch that drives Telegram delivery.
                     </div>
                     <button type="button" onClick={onOpenSchedule} disabled={actionBusy} style={secondaryButtonStyle}>
                       <AppIcon icon={IconClock} size={15} color={G.text} />

@@ -143,14 +143,14 @@ async function finalizeScheduledRun({
 function buildHealthPayload(schedule = {}, telegramConfig = {}, slot) {
   return {
     ok: true,
+    mode: slot.mode || "daily_batch",
     scheduleEnabled: !!schedule?.enabled,
     messengerEnabled: telegramConfig?.enabled !== false,
     scheduledDeliveryEnabled: telegramConfig?.delivery?.scheduledEnabled !== false,
     timeZone: slot.timeZone,
     localDateKey: slot.dateContext.todayKey,
     localTimeKey: slot.dateContext.currentTimeKey,
-    due: slot.due,
-    dueTimeKey: slot.dueTimeKey,
+    batchTimeKey: slot.dueTimeKey,
     slotKey: slot.slotKey,
     scheduleTimes: slot.times,
     lastRunAt: Number(schedule?.execution?.lastRunAt || schedule?.lastRunAt || 0),
@@ -185,9 +185,6 @@ export default async function handler(req, res) {
   }
   if (telegramConfig?.enabled === false || telegramConfig?.delivery?.scheduledEnabled === false) {
     return sendJson(res, 200, { ok: true, state: "paused", ...buildHealthPayload(schedule, telegramConfig, slot) });
-  }
-  if (!slot.due) {
-    return sendJson(res, 200, { ok: true, state: "not_due", ...buildHealthPayload(schedule, telegramConfig, slot) });
   }
 
   const claim = await claimScheduledSlot(scheduleRef, slot);

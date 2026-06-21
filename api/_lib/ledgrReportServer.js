@@ -1725,25 +1725,22 @@ function buildScopedRecipients(schedule = {}, telegramConfig = {}) {
   );
 }
 
-export function getDueScheduledSlot(schedule = {}, now = new Date(), graceMinutes = 3) {
+const HOBBY_BATCH_TIME_KEY = "20:00";
+
+export function getDueScheduledSlot(schedule = {}, now = new Date()) {
   const timeZone = String(schedule?.timezone || "Asia/Kolkata").trim() || "Asia/Kolkata";
   const dateContext = buildDateContext(timeZone, now);
-  const times = normaliseLedgrScheduleTimes(schedule?.times || []);
+  const times = [HOBBY_BATCH_TIME_KEY];
   const enabled = !!schedule?.enabled;
-  const nowMinutes = parseClockMins(dateContext.currentTimeKey);
-  const dueTime = times
-    .map(time => ({ time, minutes: parseClockMins(time) }))
-    .filter(item => item.minutes !== null && nowMinutes !== null && nowMinutes >= item.minutes && (nowMinutes - item.minutes) <= graceMinutes)
-    .sort((a, b) => b.minutes - a.minutes)[0] || null;
   return {
     enabled,
+    mode: "daily_batch",
     timeZone,
     times,
     dateContext,
-    graceMinutes,
-    due: !!enabled && !!dueTime,
-    dueTimeKey: dueTime?.time || "",
-    slotKey: dueTime ? `${dateContext.todayKey}@${dueTime.time}` : "",
+    due: !!enabled,
+    dueTimeKey: HOBBY_BATCH_TIME_KEY,
+    slotKey: `${dateContext.todayKey}@${HOBBY_BATCH_TIME_KEY}`,
   };
 }
 
