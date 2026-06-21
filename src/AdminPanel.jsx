@@ -11653,13 +11653,14 @@ function AdminPanelInner({user}){
       gap:6,
       WebkitTapHighlightColor:"transparent",
     };
+    const scheduleButtonBusy = !!ledgrReportScheduleSaving;
     return (
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
         <button
           type="button"
           className="admin-mobile-touch"
-          onClick={()=>openInstituteGlanceOptions("export")}
-          disabled={!!instituteGlanceAnyExportBusy}
+          onClick={()=>openInstituteGlanceOptions("schedule", "report")}
+          disabled={scheduleButtonBusy}
           style={{
             ...baseButtonStyle,
             minWidth:compact ? 170 : 210,
@@ -11667,7 +11668,8 @@ function AdminPanelInner({user}){
             background:G.blueL,
             border:`1px solid #BFDBFE`,
             color:G.blue,
-            cursor:instituteGlanceAnyExportBusy ? "not-allowed" : "pointer",
+            cursor:scheduleButtonBusy ? "not-allowed" : "pointer",
+            opacity:scheduleButtonBusy ? 0.65 : 1,
           }}>
           <span style={{display:"inline-flex",alignItems:"center",gap:7,minWidth:0}}>
             <AppIcon icon={IconCalendar} size={15} color={G.blue} />
@@ -11678,6 +11680,20 @@ function AdminPanelInner({user}){
               ? `${ledgrReportSchedule.times?.length || 0} ${ledgrReportSchedule?.execution?.lastRunAt || ledgrReportSchedule?.lastRunAt ? "scheduled" : "saved"}`
               : "Options"}
           </span>
+        </button>
+        <button
+          type="button"
+          className="admin-mobile-touch"
+          onClick={()=>openInstituteGlanceOptions("export", "report")}
+          disabled={!!instituteGlanceAnyExportBusy}
+          style={{
+            ...baseButtonStyle,
+            minWidth:compact ? 96 : 108,
+            cursor:instituteGlanceAnyExportBusy ? "not-allowed" : "pointer",
+            opacity:instituteGlanceAnyExportBusy ? 0.65 : 1,
+          }}>
+          <AppIcon icon={IconDownload} size={15} color={G.text} />
+          Export
         </button>
         <button
           type="button"
