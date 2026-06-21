@@ -1464,19 +1464,26 @@ function normaliseTelegramChatId(value) {
   return String(value || "").trim().replace(/\s+/g, "");
 }
 
+function normaliseTelegramUsername(value) {
+  const clean = String(value || "").trim().replace(/\s+/g, "");
+  if (!clean) return "";
+  return clean.startsWith("@") ? clean : `@${clean}`;
+}
+
 function normaliseLedgrTelegramRecipients(list) {
   const seen = new Set();
   return (list || [])
     .map((item, index) => {
       const institute = String(item?.institute || "").trim().replace(/\s+/g, " ");
       const label = String(item?.label || "").trim();
+      const username = normaliseTelegramUsername(item?.username);
       const chatId = normaliseTelegramChatId(item?.chatId);
       const notes = String(item?.notes || "").trim();
       const destinationType = ["channel", "group", "private"].includes(item?.destinationType)
         ? item.destinationType
         : "channel";
       const enabled = item?.enabled !== false;
-      const touched = institute || label || chatId || notes;
+      const touched = institute || label || username || chatId || notes;
       if (!touched) return null;
       if (!institute) {
         throw new Error(`Telegram destination ${index + 1} is missing an institute.`);
@@ -1487,6 +1494,9 @@ function normaliseLedgrTelegramRecipients(list) {
       if (!/^-?\d{5,}$/.test(chatId)) {
         throw new Error(`Telegram chat id for ${institute} looks invalid.`);
       }
+      if (username && !/^@?[A-Za-z0-9_]{5,}$/.test(username)) {
+        throw new Error(`Telegram username for ${institute} looks invalid.`);
+      }
       const dedupeKey = `${institute.toLowerCase()}__${chatId}`;
       if (seen.has(dedupeKey)) return null;
       seen.add(dedupeKey);
@@ -1496,6 +1506,47 @@ function normaliseLedgrTelegramRecipients(list) {
           .replace(/\s+/g, "_"),
         institute,
         label,
+        username,
+        chatId,
+        notes,
+        destinationType,
+        enabled,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normaliseLedgrTelegramFullReportRecipients(list) {
+  const seen = new Set();
+  return (list || [])
+    .map((item, index) => {
+      const label = String(item?.label || "").trim();
+      const username = normaliseTelegramUsername(item?.username);
+      const chatId = normaliseTelegramChatId(item?.chatId);
+      const notes = String(item?.notes || "").trim();
+      const destinationType = ["channel", "group", "private"].includes(item?.destinationType)
+        ? item.destinationType
+        : "private";
+      const enabled = item?.enabled !== false;
+      const touched = label || username || chatId || notes;
+      if (!touched) return null;
+      if (!chatId) {
+        throw new Error(`Complete report recipient ${index + 1} is missing a chat id.`);
+      }
+      if (!/^-?\d{5,}$/.test(chatId)) {
+        throw new Error(`Complete report chat id ${index + 1} looks invalid.`);
+      }
+      if (username && !/^@?[A-Za-z0-9_]{5,}$/.test(username)) {
+        throw new Error(`Complete report username ${index + 1} looks invalid.`);
+      }
+      if (seen.has(chatId)) return null;
+      seen.add(chatId);
+      return {
+        id: String(item?.id || `telegram_full_${chatId}_${index + 1}`)
+          .trim()
+          .replace(/\s+/g, "_"),
+        label,
+        username,
         chatId,
         notes,
         destinationType,
@@ -1576,9 +1627,10 @@ export async function saveLedgrTelegramConfig(config = {}, updatedBy = "") {
     ? (botUsernameRaw.startsWith("@") ? botUsernameRaw : `@${botUsernameRaw}`)
     : "";
   const recipients = normaliseLedgrTelegramRecipients(config.recipients);
+  const fullReportRecipients = normaliseLedgrTelegramFullReportRecipients(config.fullReportRecipients);
 
   const payload = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     transport: "telegram",
     tokenMode: "server_env",
     enabled: config.enabled !== false,
@@ -1589,6 +1641,7 @@ export async function saveLedgrTelegramConfig(config = {}, updatedBy = "") {
       reportFormat: "pdf",
     },
     recipients,
+    fullReportRecipients,
     updatedAt: Date.now(),
     updatedBy: String(updatedBy || "").trim(),
   };

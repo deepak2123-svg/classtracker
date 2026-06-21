@@ -23,12 +23,15 @@ function parseBody(req) {
 function normaliseRouteRecipient(item, index = 0) {
   const id = String(item?.id || item?.recipientId || "").trim();
   const institute = String(item?.institute || "").trim();
+  const usernameRaw = String(item?.username || "").trim().replace(/\s+/g, "");
+  const username = usernameRaw ? (usernameRaw.startsWith("@") ? usernameRaw : `@${usernameRaw}`) : "";
   const chatId = String(item?.chatId || "").trim().replace(/\s+/g, "");
-  if (!id || !institute || !chatId) return null;
+  if (!id || !chatId) return null;
   return {
     id,
     institute,
     label: String(item?.label || "").trim(),
+    username,
     chatId,
     notes: String(item?.notes || "").trim(),
     destinationType: ["channel", "group", "private"].includes(item?.destinationType)
@@ -181,6 +184,7 @@ export default async function handler(req, res) {
           recipientId,
           institute: recipient.institute || "",
           label: recipient.label || "",
+          username: recipient.username || "",
           chatId: recipient.chatId || "",
           ok: true,
           messageId: telegramResult?.message_id || null,
@@ -190,6 +194,7 @@ export default async function handler(req, res) {
           recipientId,
           institute: recipient.institute || "",
           label: recipient.label || "",
+          username: recipient.username || "",
           chatId: recipient.chatId || "",
           ok: false,
           error: error?.message || "Telegram send failed.",

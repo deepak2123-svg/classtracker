@@ -1,0 +1,43 @@
+name: Ledgr Telegram Daily Batch
+
+on:
+  schedule:
+    - cron: "30 14 * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger-daily-batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate scheduler secrets
+        env:
+          LEDGR_SCHEDULER_URL: ${{ secrets.LEDGR_SCHEDULER_URL }}
+          LEDGR_SCHEDULER_SECRET: ${{ secrets.LEDGR_SCHEDULER_SECRET }}
+        run: |
+          if [ -z "$LEDGR_SCHEDULER_URL" ]; then
+            echo "Missing LEDGR_SCHEDULER_URL GitHub secret."
+            exit 1
+          fi
+          if [ -z "$LEDGR_SCHEDULER_SECRET" ]; then
+            echo "Missing LEDGR_SCHEDULER_SECRET GitHub secret."
+            exit 1
+          fi
+
+      - name: Trigger Ledgr Telegram scheduler
+        env:
+          LEDGR_SCHEDULER_URL: ${{ secrets.LEDGR_SCHEDULER_URL }}
+          LEDGR_SCHEDULER_SECRET: ${{ secrets.LEDGR_SCHEDULER_SECRET }}
+        run: |
+          http_code=$(curl -sS \
+            --retry 3 \
+            --retry-delay 10 \
+            --retry-all-errors \
+            -H "User-Agent: ledgr-github-scheduler/1.0" \
+            -H "x-ledgr-scheduler-secret: ${LEDGR_SCHEDULER_SECRET}" \
+            -o response.json \
+            -w "%{http_code}" \
+            "${LEDGR_SCHEDULER_URL}")
+          cat response.json
+          export HTTP_CODE="$http_code"
+          node -e "const fs=require('fs'); const raw=fs.readFileSync('response.json','utf8'); let payload={}; try{payload=JSON.parse(raw);}catch(error){console.error('Scheduler returned non-JSON response'); process.exit(1);} const code=Number(process.env.HTTP_CODE||0); if(code>=400 || payload.ok===false){console.error('Daily batch failed', { code, state: payload.state, error: payload.error || '', partial: payload.partial || false }); process.exit(1);} console.log('Daily batch completed', { code, state: payload.state || 'ok' });"

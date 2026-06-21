@@ -1663,19 +1663,26 @@ export function normaliseTelegramChatId(value) {
   return String(value || "").trim().replace(/\s+/g, "");
 }
 
+function normaliseTelegramUsername(value) {
+  const clean = String(value || "").trim().replace(/\s+/g, "");
+  if (!clean) return "";
+  return clean.startsWith("@") ? clean : `@${clean}`;
+}
+
 function normaliseLedgrTelegramRecipients(list) {
   const seen = new Set();
   return (list || [])
     .map((item, index) => {
       const institute = String(item?.institute || "").trim().replace(/\s+/g, " ");
       const label = String(item?.label || "").trim();
+      const username = normaliseTelegramUsername(item?.username);
       const chatId = normaliseTelegramChatId(item?.chatId);
       const notes = String(item?.notes || "").trim();
       const destinationType = ["channel", "group", "private"].includes(item?.destinationType)
         ? item.destinationType
         : "channel";
       const enabled = item?.enabled !== false;
-      const touched = institute || label || chatId || notes;
+      const touched = institute || label || username || chatId || notes;
       if (!touched) return null;
       if (!institute || !chatId || !/^-?\d{5,}$/.test(chatId)) return null;
       const dedupeKey = `${institute.toLowerCase()}__${chatId}`;
@@ -1685,6 +1692,37 @@ function normaliseLedgrTelegramRecipients(list) {
         id: String(item?.id || `${institute}_${chatId}_${index + 1}`).trim().replace(/\s+/g, "_"),
         institute,
         label,
+        username,
+        chatId,
+        notes,
+        destinationType,
+        enabled,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normaliseLedgrTelegramFullReportRecipients(list) {
+  const seen = new Set();
+  return (list || [])
+    .map((item, index) => {
+      const label = String(item?.label || "").trim();
+      const username = normaliseTelegramUsername(item?.username);
+      const chatId = normaliseTelegramChatId(item?.chatId);
+      const notes = String(item?.notes || "").trim();
+      const destinationType = ["channel", "group", "private"].includes(item?.destinationType)
+        ? item.destinationType
+        : "private";
+      const enabled = item?.enabled !== false;
+      const touched = label || username || chatId || notes;
+      if (!touched) return null;
+      if (!chatId || !/^-?\d{5,}$/.test(chatId)) return null;
+      if (seen.has(chatId)) return null;
+      seen.add(chatId);
+      return {
+        id: String(item?.id || `telegram_full_${chatId}_${index + 1}`).trim().replace(/\s+/g, "_"),
+        label,
+        username,
         chatId,
         notes,
         destinationType,
@@ -1725,6 +1763,11 @@ function buildScopedRecipients(schedule = {}, telegramConfig = {}) {
   );
 }
 
+function buildFullReportRecipients(telegramConfig = {}) {
+  return normaliseLedgrTelegramFullReportRecipients(telegramConfig?.fullReportRecipients || [])
+    .filter(item => item.enabled !== false);
+}
+
 const HOBBY_BATCH_TIME_KEY = "20:00";
 
 export function getDueScheduledSlot(schedule = {}, now = new Date()) {
@@ -1755,10 +1798,12 @@ function instituteCaption(row) {
 export async function buildScheduledTelegramJobs({ db, schedule = {}, telegramConfig = {}, now = new Date() }) {
   const dateContext = buildDateContext(String(schedule?.timezone || "Asia/Kolkata").trim() || "Asia/Kolkata", now);
   const recipients = buildScopedRecipients(schedule, telegramConfig);
-  if (!recipients.length) {
+  const fullReportRecipients = buildFullReportRecipients(telegramConfig);
+  if (!recipients.length && !fullReportRecipients.length) {
     return {
       dateContext,
       recipients: [],
+      fullReportRecipients: [],
       rows: [],
       summary: { ...EMPTY_INSTITUTE_GLANCE_SUMMARY },
       jobs: [],
@@ -1770,18 +1815,26 @@ export async function buildScheduledTelegramJobs({ db, schedule = {}, telegramCo
     };
   }
 
-  const requestedInstitutes = uniqueTrimmed(recipients.map(item => item.institute));
   const { period, rangeStartKey, rangeEndKey } = resolveScheduleReportWindow(schedule, dateContext);
-  const scopeLabel = schedule?.scope?.type === "selected"
-    ? `${requestedInstitutes.length} institute${requestedInstitutes.length === 1 ? "" : "s"} selected`
-    : "All institutes";
-
   const [allTeachers, roles, syllabusTemplates, instituteSections] = await Promise.all([
     readAllTeacherSummaries(db),
     readAllRoles(db),
     readSyllabusTemplates(db),
     readInstituteSections(db),
   ]);
+
+  const requestedInstitutes = (() => {
+    if (recipients.length) {
+      return uniqueTrimmed(recipients.map(item => item.institute));
+    }
+    if (schedule?.scope?.type === "selected") {
+      return uniqueTrimmed(schedule?.scope?.institutes || []);
+    }
+    return uniqueTrimmed(allTeachers.flatMap(teacher => teacher?.institutes || []));
+  })();
+  const scopeLabel = schedule?.scope?.type === "selected"
+    ? `${requestedInstitutes.length} institute${requestedInstitutes.length === 1 ? "" : "s"} selected`
+    : "All institutes";
 
   const relevantTeachers = allTeachers.filter(teacher =>
     requestedInstitutes.some(institute =>
@@ -1827,12 +1880,41 @@ export async function buildScheduledTelegramJobs({ db, schedule = {}, telegramCo
       filename: instituteGlancePdfFilename(recipient.institute, period, rangeStartKey, rangeEndKey, dateContext),
       caption: instituteCaption(row || recipient),
       html,
+      reportKind: "institute",
     };
   });
+  if (fullReportRecipients.length) {
+    const html = buildInstituteGlanceSummaryHtml({
+      rows,
+      summary,
+      generatedOnLabel,
+      period,
+      rangeStartKey,
+      rangeEndKey,
+      scopeLabel,
+      dateContext,
+    });
+    fullReportRecipients.forEach(recipient => {
+      jobs.push({
+        recipientId: recipient.id,
+        institute: "",
+        label: recipient.label || "",
+        username: recipient.username || "",
+        chatId: recipient.chatId,
+        destinationType: recipient.destinationType || "private",
+        notes: recipient.notes || "",
+        filename: allInstitutesGlancePdfFilename(period, rangeStartKey, rangeEndKey, dateContext),
+        caption: `Ledgr Report | ${scopeLabel}`,
+        html,
+        reportKind: "full_report",
+      });
+    });
+  }
 
   return {
     dateContext,
     recipients,
+    fullReportRecipients,
     rows,
     summary,
     jobs,
@@ -1846,4 +1928,8 @@ export async function buildScheduledTelegramJobs({ db, schedule = {}, telegramCo
 
 function instituteGlancePdfFilename(instituteName, period = "daily", rangeStartKey = "", rangeEndKey = "", dateContext = buildDateContext()) {
   return `${slugifyDownloadPart(instituteName)}_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey, dateContext).filePart}_ledgr_report_${dateContext.todayKey}.pdf`;
+}
+
+function allInstitutesGlancePdfFilename(period = "daily", rangeStartKey = "", rangeEndKey = "", dateContext = buildDateContext()) {
+  return `all_institutes_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey, dateContext).filePart}_ledgr_report_${dateContext.todayKey}.pdf`;
 }

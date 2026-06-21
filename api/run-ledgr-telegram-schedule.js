@@ -11,8 +11,12 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function isCronRequest(req) {
-  return /vercel-cron/i.test(String(req.headers["user-agent"] || req.headers["User-Agent"] || ""));
+function isTrustedSchedulerRequest(req) {
+  const userAgent = String(req.headers["user-agent"] || req.headers["User-Agent"] || "");
+  if (/vercel-cron/i.test(userAgent)) return true;
+  const expectedSecret = String(process.env.LEDGR_SCHEDULER_SECRET || "").trim();
+  const providedSecret = String(req.headers["x-ledgr-scheduler-secret"] || "").trim();
+  return !!expectedSecret && !!providedSecret && providedSecret === expectedSecret;
 }
 
 function createRunError(message, { consumeSlot = false } = {}) {
@@ -176,7 +180,7 @@ export default async function handler(req, res) {
   const telegramConfig = telegramSnap.exists ? (telegramSnap.data() || {}) : {};
   const slot = getDueScheduledSlot(schedule, new Date());
 
-  if (!isCronRequest(req)) {
+  if (!isTrustedSchedulerRequest(req)) {
     return sendJson(res, 200, buildHealthPayload(schedule, telegramConfig, slot));
   }
 
