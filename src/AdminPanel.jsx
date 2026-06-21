@@ -5559,46 +5559,89 @@ function LedgrTelegramDashboardModal({
     });
   };
 
-  const summaryCards = [
+  const routeCount = configuredRecipients.length;
+  const missingCoverageCount = Math.max((institutes || []).length - coveredInstitutes.length, 0);
+  const botReady = !!normaliseTelegramBotUsername(botUsername);
+  const mappingReady = routeCount > 0;
+  const manualSendReady = !deliveryProbe.checking && !routeIssue && !tokenMissingOnServer && manualRouteReady;
+  const scheduleSaved = !!schedule?.enabled && scheduleTimes.length > 0;
+  const pilotRecipient = recipients.find(item => item.institute && normaliseTelegramChatId(item.chatId)) || recipients[0] || null;
+  const setupSteps = [
     {
-      label:"Configured routes",
-      value:String(configuredRecipients.length),
-      hint:`${activeRecipients.length} active`,
-      tone:"#DBEAFE",
-      accent:G.blue,
+      key:"bot",
+      number:"1",
+      title:"Bot",
+      status:botReady ? "done" : "pending",
+      hint:botReady ? normaliseTelegramBotUsername(botUsername) : "Add the bot username",
     },
     {
-      label:"Institutes covered",
-      value:String(coveredInstitutes.length),
-      hint:`${Math.max((institutes || []).length - coveredInstitutes.length, 0)} pending`,
-      tone:"#E8F8EF",
-      accent:"#198754",
+      key:"route",
+      number:"2",
+      title:"First route",
+      status:mappingReady ? "done" : "pending",
+      hint:mappingReady
+        ? `${routeCount} saved route${routeCount === 1 ? "" : "s"}`
+        : "Map one institute first",
     },
     {
-      label:"Schedule link",
-      value:scheduledEnabled && schedule?.enabled
-        ? `${scheduleTimes.length || 0} run${scheduleTimes.length === 1 ? "" : "s"}`
-        : scheduledEnabled
-          ? "Waiting"
-          : "Paused",
-      hint:schedule?.enabled
+      key:"test",
+      number:"3",
+      title:"Test send",
+      status:manualSendReady ? "live" : "pending",
+      hint:deliveryProbe.checking
+        ? "Checking route"
+        : routeIssue
+          ? "API route blocked"
+          : tokenMissingOnServer
+            ? "Server token missing"
+            : manualRouteReady
+              ? "Ready now"
+              : "Not ready yet",
+    },
+    {
+      key:"auto",
+      number:"4",
+      title:"Automation",
+      status:scheduleSaved ? "done" : "pending",
+      hint:scheduleSaved
         ? backgroundRunnerReady
-          ? "Uses the Ledgr report schedule"
-          : "Schedule saved; runner not connected yet"
-        : "No active report schedule yet",
-      tone:"#FEF3C7",
-      accent:G.amber,
-    },
-    {
-      label:"Last delivery",
-      value:lastSuccessAt
-        ? new Date(lastSuccessAt).toLocaleDateString("en-IN", { day:"numeric", month:"short" })
-        : "Not yet",
-      hint:lastDeliveryHint,
-      tone:"#F3E8FF",
-      accent:"#7C3AED",
+          ? "Daily delivery linked"
+          : "Runner not connected yet"
+        : "Save the daily schedule",
     },
   ];
+  const nextAction = deliveryProbe.checking
+    ? { label:"Checking send route", background:"#DBEAFE", color:G.blue }
+    : routeIssue
+      ? { label:"Fix API route", background:"#FEE2E2", color:"#B91C1C" }
+      : tokenMissingOnServer
+        ? { label:"Add TELEGRAM_BOT_TOKEN", background:"#FEF3C7", color:"#B45309" }
+        : !mappingReady
+          ? { label:"Add first route", background:"#FEF3C7", color:"#B45309" }
+          : !manualSendReady
+            ? { label:"Verify manual send", background:"#FEF3C7", color:"#B45309" }
+            : !backgroundRunnerReady && scheduleSaved
+              ? { label:"Connect scheduler", background:"#FEF3C7", color:"#B45309" }
+              : { label:"Ready to use", background:"#DCFCE7", color:"#166534" };
+  const stepTagStyle = (status) => ({
+    borderRadius:999,
+    padding:"6px 10px",
+    fontSize:10.5,
+    fontWeight:800,
+    fontFamily:G.mono,
+    letterSpacing:0.5,
+    textTransform:"uppercase",
+    background:status === "done"
+      ? "#DCFCE7"
+      : status === "live"
+        ? "#DBEAFE"
+        : "#FEF3C7",
+    color:status === "done"
+      ? "#166534"
+      : status === "live"
+        ? G.blue
+        : "#B45309",
+  });
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.64)",zIndex:10020,display:"flex",alignItems:"stretch",justifyContent:"stretch",padding:0,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
@@ -5627,298 +5670,357 @@ function LedgrTelegramDashboardModal({
       <div className="ledgr-telegram-modal" style={{width:"100vw",height:"100dvh",maxWidth:"100vw",background:"#F8FAFC",borderRadius:0,boxShadow:"none",maxHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div className="ledgr-telegram-scroll" style={{overflowY:"auto",minHeight:0,flex:1,padding:"24px 24px 14px"}}>
           <div style={{width:"100%",maxWidth:1480,margin:"0 auto"}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:18}}>
-            <div style={{display:"flex",gap:14,minWidth:0,flex:1}}>
-              <div style={{width:56,height:56,borderRadius:18,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <AppIcon icon={IconSend} size={26} color={G.blue} />
-              </div>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>Messenger feature</div>
-                <div style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.04,marginTop:6}}>Messenger delivery</div>
-                <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:760}}>
-                  Telegram routing is live now, with schedule linkage, institute mapping, and delivery health ready for a broader Messenger surface that can also absorb WhatsApp next.
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:18}}>
+              <div style={{display:"flex",gap:14,minWidth:0,flex:1}}>
+                <div style={{width:56,height:56,borderRadius:18,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <AppIcon icon={IconSend} size={26} color={G.blue} />
+                </div>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase"}}>Messenger feature</div>
+                  <div style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.04,marginTop:6}}>Messenger delivery</div>
+                  <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:760}}>
+                    Set one route, test one send, then turn on daily delivery.
+                  </div>
                 </div>
               </div>
-            </div>
-            <button type="button" onClick={onClose} disabled={!!saving} style={{height:42,padding:"0 14px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:13,fontWeight:800,fontFamily:G.sans,cursor:saving?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:7,flexShrink:0}}>
-              <AppIcon icon={IconX} size={16} color={G.text} />
-              Close
-            </button>
-          </div>
-
-          <div className="ledgr-telegram-summary-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:16}}>
-            {summaryCards.map(card => (
-              <div key={card.label} style={smallStatStyle}>
-                <div style={{display:"inline-flex",alignItems:"center",gap:7,padding:"5px 9px",borderRadius:999,background:card.tone,color:card.accent,fontSize:10.5,fontWeight:800,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6}}>
-                  {card.label}
-                </div>
-                <div style={{fontSize:24,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:14}}>{card.value}</div>
-                <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5,marginTop:8}}>{card.hint}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="ledgr-telegram-dashboard-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,1.1fr) minmax(0,0.9fr)",gap:14,marginBottom:14}}>
-            <div style={sectionCardStyle}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14}}>
-                <div>
-                  <div style={labelStyle}>Integration control</div>
-                  <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Ops defaults</div>
-                </div>
-                <span style={{background:enabled ? "#DCFCE7" : "#F3F4F6",color:enabled ? "#166534" : G.textM,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>
-                  {enabled ? "Active" : "Paused"}
+              <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                <span style={{background:nextAction.background,color:nextAction.color,borderRadius:999,padding:"10px 14px",fontSize:12,fontWeight:800,fontFamily:G.sans}}>
+                  {nextAction.label}
                 </span>
-              </div>
-
-              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:12}}>
-                <div style={{gridColumn:"1 / -1"}}>
-                  <div style={labelStyle}>Bot username</div>
-                  <input value={botUsername} onChange={event=>setBotUsername(event.target.value)} disabled={actionBusy} placeholder="@ledgrapp_bot" style={inputStyle} />
-                  <div style={{fontSize:11.5,color:G.textL,lineHeight:1.5,marginTop:8}}>
-                    Store the Telegram bot token in the server environment. This dashboard only stores routing and operational metadata.
-                  </div>
-                </div>
-
-                {[
-                  {
-                    key:"enabled",
-                    title:"Delivery active",
-                    value:enabled,
-                    onChange:setEnabled,
-                    help:"Master switch for Telegram sends across scheduled and manual flows.",
-                  },
-                  {
-                    key:"scheduled",
-                    title:"Scheduled sends",
-                    value:scheduledEnabled,
-                    onChange:setScheduledEnabled,
-                    help:"Allows the background runner to push the saved Ledgr report schedule.",
-                  },
-                  {
-                    key:"manual",
-                    title:"On-demand sends",
-                    value:onDemandEnabled,
-                    onChange:setOnDemandEnabled,
-                    help:"Keeps the admin-triggered send-now path available once the server endpoint is live.",
-                  },
-                ].map(item => (
-                  <label key={item.key} style={{display:"flex",alignItems:"flex-start",gap:10,border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 13px 12px",cursor:actionBusy?"not-allowed":"pointer"}}>
-                    <input type="checkbox" checked={item.value} disabled={actionBusy} onChange={event=>item.onChange(event.target.checked)} style={{width:18,height:18,marginTop:2,accentColor:G.blue,flexShrink:0}} />
-                    <span style={{minWidth:0}}>
-                      <span style={{display:"block",fontSize:13.5,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.25}}>{item.title}</span>
-                      <span style={{display:"block",fontSize:11.5,color:G.textM,lineHeight:1.45,marginTop:5}}>{item.help}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div style={sectionCardStyle}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14}}>
-                <div>
-                  <div style={labelStyle}>Health</div>
-                  <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Backend posture</div>
-                </div>
-                <span style={{background:backendStatus.background,color:backendStatus.color,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>
-                  {backendStatus.label}
-                </span>
-              </div>
-
-              <div style={{display:"grid",gap:10}}>
-                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
-                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Report scheduler</div>
-                  <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
-                    {schedule?.enabled
-                      ? scheduleTimes.length
-                        ? `Linked to ${scheduleTimes.length} saved run${scheduleTimes.length === 1 ? "" : "s"}${runnerLastSeenAt ? `; last runner activity ${new Date(runnerLastSeenAt).toLocaleString("en-IN")}.` : "."}`
-                        : "Schedule is active but no run time has been saved yet."
-                      : "No active Ledgr report schedule is linked yet."}
-                  </div>
-                </div>
-                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
-                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Delivery endpoint</div>
-                  <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
-                    {endpointMessage}
-                  </div>
-                </div>
-                <div style={{border:`1px solid ${lastErrorMessage ? "#FECACA" : "#E2E8F0"}`,borderRadius:16,background:lastErrorMessage ? "#FEF2F2" : "#F8FAFC",padding:"13px 14px"}}>
-                  <div style={{fontSize:12,fontWeight:800,color:lastErrorMessage ? "#991B1B" : G.text,fontFamily:G.sans}}>Recent delivery health</div>
-                  <div style={{fontSize:12,color:lastErrorMessage ? "#991B1B" : G.textM,lineHeight:1.55,marginTop:6}}>
-                    {lastErrorMessage
-                      ? lastErrorMessage
-                      : lastSuccessAt
-                        ? `Last successful Telegram delivery ran on ${new Date(lastSuccessAt).toLocaleString("en-IN")}.`
-                        : lastAttemptAt
-                          ? `Last attempt ran on ${new Date(lastAttemptAt).toLocaleString("en-IN")}.`
-                          : "No Telegram delivery attempts have been recorded yet."}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style={{...sectionCardStyle,marginBottom:14}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
-              <div>
-                <div style={labelStyle}>Institute routing</div>
-                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Telegram destinations</div>
-                <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8,maxWidth:760}}>
-                  Map each institute to the exact Telegram chat id that should receive Ledgr reports. Channels and groups usually use negative ids like <strong style={{color:G.text}}>-100...</strong>; private chats are usually positive.
-                </div>
-              </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <button type="button" onClick={addMissingInstitutes} disabled={actionBusy || missingInstituteCount === 0} style={secondaryButtonStyle}>
-                  <AppIcon icon={IconPlus} size={15} color={G.text} />
-                  {missingInstituteCount > 0 ? `Add ${missingInstituteCount} missing institute${missingInstituteCount === 1 ? "" : "s"}` : "All institutes added"}
-                </button>
-                <button type="button" onClick={()=>addRecipient()} disabled={actionBusy} style={primaryButtonStyle}>
-                  <AppIcon icon={IconPlus} size={16} color="#FFFFFF" />
-                  Add destination
+                <button type="button" onClick={onClose} disabled={!!saving} style={{height:42,padding:"0 14px",borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:13,fontWeight:800,fontFamily:G.sans,cursor:saving?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
+                  <AppIcon icon={IconX} size={16} color={G.text} />
+                  Close
                 </button>
               </div>
             </div>
 
-            {recipients.length === 0 ? (
-              <div style={{border:"1px dashed #BFDBFE",borderRadius:18,background:"#F8FBFF",padding:"22px 20px",textAlign:"center"}}>
-                <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display}}>No Telegram destinations saved yet</div>
-                <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8,maxWidth:560,marginLeft:"auto",marginRight:"auto"}}>
-                  Start with one pilot institute route, confirm the chat id, then fill out the remaining centres. This keeps the rollout controlled and auditable.
-                </div>
-                <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:16}}>
-                  <button type="button" onClick={addMissingInstitutes} disabled={actionBusy || missingInstituteCount === 0} style={secondaryButtonStyle}>Add current institutes</button>
-                  <button type="button" onClick={()=>addRecipient()} disabled={actionBusy} style={primaryButtonStyle}>Add first destination</button>
-                </div>
-              </div>
-            ) : (
-              <div style={{display:"grid",gap:12}}>
-                {recipients.map((item, index) => {
-                  const currentInstituteValue = item.institute && !recipientOptions.some(option => sameInstituteName(option, item.institute))
-                    ? [item.institute, ...recipientOptions]
-                    : recipientOptions;
-                  return (
-                    <div key={item.id} style={{border:"1px solid #E2E8F0",borderRadius:18,background:"#F8FAFC",padding:"14px 14px 15px"}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:12}}>
-                        <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-                          <span style={{width:32,height:32,borderRadius:12,background:item.enabled ? "#DBEAFE" : "#E5E7EB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:item.enabled ? G.blue : G.textM,fontFamily:G.mono,flexShrink:0}}>
-                            {index + 1}
-                          </span>
-                          <div style={{minWidth:0}}>
-                            <div style={{fontSize:14,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.2}}>
-                              {item.institute || "Unassigned institute"}
-                            </div>
-                            <div style={{fontSize:11.5,color:G.textM,lineHeight:1.45,marginTop:4}}>
-                              {item.destinationType === "channel" ? "Channel route" : item.destinationType === "group" ? "Group route" : "Private route"}
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-                          <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,fontWeight:800,color:item.enabled ? G.blue : G.textM,fontFamily:G.sans}}>
-                            <input type="checkbox" checked={item.enabled} disabled={actionBusy} onChange={event=>updateRecipient(item.id, { enabled:event.target.checked })} style={{width:17,height:17,accentColor:G.blue}} />
-                            {item.enabled ? "Active" : "Paused"}
-                          </label>
-                          <button type="button" onClick={()=>removeRecipient(item.id)} disabled={actionBusy} style={{width:38,height:38,borderRadius:12,border:"1px solid #FECACA",background:"#FFFFFF",color:G.red,cursor:actionBusy?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
-                            <AppIcon icon={IconTrash} size={16} color={G.red} />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:12}}>
-                        <div>
-                          <div style={labelStyle}>Institute</div>
-                          <select value={item.institute} disabled={actionBusy} onChange={event=>updateRecipient(item.id, { institute:event.target.value })} style={inputStyle}>
-                            <option value="">Select institute</option>
-                            {currentInstituteValue.map(option => (
-                              <option key={`${item.id}_${option}`} value={option}>{option}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <div style={labelStyle}>Route type</div>
-                          <select value={item.destinationType} disabled={actionBusy} onChange={event=>updateRecipient(item.id, { destinationType:event.target.value })} style={inputStyle}>
-                            <option value="channel">Channel</option>
-                            <option value="group">Group</option>
-                            <option value="private">Private chat</option>
-                          </select>
-                        </div>
-                        <div>
-                          <div style={labelStyle}>Chat id</div>
-                          <input value={item.chatId} onChange={event=>updateRecipient(item.id, { chatId:event.target.value })} disabled={actionBusy} placeholder="-1004343564758" style={inputStyle} />
-                        </div>
-                        <div>
-                          <div style={labelStyle}>Display label</div>
-                          <input value={item.label} onChange={event=>updateRecipient(item.id, { label:event.target.value })} disabled={actionBusy} placeholder="KIS SIP reports" style={inputStyle} />
-                        </div>
-                        <div style={{gridColumn:"1 / -1"}}>
-                          <div style={labelStyle}>Notes</div>
-                          <textarea value={item.notes} onChange={event=>updateRecipient(item.id, { notes:event.target.value })} disabled={actionBusy} placeholder="Optional operator notes, fallback contact, or rollout comments." style={textAreaStyle} />
-                        </div>
-                      </div>
+            <div className="ledgr-telegram-summary-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:16}}>
+              {setupSteps.map(step => (
+                <div key={step.key} style={smallStatStyle}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                    <div style={{width:30,height:30,borderRadius:11,background:"#E6EFFF",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:G.blue,fontFamily:G.mono}}>
+                      {step.number}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    <span style={stepTagStyle(step.status)}>
+                      {step.status === "done" ? "Done" : step.status === "live" ? "Ready" : "Next"}
+                    </span>
+                  </div>
+                  <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.1,marginTop:14}}>{step.title}</div>
+                  <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5,marginTop:8}}>{step.hint}</div>
+                </div>
+              ))}
+            </div>
 
-          <div className="ledgr-telegram-dashboard-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:14}}>
-            <div style={sectionCardStyle}>
-              <div style={labelStyle}>Operations</div>
-              <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Send now and automation</div>
-              <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8}}>
-                Manual sends and scheduled sends should call the same server delivery path so audit trails, retries, and PDF rendering stay consistent.
+            <div className="ledgr-telegram-dashboard-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,1.1fr) minmax(0,0.9fr)",gap:14,marginBottom:14}}>
+              <div style={sectionCardStyle}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14}}>
+                  <div>
+                    <div style={labelStyle}>Basics</div>
+                    <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Setup defaults</div>
+                  </div>
+                  <span style={{background:enabled ? "#DCFCE7" : "#F3F4F6",color:enabled ? "#166534" : G.textM,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>
+                    {enabled ? "Active" : "Paused"}
+                  </span>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:12}}>
+                  <div style={{gridColumn:"1 / -1"}}>
+                    <div style={labelStyle}>Bot username</div>
+                    <input value={botUsername} onChange={event=>setBotUsername(event.target.value)} disabled={actionBusy} placeholder="@ledgrapp_bot" style={inputStyle} />
+                    <div style={{fontSize:11.5,color:G.textL,lineHeight:1.5,marginTop:8}}>
+                      Keep the bot token on the server. This screen only stores routing.
+                    </div>
+                  </div>
+
+                  {[
+                    {
+                      key:"enabled",
+                      title:"Delivery active",
+                      value:enabled,
+                      onChange:setEnabled,
+                      help:"Main switch for Telegram sends.",
+                    },
+                    {
+                      key:"scheduled",
+                      title:"Use daily schedule",
+                      value:scheduledEnabled,
+                      onChange:setScheduledEnabled,
+                      help:"Lets the saved report schedule send automatically.",
+                    },
+                    {
+                      key:"manual",
+                      title:"Allow send now",
+                      value:onDemandEnabled,
+                      onChange:setOnDemandEnabled,
+                      help:"Keeps manual test sends available.",
+                    },
+                  ].map(item => (
+                    <label key={item.key} style={{display:"flex",alignItems:"flex-start",gap:10,border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 13px 12px",cursor:actionBusy?"not-allowed":"pointer"}}>
+                      <input type="checkbox" checked={item.value} disabled={actionBusy} onChange={event=>item.onChange(event.target.checked)} style={{width:18,height:18,marginTop:2,accentColor:G.blue,flexShrink:0}} />
+                      <span style={{minWidth:0}}>
+                        <span style={{display:"block",fontSize:13.5,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.25}}>{item.title}</span>
+                        <span style={{display:"block",fontSize:11.5,color:G.textM,lineHeight:1.45,marginTop:5}}>{item.help}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
-              <div style={{display:"grid",gap:10,marginTop:14}}>
-                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
-                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>On-demand send</div>
-                  <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
-                    {onDemandEnabled
-                      ? deliveryProbe.checking
-                        ? "Checking whether this deployment can send reports right now."
-                        : routeIssue
-                          ? "Manual send is blocked because this deployment is not exposing the messenger API route."
-                          : tokenMissingOnServer
-                            ? "Manual send is blocked until TELEGRAM_BOT_TOKEN is added on the deployed server."
-                            : manualRouteReady
-                              ? "Manual send is live and ready."
-                              : "Manual send has not been verified yet."
-                      : "On-demand sends are paused from the dashboard."}
+
+              <div style={sectionCardStyle}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14}}>
+                  <div>
+                    <div style={labelStyle}>Status</div>
+                    <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>What is ready now</div>
+                  </div>
+                  <span style={{background:backendStatus.background,color:backendStatus.color,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono}}>
+                    {backendStatus.label}
+                  </span>
+                </div>
+
+                <div style={{display:"grid",gap:10}}>
+                  <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Manual send</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
+                      {onDemandEnabled
+                        ? deliveryProbe.checking
+                          ? "Checking the send route."
+                          : routeIssue
+                            ? "Blocked because the API route is not live on this deployment."
+                            : tokenMissingOnServer
+                              ? "Blocked until TELEGRAM_BOT_TOKEN is added on the server."
+                              : manualRouteReady
+                                ? "Ready for a test send."
+                                : "Not verified yet."
+                        : "Manual send is paused."}
+                    </div>
+                  </div>
+                  <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Daily schedule</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
+                      {scheduleSaved
+                        ? backgroundRunnerReady
+                          ? `Linked to ${scheduleTimes.length} saved run${scheduleTimes.length === 1 ? "" : "s"}.`
+                          : "Saved, but the runner is not connected yet."
+                        : "No daily schedule saved yet."}
+                    </div>
+                  </div>
+                  <div style={{border:`1px solid ${lastErrorMessage ? "#FECACA" : "#E2E8F0"}`,borderRadius:16,background:lastErrorMessage ? "#FEF2F2" : "#F8FAFC",padding:"13px 14px"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:lastErrorMessage ? "#991B1B" : G.text,fontFamily:G.sans}}>Latest delivery</div>
+                    <div style={{fontSize:12,color:lastErrorMessage ? "#991B1B" : G.textM,lineHeight:1.55,marginTop:6}}>
+                      {lastErrorMessage
+                        ? lastErrorMessage
+                        : lastSuccessAt
+                          ? `Sent successfully on ${new Date(lastSuccessAt).toLocaleString("en-IN")}.`
+                          : lastAttemptAt
+                            ? `Last attempt was on ${new Date(lastAttemptAt).toLocaleString("en-IN")}.`
+                            : "No send attempts yet."}
+                    </div>
+                  </div>
+                  <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#FFFFFF",padding:"13px 14px"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Do this next</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
+                      {routeIssue
+                        ? "Expose `/api/send-ledgr-telegram` on the deployed app, then try one send."
+                        : tokenMissingOnServer
+                          ? "Add `TELEGRAM_BOT_TOKEN` on the server, then try one send."
+                          : !mappingReady
+                            ? "Add one institute route and save it."
+                            : !manualSendReady
+                              ? "Use Send now once to confirm the route."
+                              : !backgroundRunnerReady && scheduleSaved
+                                ? "Connect the background runner for daily sends."
+                                : "Start adding the remaining institutes."}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{...sectionCardStyle,marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
+                <div>
+                  <div style={labelStyle}>Routing</div>
+                  <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Telegram destinations</div>
+                  <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8,maxWidth:760}}>
+                    Start with one institute. After the first test works, add the rest.
                   </div>
                 </div>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <button type="button" onClick={onSendNow} disabled={sendNowDisabled} style={{...primaryButtonStyle,opacity:sendNowDisabled ? 0.55 : 1,cursor:sendNowDisabled ? "not-allowed" : "pointer"}}>
-                    <AppIcon icon={IconSend} size={16} color="#FFFFFF" />
-                    {sendBusy ? "Sending..." : "Send now"}
+                  <button type="button" onClick={addMissingInstitutes} disabled={actionBusy || missingInstituteCount === 0} style={secondaryButtonStyle}>
+                    <AppIcon icon={IconPlus} size={15} color={G.text} />
+                    {missingInstituteCount > 0 ? `Add ${missingInstituteCount} missing institute${missingInstituteCount === 1 ? "" : "s"}` : "All institutes added"}
                   </button>
-                  <button type="button" onClick={onOpenSchedule} disabled={actionBusy} style={secondaryButtonStyle}>
-                    <AppIcon icon={IconClock} size={15} color={G.text} />
-                    Open report schedule
+                  <button type="button" onClick={()=>addRecipient()} disabled={actionBusy} style={primaryButtonStyle}>
+                    <AppIcon icon={IconPlus} size={16} color="#FFFFFF" />
+                    Add destination
                   </button>
                 </div>
               </div>
+
+              {pilotRecipient && (
+                <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",gap:12,marginBottom:14}}>
+                  <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                    <div style={{fontSize:11,fontWeight:800,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8}}>Pilot route</div>
+                    <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.15,marginTop:8}}>
+                      {pilotRecipient.institute || "Unassigned institute"}
+                    </div>
+                  </div>
+                  <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                    <div style={{fontSize:11,fontWeight:800,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8}}>Route count</div>
+                    <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.15,marginTop:8}}>
+                      {routeCount} saved
+                    </div>
+                  </div>
+                  <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                    <div style={{fontSize:11,fontWeight:800,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8}}>Still missing</div>
+                    <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.15,marginTop:8}}>
+                      {missingCoverageCount} institute{missingCoverageCount === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {recipients.length === 0 ? (
+                <div style={{border:"1px dashed #BFDBFE",borderRadius:18,background:"#F8FBFF",padding:"22px 20px",textAlign:"center"}}>
+                  <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display}}>No Telegram destinations yet</div>
+                  <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:8,maxWidth:560,marginLeft:"auto",marginRight:"auto"}}>
+                    Add one institute route first, save it, then test one send.
+                  </div>
+                  <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:16}}>
+                    <button type="button" onClick={addMissingInstitutes} disabled={actionBusy || missingInstituteCount === 0} style={secondaryButtonStyle}>Add current institutes</button>
+                    <button type="button" onClick={()=>addRecipient()} disabled={actionBusy} style={primaryButtonStyle}>Add first destination</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{display:"grid",gap:12}}>
+                  {recipients.map((item, index) => {
+                    const currentInstituteValue = item.institute && !recipientOptions.some(option => sameInstituteName(option, item.institute))
+                      ? [item.institute, ...recipientOptions]
+                      : recipientOptions;
+                    return (
+                      <div key={item.id} style={{border:"1px solid #E2E8F0",borderRadius:18,background:"#F8FAFC",padding:"14px 14px 15px"}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:12}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                            <span style={{width:32,height:32,borderRadius:12,background:item.enabled ? "#DBEAFE" : "#E5E7EB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:item.enabled ? G.blue : G.textM,fontFamily:G.mono,flexShrink:0}}>
+                              {index + 1}
+                            </span>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:14,fontWeight:800,color:G.text,fontFamily:G.sans,lineHeight:1.2}}>
+                                {item.institute || "Unassigned institute"}
+                              </div>
+                              <div style={{fontSize:11.5,color:G.textM,lineHeight:1.45,marginTop:4}}>
+                                {item.destinationType === "channel" ? "Channel" : item.destinationType === "group" ? "Group" : "Private chat"}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                            <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,fontWeight:800,color:item.enabled ? G.blue : G.textM,fontFamily:G.sans}}>
+                              <input type="checkbox" checked={item.enabled} disabled={actionBusy} onChange={event=>updateRecipient(item.id, { enabled:event.target.checked })} style={{width:17,height:17,accentColor:G.blue}} />
+                              {item.enabled ? "Active" : "Paused"}
+                            </label>
+                            <button type="button" onClick={()=>removeRecipient(item.id)} disabled={actionBusy} style={{width:38,height:38,borderRadius:12,border:"1px solid #FECACA",background:"#FFFFFF",color:G.red,cursor:actionBusy?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
+                              <AppIcon icon={IconTrash} size={16} color={G.red} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:12}}>
+                          <div>
+                            <div style={labelStyle}>Institute</div>
+                            <select value={item.institute} disabled={actionBusy} onChange={event=>updateRecipient(item.id, { institute:event.target.value })} style={inputStyle}>
+                              <option value="">Select institute</option>
+                              {currentInstituteValue.map(option => (
+                                <option key={`${item.id}_${option}`} value={option}>{option}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <div style={labelStyle}>Route type</div>
+                            <select value={item.destinationType} disabled={actionBusy} onChange={event=>updateRecipient(item.id, { destinationType:event.target.value })} style={inputStyle}>
+                              <option value="channel">Channel</option>
+                              <option value="group">Group</option>
+                              <option value="private">Private chat</option>
+                            </select>
+                          </div>
+                          <div>
+                            <div style={labelStyle}>Chat id</div>
+                            <input value={item.chatId} onChange={event=>updateRecipient(item.id, { chatId:event.target.value })} disabled={actionBusy} placeholder="-1004343564758" style={inputStyle} />
+                          </div>
+                          <div>
+                            <div style={labelStyle}>Display label</div>
+                            <input value={item.label} onChange={event=>updateRecipient(item.id, { label:event.target.value })} disabled={actionBusy} placeholder="KIS SIP reports" style={inputStyle} />
+                          </div>
+                          <div style={{gridColumn:"1 / -1"}}>
+                            <div style={labelStyle}>Notes</div>
+                            <textarea value={item.notes} onChange={event=>updateRecipient(item.id, { notes:event.target.value })} disabled={actionBusy} placeholder="Optional notes" style={textAreaStyle} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            <div style={sectionCardStyle}>
-              <div style={labelStyle}>Security</div>
-              <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Server-managed secret model</div>
-              <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8}}>
-                Keep the Telegram bot token in a server environment variable. The admin web app should only manage bot identity, routing, and execution telemetry.
-              </div>
-              <div style={{marginTop:14,display:"grid",gap:10}}>
-                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
-                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Recommended server envs</div>
-                  <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:6}}>
-                    <code style={{fontFamily:G.mono,color:G.text}}>TELEGRAM_BOT_TOKEN</code>, plus a protected admin delivery route that can render the Ledgr PDF and call Telegram <code style={{fontFamily:G.mono,color:G.text}}>sendDocument</code>.
+            <div className="ledgr-telegram-dashboard-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:14}}>
+              <div style={sectionCardStyle}>
+                <div style={labelStyle}>Send</div>
+                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Test send and schedule</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8}}>
+                  Use one manual send first. Daily delivery can use the same route after that.
+                </div>
+                <div style={{display:"grid",gap:10,marginTop:14}}>
+                  <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Current send status</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:6}}>
+                      {onDemandEnabled
+                        ? deliveryProbe.checking
+                          ? "Checking the send route."
+                          : routeIssue
+                            ? "The API route is not live on this deployment."
+                            : tokenMissingOnServer
+                              ? "The server token is still missing."
+                              : manualRouteReady
+                                ? "Ready to send now."
+                                : "Not verified yet."
+                        : "Manual send is paused."}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <button type="button" onClick={onSendNow} disabled={sendNowDisabled} style={{...primaryButtonStyle,opacity:sendNowDisabled ? 0.55 : 1,cursor:sendNowDisabled ? "not-allowed" : "pointer"}}>
+                      <AppIcon icon={IconSend} size={16} color="#FFFFFF" />
+                      {sendBusy ? "Sending..." : "Send now"}
+                    </button>
+                    <button type="button" onClick={onOpenSchedule} disabled={actionBusy} style={secondaryButtonStyle}>
+                      <AppIcon icon={IconClock} size={15} color={G.text} />
+                      Open report schedule
+                    </button>
                   </div>
                 </div>
-                <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
-                  <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Saved here today</div>
-                  <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:6}}>
-                    Bot username, institute chat routing, delivery toggles, and future execution metadata. No Telegram secret is persisted from this screen.
+              </div>
+
+              <div style={sectionCardStyle}>
+                <div style={labelStyle}>Server</div>
+                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Token and route</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.6,marginTop:8}}>
+                  Keep secrets on the server. This screen should never store the bot token.
+                </div>
+                <div style={{marginTop:14,display:"grid",gap:10}}>
+                  <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Required</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:6}}>
+                      <code style={{fontFamily:G.mono,color:G.text}}>TELEGRAM_BOT_TOKEN</code> and a working <code style={{fontFamily:G.mono,color:G.text}}>/api/send-ledgr-telegram</code> route.
+                    </div>
+                  </div>
+                  <div style={{border:"1px solid #E2E8F0",borderRadius:16,background:"#F8FAFC",padding:"13px 14px"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans}}>Saved here</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.6,marginTop:6}}>
+                      Bot username, institute routes, and delivery switches.
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
           </div>
         </div>
 
