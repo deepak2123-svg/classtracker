@@ -9509,6 +9509,14 @@ function ClassBoundSyllabusFlow({
   const visibleInstitutes=institutes.filter(institute=>
     !instituteSearch.trim()||institute.toLowerCase().includes(instituteSearch.trim().toLowerCase())
   );
+  const sectionCountsByInstitute = useMemo(()=>Object.fromEntries((institutes||[]).map(instituteName=>{
+    const config = getInstituteSectionConfig(instituteSections, instituteName) || {};
+    const count = uniqueSectionNames([
+      ...(config.gradeGroups || []).flatMap(group => group.sections || []),
+      ...(config.extraSections || []),
+    ]).length;
+    return [instituteName, count];
+  })), [institutes, instituteSections]);
   const selectedScope=useMemo(
     ()=>normaliseSyllabusScope(selectedInstitutes.map(instituteName=>({
       instituteName,
