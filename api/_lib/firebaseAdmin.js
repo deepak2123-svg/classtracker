@@ -1,5 +1,4 @@
 import { getApps, initializeApp, cert, applicationDefault } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
 function readServiceAccountFromEnv() {
@@ -41,7 +40,15 @@ function ensureAdminApp() {
   });
 }
 
-export function adminAuth() {
+let authModulePromise = null;
+
+async function loadAuthModule() {
+  authModulePromise ||= import("firebase-admin/auth");
+  return authModulePromise;
+}
+
+export async function adminAuth() {
+  const { getAuth } = await loadAuthModule();
   return getAuth(ensureAdminApp());
 }
 
@@ -58,7 +65,8 @@ export async function requireAdminUser(req) {
     throw error;
   }
 
-  const decoded = await adminAuth().verifyIdToken(token);
+  const auth = await adminAuth();
+  const decoded = await auth.verifyIdToken(token);
   const roleSnap = await adminDb().doc(`roles/${decoded.uid}`).get();
   const role = roleSnap.exists ? roleSnap.data()?.role : "teacher";
   if (role !== "admin") {
