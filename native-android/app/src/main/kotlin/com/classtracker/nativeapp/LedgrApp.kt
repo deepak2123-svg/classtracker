@@ -139,8 +139,7 @@ private const val ReportsRoute = "reports"
 private const val FeedbackRoute = "feedback"
 private const val ClassPagerSnapMillis = 170
 private const val ClassPagerPositionalThreshold = 0.82f
-private const val EntrySaveHandoffMillis = 180L
-private const val EntrySaveSuccessRevealMillis = 220L
+private const val EntrySaveSuccessRevealMillis = 160L
 private const val AddClassRoute = "add-class"
 private const val ManageClassesRoute = "manage-classes"
 private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
@@ -401,17 +400,6 @@ private fun TeacherApp(
         errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             onClearError()
-        }
-    }
-
-    LaunchedEffect(entrySaved, isClassEntry, isEntryEditor) {
-        if (entrySaved && !isClassEntry && !isEntryEditor) {
-            snackbarHostState.showSnackbar(
-                message = "✓ Entry saved successfully",
-                duration = androidx.compose.material3.SnackbarDuration.Short,
-                withDismissAction = true,
-            )
-            onConsumeEntrySaved()
         }
     }
 
@@ -968,12 +956,6 @@ private fun TeacherApp(
                                         }
                                         launchSingleTop = true
                                     }
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            message = "✓ Entry saved successfully",
-                                            duration = androidx.compose.material3.SnackbarDuration.Short,
-                                        )
-                                    }
                                 },
                             )
                         }
@@ -1385,17 +1367,8 @@ private fun ClassEntryPagerRoute(
 ) {
     val initialPage = snapshot.classes.indexOfFirst { it.id == initialClassId }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = initialPage) { snapshot.classes.size }
-    var pagerSwipeEnabled by rememberSaveable { mutableStateOf(false) }
-    val classIds = remember(snapshot.classes) { snapshot.classes.map(TeacherClass::id) }
-    val recoveredDraftsByClass = remember(teacher.uid, classIds) {
-        classIds.associateWith { classId ->
-            draftStore.read(
-                uid = teacher.uid,
-                classId = classId,
-                entryId = null,
-            )
-        }
-    }
+    val scope = rememberCoroutineScope()
+    val haptics = rememberLedgrHaptics()
 
     LaunchedEffect(initialPage, snapshot.classes.size) {
         if (pagerState.currentPage != initialPage) pagerState.scrollToPage(initialPage)
@@ -1403,7 +1376,7 @@ private fun ClassEntryPagerRoute(
 
     HorizontalPager(
         state = pagerState,
-        userScrollEnabled = pagerSwipeEnabled,
+        userScrollEnabled = false,
         modifier = modifier.fillMaxSize(),
         key = { page -> snapshot.classes[page].id },
         contentPadding = PaddingValues(0.dp),
@@ -1439,7 +1412,13 @@ private fun ClassEntryPagerRoute(
                     timeEnd = pageClass.endTime.orEmpty(),
                 )
             }
-            val recovered = recoveredDraftsByClass[pageClass.id]
+            val recovered = remember(teacher.uid, pageClass.id, draftKeyEntryId) {
+                draftStore.read(
+                    uid = teacher.uid,
+                    classId = pageClass.id,
+                    entryId = draftKeyEntryId,
+                )
+            }
             val resolvedDraft = remember(recovered, todayKey, pageClass.id) {
                 resolveDraftForEntry(
                     baseDraft = baseDraft,
@@ -1485,18 +1464,9 @@ private fun ClassEntryPagerRoute(
                     recoveredDraftVisible = false
                     saveCompletedVisible = true
                     delay(EntrySaveSuccessRevealMillis)
-                    editorVisible = false
                     draft = baseDraft.copy(mutationId = "native_${UUID.randomUUID()}")
-                    saveCompletedVisible = false
-                    delay(EntrySaveHandoffMillis)
                     onConsumeEntrySaved()
                     onSaved()
-                }
-            }
-
-            LaunchedEffect(editorVisible, pagerState.currentPage, page) {
-                if (pagerState.currentPage == page) {
-                    pagerSwipeEnabled = !editorVisible
                 }
             }
 
@@ -1526,6 +1496,34 @@ private fun ClassEntryPagerRoute(
                 onOpenPastEntries = {
                     onNavigateToClass(pageClass.id)
                 },
+                onOpenPreviousClass = {
+                    if (page == pagerState.currentPage && page > 0 && !pagerState.isScrollInProgress) {
+                        scope.launch {
+                            val targetPage = page - 1
+                            pagerState.animateScrollToPage(targetPage)
+                            if (pagerState.currentPage == targetPage) {
+                                haptics.selection()
+                            }
+                        }
+                    }
+                },
+                onOpenNextClass = {
+                    if (
+                        page == pagerState.currentPage &&
+                        page < snapshot.classes.lastIndex &&
+                        !pagerState.isScrollInProgress
+                    ) {
+                        scope.launch {
+                            val targetPage = page + 1
+                            pagerState.animateScrollToPage(targetPage)
+                            if (pagerState.currentPage == targetPage) {
+                                haptics.selection()
+                            }
+                        }
+                    }
+                },
+                canSwipeToPreviousClass = page > 0,
+                canSwipeToNextClass = page < snapshot.classes.lastIndex,
                 onEditEntry = { entry -> onEditEntry(pageClass.id, entry) },
                 onDuplicateEntry = { entry -> onDuplicateEntry(pageClass.id, entry) },
                 onDeleteEntry = { entry -> onDeleteEntry(entry, pageClass) },
@@ -1566,6 +1564,7 @@ private fun ClassHistoryPagerRoute(
 
     HorizontalPager(
         state = pagerState,
+        userScrollEnabled = false,
         modifier = modifier.fillMaxSize(),
         key = { page -> snapshot.classes[page].id },
         contentPadding = PaddingValues(horizontal = 8.dp),
@@ -1666,6 +1665,8 @@ private fun EntryEditorRoute(
 ) {
     val entryId = existingEntry?.id
     val draftKeyEntryId = draftStoreEntryId ?: entryId
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val baseDraft = remember(teacherClass.id, entryId, initialDateKey, initialDraft) {
         initialDraft ?: existingEntry?.toDraft() ?: TeacherEntryDraft(
             mutationId = "native_${UUID.randomUUID()}",
@@ -1712,7 +1713,8 @@ private fun EntryEditorRoute(
                 classId = teacherClass.id,
                 entryId = draftKeyEntryId,
             )
-            delay(EntrySaveHandoffMillis)
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
             onConsumeEntrySaved()
             onSaved()
         }

@@ -318,8 +318,9 @@ fun EntryEditorScreen(
                 value = draft.title,
                 onValueChange = { onDraftChanged(draft.copy(title = it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Topic / title") },
-                supportingText = { Text("Required") },
+                label = { Text("Topic") },
+                placeholder = { Text("What did you cover?") },
+                supportingText = { Text("A short title is enough") },
                 singleLine = true,
             )
         }
@@ -329,8 +330,9 @@ fun EntryEditorScreen(
                 value = draft.body,
                 onValueChange = { onDraftChanged(draft.copy(body = it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Notes") },
-                minLines = 4,
+                label = { Text("Notes (optional)") },
+                placeholder = { Text("Add a short note, if needed") },
+                minLines = 3,
                 maxLines = 8,
             )
         }
@@ -1191,7 +1193,7 @@ private fun EntryTextAndSavePanel(
             singleLine = false,
             onFocused = requestBringIntoView,
         )
-        if (validation is TeacherEntryValidation.Overlap) {
+        if (!saving && !saveCompleted && validation is TeacherEntryValidation.Overlap) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = if (LedgrTheme.isDark) LedgrTheme.colors.warningSurface else Color(0xFFFFF4C8),
@@ -1294,6 +1296,12 @@ private fun EntryTextBox(
 ) {
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
+    val fieldTextStyle = MaterialTheme.typography.titleLarge.copy(
+        fontSize = if (singleLine) 17.sp else 15.sp,
+        lineHeight = if (singleLine) 23.sp else 21.sp,
+        fontWeight = if (singleLine) FontWeight.SemiBold else FontWeight.Medium,
+        color = entryInkColor(),
+    )
 
     Surface(
         modifier = Modifier
@@ -1340,9 +1348,9 @@ private fun EntryTextBox(
                             }
                         },
                     textStyle = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 18.sp,
-                        lineHeight = 24.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = fieldTextStyle.fontSize,
+                        lineHeight = fieldTextStyle.lineHeight,
+                        fontWeight = fieldTextStyle.fontWeight,
                         color = entryInkColor(),
                     ),
                     singleLine = singleLine,
@@ -1356,10 +1364,7 @@ private fun EntryTextBox(
                             if (value.isBlank()) {
                                 Text(
                                     text = placeholder,
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontSize = 18.sp,
-                                        lineHeight = 24.sp,
-                                        fontWeight = FontWeight.Bold,
+                                    style = fieldTextStyle.copy(
                                         color = entryPlaceholderColor(),
                                     ),
                                 )

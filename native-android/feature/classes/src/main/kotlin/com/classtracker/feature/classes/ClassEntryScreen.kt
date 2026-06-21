@@ -91,6 +91,10 @@ fun ClassEntryScreen(
     onSave: (TeacherEntryDraft) -> Unit,
     onAddAnotherEntry: () -> Unit = {},
     onOpenPastEntries: () -> Unit = {},
+    onOpenPreviousClass: () -> Unit = {},
+    onOpenNextClass: () -> Unit = {},
+    canSwipeToPreviousClass: Boolean = false,
+    canSwipeToNextClass: Boolean = false,
     onEditEntry: (TeacherEntry) -> Unit = {},
     onDuplicateEntry: (TeacherEntry) -> Unit = {},
     onDeleteEntry: (TeacherEntry) -> Unit = {},
@@ -134,6 +138,11 @@ fun ClassEntryScreen(
             ClassDetailHero(
                 teacherClass = teacherClass,
                 metrics = metrics,
+                swipeEnabled = canSwipeToPreviousClass || canSwipeToNextClass,
+                canSwipePrevious = canSwipeToPreviousClass,
+                canSwipeNext = canSwipeToNextClass,
+                onSwipePrevious = onOpenPreviousClass,
+                onSwipeNext = onOpenNextClass,
             )
         }
 

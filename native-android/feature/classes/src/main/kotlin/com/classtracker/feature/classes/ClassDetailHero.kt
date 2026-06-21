@@ -1,6 +1,8 @@
 package com.classtracker.feature.classes
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,9 +16,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -25,19 +31,104 @@ import com.classtracker.core.model.TeacherClass
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.max
 
 private val HeroInk = Color(0xFF202A55)
 private val HeroStatSurface = Color(0xFF3E486F)
 private val HeroMint = Color(0xFF63D9B5)
 private val HeroWarning = Color(0xFFFFF4C8)
+private const val HeroSwipeHorizontalBias = 1.3f
+private const val HeroSwipeTouchSlopMultiplier = 1.1f
+
+private enum class HeroGestureAxisLock {
+    Horizontal,
+    Vertical,
+}
 
 @Composable
 internal fun ClassDetailHero(
     teacherClass: TeacherClass,
     metrics: ClassDetailMetrics,
+    swipeEnabled: Boolean = false,
+    canSwipePrevious: Boolean = false,
+    canSwipeNext: Boolean = false,
+    onSwipePrevious: () -> Unit = {},
+    onSwipeNext: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
+    val minSwipeDistancePx = with(LocalDensity.current) { 64.dp.toPx() }
+    val currentOnSwipePrevious by rememberUpdatedState(onSwipePrevious)
+    val currentOnSwipeNext by rememberUpdatedState(onSwipeNext)
+    val swipeModifier = Modifier.pointerInput(
+        swipeEnabled,
+        canSwipePrevious,
+        canSwipeNext,
+        minSwipeDistancePx,
+    ) {
+        if (swipeEnabled && (canSwipePrevious || canSwipeNext)) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val touchSlop = viewConfiguration.touchSlop
+                var axisLock: HeroGestureAxisLock? = null
+                var totalDeltaX = 0f
+                var totalDeltaY = 0f
+                var dragHandled = false
+
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+
+                    val delta = change.position - change.previousPosition
+                    totalDeltaX += delta.x
+                    totalDeltaY += delta.y
+
+                    if (axisLock == null) {
+                        val absX = abs(totalDeltaX)
+                        val absY = abs(totalDeltaY)
+                        if (absX > touchSlop || absY > touchSlop) {
+                            axisLock = if (
+                                absX >= touchSlop * HeroSwipeTouchSlopMultiplier &&
+                                absX > absY * HeroSwipeHorizontalBias
+                            ) {
+                                HeroGestureAxisLock.Horizontal
+                            } else {
+                                HeroGestureAxisLock.Vertical
+                            }
+                        }
+                    }
+
+                    when (axisLock) {
+                        HeroGestureAxisLock.Horizontal -> {
+                            change.consume()
+                            dragHandled = true
+                        }
+
+                        HeroGestureAxisLock.Vertical -> break
+                        null -> Unit
+                    }
+                }
+
+                if (dragHandled) {
+                    val swipeTriggerPx = max(minSwipeDistancePx, size.width * 0.14f)
+                    when {
+                        totalDeltaX >= swipeTriggerPx && canSwipePrevious -> {
+                            currentOnSwipePrevious()
+                        }
+
+                        totalDeltaX <= -swipeTriggerPx && canSwipeNext -> {
+                            currentOnSwipeNext()
+                        }
+                    }
+                }
+            }
+        }
+    }
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(swipeModifier),
         color = HeroInk,
         shape = RoundedCornerShape(22.dp),
         shadowElevation = 0.dp,
