@@ -9983,6 +9983,7 @@ function AdminPanelInner({user}){
   const instituteGlanceDataRef = React.useRef({});
   const instituteGlanceReportRef = React.useRef(instituteGlanceReport);
   const instituteGlanceAutoLoadKeyRef = React.useRef("");
+  const instituteGlanceOptionsFrameRef = React.useRef(null);
   const historyReadyRef = React.useRef(false);
   const historyRestoreRef = React.useRef(false);
   const lastHistoryKeyRef = React.useRef("");
@@ -10006,6 +10007,13 @@ function AdminPanelInner({user}){
   React.useEffect(() => {
     fullDataRef.current = fullData;
   }, [fullData]);
+
+  React.useEffect(() => () => {
+    if(instituteGlanceOptionsFrameRef.current && typeof window !== "undefined"){
+      window.cancelAnimationFrame(instituteGlanceOptionsFrameRef.current);
+      instituteGlanceOptionsFrameRef.current = null;
+    }
+  }, []);
 
   const handlePeriodChange = React.useCallback((nextPeriod)=>{
     if(nextPeriod==="range"){
@@ -10963,6 +10971,17 @@ function AdminPanelInner({user}){
     setProfileOpen(false);
     setInstituteGlanceOptionsContext(context === "messenger" ? "messenger" : "report");
     setInstituteGlanceOptionsMode(mode === "schedule" ? "schedule" : "export");
+    setInstituteGlanceOptionsOpen(false);
+    if(typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"){
+      if(instituteGlanceOptionsFrameRef.current){
+        window.cancelAnimationFrame(instituteGlanceOptionsFrameRef.current);
+      }
+      instituteGlanceOptionsFrameRef.current = window.requestAnimationFrame(() => {
+        instituteGlanceOptionsFrameRef.current = null;
+        setInstituteGlanceOptionsOpen(true);
+      });
+      return;
+    }
     setInstituteGlanceOptionsOpen(true);
   }, []);
 
@@ -11789,7 +11808,12 @@ function AdminPanelInner({user}){
         <button
           type="button"
           className="admin-mobile-touch"
-          onClick={()=>openInstituteGlanceOptions("schedule", "report")}
+          onPointerDown={event=>event.stopPropagation()}
+          onClick={event=>{
+            event.preventDefault();
+            event.stopPropagation();
+            openInstituteGlanceOptions("schedule", "report");
+          }}
           disabled={scheduleButtonBusy}
           style={{
             ...baseButtonStyle,
@@ -11814,7 +11838,12 @@ function AdminPanelInner({user}){
         <button
           type="button"
           className="admin-mobile-touch"
-          onClick={()=>openInstituteGlanceOptions("export", "report")}
+          onPointerDown={event=>event.stopPropagation()}
+          onClick={event=>{
+            event.preventDefault();
+            event.stopPropagation();
+            openInstituteGlanceOptions("export", "report");
+          }}
           disabled={!!instituteGlanceAnyExportBusy}
           style={{
             ...baseButtonStyle,
