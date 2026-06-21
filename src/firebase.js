@@ -1470,6 +1470,16 @@ function normaliseTelegramUsername(value) {
   return clean.startsWith("@") ? clean : `@${clean}`;
 }
 
+function hasTelegramRecipientData(item = {}) {
+  return !!(
+    String(item?.institute || "").trim() ||
+    String(item?.label || "").trim() ||
+    normaliseTelegramUsername(item?.username) ||
+    normaliseTelegramChatId(item?.chatId) ||
+    String(item?.notes || "").trim()
+  );
+}
+
 function normaliseLedgrTelegramRecipients(list) {
   const seen = new Set();
   return (list || [])
@@ -1626,8 +1636,17 @@ export async function saveLedgrTelegramConfig(config = {}, updatedBy = "") {
   const botUsername = botUsernameRaw
     ? (botUsernameRaw.startsWith("@") ? botUsernameRaw : `@${botUsernameRaw}`)
     : "";
-  const recipients = normaliseLedgrTelegramRecipients(config.recipients);
-  const fullReportRecipients = normaliseLedgrTelegramFullReportRecipients(config.fullReportRecipients);
+  const rawRecipients = Array.isArray(config.recipients) ? config.recipients : [];
+  const legacyFullReportRecipients = rawRecipients.filter(item =>
+    !String(item?.institute || "").trim() && hasTelegramRecipientData(item)
+  );
+  const recipients = normaliseLedgrTelegramRecipients(
+    rawRecipients.filter(item => String(item?.institute || "").trim())
+  );
+  const fullReportRecipients = normaliseLedgrTelegramFullReportRecipients([
+    ...(Array.isArray(config.fullReportRecipients) ? config.fullReportRecipients : []),
+    ...legacyFullReportRecipients,
+  ]);
 
   const payload = {
     schemaVersion: 2,

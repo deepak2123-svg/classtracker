@@ -186,6 +186,68 @@ function normaliseTelegramFullReportRecipientsForUi(list = []) {
   }));
 }
 
+function buildTelegramRecipientTouchSummary(item = {}) {
+  return {
+    institute: String(item?.institute || "").trim(),
+    label: String(item?.label || "").trim(),
+    username: normaliseTelegramUsername(item?.username),
+    chatId: normaliseTelegramChatId(item?.chatId),
+    notes: String(item?.notes || "").trim(),
+  };
+}
+
+function recipientHasAnyTelegramData(item = {}) {
+  const summary = buildTelegramRecipientTouchSummary(item);
+  return !!(summary.institute || summary.label || summary.username || summary.chatId || summary.notes);
+}
+
+function mergeTelegramFullReportRecipientsForUi(...lists) {
+  const merged = [];
+  const seen = new Set();
+  lists.flat().forEach(item => {
+    const summary = buildTelegramRecipientTouchSummary(item);
+    if (!recipientHasAnyTelegramData(summary)) return;
+    const key = summary.chatId
+      ? `chat:${summary.chatId}`
+      : summary.username
+        ? `user:${telegramUsernameKey(summary.username)}`
+        : `id:${String(item?.id || "").trim()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push({
+      id: String(item?.id || buildTelegramRecipientDraft("").id),
+      destinationType: ["channel", "group", "private"].includes(item?.destinationType)
+        ? item.destinationType
+        : "private",
+      chatId: summary.chatId,
+      username: summary.username,
+      label: summary.label,
+      enabled: item?.enabled !== false,
+      notes: summary.notes,
+    });
+  });
+  return merged;
+}
+
+function partitionTelegramRecipientsForUi(config = null) {
+  const routeRecipients = [];
+  const legacyFullReportRecipients = [];
+  normaliseTelegramRecipientsForUi(config?.recipients || []).forEach(item => {
+    if (String(item?.institute || "").trim()) {
+      routeRecipients.push(item);
+    } else if (recipientHasAnyTelegramData(item)) {
+      legacyFullReportRecipients.push(item);
+    }
+  });
+  return {
+    recipients: routeRecipients,
+    fullReportRecipients: mergeTelegramFullReportRecipientsForUi(
+      normaliseTelegramFullReportRecipientsForUi(config?.fullReportRecipients || []),
+      legacyFullReportRecipients,
+    ),
+  };
+}
+
 function getTelegramRecipientDisplayName(item = {}) {
   const username = normaliseTelegramUsername(item?.username);
   if (username) return username;
@@ -196,13 +258,14 @@ function getTelegramRecipientDisplayName(item = {}) {
 }
 
 function buildTelegramDashboardDraft(config = null) {
+  const partitioned = partitionTelegramRecipientsForUi(config);
   return {
     enabled: config?.enabled !== false,
     botUsername: normaliseTelegramBotUsername(config?.botUsername || "@ledgrapp_bot"),
     scheduledEnabled: config?.delivery?.scheduledEnabled !== false,
     onDemandEnabled: config?.delivery?.onDemandEnabled !== false,
-    recipients: normaliseTelegramRecipientsForUi(config?.recipients || []),
-    fullReportRecipients: normaliseTelegramFullReportRecipientsForUi(config?.fullReportRecipients || []),
+    recipients: partitioned.recipients,
+    fullReportRecipients: partitioned.fullReportRecipients,
   };
 }
 
@@ -5623,7 +5686,7 @@ function LedgrTelegramDashboardModal({
   };
 
   const buildDraftPayload = () => {
-    const cleanedRecipients = recipients.map(item => {
+    const cleanedRouteCandidates = recipients.map(item => {
       const resolved = resolveRecipientIdentity(item);
       return {
         ...resolved,
@@ -5634,16 +5697,37 @@ function LedgrTelegramDashboardModal({
         notes:String(resolved?.notes || "").trim(),
       };
     });
-    const cleanedFullReportRecipients = fullReportRecipients.map(item => {
-      const resolved = resolveRecipientIdentity(item);
-      return {
-        ...resolved,
-        label:String(resolved?.label || "").trim(),
-        username:normaliseTelegramUsername(resolved?.username),
-        chatId:normaliseTelegramChatId(resolved?.chatId),
-        notes:String(resolved?.notes || "").trim(),
-      };
-    });
+    const promotedFullReportRecipients = cleanedRouteCandidates
+      .filter(item => !item.institute && recipientHasAnyTelegramData(item))
+      .map(item => ({
+        id:item.id,
+        destinationType:item.destinationType || "private",
+        chatId:item.chatId,
+        username:item.username,
+        label:item.label,
+        enabled:item.enabled !== false,
+        notes:item.notes,
+      }));
+    const cleanedRecipients = cleanedRouteCandidates.filter(item => item.institute);
+    const cleanedFullReportRecipients = mergeTelegramFullReportRecipientsForUi(
+      fullReportRecipients.map(item => {
+        const resolved = resolveRecipientIdentity(item);
+        return {
+          ...resolved,
+          label:String(resolved?.label || "").trim(),
+          username:normaliseTelegramUsername(resolved?.username),
+          chatId:normaliseTelegramChatId(resolved?.chatId),
+          notes:String(resolved?.notes || "").trim(),
+        };
+      }),
+      promotedFullReportRecipients,
+    ).map(item => ({
+      ...item,
+      label:String(item?.label || "").trim(),
+      username:normaliseTelegramUsername(item?.username),
+      chatId:normaliseTelegramChatId(item?.chatId),
+      notes:String(item?.notes || "").trim(),
+    }));
     const incompleteRoute = cleanedRecipients.find(item => {
       const touched = item.label || item.username || item.chatId || item.notes;
       if(!touched) return false;
