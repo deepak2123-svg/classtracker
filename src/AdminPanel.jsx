@@ -9669,23 +9669,33 @@ function ClassBoundSyllabusFlow({
     letterSpacing:0.7,
     textTransform:"uppercase",
   };
-  const compactRowStyle = selected => ({
+  const instituteGridStyle = {
     display:"grid",
-    gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2.1fr) 112px 104px",
-    gap:12,
-    alignItems:"center",
-    padding:isMobile?"12px":"12px 14px",
-    borderTop:`1px solid ${G.border}`,
-    background:selected?"#F8FBFF":"#FFFFFF",
+    gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",
+    gap:9,
+  };
+  const sectionGridStyle = {
+    display:"grid",
+    gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(180px,1fr))",
+    gap:8,
+  };
+  const compactSectionCard = selected => ({
+    ...selectionCard(selected),
+    minHeight:isMobile?48:54,
+    padding:"8px 10px",
+    gap:10,
+    boxShadow:"none",
   });
+  const sectionGridScrollStyle = isMobile ? undefined : {
+    maxHeight:360,
+    overflowY:"auto",
+    paddingRight:2,
+  };
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
-      <div>
-        <div style={{fontSize:isMobile?23:28,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.15}}>Syllabus</div>
-        <div style={{fontSize:14,color:G.textM,lineHeight:1.55,marginTop:5}}>
-          Choose existing classes first. Their subject and teacher records determine exactly who receives the published syllabus.
-        </div>
+      <div style={{fontSize:13.5,color:G.textM,lineHeight:1.55,marginTop:-2}}>
+        Choose existing classes first, then pick only the sections that should receive the same syllabus.
       </div>
 
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden"}}>
@@ -9698,31 +9708,18 @@ function ClassBoundSyllabusFlow({
         </div>
         <div style={{padding:isMobile?14:18}}>
           <input value={instituteSearch} onChange={event=>setInstituteSearch(event.target.value)} placeholder="Filter institutes" style={{width:"100%",boxSizing:"border-box",border:`1px solid ${G.borderM}`,borderRadius:10,padding:"10px 12px",fontFamily:G.sans,fontSize:13,color:G.text,outline:"none",marginBottom:12}}/>
-          <div style={compactTableWrapStyle}>
-            <div style={compactTableHeadStyle}>
-              <span>Institute</span>
-              {!isMobile&&<span>Sections</span>}
-              <span style={{textAlign:"right"}}>Select</span>
-            </div>
+          <div style={instituteGridStyle}>
             {visibleInstitutes.map(institute=>{
               const selected=selectedInstitutes.includes(institute);
               const sectionCount = sectionCountsByInstitute[institute] || 0;
               return (
-                <div key={institute} style={compactRowStyle(selected)}>
-                  <button onClick={()=>toggleInstitute(institute)} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:11,minWidth:0,cursor:"pointer",textAlign:"left"}}>
-                    {checkBox(selected)}
-                    <span style={{minWidth:0,flex:1}}>
-                      <span style={{display:"block",fontSize:14,fontWeight:850,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:G.text}}>{institute}</span>
-                      <span style={{display:"block",fontSize:11.5,color:G.textM,marginTop:3}}>{sectionCount} configured section{sectionCount===1?"":"s"}</span>
-                    </span>
-                  </button>
-                  {!isMobile&&<div style={{fontSize:13.5,fontWeight:800,color:G.text}}>{sectionCount}</div>}
-                  <div style={{display:"flex",justifyContent:"flex-end"}}>
-                    <button onClick={()=>toggleInstitute(institute)} style={{...pill(selected?G.blue:"#FFFFFF",selected?"#FFFFFF":G.textS,selected?G.blue:G.borderM),padding:"7px 11px",fontSize:12,fontWeight:800,minWidth:82,justifyContent:"center"}}>
-                      {selected ? "Selected" : "Pick"}
-                    </button>
-                  </div>
-                </div>
+                <button key={institute} onClick={()=>toggleInstitute(institute)} style={selectionCard(selected)}>
+                  {checkBox(selected)}
+                  <span style={{minWidth:0,flex:1}}>
+                    <span style={{display:"block",fontSize:13.5,fontWeight:850,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:G.text}}>{institute}</span>
+                    <span style={{display:"block",fontSize:11.5,color:G.textM,marginTop:3}}>{sectionCount} configured section{sectionCount===1?"":"s"}</span>
+                  </span>
+                </button>
               );
             })}
           </div>
@@ -9739,10 +9736,10 @@ function ClassBoundSyllabusFlow({
         </div>
         <div style={{padding:isMobile?14:18,display:"flex",flexDirection:"column",gap:15}}>
           {!selectedInstitutes.length&&<div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM}}>Select an institute first.</div>}
-          {selectedInstitutes.map(instituteName=>{
+          {selectedInstitutes.map((instituteName,index)=>{
             const sections=sectionOptionsByInstitute[instituteName]||[];
             return (
-              <div key={instituteName}>
+              <div key={instituteName} style={{paddingTop:index?14:0,borderTop:index?`1px solid ${G.border}`:"none"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:13.5,fontWeight:850,color:G.text,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{instituteName}</div>
@@ -9762,29 +9759,18 @@ function ClassBoundSyllabusFlow({
                   )}
                 </div>
                 {sections.length?(
-                  <div style={compactTableWrapStyle}>
-                    {!isMobile&&(
-                      <div style={{...compactTableHeadStyle,gridTemplateColumns:"minmax(0,2.2fr) 104px"}}>
-                        <span>Section</span>
-                        <span style={{textAlign:"right"}}>Select</span>
-                      </div>
-                    )}
-                    {sections.map(sectionName=>{
-                      const selected=(selectedSections[instituteName]||[]).includes(sectionName);
-                      return (
-                        <div key={sectionName} style={{display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2.2fr) 104px",gap:12,alignItems:"center",padding:isMobile?"11px 12px":"11px 14px",borderTop:`1px solid ${G.border}`,background:selected?"#F8FBFF":"#FFFFFF"}}>
-                          <button onClick={()=>toggleSection(instituteName,sectionName)} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:11,cursor:"pointer",textAlign:"left",minWidth:0}}>
+                  <div style={sectionGridScrollStyle}>
+                    <div style={sectionGridStyle}>
+                      {sections.map(sectionName=>{
+                        const selected=(selectedSections[instituteName]||[]).includes(sectionName);
+                        return (
+                          <button key={sectionName} onClick={()=>toggleSection(instituteName,sectionName)} style={compactSectionCard(selected)}>
                             {checkBox(selected)}
-                            <span style={{fontSize:13.5,fontWeight:850,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:G.text}}>{sectionName}</span>
+                            <span style={{fontSize:13,fontWeight:850,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:G.text}}>{sectionName}</span>
                           </button>
-                          <div style={{display:"flex",justifyContent:"flex-end"}}>
-                            <button onClick={()=>toggleSection(instituteName,sectionName)} style={{...pill(selected?G.blue:"#FFFFFF",selected?"#FFFFFF":G.textS,selected?G.blue:G.borderM),padding:"7px 11px",fontSize:12,fontWeight:800,minWidth:82,justifyContent:"center"}}>
-                              {selected ? "Added" : "Add"}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 ):(
                   <div style={{padding:"12px 14px",border:`1px dashed ${G.borderM}`,borderRadius:10,fontSize:12.5,color:G.textM}}>No configured sections. Add them from this institute's Sections area.</div>
