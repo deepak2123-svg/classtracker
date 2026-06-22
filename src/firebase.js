@@ -1399,6 +1399,54 @@ function normaliseSyllabusTemplate(source = {}) {
   };
 }
 
+function mergeSyllabusTemplateSource(templateSource = {}, publishedSource = {}) {
+  const cleanTemplate = templateSource || {};
+  const cleanPublished = publishedSource || {};
+  const embeddedPublished = cleanTemplate.published || {};
+  const embeddedVersion = Number(embeddedPublished.version || cleanTemplate.currentVersion || 0);
+  const publishedDocVersion = Number(cleanPublished.version || 0);
+  const embeddedChapterCount = Array.isArray(embeddedPublished.chapters) ? embeddedPublished.chapters.length : 0;
+  const publishedDocChapterCount = Array.isArray(cleanPublished.chapters) ? cleanPublished.chapters.length : 0;
+  const usePublishedDoc = (
+    !cleanTemplate.published
+    || publishedDocVersion > embeddedVersion
+    || publishedDocChapterCount > embeddedChapterCount
+  );
+  const mergedPublished = usePublishedDoc
+    ? { ...embeddedPublished, ...cleanPublished }
+    : { ...cleanPublished, ...embeddedPublished };
+  const mergedVersion = Math.max(
+    Number(cleanTemplate.currentVersion || 0),
+    Number(mergedPublished.version || 0),
+  );
+  return {
+    ...cleanTemplate,
+    id: String(cleanTemplate.id || cleanPublished.templateId || cleanPublished.id || ""),
+    subjectId: String(
+      cleanTemplate.subjectId
+      || mergedPublished.subjectId
+      || subjectIdFromName(mergedPublished.subjectName || cleanTemplate.subjectName || "")
+    ),
+    subjectName: String(cleanTemplate.subjectName || mergedPublished.subjectName || ""),
+    name: String(cleanTemplate.name || mergedPublished.name || ""),
+    instituteName: String(cleanTemplate.instituteName || mergedPublished.instituteName || ""),
+    sectionName: String(cleanTemplate.sectionName || mergedPublished.sectionName || ""),
+    scope: cleanTemplate.scope || mergedPublished.scope || [],
+    academicYear: String(cleanTemplate.academicYear || mergedPublished.academicYear || ""),
+    curriculum: String(cleanTemplate.curriculum || mergedPublished.curriculum || ""),
+    gradeLabel: String(cleanTemplate.gradeLabel || mergedPublished.gradeLabel || ""),
+    status: mergedVersion > 0 ? "published" : (cleanTemplate.status || "draft"),
+    currentVersion: mergedVersion,
+    updatedAt: Math.max(
+      Number(cleanTemplate.updatedAt || 0),
+      Number(mergedPublished.updatedAt || 0),
+      Number(mergedPublished.publishedAt || 0),
+    ),
+    updatedBy: String(cleanTemplate.updatedBy || mergedPublished.publishedBy || ""),
+    published: mergedVersion > 0 ? mergedPublished : (cleanTemplate.published || null),
+  };
+}
+
 function syllabusTemplateId({ subjectId, name, scope, academicYear, curriculum, gradeLabel }) {
   const scopeKey = syllabusScopeHash(scope);
   const idParts = [subjectId, name, scopeKey, academicYear, curriculum, gradeLabel]
@@ -1410,9 +1458,23 @@ function syllabusTemplateId({ subjectId, name, scope, academicYear, curriculum, 
 
 export async function getSyllabusTemplates() {
   try {
-    const snap = await getDocs(collection(db, "syllabusTemplates"));
-    return snap.docs
-      .map(item => normaliseSyllabusTemplate({ id: item.id, ...item.data() }))
+    const [templateSnap, publishedSnap] = await Promise.all([
+      getDocs(collection(db, "syllabusTemplates")),
+      getDocs(collection(db, "publishedSyllabi")),
+    ]);
+    const merged = new Map();
+
+    templateSnap.docs.forEach(item => {
+      merged.set(item.id, { id: item.id, ...item.data() });
+    });
+
+    publishedSnap.docs.forEach(item => {
+      const current = merged.get(item.id) || { id: item.id };
+      merged.set(item.id, mergeSyllabusTemplateSource(current, { id: item.id, ...item.data() }));
+    });
+
+    return [...merged.values()]
+      .map(item => normaliseSyllabusTemplate(item))
       .sort((a, b) => {
         const subjectOrder = a.subjectName.localeCompare(b.subjectName, undefined, { sensitivity: "base" });
         if (subjectOrder) return subjectOrder;
