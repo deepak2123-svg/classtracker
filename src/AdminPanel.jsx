@@ -9510,6 +9510,7 @@ function ClassBoundSyllabusFlow({
   const [selectedSections,setSelectedSections] = useState({});
   const [selectedSubject,setSelectedSubject] = useState(null);
   const [instituteSearch,setInstituteSearch] = useState("");
+  const [expandedSectionGroups,setExpandedSectionGroups] = useState({});
   const visibleInstitutes=institutes.filter(institute=>
     !instituteSearch.trim()||institute.toLowerCase().includes(instituteSearch.trim().toLowerCase())
   );
@@ -9533,13 +9534,29 @@ function ClassBoundSyllabusFlow({
     ()=>Object.values(selectedSections || {}).reduce((total, sectionList)=>total + ((sectionList || []).length), 0),
     [selectedSections],
   );
-  const sectionOptionsByInstitute=useMemo(()=>Object.fromEntries(selectedInstitutes.map(instituteName=>{
+  const sectionGroupsByInstitute=useMemo(()=>Object.fromEntries(selectedInstitutes.map(instituteName=>{
     const config=getInstituteSectionConfig(instituteSections,instituteName)||{};
-    return [instituteName,uniqueSectionNames([
-      ...(config.gradeGroups||[]).flatMap(group=>group.sections||[]),
-      ...(config.extraSections||[]),
-    ])];
+    const namedGroups=(config.gradeGroups||[])
+      .map((group,index)=>({
+        id:String(group?.id || `group-${index}`),
+        label:String(group?.label || `Group ${index + 1}`).trim() || `Group ${index + 1}`,
+        sections:uniqueSectionNames(group?.sections||[]),
+      }))
+      .filter(group=>group.sections.length);
+    const standaloneSections=uniqueSectionNames(config.extraSections||[]);
+    if(standaloneSections.length){
+      namedGroups.push({
+        id:"__other_sections__",
+        label:"Other sections",
+        sections:standaloneSections,
+      });
+    }
+    return [instituteName,namedGroups];
   })),[selectedInstitutes,instituteSections]);
+  const sectionOptionsByInstitute=useMemo(()=>Object.fromEntries(selectedInstitutes.map(instituteName=>[
+    instituteName,
+    uniqueSectionNames((sectionGroupsByInstitute[instituteName]||[]).flatMap(group=>group.sections||[])),
+  ])),[selectedInstitutes,sectionGroupsByInstitute]);
   const teacherNames=useMemo(()=>Object.fromEntries((teachers||[]).map(teacher=>[
     teacher.uid,
     classData?.[teacher.uid]?.profile?.name || teacher.name || teacher.email || "Teacher",
@@ -9626,6 +9643,10 @@ function ClassBoundSyllabusFlow({
       };
     });
   };
+  const toggleSectionGroup=(instituteName,groupId)=>{
+    const key=`${instituteName}::${groupId}`;
+    setExpandedSectionGroups(current=>({...current,[key]:!current[key]}));
+  };
   const selectionCard=selected=>({
     width:"100%",
     minHeight:isMobile?56:66,
@@ -9686,10 +9707,24 @@ function ClassBoundSyllabusFlow({
     gap:10,
     boxShadow:"none",
   });
-  const sectionGridScrollStyle = isMobile ? undefined : {
-    maxHeight:360,
-    overflowY:"auto",
-    paddingRight:2,
+  const sectionGroupCardStyle = expanded => ({
+    border:`1px solid ${expanded?"#BFD1F4":G.border}`,
+    borderRadius:14,
+    background:expanded?"#F8FBFF":"#FFFFFF",
+    overflow:"hidden",
+  });
+  const sectionGroupHeaderStyle = {
+    width:"100%",
+    border:"none",
+    background:"transparent",
+    padding:isMobile?"12px 13px":"13px 14px",
+    display:"flex",
+    alignItems:"center",
+    justifyContent:"space-between",
+    gap:12,
+    cursor:"pointer",
+    textAlign:"left",
+    fontFamily:G.sans,
   };
 
   return (
@@ -9738,6 +9773,7 @@ function ClassBoundSyllabusFlow({
           {!selectedInstitutes.length&&<div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM}}>Select an institute first.</div>}
           {selectedInstitutes.map((instituteName,index)=>{
             const sections=sectionOptionsByInstitute[instituteName]||[];
+            const sectionGroups=sectionGroupsByInstitute[instituteName]||[];
             return (
               <div key={instituteName} style={{paddingTop:index?14:0,borderTop:index?`1px solid ${G.border}`:"none"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
@@ -9759,18 +9795,61 @@ function ClassBoundSyllabusFlow({
                   )}
                 </div>
                 {sections.length?(
-                  <div style={sectionGridScrollStyle}>
-                    <div style={sectionGridStyle}>
-                      {sections.map(sectionName=>{
-                        const selected=(selectedSections[instituteName]||[]).includes(sectionName);
-                        return (
-                          <button key={sectionName} onClick={()=>toggleSection(instituteName,sectionName)} style={compactSectionCard(selected)}>
-                            {checkBox(selected)}
-                            <span style={{fontSize:13,fontWeight:850,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:G.text}}>{sectionName}</span>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {sectionGroups.map(group=>{
+                      const groupKey=`${instituteName}::${group.id}`;
+                      const expanded=!!expandedSectionGroups[groupKey];
+                      const currentSections=selectedSections[instituteName]||[];
+                      const selectedCount=group.sections.filter(section=>currentSections.includes(section)).length;
+                      const allSelected=group.sections.length>0&&group.sections.every(section=>currentSections.includes(section));
+                      return (
+                        <div key={groupKey} style={sectionGroupCardStyle(expanded)}>
+                          <button onClick={()=>toggleSectionGroup(instituteName,group.id)} style={sectionGroupHeaderStyle}>
+                            <div style={{minWidth:0,flex:1}}>
+                              <div style={{fontSize:14.5,fontWeight:850,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{group.label}</div>
+                              <div style={{fontSize:12,color:G.textM,marginTop:4}}>
+                                {group.sections.length} section{group.sections.length===1?"":"s"}{selectedCount?` · ${selectedCount} selected`:""}
+                              </div>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                              {selectedCount>0&&<span style={{...pill("#EEF7EE","#137A45","#C9EED3"),fontSize:11.5,fontWeight:800,padding:"5px 9px"}}>{selectedCount} selected</span>}
+                              <AppIcon icon={expanded?IconArrowUp:IconChevronRight} size={16} color={G.textL}/>
+                            </div>
                           </button>
-                        );
-                      })}
-                    </div>
+                          {expanded&&(
+                            <div style={{padding:"0 13px 13px"}}>
+                              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+                                <button onClick={()=>{
+                                  setSelectedSubject(null);
+                                  setSelectedSections(current=>{
+                                    const currentSections=current[instituteName]||[];
+                                    return {
+                                      ...current,
+                                      [instituteName]:allSelected
+                                        ? currentSections.filter(section=>!group.sections.includes(section))
+                                        : uniqueSectionNames([...currentSections,...group.sections]),
+                                    };
+                                  });
+                                }} style={{border:"none",background:"transparent",padding:"4px 2px",fontSize:11.5,fontWeight:850,color:G.blue,fontFamily:G.sans,cursor:"pointer",whiteSpace:"nowrap"}}>
+                                  {allSelected?"Clear group":"Select group"}
+                                </button>
+                              </div>
+                              <div style={sectionGridStyle}>
+                                {group.sections.map(sectionName=>{
+                                  const selected=currentSections.includes(sectionName);
+                                  return (
+                                    <button key={sectionName} onClick={()=>toggleSection(instituteName,sectionName)} style={compactSectionCard(selected)}>
+                                      {checkBox(selected)}
+                                      <span style={{fontSize:13,fontWeight:850,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:G.text}}>{sectionName}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ):(
                   <div style={{padding:"12px 14px",border:`1px dashed ${G.borderM}`,borderRadius:10,fontSize:12.5,color:G.textM}}>No configured sections. Add them from this institute's Sections area.</div>
