@@ -13788,15 +13788,23 @@ function AdminPanelInner({user}){
 
   // Rename a teacher (admin only)
   const handleRenameTeacher = async (uid, newName) => {
-    if (!newName.trim()) return;
+    const trimmedName = String(newName || "").trim();
+    if (!trimmedName) return;
     try {
-      await saveProfileName(uid, newName.trim());
-      setTeachers(ts => ts.map(t => t.uid === uid ? { ...t, name: newName.trim() } : t));
+      const saved = await saveProfileName(uid, trimmedName);
+      setTeachers(ts => ts.map(t => t.uid === uid ? { ...t, name: trimmedName } : t));
       setFullData(fd => {
-        if (!fd[uid]) return fd;
-        return { ...fd, [uid]: { ...fd[uid], profile: { ...fd[uid].profile, name: newName.trim() } } };
+        const existing = fd[uid] || {};
+        return {
+          ...fd,
+          [uid]: saved || {
+            ...existing,
+            profile: { ...(existing.profile || {}), name: trimmedName },
+          },
+        };
       });
       clearTeacherRename();
+      showAdminToast("Name saved.");
     } catch(e) { showAdminToast("Could not rename: " + e.message); }
   };
 
@@ -17207,7 +17215,11 @@ function AdminPanelInner({user}){
                           </>
                         ) : (
                           <>
-                            <button onClick={()=>{setRenamingTeacher({uid:row.teacher.uid,currentName:row.rawName});setRenameVal(row.rawName);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+                            <button onClick={()=>{
+                              const nextName = row.rawName || row.name || "";
+                              setRenamingTeacher({uid:row.teacher.uid,currentName:nextName});
+                              setRenameVal(nextName);
+                            }} style={workspaceActionButtonStyle("neutral")}>Rename</button>
                             {!row.isMe ? (
                               <button onClick={()=>handleDemote(row.teacher.uid)} style={workspaceActionButtonStyle("danger")}>Remove Admin</button>
                             ) : (
@@ -17546,7 +17558,11 @@ function AdminPanelInner({user}){
 
                       <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:16}}>
                         {renamingTeacher?.uid===t.uid ? null : (
-                          <button onClick={()=>{setRenamingTeacher({uid:t.uid,currentName:row.rawName});setRenameVal(row.rawName);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+                          <button onClick={()=>{
+                            const nextName = row.rawName || row.name || "";
+                            setRenamingTeacher({uid:t.uid,currentName:nextName});
+                            setRenameVal(nextName);
+                          }} style={workspaceActionButtonStyle("neutral")}>Rename</button>
                         )}
                         {!row.isMe&&(
                           <button onClick={()=>handlePromote(t.uid)} style={workspaceActionButtonStyle("blue")}>Make Admin</button>

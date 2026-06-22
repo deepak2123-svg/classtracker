@@ -840,30 +840,33 @@ export function purgeExpiredTrash(data) {
 
 // ── Save a name to a user's profile (used by admin + teacher name setup) ─────
 export async function saveProfileName(uid, name) {
+  const trimmedName = String(name || "").trim();
+  if (!trimmedName) throw new Error("Name is required.");
   try {
-    const ref = userDocRef(uid);
-    const snap = await getDoc(ref);
-    const existing = snap.exists() ? snap.data() : {};
-    const currentRevision = safeRevision(existing?._meta?.revision);
-    const updatedAt = Date.now();
-    await setDoc(ref, {
-      ...existing,
-      profile: { ...(existing.profile || {}), name: name.trim() },
-      _meta: {
-        ...(existing._meta || {}),
-        updatedAt,
-        schemaVersion: MAIN_SCHEMA_VERSION,
-        revision: currentRevision + 1,
-        previousRevision: currentRevision,
-        source: "saveProfileName",
+    const state = await loadUserDataState(uid);
+    const existing = state?.data || null;
+    const saved = await saveUserData(uid, {
+      ...(existing || {}),
+      profile: {
+        ...((existing && existing.profile) || {}),
+        name: trimmedName,
       },
+    }, {
+      expectedRevision: safeRevision(existing?._meta?.revision),
+      source: "saveProfileName",
     });
-    // Also update the teacher index entry
+
+    // Force the admin discovery index to reflect the saved name immediately.
     await setDoc(doc(db, "teachers", uid), {
-      name: name.trim(),
+      ...buildTeacherIndexPayload(uid, saved.data),
+      name: trimmedName,
       ...buildTeacherIdentityPatch(uid),
     }, { merge: true });
-  } catch (e) { console.error("saveProfileName", e); }
+    return saved.data;
+  } catch (e) {
+    console.error("saveProfileName", e);
+    throw e;
+  }
 }
 
 export async function repairTeacherIndex(uid) {
