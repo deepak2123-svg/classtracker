@@ -10162,6 +10162,7 @@ function AdminPanelInner({user}){
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections | report | messenger
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
   const [manageTeacherSort, setManageTeacherSort] = useState("count");
+  const [manageTeacherInstituteFilter, setManageTeacherInstituteFilter] = useState("");
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [manageSectionSearch, setManageSectionSearch] = useState("");
   const [manageInstituteFilter, setManageInstituteFilter] = useState("");
@@ -10641,6 +10642,15 @@ function AdminPanelInner({user}){
     const extras   = Array.from(set).filter(i=>!globalInstList.includes(i)).sort();
     return [...ordered, ...extras];
   },[globalInstList,teachers,fullData,deletedInstitutes]);
+
+  const sectionCountsByInstitute = useMemo(()=>Object.fromEntries((institutes||[]).map(instituteName=>{
+    const config = getInstituteSectionConfig(instSectionsAll, instituteName) || {};
+    const count = uniqueSectionNames([
+      ...(config.gradeGroups || []).flatMap(group => group.sections || []),
+      ...(config.extraSections || []),
+    ]).length;
+    return [instituteName, count];
+  })), [institutes, instSectionsAll]);
 
   const teacherOnlyList = useMemo(
     () => teachers.filter(t => roles[t.uid] !== "admin"),
@@ -17209,7 +17219,20 @@ function AdminPanelInner({user}){
             ? teacherOnlyList.filter(t=>teacherBelongsToInstitute(t, manageScopeInstitute))
             : teacherOnlyList;
           const teacherSearchKey = manageTeacherSearch.trim().toLowerCase();
+          const teacherInstituteOptions = !manageScopeInstitute
+            ? institutes
+                .map(inst=>{
+                  const count = scopedTeacherOnlyList.filter(t=>teacherBelongsToInstitute(t, inst)).length;
+                  return { inst, count };
+                })
+                .filter(item=>item.count>0)
+            : [];
           const matchesTeacher = (teacher) => {
+            if(manageTeacherInstituteFilter){
+              const instituteList = getTeacherInstituteList(teacher);
+              const matchesInstitute = instituteList.some(inst=>sameInstituteName(inst, manageTeacherInstituteFilter));
+              if(!matchesInstitute) return false;
+            }
             if(!teacherSearchKey) return true;
             const name = getTeacherDisplayName(teacher).toLowerCase();
             const email = getTeacherEmail(teacher).toLowerCase();
@@ -17267,6 +17290,67 @@ function AdminPanelInner({user}){
                   : "One row per teacher, with institute, subjects, classes, status, and actions visible without opening every card."}
               </div>
               {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search teachers by name, email, or institute")}
+              {!manageScopeInstitute&&teacherInstituteOptions.length>0&&(
+                <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:12,WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
+                  <button
+                    onClick={()=>setManageTeacherInstituteFilter("")}
+                    style={{
+                      border:`1px solid ${!manageTeacherInstituteFilter?G.navy:G.border}`,
+                      borderRadius:999,
+                      padding:"6px 12px",
+                      background:!manageTeacherInstituteFilter?G.navy:"#FFFFFF",
+                      color:!manageTeacherInstituteFilter?"#FFFFFF":G.textM,
+                      fontFamily:G.sans,
+                      fontSize:11.5,
+                      fontWeight:850,
+                      cursor:"pointer",
+                      whiteSpace:"nowrap",
+                      flexShrink:0,
+                    }}>
+                    All institutes
+                  </button>
+                  {teacherInstituteOptions.map(item=>(
+                    <button
+                      key={`teacher_filter_${item.inst}`}
+                      onClick={()=>setManageTeacherInstituteFilter(current=>sameInstituteName(current, item.inst) ? "" : item.inst)}
+                      style={{
+                        border:`1px solid ${sameInstituteName(manageTeacherInstituteFilter, item.inst)?G.navy:G.border}`,
+                        borderRadius:999,
+                        padding:"6px 12px",
+                        background:sameInstituteName(manageTeacherInstituteFilter, item.inst)?G.navy:"#FFFFFF",
+                        color:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"#FFFFFF":G.textM,
+                        fontFamily:G.sans,
+                        fontSize:11.5,
+                        fontWeight:850,
+                        cursor:"pointer",
+                        whiteSpace:"nowrap",
+                        display:"inline-flex",
+                        alignItems:"center",
+                        gap:6,
+                        flexShrink:0,
+                      }}>
+                      <span style={{maxWidth:isMobile?160:220,overflow:"hidden",textOverflow:"ellipsis"}}>{item.inst}</span>
+                      <span style={{
+                        minWidth:20,
+                        height:20,
+                        borderRadius:999,
+                        padding:"0 6px",
+                        display:"inline-flex",
+                        alignItems:"center",
+                        justifyContent:"center",
+                        background:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"rgba(255,255,255,0.16)":G.bg,
+                        border:`1px solid ${sameInstituteName(manageTeacherInstituteFilter, item.inst)?"rgba(255,255,255,0.18)":G.border}`,
+                        color:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"#FFFFFF":G.textL,
+                        fontSize:9.5,
+                        fontWeight:850,
+                        fontFamily:G.mono,
+                      }}>
+                        {item.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {!manageScopeInstitute&&(
                 <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
                   {[
