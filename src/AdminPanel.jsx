@@ -10613,13 +10613,24 @@ function AdminPanelInner({user}){
 
   const getTeacherDisplayName = React.useCallback((teacher) => {
     const data = fullData[teacher?.uid];
-    return data?.profile?.name || teacher?.name || "Unknown";
+    const raw = String(data?.profile?.name || teacher?.name || "").trim();
+    return raw || "Unnamed teacher";
+  }, [fullData]);
+
+  const getTeacherRawName = React.useCallback((teacher) => {
+    const data = fullData[teacher?.uid];
+    return String(data?.profile?.name || teacher?.name || "").trim();
   }, [fullData]);
 
   const getTeacherEmail = React.useCallback((teacher) => {
     const data = fullData[teacher?.uid];
     return String(data?.profile?.email || teacher?.email || "").trim();
   }, [fullData]);
+
+  const clearTeacherRename = React.useCallback(() => {
+    setRenamingTeacher(null);
+    setRenameVal("");
+  }, []);
 
   // Keep the canonical institute list defined before any derived summaries use it.
   const institutes=useMemo(()=>{
@@ -13785,7 +13796,7 @@ function AdminPanelInner({user}){
         if (!fd[uid]) return fd;
         return { ...fd, [uid]: { ...fd[uid], profile: { ...fd[uid].profile, name: newName.trim() } } };
       });
-      setRenamingTeacher(null);
+      clearTeacherRename();
     } catch(e) { showAdminToast("Could not rename: " + e.message); }
   };
 
@@ -17086,6 +17097,7 @@ function AdminPanelInner({user}){
               const instituteList = getTeacherInstituteList(t);
               return {
                 teacher:t,
+                rawName:getTeacherRawName(t),
                 name:getTeacherDisplayName(t),
                 email:getTeacherEmail(t) || "Email not available",
                 primaryInstitute:instituteList[0] || "No institute assigned",
@@ -17158,7 +17170,7 @@ function AdminPanelInner({user}){
                               onChange={e=>setRenameVal(e.target.value)}
                               onKeyDown={e=>{
                                 if(e.key==="Enter") handleRenameTeacher(row.teacher.uid,renameVal);
-                                if(e.key==="Escape") setRenamingTeacher(null);
+                                if(e.key==="Escape") clearTeacherRename();
                               }}
                               placeholder="Admin name"
                               autoFocus
@@ -17191,11 +17203,11 @@ function AdminPanelInner({user}){
                         {renamingTeacher?.uid===row.teacher.uid ? (
                           <>
                             <button onClick={()=>handleRenameTeacher(row.teacher.uid,renameVal)} style={workspaceActionButtonStyle("primary")}>Save</button>
-                            <button onClick={()=>setRenamingTeacher(null)} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
+                            <button onClick={clearTeacherRename} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
                           </>
                         ) : (
                           <>
-                            <button onClick={()=>{setRenamingTeacher({uid:row.teacher.uid,currentName:row.name});setRenameVal(row.name);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+                            <button onClick={()=>{setRenamingTeacher({uid:row.teacher.uid,currentName:row.rawName});setRenameVal(row.rawName);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
                             {!row.isMe ? (
                               <button onClick={()=>handleDemote(row.teacher.uid)} style={workspaceActionButtonStyle("danger")}>Remove Admin</button>
                             ) : (
@@ -17248,6 +17260,7 @@ function AdminPanelInner({user}){
               const hasLeftWorkspace = t.accountStatus === "departed" || t.active === false;
               return {
                 teacher:t,
+                rawName:getTeacherRawName(t),
                 name:getTeacherDisplayName(t),
                 email:getTeacherEmail(t) || "Email not available",
                 primaryInstitute,
@@ -17404,7 +17417,7 @@ function AdminPanelInner({user}){
                           onChange={e=>setRenameVal(e.target.value)}
                           onKeyDown={e=>{
                             if(e.key==="Enter") handleRenameTeacher(row.teacher.uid,renameVal);
-                            if(e.key==="Escape") setRenamingTeacher(null);
+                            if(e.key==="Escape") clearTeacherRename();
                           }}
                           placeholder="Teacher name"
                           autoFocus
@@ -17446,7 +17459,7 @@ function AdminPanelInner({user}){
                           }}>
                           Save
                         </button>
-                        <button onClick={()=>setRenamingTeacher(null)} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
+                        <button onClick={clearTeacherRename} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
                         {!row.isMe&&(
                           <button onClick={()=>handleRemoveTeacher(row.teacher.uid,row.name || "this teacher")} style={workspaceActionButtonStyle("danger")}>Remove</button>
                         )}
@@ -17533,7 +17546,7 @@ function AdminPanelInner({user}){
 
                       <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:16}}>
                         {renamingTeacher?.uid===t.uid ? null : (
-                          <button onClick={()=>{setRenamingTeacher({uid:t.uid,currentName:row.name});setRenameVal(row.name);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+                          <button onClick={()=>{setRenamingTeacher({uid:t.uid,currentName:row.rawName});setRenameVal(row.rawName);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
                         )}
                         {!row.isMe&&(
                           <button onClick={()=>handlePromote(t.uid)} style={workspaceActionButtonStyle("blue")}>Make Admin</button>
