@@ -17291,7 +17291,21 @@ function AdminPanelInner({user}){
               </div>
               {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search teachers by name, email, or institute")}
               {!manageScopeInstitute&&teacherInstituteOptions.length>0&&(
-                <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:12,WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
+                <>
+                  <div style={{fontSize:12.5,color:G.textM,marginBottom:8}}>
+                    {isMobile ? "Swipe institute pills to browse quickly." : "Tap an institute pill to narrow the table instantly."}
+                  </div>
+                  <div
+                    style={{
+                      display:"flex",
+                      gap:8,
+                      flexWrap:isMobile?"nowrap":"wrap",
+                      overflowX:isMobile?"auto":"visible",
+                      paddingBottom:isMobile?4:0,
+                      marginBottom:12,
+                      WebkitOverflowScrolling:"touch",
+                      scrollbarWidth:isMobile?"thin":"auto",
+                    }}>
                   <button
                     onClick={()=>setManageTeacherInstituteFilter("")}
                     style={{
@@ -17349,7 +17363,8 @@ function AdminPanelInner({user}){
                       </span>
                     </button>
                   ))}
-                </div>
+                  </div>
+                </>
               )}
               {!manageScopeInstitute&&(
                 <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
@@ -17421,8 +17436,20 @@ function AdminPanelInner({user}){
                   <div key="actions" style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
                     {renamingTeacher?.uid===row.teacher.uid ? (
                       <>
-                        <button onClick={()=>handleRenameTeacher(row.teacher.uid,renameVal)} style={workspaceActionButtonStyle("primary")}>Save</button>
+                        <button
+                          onClick={()=>handleRenameTeacher(row.teacher.uid,renameVal)}
+                          disabled={!renameVal.trim()}
+                          style={{
+                            ...workspaceActionButtonStyle("primary"),
+                            opacity:renameVal.trim()?1:0.55,
+                            cursor:renameVal.trim()?"pointer":"not-allowed",
+                          }}>
+                          Save
+                        </button>
                         <button onClick={()=>setRenamingTeacher(null)} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
+                        {!row.isMe&&(
+                          <button onClick={()=>handleRemoveTeacher(row.teacher.uid,row.name || "this teacher")} style={workspaceActionButtonStyle("danger")}>Remove</button>
+                        )}
                       </>
                     ) : (
                       <>
