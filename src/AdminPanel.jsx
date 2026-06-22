@@ -6648,6 +6648,24 @@ function LedgrTelegramDashboardModal({
   );
 }
 
+function AdminConfirmModal({ message, confirmLabel, onConfirm, onClose }) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.55)",zIndex:650,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
+      <div style={{background:"#fff",borderRadius:18,padding:"26px 22px",width:"100%",maxWidth:380,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+        <p style={{fontSize:16,color:"#374151",fontFamily:G.sans,marginBottom:24,lineHeight:1.6}}>{message}</p>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{background:"none",border:"1.5px solid #E5E7EB",borderRadius:9,padding:"8px 18px",fontSize:14,cursor:"pointer",color:"#6B7280",fontFamily:G.sans}}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} style={{background:"#1A2F5A",color:"#fff",border:"none",borderRadius:9,padding:"8px 20px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600}}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LedgrTelegramDashboardModalLegacy({
   institutes,
   schedule,
@@ -16352,6 +16370,7 @@ function AdminPanelInner({user}){
       )}
       {binView&&<AdminBinModal/>}
       {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+      {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
       <AdminToastBanner message={adminToast} />
       {/* nav */}
       <div style={isMobile
@@ -17833,6 +17852,7 @@ function AdminPanelInner({user}){
         )}
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
         <AdminToastBanner message={adminToast} />
         <MobileNav/>
         <div style={mobilePageInnerStyle}>
@@ -18179,6 +18199,7 @@ function AdminPanelInner({user}){
         <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
         <MobileNav/>
         <div style={mobilePageInnerStyle}>
           <div style={{fontSize:11,fontWeight:700,color:G.textL,letterSpacing:1.5,fontFamily:G.sans,textTransform:"uppercase",marginBottom:10}}>Institutes</div>
@@ -18292,6 +18313,7 @@ function AdminPanelInner({user}){
         <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         {legacySectionRepair&&(
           <LegacySectionRepairModal
@@ -18508,6 +18530,7 @@ function AdminPanelInner({user}){
         <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         <AdminToastBanner message={adminToast} />
         <MobileBreadcrumb/>
@@ -18654,6 +18677,7 @@ function AdminPanelInner({user}){
           <MobileMotionStyles />
           {binView&&<AdminBinModal/>}
           {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+          {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
           {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
           <AdminToastBanner message={adminToast} />
           <MobileBreadcrumb/>
@@ -18908,18 +18932,8 @@ function AdminPanelInner({user}){
       )}
       {binView&&<AdminBinModal/>}
       {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+      {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
       {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
-      {adminConfirm&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
-          <div style={{background:"#fff",borderRadius:18,padding:"26px 22px",width:"100%",maxWidth:380,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
-            <p style={{fontSize:16,color:"#374151",fontFamily:"'Inter',sans-serif",marginBottom:24,lineHeight:1.6}}>{adminConfirm.msg}</p>
-            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-              <button onClick={()=>setAdminConfirm(null)} style={{background:"none",border:"1.5px solid #E5E7EB",borderRadius:9,padding:"8px 18px",fontSize:14,cursor:"pointer",color:"#6B7280",fontFamily:"'Inter',sans-serif"}}>Cancel</button>
-              <button onClick={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} style={{background:"#1A2F5A",color:"#fff",border:"none",borderRadius:9,padding:"8px 20px",fontSize:14,cursor:"pointer",fontFamily:"'Inter',sans-serif",fontWeight:600}}>{adminConfirm.confirmLabel}</button>
-            </div>
-          </div>
-        </div>
-      )}
       <style>{`
         @media (min-width: 768px) { .admin-mobile-back { display: none !important; } }
         .admin-mobile-back { display: none; }
