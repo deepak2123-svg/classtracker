@@ -10205,7 +10205,6 @@ function AdminPanelInner({user}){
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
   const [copyGroupModal, setCopyGroupModal] = useState(null); // null | {sourceInst, group}
   const [legacySectionRepair, setLegacySectionRepair] = useState(null); // null | {scopeLabel,items,selections,busy,error}
-  const [instMenuOpen, setInstMenuOpen]     = useState(null); // inst name whose ⋯ menu is open
   const [instSearch, setInstSearch]         = useState("");
   const [p2Search, setP2Search]             = useState("");
   const [p3Search, setP3Search]             = useState("");
@@ -12052,7 +12051,7 @@ function AdminPanelInner({user}){
           onClick={event=>{
             event.preventDefault();
             event.stopPropagation();
-            openInstituteGlanceOptions("schedule", "report");
+            openInstituteGlanceOptions("export", "report");
           }}
           disabled={scheduleButtonBusy}
           style={{
@@ -15716,6 +15715,135 @@ function AdminPanelInner({user}){
     </div>
   );
 
+  const workspaceTableTones = {
+    slate:{bg:"#F8FAFC",border:G.border,color:G.textM},
+    blue:{bg:"#EEF4FF",border:"#C7D7F5",color:G.blue},
+    green:{bg:"#ECFDF5",border:"#BBF7D0",color:"#166534"},
+    amber:{bg:"#FFF7ED",border:"#FED7AA",color:G.amber},
+    red:{bg:"#FEF2F2",border:"#FECACA",color:G.red},
+  };
+
+  const renderWorkspacePill = (label, tone = "slate", extraStyle = {}) => {
+    if(label===null || label===undefined || label==="") return null;
+    const theme = workspaceTableTones[tone] || workspaceTableTones.slate;
+    return (
+      <span
+        style={{
+          display:"inline-flex",
+          alignItems:"center",
+          justifyContent:"center",
+          minHeight:28,
+          borderRadius:999,
+          padding:"0 10px",
+          background:theme.bg,
+          border:`1px solid ${theme.border}`,
+          color:theme.color,
+          fontSize:11.5,
+          fontWeight:800,
+          fontFamily:G.sans,
+          whiteSpace:"nowrap",
+          ...extraStyle,
+        }}>
+        {label}
+      </span>
+    );
+  };
+
+  const workspaceActionButtonStyle = (tone = "neutral") => {
+    const tones = {
+      neutral:{bg:"#FFFFFF",border:G.border,color:G.textS},
+      blue:{bg:G.blueL,border:"#C7D7F5",color:G.blue},
+      primary:{bg:G.navy,border:G.navy,color:"#FFFFFF"},
+      danger:{bg:G.redL,border:"#FECACA",color:G.red},
+    };
+    const theme = tones[tone] || tones.neutral;
+    return {
+      minHeight:34,
+      borderRadius:10,
+      border:`1px solid ${theme.border}`,
+      background:theme.bg,
+      color:theme.color,
+      fontSize:12.5,
+      fontWeight:800,
+      fontFamily:G.sans,
+      padding:"0 12px",
+      cursor:"pointer",
+      display:"inline-flex",
+      alignItems:"center",
+      justifyContent:"center",
+      gap:6,
+      whiteSpace:"nowrap",
+      boxShadow:reduceEffects ? "none" : G.shadowSm,
+    };
+  };
+
+  const renderWorkspaceTable = ({
+    columns,
+    desktopGrid,
+    rows,
+    rowKey,
+    minWidth = 980,
+    emptyMessage,
+    renderDesktopCells,
+    renderExpandedRow = null,
+  }) => {
+    if(!rows.length){
+      return (
+        <div style={{fontSize:15,color:G.textM,padding:"22px 8px 10px",textAlign:"center"}}>
+          {emptyMessage}
+        </div>
+      );
+    }
+    return (
+      <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",boxShadow:reduceEffects ? "none" : G.shadowSm}}>
+        <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          <div style={{minWidth}}>
+            <div
+              style={{
+                display:"grid",
+                gridTemplateColumns:desktopGrid,
+                gap:isMobile ? 10 : 14,
+                padding:isMobile ? "12px 12px 10px" : "12px 16px 10px",
+                background:"#F8FAFC",
+                borderBottom:`1px solid ${G.border}`,
+              }}>
+              {columns.map(column=>(
+                <div
+                  key={column.key || column.label}
+                  style={{
+                    fontSize:10.5,
+                    fontWeight:850,
+                    color:G.textL,
+                    textTransform:"uppercase",
+                    letterSpacing:0.7,
+                    fontFamily:G.mono,
+                  }}>
+                  {column.label}
+                </div>
+              ))}
+            </div>
+            {rows.map((row, index)=>(
+              <div key={rowKey(row, index)} style={{borderTop:index===0 ? "none" : `1px solid ${G.border}`}}>
+                <div
+                  style={{
+                    display:"grid",
+                    gridTemplateColumns:desktopGrid,
+                    gap:isMobile ? 10 : 14,
+                    alignItems:"center",
+                    padding:isMobile ? "14px 12px" : "14px 16px",
+                    background:"#FFFFFF",
+                  }}>
+                  {renderDesktopCells(row, index)}
+                </div>
+                {renderExpandedRow ? renderExpandedRow(row, index) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const instituteAccordionHeader = ({ icon, title, count, countLabel, isOpen, onClick }) => (
     <button
       type="button"
@@ -16726,74 +16854,70 @@ function AdminPanelInner({user}){
           </div>
         )}
 
-        {manageTab==="sections"&&(
-          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:isMobile?"14px 14px 12px":"16px 18px",marginBottom:24}}>
-            <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Section groups by institute</div>
-            <div style={{fontSize:14,color:G.textM,marginBottom:10,lineHeight:1.6}}>Open an institute to rename sections, repair legacy names, and manage shared timetable groups in one place.</div>
-            {manageSearchInput(manageSectionSearch,setManageSectionSearch,"Search institutes for section setup")}
-            {mobileManageSections.length===0
-              ? <div style={{fontSize:15,color:G.textM,padding:"14px 0 6px",textAlign:"center"}}>No institutes match your search.</div>
-              : <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {mobileManageSections.map(item=>{
-                    const hasPending = item.pendingSections.length > 0;
-                    const hasStandalone = item.standaloneSections.length > 0;
-                    return (
-                      <div key={`sections_${item.inst}`} style={{background:G.bg,borderRadius:14,padding:isMobile?"13px 13px 12px":"15px 16px",border:`1px solid ${G.border}`}}>
-                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-                          <div style={{minWidth:0,flex:1}}>
-                            <div style={{fontSize:isMobile?16:17,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.15}}>{item.inst}</div>
-                            <div style={{fontSize:12.5,color:G.textM,marginTop:5,lineHeight:1.55}}>
-                              {item.groups.length} timetable group{item.groups.length!==1?"s":""} · {item.totalSections.length} section{item.totalSections.length!==1?"s":""}
-                            </div>
-                          </div>
-                          <button onClick={()=>setInstDetailView(item.inst)} className={isMobile?"admin-mobile-touch":undefined} style={{...pill("#EEF4FF",G.blue,"#C7D7F5"),fontSize:12.5,fontWeight:800,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
-                            Open
-                          </button>
-                        </div>
-                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
-                          <span style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontFamily:G.mono,fontWeight:700,color:G.textS}}>
-                            {item.groups.length} groups
-                          </span>
-                          {hasPending&&(
-                            <span style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:999,padding:"5px 10px",fontSize:11.5,fontFamily:G.mono,fontWeight:700,color:"#B45309"}}>
-                              {item.pendingSections.length} pending
-                            </span>
-                          )}
-                          {hasStandalone&&(
-                            <span style={{background:"#EEF4FF",border:"1px solid #C7D7F5",borderRadius:999,padding:"5px 10px",fontSize:11.5,fontFamily:G.mono,fontWeight:700,color:G.blue}}>
-                              {item.standaloneSections.length} standalone
-                            </span>
-                          )}
-                        </div>
-                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
-                          <button onClick={()=>openLegacySectionRepairForInstitute(item.inst)} className={isMobile?"admin-mobile-touch":undefined} style={{...pill("#FFFFFF",G.textS,G.borderM),fontSize:12.5,WebkitTapHighlightColor:"transparent"}}>
-                            Legacy repair
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-            }
-          </div>
-        )}
+        {manageTab==="sections"&&(()=>{
+          const sectionRows = mobileManageSections.map(item=>({
+            ...item,
+            groupCount:item.groups.length,
+            totalCount:item.totalSections.length,
+            pendingCount:item.pendingSections.length,
+            standaloneCount:item.standaloneSections.length,
+            groupPreview:item.groups
+              .map(group=>String(group?.label || "").trim())
+              .filter(Boolean)
+              .slice(0, 2),
+          }));
+          return (
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:isMobile?"14px 14px 12px":"16px 18px",marginBottom:24}}>
+              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Sections</div>
+              <div style={{fontSize:14,color:G.textM,marginBottom:10,lineHeight:1.6}}>Review every institute at once, then open the one that needs timetable, rename, or repair work.</div>
+              {manageSearchInput(manageSectionSearch,setManageSectionSearch,"Search institutes for section setup")}
+              {renderWorkspaceTable({
+                columns:[
+                  { key:"institute", label:"Institute" },
+                  { key:"groups", label:"Groups" },
+                  { key:"sections", label:"Sections" },
+                  { key:"pending", label:"Pending" },
+                  { key:"standalone", label:"Standalone" },
+                  { key:"actions", label:"Actions" },
+                ],
+                desktopGrid:"minmax(270px,1.8fr) 90px 90px 120px 120px minmax(220px,1.2fr)",
+                minWidth:980,
+                rows:sectionRows,
+                rowKey:row=>`sections_${row.inst}`,
+                emptyMessage:"No institutes match your search.",
+                renderDesktopCells:row=>[
+                  <div key="institute" style={{minWidth:0}}>
+                    <div style={{fontSize:15.5,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.inst}</div>
+                    <div style={{fontSize:12.5,color:G.textM,marginTop:4,lineHeight:1.45}}>
+                      {row.groupPreview.length
+                        ? `${row.groupPreview.join(" · ")}${row.groupCount>row.groupPreview.length ? ` +${row.groupCount-row.groupPreview.length} more` : ""}`
+                        : "No timetable groups yet"}
+                    </div>
+                  </div>,
+                  <div key="groups" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.groupCount}</div>,
+                  <div key="sections" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.totalCount}</div>,
+                  <div key="pending">
+                    {row.pendingCount>0
+                      ? renderWorkspacePill(`${row.pendingCount} pending`, "amber")
+                      : renderWorkspacePill("Ready", "green")}
+                  </div>,
+                  <div key="standalone">
+                    {row.standaloneCount>0
+                      ? renderWorkspacePill(`${row.standaloneCount} loose`, "blue")
+                      : <span style={{fontSize:13,color:G.textL}}>—</span>}
+                  </div>,
+                  <div key="actions" style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
+                    <button onClick={()=>setInstDetailView(row.inst)} className={isMobile?"admin-mobile-touch":undefined} style={workspaceActionButtonStyle("blue")}>Open</button>
+                    <button onClick={()=>openLegacySectionRepairForInstitute(row.inst)} className={isMobile?"admin-mobile-touch":undefined} style={workspaceActionButtonStyle("neutral")}>Legacy repair</button>
+                  </div>,
+                ],
+              })}
+            </div>
+          );
+        })()}
 
         {/* ── INSTITUTES TAB ── */}
         {manageTab==="institutes"&&<>
-
-        {/* Class Manager callout */}
-        {!isMobile&&<div style={{background:`linear-gradient(135deg,${G.navy},${G.navyS})`,borderRadius:14,padding:"20px",marginBottom:20,display:"flex",alignItems:"center",gap:14}}>
-          <div style={{width:48,height:48,borderRadius:14,background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>📚</div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:17,fontWeight:700,color:"#fff",fontFamily:G.display,marginBottom:3}}>{manageScopeInstitute ? "Institute settings" : "Institutes"}</div>
-            <div style={{fontSize:13,color:"rgba(255,255,255,0.6)",lineHeight:1.5}}>
-              {manageScopeInstitute
-                ? `Manage the identity, structure, and lifecycle of ${manageScopeInstitute}.`
-                : "Create institutes and maintain the workspace-wide institute list."}
-            </div>
-          </div>
-        </div>}
-
         {/* Create Institute */}
         {!manageScopeInstitute&&(
         <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:20}}>
@@ -16818,96 +16942,102 @@ function AdminPanelInner({user}){
         )}
 
         {/* Institute list */}
-        <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:24}}>
-          <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{manageScopeInstitute ? manageScopeInstitute : "All Institutes"}</div>
-          <div style={{fontSize:14,color:G.textM,marginBottom:14}}>
-            {manageScopeInstitute
-              ? "Rename this institute, open its sections, or manage its lifecycle."
-              : "Delete removes from the list only. Teacher data is not affected."}
-          </div>
-          {institutes.length===0
-            ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No institutes yet. Create one above.</div>
-            :<div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {(manageScopeInstitute ? institutes.filter(inst=>sameInstituteName(inst,manageScopeInstitute)) : institutes).map((inst)=>{
-                const instIdx=institutes.indexOf(inst);
-                const instTeacherList=teachers.filter(t=>teacherBelongsToInstitute(t, inst));
-                const clsCount=instituteStats[inst]?.classCount || instTeacherList.length;
-                return(
-                  <div key={inst}
-                    style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`}}>
-                    {renamingInst===inst?(
-                      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
-                        <input value={renameInstVal} onChange={e=>setRenameInstVal(e.target.value)}
-                          onKeyDown={e=>{if(e.key==="Enter")handleRenameInstitute(inst,renameInstVal);if(e.key==="Escape")setRenamingInst(null);}}
-                          autoFocus style={{flex:1,minWidth:120,padding:"7px 11px",borderRadius:8,border:`1.5px solid ${G.blue}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
-                        <button onClick={()=>handleRenameInstitute(inst,renameInstVal)} style={{...pill(G.navy,"#fff","transparent"),fontSize:13,padding:"6px 14px"}}>Save</button>
-                        <button onClick={()=>setRenamingInst(null)} style={{...pill("none",G.textM,G.border),fontSize:13,padding:"6px 10px"}}>✕</button>
-                      </div>
-                    ):(
-                      <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:3}}>{inst}</div>
+        {(()=>{
+          const instituteSearchKey = manageInstituteFilter.trim().toLowerCase();
+          const visibleInstitutes = (manageScopeInstitute
+            ? institutes.filter(inst=>sameInstituteName(inst,manageScopeInstitute))
+            : institutes.filter(inst=>!instituteSearchKey || inst.toLowerCase().includes(instituteSearchKey))
+          ).map(inst=>{
+            const instTeacherList = teachers.filter(t=>teacherBelongsToInstitute(t, inst));
+            const clsCount = instituteStats[inst]?.classCount || instTeacherList.length;
+            const sectionCount = sectionCountsByInstitute[inst] || 0;
+            const groupCount = (getInstituteSectionConfig(instSectionsAll, inst)?.gradeGroups || []).length;
+            return {
+              inst,
+              teacherCount:instTeacherList.length,
+              classCount:clsCount,
+              sectionCount,
+              groupCount,
+            };
+          });
+          return (
+            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:24}}>
+              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{manageScopeInstitute ? manageScopeInstitute : "Institutes"}</div>
+              <div style={{fontSize:14,color:G.textM,marginBottom:14}}>
+                {manageScopeInstitute
+                  ? "Rename this institute, open its sections, or jump straight to the connected teachers."
+                  : "One line per institute, with teachers, classes, sections, and the next action visible immediately."}
+              </div>
+              {!manageScopeInstitute&&manageSearchInput(manageInstituteFilter,setManageInstituteFilter,"Search institutes by name")}
+              {renderWorkspaceTable({
+                columns:[
+                  { key:"institute", label:"Institute" },
+                  { key:"teachers", label:"Teachers" },
+                  { key:"classes", label:"Classes" },
+                  { key:"sections", label:"Sections" },
+                  { key:"groups", label:"Groups" },
+                  { key:"actions", label:"Actions" },
+                ],
+                desktopGrid:"minmax(270px,1.8fr) 90px 90px 90px 90px minmax(320px,1.4fr)",
+                minWidth:1040,
+                rows:visibleInstitutes,
+                rowKey:row=>`institute_${row.inst}`,
+                emptyMessage:manageScopeInstitute ? "This institute could not be found." : "No institutes match your search yet.",
+                renderDesktopCells:row=>[
+                  <div key="institute" style={{minWidth:0}}>
+                    {renamingInst===row.inst ? (
+                      <input
+                        value={renameInstVal}
+                        onChange={e=>setRenameInstVal(e.target.value)}
+                        onKeyDown={e=>{
+                          if(e.key==="Enter") handleRenameInstitute(row.inst,renameInstVal);
+                          if(e.key==="Escape") setRenamingInst(null);
+                        }}
+                        autoFocus
+                        style={{width:"100%",maxWidth:320,padding:"8px 11px",borderRadius:10,border:`1.5px solid ${G.blue}`,fontSize:14,fontFamily:G.sans,outline:"none"}}
+                      />
+                    ) : (
+                      <>
+                        <div style={{fontSize:15.5,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.inst}</div>
+                        <div style={{fontSize:12.5,color:G.textM,marginTop:4,lineHeight:1.45}}>
+                          {row.classCount} class{row.classCount!==1?"es":""} connected
+                        </div>
+                      </>
                     )}
-                    {/* Row 2: stats + buttons on same line */}
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-                      <div>
-                        <div style={{fontSize:14,color:G.textM}}>{clsCount} class{clsCount!==1?"es":""} · {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}</div>
-                        {instTeacherList.length>0&&(
-                          <div style={{display:"flex",gap:8,marginTop:6,alignItems:"center"}}>
-                            <span style={{background:G.blueL,color:G.blue,borderRadius:20,padding:"3px 12px",fontSize:13,fontFamily:G.sans,fontWeight:600}}>
-                              {instTeacherList.length} teacher{instTeacherList.length!==1?"s":""}
-                            </span>
-                            <button onClick={()=>{
-                              setManageTab("teachers");
-                              setOpenTeacherInstitute(inst);
-                              setManageTeacherSearch("");
-                            }}
-                              style={{background:"none",border:"none",fontSize:12,color:G.textM,cursor:"pointer",fontFamily:G.sans,textDecoration:"underline",padding:0}}>
-                              View in Teachers →
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center",position:"relative"}}>
-                        <button onClick={()=>openManageTab("sections",{ detailInstitute: inst })}
-                          style={{background:G.blueL,border:`1px solid ${G.borderM}`,borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",color:G.blue,fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap"}}>
-                          📚 Manage Sections →
-                        </button>
+                  </div>,
+                  <div key="teachers" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.teacherCount}</div>,
+                  <div key="classes" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.classCount}</div>,
+                  <div key="sections" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.sectionCount}</div>,
+                  <div key="groups" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.groupCount}</div>,
+                  <div key="actions" style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
+                    {renamingInst===row.inst ? (
+                      <>
+                        <button onClick={()=>handleRenameInstitute(row.inst,renameInstVal)} style={workspaceActionButtonStyle("primary")}>Save</button>
+                        <button onClick={()=>setRenamingInst(null)} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
+                      </>
+                    ) : (
+                      <>
                         <button
-                          onClick={e=>{e.stopPropagation();setInstMenuOpen(instMenuOpen===inst?null:inst);}}
-                          style={{width:34,height:34,background:G.surface,border:`1px solid ${G.borderM}`,borderRadius:8,fontSize:20,cursor:"pointer",color:G.textM,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,letterSpacing:1}}>
-                          ⋯
+                          onClick={()=>{
+                            setManageTab("teachers");
+                            setManageScopeInstitute(row.inst);
+                            setManageTeacherSearch("");
+                            setSelTeacher(null);
+                          }}
+                          style={workspaceActionButtonStyle("neutral")}>
+                          Teachers
                         </button>
-                        {instMenuOpen===inst&&(<>
-                          <div onClick={()=>setInstMenuOpen(null)} style={{position:"fixed",inset:0,zIndex:199}}/>
-                          <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:200,background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,boxShadow:G.shadowMd,overflow:"hidden",minWidth:165}}>
-                            {instIdx>0&&(
-                              <button onClick={()=>{
-                                const reordered=[...institutes];
-                                const [moved]=reordered.splice(instIdx,1);
-                                reordered.unshift(moved);
-                                saveInstOrder(reordered);
-                                setInstMenuOpen(null);
-                              }} style={{width:"100%",padding:"11px 16px",background:"none",border:"none",borderBottom:`1px solid ${G.border}`,textAlign:"left",fontSize:14,cursor:"pointer",color:G.textS,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:10}}>
-                                <span>↑</span> Move to Top
-                              </button>
-                            )}
-                            <button onClick={()=>{setRenamingInst(inst);setRenameInstVal(inst);setInstMenuOpen(null);}}
-                              style={{width:"100%",padding:"11px 16px",background:"none",border:"none",borderBottom:`1px solid ${G.border}`,textAlign:"left",fontSize:14,cursor:"pointer",color:G.textS,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:10}}>
-                              <span>✏</span> Rename
-                            </button>
-                            <button onClick={()=>{handleDeleteInstitute(inst);setInstMenuOpen(null);}}
-                              style={{width:"100%",padding:"11px 16px",background:"none",border:"none",textAlign:"left",fontSize:14,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,display:"flex",alignItems:"center",gap:10}}>
-                              <span>🗑</span> Delete
-                            </button>
-                          </div>
-        </>)}
-                      </div>
-                    </div>
-                  </div>
-                );
+                        <button onClick={()=>openManageTab("sections",{ detailInstitute: row.inst })} style={workspaceActionButtonStyle("blue")}>Sections</button>
+                        <button onClick={()=>{setRenamingInst(row.inst);setRenameInstVal(row.inst);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+                        <button onClick={()=>handleDeleteInstitute(row.inst)} style={workspaceActionButtonStyle("danger")}>Delete</button>
+                      </>
+                    )}
+                  </div>,
+                ],
               })}
             </div>
-          }
-        </div>
+          );
+        })()}
 
         </>}
 
@@ -16921,66 +17051,23 @@ function AdminPanelInner({user}){
             const instituteText = getTeacherInstituteList(teacher).join(" ").toLowerCase();
             return name.includes(adminSearchKey) || email.includes(adminSearchKey) || instituteText.includes(adminSearchKey);
           };
-          const adminInstitutes = [...new Set([
-            ...institutes,
-            ...adminList.flatMap(t=>getTeacherInstituteList(t)),
-          ])]
-            .filter(Boolean)
-            .sort(exportTextSorter.compare);
-          const adminsWithoutInstitute = adminList.filter(t=>!getTeacherInstituteList(t).length && matchesAdmin(t));
-          const AdminCard = ({ t, currentInstitute = null }) => {
-            const name=getTeacherDisplayName(t);
-            const isMe=t.uid===user.uid;
-            const instituteList = getTeacherInstituteList(t);
-            const otherInstitutes = currentInstitute
-              ? instituteList.filter(value=>!sameInstituteName(value, currentInstitute))
-              : instituteList;
-            return(
-              <div style={{background:G.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:12}}>
-                <div style={{width:42,height:42,borderRadius:11,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:800,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
-                  {(name[0]||"?").toUpperCase()}
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  {renamingTeacher?.uid===t.uid?(
-                    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                      <input value={renameVal} onChange={e=>setRenameVal(e.target.value)}
-                        onKeyDown={e=>e.key==="Enter"&&handleRenameTeacher(t.uid,renameVal)}
-                        placeholder="Admin name" autoFocus
-                        style={{flex:"1 1 220px",minWidth:0,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${G.blue}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
-                      <button onClick={()=>handleRenameTeacher(t.uid,renameVal)} style={{...pill(G.navy,"#fff","transparent"),fontSize:13,padding:"7px 14px"}}>Save</button>
-                      <button onClick={()=>setRenamingTeacher(null)} style={{...pill("none",G.textM,G.border),fontSize:13,padding:"7px 10px"}}>Cancel</button>
-                    </div>
-                  ):(
-                    <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                      {name}
-                      {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
-                    </div>
-                  )}
-                  <div style={{fontSize:13,color:G.textM,marginTop:3,fontFamily:G.mono}}>
-                    {getTeacherEmail(t) || "Email not available"}
-                  </div>
-                  {otherInstitutes.length>0&&<AlsoAtInstitutes institutes={otherInstitutes} />}
-                </div>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,flexShrink:0}}>
-                  <span style={{background:G.blueL,color:G.blue,fontSize:12,fontWeight:800,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
-                    Admin
-                  </span>
-                  <div style={{display:"flex",gap:7,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                    <button onClick={()=>{setRenamingTeacher({uid:t.uid,currentName:name});setRenameVal(name);}}
-                      style={{...pill(G.surface,G.textS,G.borderM),fontSize:13,flexShrink:0}}>
-                      Rename
-                    </button>
-                    {!isMe&&(
-                      <button onClick={()=>handleDemote(t.uid)}
-                        style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13,flexShrink:0}}>
-                        Remove Admin
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+          const adminRows = adminList
+            .filter(matchesAdmin)
+            .map(t=>{
+              const instituteList = getTeacherInstituteList(t);
+              return {
+                teacher:t,
+                name:getTeacherDisplayName(t),
+                email:getTeacherEmail(t) || "Email not available",
+                primaryInstitute:instituteList[0] || "No institute assigned",
+                otherInstitutes:instituteList.slice(1),
+                isMe:t.uid===user.uid,
+              };
+            })
+            .sort((a,b)=>
+              exportTextSorter.compare(a.primaryInstitute, b.primaryInstitute)
+              || exportTextSorter.compare(a.name, b.name)
             );
-          };
           return(
             <>
               {/* Invite link */}
@@ -17012,58 +17099,84 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
                   Admins ({adminList.length})
                 </div>
-                <div style={{fontSize:14,color:G.textM,marginBottom:10}}>These accounts have full access to the admin panel. Open an institute to view its admins.</div>
+                <div style={{fontSize:14,color:G.textM,marginBottom:10}}>Every admin is visible here with their parent institute, extra institutes, access level, and actions in one pass.</div>
                 {manageSearchInput(manageAdminSearch,setManageAdminSearch,"Search admins by name, email, or institute")}
                 {adminList.length===0
                   ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No admins yet. Generate an invite link above.</div>
-                  :<div style={{display:"flex",flexDirection:"column",gap:12}}>
-                    {adminInstitutes.map(inst=>{
-                      const instAdmins = adminList.filter(t=>teacherBelongsToInstitute(t, inst) && matchesAdmin(t));
-                      if(!instAdmins.length) return null;
-                      const isOpen = openAdminInstitute===inst;
-                      return(
-                        <div key={inst}>
-                          {instituteAccordionHeader({
-                            icon:IconSettings,
-                            title:inst,
-                            count:instAdmins.length,
-                            countLabel:"admin",
-                            isOpen,
-                            onClick:()=>setOpenAdminInstitute(curr=>curr===inst?null:inst),
-                          })}
-                          {isOpen&&(
-                            <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
-                              {instAdmins.map(t=>(
-                                <AdminCard key={`${inst}_${t.uid}`} t={t} currentInstitute={inst} />
-                              ))}
-                            </div>
+                  :renderWorkspaceTable({
+                    columns:[
+                      { key:"admin", label:"Admin" },
+                      { key:"primary", label:"Parent institute" },
+                      { key:"alsoAt", label:"Also at" },
+                      { key:"email", label:"Email" },
+                      { key:"access", label:"Access" },
+                      { key:"actions", label:"Actions" },
+                    ],
+                    desktopGrid:"minmax(240px,1.5fr) minmax(220px,1.2fr) minmax(150px,1fr) minmax(230px,1.35fr) 120px minmax(210px,1fr)",
+                    minWidth:1170,
+                    rows:adminRows,
+                    rowKey:row=>`admin_${row.teacher.uid}`,
+                    emptyMessage:"No admins match your search.",
+                    renderDesktopCells:row=>[
+                      <div key="admin" style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+                        <div style={{width:38,height:38,borderRadius:11,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
+                          {(row.name[0]||"?").toUpperCase()}
+                        </div>
+                        <div style={{minWidth:0}}>
+                          {renamingTeacher?.uid===row.teacher.uid ? (
+                            <input
+                              value={renameVal}
+                              onChange={e=>setRenameVal(e.target.value)}
+                              onKeyDown={e=>{
+                                if(e.key==="Enter") handleRenameTeacher(row.teacher.uid,renameVal);
+                                if(e.key==="Escape") setRenamingTeacher(null);
+                              }}
+                              placeholder="Admin name"
+                              autoFocus
+                              style={{width:"100%",maxWidth:240,padding:"8px 11px",borderRadius:10,border:`1.5px solid ${G.blue}`,fontSize:14,fontFamily:G.sans,outline:"none"}}
+                            />
+                          ) : (
+                            <>
+                              <div style={{fontSize:15.5,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</div>
+                              <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>{row.isMe ? "Current session" : "Admin account"}</div>
+                            </>
                           )}
                         </div>
-                      );
-                    })}
-                    {adminsWithoutInstitute.length>0&&(
-                      <div>
-                        {instituteAccordionHeader({
-                          icon:IconSettings,
-                          title:"No Institute Assigned",
-                          count:adminsWithoutInstitute.length,
-                          countLabel:"admin",
-                          isOpen:openAdminInstitute==="__no_inst__",
-                          onClick:()=>setOpenAdminInstitute(curr=>curr==="__no_inst__"?null:"__no_inst__"),
-                        })}
-                        {openAdminInstitute==="__no_inst__"&&(
-                          <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
-                            {adminsWithoutInstitute.map(t=>(
-                              <AdminCard key={`noinst_${t.uid}`} t={t} />
-                            ))}
-                          </div>
+                      </div>,
+                      <div key="primary" style={{minWidth:0}}>
+                        <div style={{fontSize:14.5,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.primaryInstitute}</div>
+                      </div>,
+                      <div key="alsoAt" style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {row.otherInstitutes.length
+                          ? row.otherInstitutes.slice(0, 2).map(inst=>(
+                              <React.Fragment key={`${row.teacher.uid}_${inst}`}>
+                                {renderWorkspacePill(inst, "slate", { maxWidth:160, overflow:"hidden", textOverflow:"ellipsis" })}
+                              </React.Fragment>
+                            ))
+                          : <span style={{fontSize:13,color:G.textL}}>—</span>}
+                        {row.otherInstitutes.length>2 && renderWorkspacePill(`+${row.otherInstitutes.length-2} more`, "blue")}
+                      </div>,
+                      <div key="email" style={{fontSize:12.5,color:G.textM,fontFamily:G.mono,wordBreak:"break-all"}}>{row.email}</div>,
+                      <div key="access">{renderWorkspacePill("Full access", "blue")}</div>,
+                      <div key="actions" style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
+                        {renamingTeacher?.uid===row.teacher.uid ? (
+                          <>
+                            <button onClick={()=>handleRenameTeacher(row.teacher.uid,renameVal)} style={workspaceActionButtonStyle("primary")}>Save</button>
+                            <button onClick={()=>setRenamingTeacher(null)} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={()=>{setRenamingTeacher({uid:row.teacher.uid,currentName:row.name});setRenameVal(row.name);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+                            {!row.isMe ? (
+                              <button onClick={()=>handleDemote(row.teacher.uid)} style={workspaceActionButtonStyle("danger")}>Remove Admin</button>
+                            ) : (
+                              <span style={{fontSize:12.5,color:G.textL,fontWeight:700,alignSelf:"center"}}>This account</span>
+                            )}
+                          </>
                         )}
-                      </div>
-                    )}
-                    {adminList.length>0 && adminInstitutes.every(inst=>!adminList.some(t=>teacherBelongsToInstitute(t, inst) && matchesAdmin(t))) && adminsWithoutInstitute.length===0 && (
-                      <div style={{fontSize:15,color:G.textM,padding:"10px 0",textAlign:"center"}}>No admins match your search.</div>
-                    )}
-                  </div>
+                      </div>,
+                    ],
+                  })
                 }
               </div>
             </>
@@ -17084,166 +17197,61 @@ function AdminPanelInner({user}){
             const instituteText = getTeacherInstituteList(teacher).join(" ").toLowerCase();
             return name.includes(teacherSearchKey) || email.includes(teacherSearchKey) || instituteText.includes(teacherSearchKey);
           };
-          const teacherInstitutes = [...new Set([
-            ...(manageScopeInstitute ? [manageScopeInstitute] : institutes),
-            ...scopedTeacherOnlyList.flatMap(t=>getTeacherInstituteList(t)),
-          ])]
-            .filter(Boolean);
-          const teacherInstituteGroups = teacherInstitutes
-            .map(inst=>({
-              inst,
-              teachers:scopedTeacherOnlyList.filter(t=>teacherBelongsToInstitute(t, inst) && matchesTeacher(t)),
-            }))
-            .filter(group=>group.teachers.length>0)
+          const teacherRows = scopedTeacherOnlyList
+            .filter(matchesTeacher)
+            .map(t=>{
+              const d = fullData[t.uid] || {};
+              const instituteList = getTeacherInstituteList(t);
+              const primaryInstitute = manageScopeInstitute || instituteList[0] || "No institute assigned";
+              const hasLeftWorkspace = t.accountStatus === "departed" || t.active === false;
+              return {
+                teacher:t,
+                name:getTeacherDisplayName(t),
+                email:getTeacherEmail(t) || "Email not available",
+                primaryInstitute,
+                extraInstitutes:manageScopeInstitute
+                  ? instituteList.filter(value=>!sameInstituteName(value, manageScopeInstitute))
+                  : instituteList.slice(1),
+                subjectCount:teacherAssignedSubjectIds(t).length,
+                classCount:fullData[t.uid] ? (d.classes || []).length : (t.classCount || 0),
+                hasLeftWorkspace,
+                departedLabel:t.departedAt
+                  ? `Left ${new Date(Number(t.departedAt)).toLocaleDateString()}`
+                  : "Left workspace",
+                isMe:t.uid===user.uid,
+              };
+            })
             .sort((a,b)=>{
-              if(manageTeacherSort==="count"){
-                return (b.teachers.length-a.teachers.length) || exportTextSorter.compare(a.inst, b.inst);
+              if(manageScopeInstitute){
+                return exportTextSorter.compare(a.name, b.name);
               }
-              return exportTextSorter.compare(a.inst, b.inst);
+              if(manageTeacherSort==="count"){
+                return exportTextSorter.compare(a.primaryInstitute, b.primaryInstitute)
+                  || exportTextSorter.compare(a.name, b.name);
+              }
+              return exportTextSorter.compare(a.name, b.name)
+                || exportTextSorter.compare(a.primaryInstitute, b.primaryInstitute);
             });
-          const teachersWithoutInstitute = manageScopeInstitute
-            ? []
-            : scopedTeacherOnlyList.filter(t=>!getTeacherInstituteList(t).length && matchesTeacher(t));
-          const hasInstituteMatches = teacherInstituteGroups.length>0;
-          const maxTeacherCount = Math.max(1, ...teacherInstituteGroups.map(group=>group.teachers.length));
 
-          const TeacherCard = ({ t, currentInstitute = null }) => {
-            const d = fullData[t.uid] || {};
-            const name = getTeacherDisplayName(t);
-            const email = getTeacherEmail(t);
-            const isMe = t.uid===user.uid;
-            const isSel = selTeacher===t.uid;
-            const allTeacherInstitutes = getTeacherInstituteList(t);
-            const otherInstitutes = currentInstitute
-              ? allTeacherInstitutes.filter(value=>!sameInstituteName(value, currentInstitute))
-              : allTeacherInstitutes;
-            const classCount = fullData[t.uid] ? (d.classes||[]).length : (t.classCount||0);
-            const hasLeftWorkspace = t.accountStatus === "departed" || t.active === false;
-            const departedLabel = t.departedAt
-              ? `Left ${new Date(Number(t.departedAt)).toLocaleDateString()}`
-              : "Left workspace";
-
-            return(
-              <div style={{background:G.surface,borderRadius:12,border:`2px solid ${isSel?G.blue:hasLeftWorkspace?"#F5CACA":G.border}`,overflow:"hidden",boxShadow:isSel?`0 0 0 3px ${G.blueL}`:G.shadowSm,transition:"all 0.15s"}}>
-                <div onClick={()=>{ensureFullData(t.uid);setSelTeacher(isSel?null:t.uid);}}
-                  style={{padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:42,height:42,borderRadius:11,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
-                    {(name[0]||"?").toUpperCase()}
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                      {name}
-                      {isMe&&<span style={{fontSize:11,color:G.textL,fontFamily:G.mono}}>(you)</span>}
-                      {hasLeftWorkspace&&<span style={{fontSize:11,color:G.red,background:G.redL,border:"1px solid #F5CACA",borderRadius:999,padding:"2px 7px",fontFamily:G.sans,fontWeight:800}}>Left workspace</span>}
-                    </div>
-                    <div style={{fontSize:13,color:G.textM,marginTop:3,fontFamily:G.mono}}>
-                      {email || "Email not available"}
-                    </div>
-                    {otherInstitutes.length>0&&<AlsoAtInstitutes institutes={otherInstitutes} />}
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
-                    <span style={{background:hasLeftWorkspace?G.redL:G.blueL,color:hasLeftWorkspace?G.red:G.blue,fontSize:12,fontWeight:700,borderRadius:20,padding:"3px 10px",fontFamily:G.sans}}>
-                      {hasLeftWorkspace ? "Departed" : "👤 Teacher"}
-                    </span>
-                    <span style={{fontSize:11,color:hasLeftWorkspace?G.red:G.textL,fontFamily:G.mono}}>{hasLeftWorkspace ? departedLabel : `${classCount} classes · tap to manage`}</span>
-                  </div>
-                </div>
-
-                {isSel&&(
-                  <div style={{borderTop:`1px solid ${G.border}`,background:G.bg,padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
-                    <div>
-                      <div style={{fontSize:12,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Assigned subjects</div>
-                      {globalSubjects.filter(subject=>subject.active).length===0 ? (
-                        <div style={{fontSize:13,color:G.textM,lineHeight:1.5}}>Create subjects in the Subject catalog before assigning them.</div>
-                      ) : (
-                        <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                          {globalSubjects.filter(subject=>subject.active).map(subject=>{
-                            const selected = teacherAssignedSubjectIds(t).includes(subject.id);
-                            return (
-                              <button key={`${t.uid}_${subject.id}`} onClick={()=>handleToggleTeacherSubject(t,subject)}
-                                disabled={subjectAssignmentBusy===t.uid}
-                                style={{...pill(selected?G.navy:G.surface,selected?"#fff":G.textS,selected?G.navy:G.borderM),fontSize:12.5,opacity:subjectAssignmentBusy===t.uid?0.65:1}}>
-                                {selected?"✓ ":""}{subject.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    {(d.classes||[]).length>0&&(
-                      <div>
-                        <div style={{fontSize:12,fontWeight:700,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Classes</div>
-                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                          {(d.classes||[]).map(cls=>(
-                            <div key={cls.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:G.surface,borderRadius:8,padding:"9px 12px",border:`1px solid ${G.border}`,gap:8}}>
-                              <div>
-                                <div style={{fontSize:14,fontWeight:600,color:G.text}}>{normaliseName(resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section)}</div>
-                                <div style={{fontSize:12,color:G.textM}}>{cls.institute} · {cls.subject}</div>
-                              </div>
-                              <button onClick={()=>handleRemoveFromClass(t.uid,cls.id,normaliseName(resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section))}
-                                style={{background:G.redL,border:"1px solid #F5CACA",borderRadius:7,padding:"5px 11px",fontSize:12,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:500,flexShrink:0}}>
-                                Remove
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:4}}>
-                      {renamingTeacher?.uid===t.uid?(
-                        <div style={{display:"flex",gap:6,flex:1,minWidth:200}}>
-                          <input value={renameVal} onChange={e=>setRenameVal(e.target.value)}
-                            onKeyDown={e=>e.key==="Enter"&&handleRenameTeacher(t.uid,renameVal)}
-                            placeholder="New name…" autoFocus
-                            style={{flex:1,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${G.blue}`,fontSize:15,fontFamily:G.sans,outline:"none"}}/>
-                          <button onClick={()=>handleRenameTeacher(t.uid,renameVal)} style={{...pill(G.navy,"#fff","transparent"),fontSize:13,padding:"7px 14px"}}>Save</button>
-                          <button onClick={()=>setRenamingTeacher(null)} style={{...pill("none",G.textM,G.border),fontSize:13,padding:"7px 10px"}}>✕</button>
-                        </div>
-                      ):(
-                        <button onClick={()=>{setRenamingTeacher({uid:t.uid,currentName:name});setRenameVal(name);}}
-                          style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>✏ Rename</button>
-                      )}
-
-                      {!isMe&&(
-                        <button onClick={()=>handlePromote(t.uid)} style={{...pill(G.blueL,G.blue,G.borderM),fontSize:13}}>Make Admin</button>
-                      )}
-
-                      <button onClick={()=>{setView("main");setSelP2(t.uid);setTab("teacher");setMobileStep(2);}}
-                        style={{...pill(G.bg,G.textS,G.borderM),fontSize:13}}>📋 View Entries</button>
-
-                      <button onClick={()=>handleRepairTeacherIndex(t.uid)}
-                        disabled={repairingTeacherUid===t.uid}
-                        style={{...pill("#EEF2FF",G.blue,"#BFDBFE"),fontSize:13,opacity:repairingTeacherUid===t.uid?0.7:1,cursor:repairingTeacherUid===t.uid?"not-allowed":"pointer"}}>
-                        {repairingTeacherUid===t.uid ? "🛠 Repairing…" : "🛠 Repair Index"}
-                      </button>
-
-                      {!isMe&&(
-                        <button onClick={()=>handleRemoveTeacher(t.uid,name)}
-                          style={{...pill(G.redL,G.red,"#F5CACA"),fontSize:13}}>🚫 Remove Teacher</button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          };
+          const emptyTeacherMessage = scopedTeacherOnlyList.length===0
+            ? (manageScopeInstitute ? "No teachers are connected to this institute yet." : "No teachers found yet.")
+            : "No teachers match your search.";
 
           return(
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
               <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
-                {manageScopeInstitute ? `Teachers at ${manageScopeInstitute}` : "All teachers"} ({scopedTeacherOnlyList.length})
+                {manageScopeInstitute ? `Teachers at ${manageScopeInstitute}` : "Teachers"} ({teacherRows.length})
               </div>
               <div style={{fontSize:14,color:G.textM,marginBottom:10}}>
                 {manageScopeInstitute
-                  ? "Manage the teacher accounts, assigned subjects, and classes connected to this institute."
-                  : `${teacherInstituteGroups.length} institutes${teacherInstituteGroups.length ? ` · ${manageTeacherSort==="count" ? "sorted by teacher count" : "sorted A-Z"}` : ""}`}
+                  ? "Teacher accounts, assigned subjects, and linked classes for this institute in one compact list."
+                  : "One row per teacher, with institute, subjects, classes, status, and actions visible without opening every card."}
               </div>
               {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search teachers by name, email, or institute")}
               {!manageScopeInstitute&&(
                 <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
                   {[
-                    {key:"count",label:"Most teachers"},
+                    {key:"count",label:"Institute A-Z"},
                     {key:"name",label:"Name A-Z"},
                   ].map(item=>(
                     <button key={item.key} onClick={()=>setManageTeacherSort(item.key)} style={{border:`1px solid ${manageTeacherSort===item.key?G.navy:G.border}`,borderRadius:999,padding:"6px 12px",background:manageTeacherSort===item.key?G.navy:"#FFFFFF",color:manageTeacherSort===item.key?"#FFFFFF":G.textM,fontFamily:G.sans,fontSize:11.5,fontWeight:850,cursor:"pointer"}}>
@@ -17252,76 +17260,169 @@ function AdminPanelInner({user}){
                   ))}
                 </div>
               )}
-
-              {scopedTeacherOnlyList.length===0
-                ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>{manageScopeInstitute ? "No teachers are connected to this institute yet." : "No teachers found yet."}</div>
-                :<div style={{display:"flex",flexDirection:"column",gap:12}}>
-                  {!manageScopeInstitute&&teacherInstituteGroups.length>0&&(
-                    <div style={{border:`1px solid ${G.border}`,borderRadius:12,overflow:"hidden",background:"#FFFFFF"}}>
-                      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.9fr) 80px 140px 90px",gap:12,padding:"0 10px 8px",borderBottom:`1px solid ${G.border}`,fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.6,fontFamily:G.mono}}>
-                        <div>Institute</div>
-                        <div>Teachers</div>
-                        <div></div>
-                        <div></div>
-                      </div>
-                      {teacherInstituteGroups.map(({ inst, teachers: instTeachers }, index)=>{
-                        const fillWidth = Math.max(3, Math.round((instTeachers.length / maxTeacherCount) * 100));
-                        return (
-                          <button key={inst} onClick={()=>{
-                            warmTeacherUids(instTeachers.map(t=>t.uid), inst);
-                            openInstituteArea(inst, "teachers");
-                          }} style={{width:"100%",display:"grid",gridTemplateColumns:"minmax(0,1.9fr) 80px 140px 90px",alignItems:"center",gap:12,border:"none",borderTop:index===0?"none":`1px solid #EEF1F6`,padding:"12px 10px",background:"#FFFFFF",fontFamily:G.sans,cursor:"pointer",textAlign:"left"}}>
-                            <span style={{fontSize:13.5,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{inst}</span>
-                            <span style={{fontSize:13,fontWeight:800,color:G.text}}>{instTeachers.length}</span>
-                            <span style={{display:"inline-flex",alignItems:"center"}}>
-                              <span style={{width:"100%",maxWidth:120,height:6,background:G.border,borderRadius:999,overflow:"hidden"}}>
-                                <span style={{display:"block",width:`${fillWidth}%`,height:"100%",background:G.blueV,borderRadius:999}}/>
-                              </span>
-                            </span>
-                            <span style={{justifySelf:"end",fontSize:12.5,fontWeight:800,color:G.textL}}>Open &#8250;</span>
-                          </button>
-                        );
-                      })}
+              {renderWorkspaceTable({
+                columns:[
+                  { key:"teacher", label:"Teacher" },
+                  { key:"institute", label:"Parent institute" },
+                  { key:"subjects", label:"Subjects" },
+                  { key:"classes", label:"Classes" },
+                  { key:"status", label:"Status" },
+                  { key:"actions", label:"Actions" },
+                ],
+                desktopGrid:"minmax(250px,1.55fr) minmax(230px,1.2fr) 90px 90px 140px minmax(240px,1.1fr)",
+                minWidth:1060,
+                rows:teacherRows,
+                rowKey:row=>`teacher_${row.teacher.uid}`,
+                emptyMessage:emptyTeacherMessage,
+                renderDesktopCells:row=>[
+                  <div key="teacher" style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+                    <div style={{width:38,height:38,borderRadius:11,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
+                      {(row.name[0]||"?").toUpperCase()}
                     </div>
-                  )}
-
-                  {manageScopeInstitute&&teacherInstituteGroups.map(({ inst, teachers: instTeachers })=>(
-                    <div key={inst}>
-                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                        {instTeachers.map(t=>(
-                          <TeacherCard key={`${inst}_${t.uid}`} t={t} currentInstitute={inst} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-
-                  {teachersWithoutInstitute.length>0&&(
-                    <div>
-                      {instituteAccordionHeader({
-                        icon:IconBuilding,
-                        title:"No Institute Assigned",
-                        count:teachersWithoutInstitute.length,
-                        countLabel:"teacher",
-                        isOpen:openTeacherInstitute==="__no_inst__",
-                        onClick:()=>{
-                          setOpenTeacherInstitute(curr=>curr==="__no_inst__"?null:"__no_inst__");
-                        },
-                      })}
-                      {openTeacherInstitute==="__no_inst__"&&(
-                        <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
-                          {teachersWithoutInstitute.map(t=>(
-                            <TeacherCard key={`noinst_${t.uid}`} t={t} />
-                          ))}
-                        </div>
+                    <div style={{minWidth:0}}>
+                      {renamingTeacher?.uid===row.teacher.uid ? (
+                        <input
+                          value={renameVal}
+                          onChange={e=>setRenameVal(e.target.value)}
+                          onKeyDown={e=>{
+                            if(e.key==="Enter") handleRenameTeacher(row.teacher.uid,renameVal);
+                            if(e.key==="Escape") setRenamingTeacher(null);
+                          }}
+                          placeholder="Teacher name"
+                          autoFocus
+                          style={{width:"100%",maxWidth:240,padding:"8px 11px",borderRadius:10,border:`1.5px solid ${G.blue}`,fontSize:14,fontFamily:G.sans,outline:"none"}}
+                        />
+                      ) : (
+                        <>
+                          <div style={{fontSize:15.5,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</div>
+                          <div style={{fontSize:12.5,color:G.textM,marginTop:4,fontFamily:G.mono,wordBreak:"break-all"}}>{row.email}</div>
+                        </>
                       )}
                     </div>
-                  )}
+                  </div>,
+                  <div key="institute" style={{minWidth:0}}>
+                    <div style={{fontSize:14.5,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.primaryInstitute}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:5}}>
+                      {row.extraInstitutes.length>0
+                        ? renderWorkspacePill(`+${row.extraInstitutes.length} more`, "slate")
+                        : <span style={{fontSize:12.5,color:G.textL}}>Single institute</span>}
+                    </div>
+                  </div>,
+                  <div key="subjects" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.subjectCount}</div>,
+                  <div key="classes" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.classCount}</div>,
+                  <div key="status">
+                    {row.hasLeftWorkspace
+                      ? renderWorkspacePill("Departed", "red")
+                      : renderWorkspacePill("Active", "green")}
+                  </div>,
+                  <div key="actions" style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
+                    {renamingTeacher?.uid===row.teacher.uid ? (
+                      <>
+                        <button onClick={()=>handleRenameTeacher(row.teacher.uid,renameVal)} style={workspaceActionButtonStyle("primary")}>Save</button>
+                        <button onClick={()=>setRenamingTeacher(null)} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={()=>{
+                            ensureFullData(row.teacher.uid);
+                            setSelTeacher(selTeacher===row.teacher.uid ? null : row.teacher.uid);
+                          }}
+                          style={workspaceActionButtonStyle(selTeacher===row.teacher.uid ? "blue" : "neutral")}>
+                          {selTeacher===row.teacher.uid ? "Done" : "Manage"}
+                        </button>
+                        <button onClick={()=>{setView("main");setSelP2(row.teacher.uid);setTab("teacher");setMobileStep(2);}} style={workspaceActionButtonStyle("neutral")}>Entries</button>
+                      </>
+                    )}
+                  </div>,
+                ],
+                renderExpandedRow:row=>{
+                  if(selTeacher!==row.teacher.uid) return null;
+                  const t = row.teacher;
+                  const d = fullData[t.uid] || {};
+                  return (
+                    <div style={{borderTop:`1px solid ${G.border}`,background:"#FBFCFE",padding:isMobile ? "14px 12px" : "16px"}}>
+                      <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(0,1.15fr) minmax(0,0.95fr)",gap:16}}>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Assigned subjects</div>
+                          {globalSubjects.filter(subject=>subject.active).length===0 ? (
+                            <div style={{fontSize:13,color:G.textM,lineHeight:1.55}}>Create subjects in the syllabus catalog before assigning them here.</div>
+                          ) : (
+                            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                              {globalSubjects.filter(subject=>subject.active).map(subject=>{
+                                const selected = teacherAssignedSubjectIds(t).includes(subject.id);
+                                return (
+                                  <button
+                                    key={`${t.uid}_${subject.id}`}
+                                    onClick={()=>handleToggleTeacherSubject(t,subject)}
+                                    disabled={subjectAssignmentBusy===t.uid}
+                                    style={{
+                                      ...pill(selected?G.navy:G.surface,selected?"#fff":G.textS,selected?G.navy:G.borderM),
+                                      fontSize:12.5,
+                                      opacity:subjectAssignmentBusy===t.uid?0.65:1,
+                                    }}>
+                                    {selected?"✓ ":""}{subject.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Account summary</div>
+                          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                            {renderWorkspacePill(row.primaryInstitute, "blue")}
+                            {renderWorkspacePill(`${row.classCount} classes`, "slate")}
+                            {renderWorkspacePill(`${row.subjectCount} subjects`, "slate")}
+                            {row.hasLeftWorkspace ? renderWorkspacePill(row.departedLabel, "red") : renderWorkspacePill("Ready to teach", "green")}
+                          </div>
+                          {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={3} />}
+                        </div>
+                      </div>
 
-                  {scopedTeacherOnlyList.length>0 && !hasInstituteMatches && teachersWithoutInstitute.length===0 && (
-                    <div style={{fontSize:15,color:G.textM,padding:"10px 0",textAlign:"center"}}>No teachers match your search.</div>
-                  )}
-                </div>
-              }
+                      <div style={{marginTop:16}}>
+                        <div style={{fontSize:12,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Classes</div>
+                        {(d.classes || []).length>0 ? (
+                          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                            {(d.classes || []).map(cls=>(
+                              <div key={cls.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#FFFFFF",borderRadius:10,padding:"10px 12px",border:`1px solid ${G.border}`,gap:8}}>
+                                <div style={{minWidth:0}}>
+                                  <div style={{fontSize:14,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{normaliseName(resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section)}</div>
+                                  <div style={{fontSize:12,color:G.textM,marginTop:3}}>{cls.institute} · {cls.subject}</div>
+                                </div>
+                                <button onClick={()=>handleRemoveFromClass(t.uid,cls.id,normaliseName(resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section))} style={workspaceActionButtonStyle("danger")}>
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{fontSize:13,color:G.textM,lineHeight:1.55}}>No classes linked yet.</div>
+                        )}
+                      </div>
+
+                      <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:16}}>
+                        {renamingTeacher?.uid===t.uid ? null : (
+                          <button onClick={()=>{setRenamingTeacher({uid:t.uid,currentName:row.name});setRenameVal(row.name);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+                        )}
+                        {!row.isMe&&(
+                          <button onClick={()=>handlePromote(t.uid)} style={workspaceActionButtonStyle("blue")}>Make Admin</button>
+                        )}
+                        <button onClick={()=>{setView("main");setSelP2(t.uid);setTab("teacher");setMobileStep(2);}} style={workspaceActionButtonStyle("neutral")}>View Entries</button>
+                        <button
+                          onClick={()=>handleRepairTeacherIndex(t.uid)}
+                          disabled={repairingTeacherUid===t.uid}
+                          style={{...workspaceActionButtonStyle("blue"),opacity:repairingTeacherUid===t.uid?0.7:1,cursor:repairingTeacherUid===t.uid?"not-allowed":"pointer"}}>
+                          {repairingTeacherUid===t.uid ? "Repairing…" : "Repair Index"}
+                        </button>
+                        {!row.isMe&&(
+                          <button onClick={()=>handleRemoveTeacher(t.uid,row.name)} style={workspaceActionButtonStyle("danger")}>Remove Teacher</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                },
+              })}
             </div>
           );
         })()}
