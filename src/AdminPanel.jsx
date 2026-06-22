@@ -5343,6 +5343,10 @@ function LedgrTelegramDashboardModal({
   const [knownUsers, setKnownUsers] = React.useState([]);
   const [knownUsersBusy, setKnownUsersBusy] = React.useState(false);
   const [knownUsersError, setKnownUsersError] = React.useState("");
+  const [messengerSearch, setMessengerSearch] = React.useState("");
+  const [messengerFilter, setMessengerFilter] = React.useState("all");
+  const [knownUserSearchByRow, setKnownUserSearchByRow] = React.useState({});
+  const [manualEditorOpenByRow, setManualEditorOpenByRow] = React.useState({});
   const [deliveryProbe, setDeliveryProbe] = React.useState({
     checking: true,
     routeReachable: false,
@@ -5370,6 +5374,9 @@ function LedgrTelegramDashboardModal({
     setRecipients(draft.recipients);
     setFullReportRecipients(draft.fullReportRecipients);
     setDraftError("");
+    setExpandedRow("");
+    setKnownUserSearchByRow({});
+    setManualEditorOpenByRow({});
   }, [config?.updatedAt, config?.schemaVersion, institutes.length]);
 
   React.useEffect(() => {
@@ -5536,6 +5543,21 @@ function LedgrTelegramDashboardModal({
       matchedUser,
     };
   }, [knownUserByUsername]);
+  const buildRecipientSearchText = React.useCallback((recipient = {}) => {
+    const resolved = resolveRecipientIdentity(recipient);
+    const resolvedChatId = normaliseTelegramChatId(resolved?.chatId);
+    const matchedKnownUser = knownUserMap.get(resolvedChatId) || resolved?.matchedUser || null;
+    return [
+      getTelegramRecipientDisplayName({
+        ...resolved,
+        username: resolved?.username || matchedKnownUser?.username,
+        label: resolved?.label || matchedKnownUser?.label,
+      }),
+      resolved?.label,
+      resolved?.username,
+      resolvedChatId,
+    ].filter(Boolean).join(" ").toLowerCase();
+  }, [knownUserMap, resolveRecipientIdentity]);
 
   const configuredRecipients = React.useMemo(() => (
     recipients.filter(item => item?.institute && normaliseTelegramChatId(item?.chatId))
@@ -5562,6 +5584,48 @@ function LedgrTelegramDashboardModal({
       - uniqueInstituteNames(activeRecipients.map(item => item?.institute)).length,
     0
   );
+  const readyInstituteCount = React.useMemo(() => (
+    instituteRows.filter(row => row.activeRecipients.length > 0).length
+  ), [instituteRows]);
+  const messengerSearchTerm = messengerSearch.trim().toLowerCase();
+  const filteredInstituteRows = React.useMemo(() => (
+    instituteRows.filter(row => {
+      const rowReady = row.activeRecipients.length > 0;
+      const matchesFilter = messengerFilter === "ready"
+        ? rowReady
+        : messengerFilter === "needs_setup"
+          ? !rowReady
+          : true;
+      if(!matchesFilter) return false;
+      if(!messengerSearchTerm) return true;
+      const rowText = [
+        row.institute,
+        ...row.recipients.map(buildRecipientSearchText),
+      ].join(" ").toLowerCase();
+      return rowText.includes(messengerSearchTerm);
+    })
+  ), [buildRecipientSearchText, instituteRows, messengerFilter, messengerSearchTerm]);
+  const fullReportVisible = React.useMemo(() => {
+    const fullReportReady = activeFullReportRecipients.length > 0;
+    const matchesFilter = messengerFilter === "ready"
+      ? fullReportReady
+      : messengerFilter === "needs_setup"
+        ? !fullReportReady
+        : true;
+    if(!matchesFilter) return false;
+    if(!messengerSearchTerm) return true;
+    const fullReportText = [
+      "complete ledgr report full report daily report whole report",
+      ...fullReportRecipients.map(buildRecipientSearchText),
+    ].join(" ").toLowerCase();
+    return fullReportText.includes(messengerSearchTerm);
+  }, [
+    activeFullReportRecipients.length,
+    buildRecipientSearchText,
+    fullReportRecipients,
+    messengerFilter,
+    messengerSearchTerm,
+  ]);
   const sendAllDisabled = actionBusy
     || !!sendBusy
     || !enabled
@@ -5883,6 +5947,7 @@ function LedgrTelegramDashboardModal({
 
   const renderRowEditor = (row) => {
     const isFullReport = row.kind === "full_report";
+    const rowKey = isFullReport ? "__full_report__" : row.institute;
     const rowRecipients = row.recipients || [];
     const resolvedRowRecipients = rowRecipients.map(resolveRecipientIdentity);
     const updateCurrentRecipient = isFullReport ? updateFullReportRecipient : updateRecipient;
@@ -5931,11 +5996,30 @@ function LedgrTelegramDashboardModal({
       const chatId = normaliseTelegramChatId(item?.chatId);
       return !(item?.destinationType === "private" && !!chatId && knownUserMap.has(chatId));
     });
+    const knownUserSearch = String(knownUserSearchByRow[rowKey] || "");
+    const knownUserSearchTerm = knownUserSearch.trim().toLowerCase();
+    const filteredKnownUsers = knownUsers.filter(user => {
+      if(!knownUserSearchTerm) return true;
+      const userChatId = normaliseTelegramChatId(user?.chatId);
+      const userText = [
+        getTelegramRecipientDisplayName(user),
+        user?.label,
+        user?.username,
+        userChatId,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return userText.includes(knownUserSearchTerm);
+    });
+    const manualEditorOpen = !!manualRecipients.length || !!manualEditorOpenByRow[rowKey];
     return (
       <div style={{display:"grid",gap:14,padding:"16px 18px 18px",background:"#F8FAFC"}}>
         <div className="ledgr-telegram-editor-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,0.95fr) minmax(0,1.05fr)",gap:14}}>
           <div style={{border:`1px solid ${G.border}`,borderRadius:16,background:"#FFFFFF",padding:"13px 14px"}}>
-            <div style={{...labelStyle,marginBottom:8}}>Started bot users</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8,flexWrap:"wrap"}}>
+              <div style={labelStyle}>Started bot users</div>
+              <span style={pillStyle(mappedKnownRecipients.length ? "#DCFCE7" : "#F3F4F6", mappedKnownRecipients.length ? "#166534" : G.textM)}>
+                {mappedKnownRecipients.length} selected
+              </span>
+            </div>
             <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginBottom:10}}>
               Ask the user to start <strong style={{color:G.text}}>{normaliseTelegramBotUsername(botUsername) || "@ledgrapp_bot"}</strong>, then refresh here and tick their name.
             </div>
@@ -5948,11 +6032,18 @@ function LedgrTelegramDashboardModal({
                 <span style={{fontSize:11.5,color:G.textL,fontFamily:G.mono}}>{knownUsers.length} found</span>
               )}
             </div>
+            <input
+              value={knownUserSearch}
+              onChange={event=>setKnownUserSearchByRow(current => ({ ...current, [rowKey]: event.target.value }))}
+              disabled={actionBusy || !knownUsers.length}
+              placeholder="Find a started user"
+              style={{...inputStyle,height:38,fontSize:13,fontWeight:700,marginBottom:10}}
+            />
             {knownUsersError ? (
               <div style={{fontSize:12,color:"#991B1B",lineHeight:1.55}}>{knownUsersError}</div>
-            ) : knownUsers.length ? (
+            ) : filteredKnownUsers.length ? (
               <div style={{display:"grid",gap:8}}>
-                {knownUsers.map(user => {
+                {filteredKnownUsers.map(user => {
                   const chatId = normaliseTelegramChatId(user?.chatId);
                   const isMapped = !!chatId && mappedKnownUserChatIds.has(chatId);
                   const displayName = getTelegramRecipientDisplayName(user);
@@ -5997,6 +6088,10 @@ function LedgrTelegramDashboardModal({
                     </label>
                   );
                 })}
+              </div>
+            ) : knownUsers.length ? (
+              <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
+                No started users match this search.
               </div>
             ) : (
               <div style={{fontSize:12,color:G.textM,lineHeight:1.55}}>
@@ -6063,20 +6158,43 @@ function LedgrTelegramDashboardModal({
             </div>
 
             <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${G.border}`}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:manualEditorOpen ? 8 : 0,flexWrap:"wrap"}}>
                 <div>
-                  <div style={labelStyle}>Other destinations</div>
+                  <div style={labelStyle}>Manual destinations</div>
                   <div style={{fontSize:12,color:G.textM,lineHeight:1.5,marginTop:4}}>
-                    Use this only for channels, groups, or a raw chat ID.
+                    Use this only for channels, groups, or a raw chat ID. Most rows can stay tick-only.
                   </div>
                 </div>
-                <button type="button" onClick={addManualRecipient} disabled={actionBusy} style={actionButtonStyle(false, actionBusy)}>
-                  <AppIcon icon={IconPlus} size={14} color={G.blue} />
-                  Add manual
-                </button>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  {!!manualRecipients.length && (
+                    <span style={pillStyle("#F1F5F9", G.textM)}>
+                      {manualRecipients.length} manual
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={()=>{
+                      if(!manualRecipients.length && !manualEditorOpen){
+                        addManualRecipient();
+                        return;
+                      }
+                      setManualEditorOpenByRow(current => ({ ...current, [rowKey]: !manualEditorOpen }));
+                    }}
+                    disabled={actionBusy}
+                    style={actionButtonStyle(false, actionBusy)}>
+                    <AppIcon icon={manualEditorOpen ? IconArrowUp : IconPlus} size={14} color={G.blue} />
+                    {manualEditorOpen ? "Hide" : manualRecipients.length ? "Manage" : "Add manual"}
+                  </button>
+                </div>
               </div>
-              {manualRecipients.length ? (
+              {manualEditorOpen ? (
                 <div style={{display:"grid",gap:10}}>
+                  <div style={{display:"flex",justifyContent:"flex-end"}}>
+                    <button type="button" onClick={addManualRecipient} disabled={actionBusy} style={actionButtonStyle(false, actionBusy)}>
+                      <AppIcon icon={IconPlus} size={14} color={G.blue} />
+                      Add another
+                    </button>
+                  </div>
                   {manualRecipients.map(recipient => {
                     const resolvedRecipient = resolveRecipientIdentity(recipient);
                     const resolvedChatId = normaliseTelegramChatId(resolvedRecipient?.chatId);
@@ -6134,7 +6252,7 @@ function LedgrTelegramDashboardModal({
                 </div>
               ) : (
                 <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55}}>
-                  No manual destinations added. Most teams can leave this empty and just tick started users.
+                  Leave this closed unless you need a channel, group, or a raw chat ID instead of a started user.
                 </div>
               )}
               {!!mappedKnownRecipients.length && (
@@ -6180,12 +6298,12 @@ function LedgrTelegramDashboardModal({
                     <AppIcon icon={IconSend} size={26} color={G.blue} />
                   </div>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Messenger feature</div>
-                    <div style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.04,marginTop:6}}>Messenger delivery</div>
-                    <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:760}}>
-                      Map each institute to one or more Telegram users, send the exact Ledgr PDF, and keep one daily batch ready at 8 PM.
-                    </div>
+                  <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Messenger feature</div>
+                  <div style={{fontSize:28,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.04,marginTop:6}}>Messenger delivery</div>
+                  <div style={{fontSize:14,color:G.textM,lineHeight:1.6,marginTop:8,maxWidth:760}}>
+                    Search an institute, expand one row, then just tick the people who already started the bot. Manual IDs stay available only when you need them.
                   </div>
+                </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:10,flexWrap:"wrap"}}>
                   <span style={pillStyle(headerStatus.bg, headerStatus.color)}>{headerStatus.label}</span>
@@ -6198,7 +6316,8 @@ function LedgrTelegramDashboardModal({
                 </div>
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
-                <span style={pillStyle("#EEF2FF", G.blue)}>{activeRecipients.length} mapped send{activeRecipients.length === 1 ? "" : "s"}</span>
+                <span style={pillStyle("#DCFCE7", "#166534")}>{readyInstituteCount} institute{readyInstituteCount === 1 ? "" : "s"} ready</span>
+                <span style={pillStyle("#EEF2FF", G.blue)}>{activeRecipients.length} mapped Telegram user{activeRecipients.length === 1 ? "" : "s"}</span>
                 <span style={pillStyle("#F1F5F9", G.textM)}>{missingCoverageCount} institute{missingCoverageCount === 1 ? "" : "s"} still missing</span>
                 <span style={pillStyle(scheduleSaved ? "#DCFCE7" : "#FEF3C7", scheduleSaved ? "#166534" : "#B45309")}>
                   {scheduledEnabled ? "Daily 8 PM batch" : "Schedule off"}
@@ -6212,7 +6331,7 @@ function LedgrTelegramDashboardModal({
                   <div style={labelStyle}>Routing</div>
                   <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.08,marginTop:6}}>Telegram recipients</div>
                   <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:6}}>
-                    One row per institute. Map one or more users, send the exact centre PDF, and keep the daily batch ready.
+                    One row per institute. Search what you need, filter down to setup gaps, then expand a row to map users.
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
@@ -6228,6 +6347,39 @@ function LedgrTelegramDashboardModal({
                     Batch schedule
                   </button>
                 </div>
+                <div style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                  <input
+                    value={messengerSearch}
+                    onChange={event=>setMessengerSearch(event.target.value)}
+                    placeholder="Search institute or Telegram user"
+                    style={{...inputStyle,height:40,maxWidth:360,flex:"1 1 280px"}}
+                  />
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    {[
+                      { key:"all", label:"All" },
+                      { key:"ready", label:`Ready (${readyInstituteCount})` },
+                      { key:"needs_setup", label:`Needs setup (${Math.max(instituteRows.length - readyInstituteCount, 0)})` },
+                    ].map(item => {
+                      const active = messengerFilter === item.key;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={()=>setMessengerFilter(item.key)}
+                          style={{
+                            ...actionButtonStyle(active, false),
+                            background:active ? G.navy : "#FFFFFF",
+                            color:active ? "#FFFFFF" : G.text,
+                          }}>
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                    <span style={pillStyle("#F8FAFC", G.textM)}>
+                      {filteredInstituteRows.length}/{instituteRows.length} shown
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div style={{overflowX:"auto"}}>
@@ -6242,7 +6394,7 @@ function LedgrTelegramDashboardModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {instituteRows.map(row => {
+                    {filteredInstituteRows.map(row => {
                       const rowExpanded = expandedRow === row.institute;
                       const rowReady = row.activeRecipients.length > 0;
                       const rowSendDisabled = actionBusy
@@ -6317,8 +6469,15 @@ function LedgrTelegramDashboardModal({
                         </React.Fragment>
                       );
                     })}
+                    {!filteredInstituteRows.length && !fullReportVisible && (
+                      <tr>
+                        <td colSpan={5} style={{padding:"24px 18px",borderBottom:"1px solid #E2E8F0",fontSize:13,color:G.textM,lineHeight:1.6}}>
+                          No institute rows match this view. Clear the search or switch the filter to see the rest.
+                        </td>
+                      </tr>
+                    )}
 
-                    {(() => {
+                    {fullReportVisible && (() => {
                       const fullRowExpanded = expandedRow === "__full_report__";
                       const fullSendDisabled = actionBusy
                         || !!sendBusy
@@ -6464,7 +6623,7 @@ function LedgrTelegramDashboardModal({
                 <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55}}>
                   {loading
                     ? "Loading messenger dashboard..."
-                    : `${activeRecipients.length} institute send${activeRecipients.length === 1 ? "" : "s"} and ${activeFullReportRecipients.length} full-report send${activeFullReportRecipients.length === 1 ? "" : "s"} are ready.`}
+                    : `${readyInstituteCount} institute row${readyInstituteCount === 1 ? "" : "s"} and ${activeFullReportRecipients.length} full-report send${activeFullReportRecipients.length === 1 ? "" : "s"} are ready.`}
                 </div>
               )}
             </div>
