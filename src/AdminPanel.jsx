@@ -8705,7 +8705,16 @@ function syllabusScopeKey(scope){
 
 function syllabusTemplateScope(template){
   const draft=template?.draft||template||{};
-  return normaliseSyllabusScope(draft.scope,draft.instituteName, draft.sectionName);
+  const published=template?.published||{};
+  const scopeSource =
+    (Array.isArray(draft.scope) && draft.scope.length ? draft.scope : null)
+    || ((Array.isArray(template?.scope) && template.scope.length) ? template.scope : null)
+    || published.scope;
+  return normaliseSyllabusScope(
+    scopeSource,
+    draft.instituteName || template?.instituteName || published.instituteName,
+    draft.sectionName || template?.sectionName || published.sectionName,
+  );
 }
 
 function emptySyllabusDraft(subject){

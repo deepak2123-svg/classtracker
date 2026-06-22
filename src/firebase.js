@@ -1272,30 +1272,58 @@ function syllabusScopeHash(scope) {
 
 function normaliseSyllabusTemplate(source = {}) {
   const draft = source.draft || {};
-  const draftScope = normaliseSyllabusScope(
-    Array.isArray(draft.scope) && draft.scope.length ? draft.scope : source.scope,
-    draft.instituteName || source.instituteName,
-    draft.sectionName || source.sectionName,
-  );
+  const publishedSource = source.published || {};
   const publishedScope = source.published
     ? normaliseSyllabusScope(
-        source.published.scope,
-        source.published.instituteName,
-        source.published.sectionName,
+        publishedSource.scope,
+        publishedSource.instituteName,
+        publishedSource.sectionName,
       )
     : [];
+  const draftSourceScope =
+    (Array.isArray(draft.scope) && draft.scope.length
+      ? draft.scope
+      : null)
+    || ((Array.isArray(source.scope) && source.scope.length)
+      ? source.scope
+      : null)
+    || publishedSource.scope;
+  const draftScope = normaliseSyllabusScope(
+    draftSourceScope,
+    draft.instituteName || source.instituteName || publishedSource.instituteName,
+    draft.sectionName || source.sectionName || publishedSource.sectionName,
+  );
+  const draftChapters = normaliseSyllabusChapters(draft.chapters);
+  const publishedChapters = normaliseSyllabusChapters(publishedSource.chapters);
+  const draftTargets = normaliseSyllabusTargets(draft.targets || source.targets);
+  const publishedTargets = normaliseSyllabusTargets(publishedSource.targets);
   const firstDraftScope = draftScope[0] || { instituteName: "", sectionNames: [] };
+  const firstPublishedScope = publishedScope[0] || { instituteName: "", sectionNames: [] };
   return {
     id: String(source.id || ""),
     subjectId: String(source.subjectId || ""),
     subjectName: String(source.subjectName || ""),
-    name: String(source.name || draft.name || ""),
-    instituteName: String(source.instituteName || draft.instituteName || firstDraftScope.instituteName || ""),
-    sectionName: String(source.sectionName || draft.sectionName || firstDraftScope.sectionNames[0] || ""),
+    name: String(source.name || draft.name || publishedSource.name || ""),
+    instituteName: String(
+      source.instituteName
+      || draft.instituteName
+      || firstDraftScope.instituteName
+      || publishedSource.instituteName
+      || firstPublishedScope.instituteName
+      || ""
+    ),
+    sectionName: String(
+      source.sectionName
+      || draft.sectionName
+      || firstDraftScope.sectionNames[0]
+      || publishedSource.sectionName
+      || firstPublishedScope.sectionNames[0]
+      || ""
+    ),
     scope: draftScope,
-    academicYear: String(source.academicYear || draft.academicYear || ""),
-    curriculum: String(source.curriculum || draft.curriculum || ""),
-    gradeLabel: String(source.gradeLabel || draft.gradeLabel || ""),
+    academicYear: String(source.academicYear || draft.academicYear || publishedSource.academicYear || ""),
+    curriculum: String(source.curriculum || draft.curriculum || publishedSource.curriculum || ""),
+    gradeLabel: String(source.gradeLabel || draft.gradeLabel || publishedSource.gradeLabel || ""),
     status: source.status === "published" ? "published" : "draft",
     currentVersion: Number(source.currentVersion || 0),
     createdAt: Number(source.createdAt || 0),
@@ -1303,22 +1331,36 @@ function normaliseSyllabusTemplate(source = {}) {
     updatedAt: Number(source.updatedAt || 0),
     updatedBy: String(source.updatedBy || ""),
     draft: {
-      name: String(draft.name || source.name || ""),
-      instituteName: String(draft.instituteName || source.instituteName || firstDraftScope.instituteName || ""),
-      sectionName: String(draft.sectionName || source.sectionName || firstDraftScope.sectionNames[0] || ""),
+      name: String(draft.name || source.name || publishedSource.name || ""),
+      instituteName: String(
+        draft.instituteName
+        || source.instituteName
+        || firstDraftScope.instituteName
+        || publishedSource.instituteName
+        || firstPublishedScope.instituteName
+        || ""
+      ),
+      sectionName: String(
+        draft.sectionName
+        || source.sectionName
+        || firstDraftScope.sectionNames[0]
+        || publishedSource.sectionName
+        || firstPublishedScope.sectionNames[0]
+        || ""
+      ),
       scope: draftScope,
-      academicYear: String(draft.academicYear || source.academicYear || ""),
-      curriculum: String(draft.curriculum || source.curriculum || ""),
-      gradeLabel: String(draft.gradeLabel || source.gradeLabel || ""),
-      chapters: normaliseSyllabusChapters(draft.chapters),
-      targets: normaliseSyllabusTargets(draft.targets || source.targets),
+      academicYear: String(draft.academicYear || source.academicYear || publishedSource.academicYear || ""),
+      curriculum: String(draft.curriculum || source.curriculum || publishedSource.curriculum || ""),
+      gradeLabel: String(draft.gradeLabel || source.gradeLabel || publishedSource.gradeLabel || ""),
+      chapters: draftChapters.length ? draftChapters : publishedChapters,
+      targets: draftTargets.length ? draftTargets : publishedTargets,
     },
     published: source.published ? {
-      ...source.published,
+      ...publishedSource,
       scope: publishedScope,
-      version: Number(source.published.version || source.currentVersion || 0),
-      chapters: normaliseSyllabusChapters(source.published.chapters),
-      targets: normaliseSyllabusTargets(source.published.targets),
+      version: Number(publishedSource.version || source.currentVersion || 0),
+      chapters: publishedChapters,
+      targets: publishedTargets,
     } : null,
   };
 }
