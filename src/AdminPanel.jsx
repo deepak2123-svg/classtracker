@@ -14084,6 +14084,7 @@ function AdminPanelInner({user}){
   const openMobileManageArea = React.useCallback((target) => {
     setProfileOpen(false);
     setMobileSurface("workspace");
+    setTelegramDashboardOpen(false);
     if(target === "teachers"){
       setManageTab("teachers");
       setInstDetailView(null);
@@ -14098,6 +14099,14 @@ function AdminPanelInner({user}){
       setInstDetailView(selInst || null);
     } else if(target === "subjects"){
       setManageTab("subjects");
+      setInstDetailView(null);
+    } else if(target === "report"){
+      setManageScopeInstitute("");
+      setManageTab("report");
+      setInstDetailView(null);
+    } else if(target === "messenger"){
+      setManageScopeInstitute("");
+      setManageTab("messenger");
       setInstDetailView(null);
     } else if(target === "catalog"){
       setManageTab("catalog");
@@ -16210,6 +16219,16 @@ function AdminPanelInner({user}){
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
       { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
     ];
+    const mobileManageTabItems = [
+      ...manageTabItems,
+      {
+        key:"messenger",
+        label:"Messenger",
+        icon:IconSend,
+        count:ledgrTelegramLoading ? "..." : (ledgrTelegramRecipientStats.active || "setup"),
+        hint:"Telegram routing",
+      },
+    ];
     const manageTitle = manageTabItems.find(item=>item.key===manageTab)?.label
       || (manageTab === "report" ? "Ledgr Report" : manageTab === "messenger" ? "Messenger" : "Control Centre");
     const getSyllabusAffectedSummary = (scope,subjectOverride) => {
@@ -16694,8 +16713,8 @@ function AdminPanelInner({user}){
         {/* Tab switcher */}
         {isMobile&&<div style={{position:"sticky",top:61,zIndex:65,margin:"-10px -12px 14px",padding:"9px 12px 10px",background:"rgba(245,247,250,0.96)",borderBottom:`1px solid ${G.border}`,backdropFilter:"blur(12px)",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
           <div style={{display:"flex",gap:8,width:"max-content",minWidth:"100%"}}>
-          {manageTabItems.map(item=>(
-            <button key={item.key} onClick={()=>{setManageTab(item.key); if(item.key!=="sections") setInstDetailView(null);}}
+          {mobileManageTabItems.map(item=>(
+            <button key={item.key} onClick={()=>openMobileManageArea(item.key)}
               className={isMobile?"admin-mobile-touch":undefined}
               style={isMobile
                 ? {
@@ -17728,7 +17747,7 @@ function AdminPanelInner({user}){
             icon={IconSend}
             title="Messenger"
             subtitle="Telegram live now, WhatsApp next, plus routing and schedule linkage."
-            onClick={openLedgrTelegramDashboard}
+            onClick={()=>openMobileManageArea("messenger")}
             badge={ledgrTelegramLoading
               ? null
               : ledgrTelegramRecipientStats.active
@@ -17743,7 +17762,7 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:20,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7}}>Manage the workspace</div>
               </div>
               <span style={{...mobileTonePillStyle("blue"),borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono}}>
-                5 tools
+                6 tools
               </span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:9}}>
@@ -17781,6 +17800,13 @@ function AdminPanelInner({user}){
                 subtitle="Roles and permissions"
                 count={teachers.filter(t=>roles[t.uid]==="admin").length}
                 onClick={()=>openMobileManageArea("admins")}
+              />
+              <MobileManageTile
+                icon={IconSend}
+                title="Messenger"
+                subtitle="Telegram recipients and send flow"
+                count={ledgrTelegramLoading ? "..." : (ledgrTelegramRecipientStats.active || "setup")}
+                onClick={()=>openMobileManageArea("messenger")}
               />
             </div>
           </div>
