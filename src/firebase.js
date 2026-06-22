@@ -691,6 +691,10 @@ export async function demoteToTeacher(uid, demotedByUid = null) {
   }, { merge: true });
 }
 
+function removedTeachersConfigRef() {
+  return doc(db, "config", "removedTeachers");
+}
+
 // ── Teacher index (for admin discovery) ───────────────────────────────────────
 // teachers/{uid} = { uid, name, email, photoURL, institutes[], lastActive }
 export async function syncTeacherIndex(uid, data) {
@@ -707,14 +711,27 @@ export async function syncTeacherIndex(uid, data) {
 // ── Admin data reads ──────────────────────────────────────────────────────────
 export async function getAllTeachers() {
   try {
+    const [removedConfigSnap, teacherIndexSnap, rolesSnap] = await Promise.all([
+      getDoc(removedTeachersConfigRef()),
+      getDocs(collection(db, "teachers")),
+      getDocs(collection(db, "roles")),
+    ]);
+
+    const removedTeacherUids = new Set(
+      Array.isArray(removedConfigSnap.data()?.ids)
+        ? removedConfigSnap.data().ids.map(uid => String(uid || "").trim()).filter(Boolean)
+        : []
+    );
+
     // Primary: teacher index (has institute/class summary)
-    const snap = await getDocs(collection(db, "teachers"));
-    const indexed = snap.docs.map(d => d.data());
+    const indexed = teacherIndexSnap.docs
+      .map(d => d.data())
+      .filter(teacher => teacher?.uid && !removedTeacherUids.has(teacher.uid));
     const merged = new Map(indexed.map(t => [t.uid, t]));
 
     // Supplement: roles collection catches teachers not yet in index
-    const rolesSnap = await getDocs(collection(db, "roles"));
     rolesSnap.docs.forEach(d => {
+      if (removedTeacherUids.has(d.id)) return;
       if (!merged.has(d.id)) {
         merged.set(d.id, { uid: d.id, name: "", institutes: [], classCount: 0 });
       }
@@ -725,6 +742,7 @@ export async function getAllTeachers() {
       appdataSnap.docs.forEach(snap => {
         const uid = snap.ref.parent.parent?.id;
         if (!uid) return;
+        if (removedTeacherUids.has(uid)) return;
         const data = snap.data();
         const summary = buildTeacherIndexPayload(uid, data);
         if (!summary.name && summary.classCount === 0) return;
@@ -820,7 +838,23 @@ export async function getInvites(adminUid) {
 // Deletes the teacher index entry and their role doc.
 // Their appdata (classes/notes) is NOT deleted — kept for admin audit trail.
 // Firebase Auth account is also kept (can't delete other users from client SDK).
-export async function removeTeacherFromSystem(uid) {
+export async function removeTeacherFromSystem(uid, removedByUid = null) {
+  const now = Date.now();
+  try {
+    const removedSnap = await getDoc(removedTeachersConfigRef());
+    const existingIds = Array.isArray(removedSnap.data()?.ids)
+      ? removedSnap.data().ids.map(item => String(item || "").trim()).filter(Boolean)
+      : [];
+    if (!existingIds.includes(uid)) {
+      existingIds.push(uid);
+    }
+    await setDoc(removedTeachersConfigRef(), {
+      ids: existingIds,
+      updatedAt: now,
+      lastRemovedUid: uid,
+      lastRemovedBy: removedByUid || null,
+    }, { merge: true });
+  } catch {}
   try { await deleteDoc(doc(db, "teachers", uid)); } catch {}
   try { await deleteDoc(doc(db, "roles", uid)); } catch {}
 }

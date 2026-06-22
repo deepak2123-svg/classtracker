@@ -9747,9 +9747,14 @@ function ClassBoundSyllabusFlow({
     teacher.uid,
     classData?.[teacher.uid]?.profile?.name || teacher.name || teacher.email || "Teacher",
   ])),[teachers,classData]);
+  const activeTeacherUids = useMemo(
+    ()=>new Set((teachers || []).map(teacher => teacher.uid).filter(Boolean)),
+    [teachers],
+  );
   const availableSubjects=useMemo(()=>{
     const groups=new Map();
     Object.entries(classData||{}).forEach(([teacherUid,data])=>{
+      if(!activeTeacherUids.has(teacherUid)) return;
       (data?.classes||[]).forEach(cls=>{
         const pair=selectedPairs.find(item=>
           sameInstituteName(cls?.institute,item.instituteName)
@@ -9790,7 +9795,7 @@ function ClassBoundSyllabusFlow({
         sectionCount:item.sections.size,
       }))
       .sort((a,b)=>exportTextSorter.compare(a.name,b.name));
-  },[classData,selectedPairs,teacherNames]);
+  },[activeTeacherUids,classData,selectedPairs,teacherNames]);
 
   useEffect(()=>{
     onScopeChange?.(selectedInstitutes);
@@ -13877,7 +13882,7 @@ function AdminPanelInner({user}){
       onConfirm: async () => {
         setDeleteBusy(true);
         try {
-          await removeTeacherFromSystem(uid);
+          await removeTeacherFromSystem(uid, user?.uid || null);
           setTeachers(ts => ts.filter(t => t.uid !== uid));
           setRoles(r => { const n={...r}; delete n[uid]; return n; });
           setFullData(fd => { const n={...fd}; delete n[uid]; return n; });
