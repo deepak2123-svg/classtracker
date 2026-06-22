@@ -9246,6 +9246,10 @@ function SharedSyllabusFlow({
     [selectedInstitutes,selectedSections],
   );
   const selectedPairs=useMemo(()=>syllabusScopePairs(selectedScope),[selectedScope]);
+  const selectedSectionsCount = useMemo(
+    ()=>Object.values(selectedSections || {}).reduce((total, sectionList)=>total + ((sectionList || []).length), 0),
+    [selectedSections],
+  );
   const sectionOptionsByInstitute=useMemo(()=>Object.fromEntries(selectedInstitutes.map(instituteName=>{
     const config=getInstituteSectionConfig(instituteSections,instituteName)||{};
     return [instituteName,uniqueSectionNames([
@@ -9525,6 +9529,10 @@ function ClassBoundSyllabusFlow({
     [selectedInstitutes,selectedSections],
   );
   const selectedPairs=useMemo(()=>syllabusScopePairs(selectedScope),[selectedScope]);
+  const selectedSectionsCount = useMemo(
+    ()=>Object.values(selectedSections || {}).reduce((total, sectionList)=>total + ((sectionList || []).length), 0),
+    [selectedSections],
+  );
   const sectionOptionsByInstitute=useMemo(()=>Object.fromEntries(selectedInstitutes.map(instituteName=>{
     const config=getInstituteSectionConfig(instituteSections,instituteName)||{};
     return [instituteName,uniqueSectionNames([
