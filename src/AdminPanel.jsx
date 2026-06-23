@@ -8777,6 +8777,47 @@ function emptySyllabusDraft(subject){
   };
 }
 
+function normaliseSyllabusTopicRecord(topic, chapterId, topicIndex){
+  const source = topic && typeof topic === "object" ? topic : {};
+  const title = typeof topic === "string" ? topic : String(source?.title || "");
+  const fallbackId = `${chapterId}-topic-${topicIndex + 1}-${slugifyDownloadPart(title || `topic_${topicIndex + 1}`)}`;
+  return {
+    ...source,
+    id:String(source?.id || fallbackId),
+    title,
+  };
+}
+
+function normaliseSyllabusChapterRecord(chapter, chapterIndex){
+  const source = chapter && typeof chapter === "object" ? chapter : {};
+  const title = typeof chapter === "string" ? chapter : String(source?.title || "");
+  const fallbackId = `chapter-${chapterIndex + 1}-${slugifyDownloadPart(title || `chapter_${chapterIndex + 1}`)}`;
+  return {
+    ...source,
+    id:String(source?.id || fallbackId),
+    title,
+    topics:(Array.isArray(source?.topics) ? source.topics : []).map((topic, topicIndex)=>
+      normaliseSyllabusTopicRecord(topic, String(source?.id || fallbackId), topicIndex)
+    ),
+  };
+}
+
+function normaliseSyllabusTemplateRecord(template){
+  if(!template || typeof template !== "object") return template;
+  const normaliseSection = section => {
+    const source = section && typeof section === "object" ? section : {};
+    return {
+      ...source,
+      chapters:(Array.isArray(source?.chapters) ? source.chapters : []).map(normaliseSyllabusChapterRecord),
+    };
+  };
+  return {
+    ...template,
+    draft:normaliseSection(template.draft),
+    published:template.published ? normaliseSection(template.published) : template.published,
+  };
+}
+
 function SyllabusBuilder({
   subject,
   templates,
@@ -8801,8 +8842,12 @@ function SyllabusBuilder({
   );
   const resolvedInitialScopeKey = useMemo(()=>syllabusScopeKey(resolvedInitialScope),[resolvedInitialScope]);
   const hasInitialTargets = Array.isArray(initialTargets) && initialTargets.length>0;
+  const normalisedTemplates = useMemo(
+    ()=>templates.map(normaliseSyllabusTemplateRecord),
+    [templates],
+  );
   const subjectTemplates = useMemo(
-    ()=>templates
+    ()=>normalisedTemplates
       .filter(item=>{
         if(!syllabusTemplateMatchesSubject(item, subject)) return false;
         if(!simpleScope) return true;
@@ -8810,7 +8855,7 @@ function SyllabusBuilder({
         return matchesScope || (hasInitialTargets && syllabusTemplateMatchesTargets(item, initialTargets));
       })
       .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)),
-    [templates,subject.id,subject.name,simpleScope,resolvedInitialScopeKey,hasInitialTargets,initialTargets],
+    [normalisedTemplates,subject.id,subject.name,simpleScope,resolvedInitialScopeKey,hasInitialTargets,initialTargets],
   );
   const scopedTemplate = subjectTemplates.find(item=>syllabusScopeKey(syllabusTemplateScope(item))===resolvedInitialScopeKey)
     || (hasInitialTargets ? subjectTemplates.find(item=>syllabusTemplateMatchesTargets(item, initialTargets)) : null);
@@ -8851,6 +8896,9 @@ function SyllabusBuilder({
   const [activeInspectorTab,setActiveInspectorTab] = useState("topics");
   const hydratedExistingTemplateRef = React.useRef(false);
   const inspectorRef = React.useRef(null);
+  const chapterTitleInputRef = React.useRef(null);
+  const pendingInspectorOpenRef = React.useRef(null);
+  const [chapterOpenNonce,setChapterOpenNonce] = useState(0);
 
   const draft = working.draft || emptySyllabusDraft(subject).draft;
   const draftScope = normaliseSyllabusScope(draft.scope,draft.instituteName,draft.sectionName);
@@ -9116,11 +9164,10 @@ function SyllabusBuilder({
   };
 
   const openChapterInspector = chapterId => {
+    pendingInspectorOpenRef.current = chapterId;
     setSelectedChapterId(chapterId);
     setActiveInspectorTab("topics");
-    requestAnimationFrame(()=>{
-      inspectorRef.current?.scrollIntoView({behavior:"smooth",block:"nearest"});
-    });
+    setChapterOpenNonce(current=>current + 1);
   };
 
   const chapterMetrics = useMemo(()=>{
@@ -9169,6 +9216,20 @@ function SyllabusBuilder({
     if(selectedChapterId && visibleChapters.some(chapter=>chapter.id===selectedChapterId)) return;
     setSelectedChapterId(visibleChapters[0].id);
   }, [visibleChapters, selectedChapterId]);
+
+  useEffect(()=>{
+    if(!pendingInspectorOpenRef.current) return;
+    if(!selectedChapterId) return;
+    if(pendingInspectorOpenRef.current!==selectedChapterId) return;
+    inspectorRef.current?.scrollIntoView({behavior:"smooth",block:isMobile?"start":"nearest"});
+    requestAnimationFrame(()=>{
+      if(activeInspectorTab==="topics"){
+        chapterTitleInputRef.current?.focus();
+        chapterTitleInputRef.current?.select?.();
+      }
+    });
+    pendingInspectorOpenRef.current = null;
+  }, [activeInspectorTab, chapterOpenNonce, isMobile, selectedChapterId]);
 
   const selectedChapter = draft.chapters.find(chapter=>chapter.id===selectedChapterId) || null;
   const selectedChapterIndex = selectedChapter ? draft.chapters.findIndex(chapter=>chapter.id===selectedChapter.id) : -1;
@@ -9499,6 +9560,7 @@ function SyllabusBuilder({
                     {selectedChapter ? (
                       <>
                         <input
+                          ref={chapterTitleInputRef}
                           value={selectedChapter.title}
                           onChange={event=>updateChapter(selectedChapter.id,{title:event.target.value})}
                           placeholder="Chapter title"
