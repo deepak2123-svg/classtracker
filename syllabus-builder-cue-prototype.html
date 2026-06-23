@@ -3,958 +3,1224 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ledgr Syllabus Studio Prototype</title>
+<title>Syllabus Builder - Ledgr Cue Prototype</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <style>
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #eef3fb;
-    --surface: #ffffff;
-    --surface-soft: #f8fbff;
-    --surface-muted: #f2f5fb;
-    --text: #14213d;
-    --text-soft: #5c6d8a;
-    --text-faint: #8d9bb3;
-    --line: #d8e2f0;
-    --line-strong: #bfd0e9;
-    --navy: #1f3972;
-    --blue: #316be8;
-    --blue-soft: #e9f1ff;
-    --teal: #0d8f7b;
-    --teal-soft: #e5f8f3;
-    --amber: #a56500;
-    --amber-soft: #fff1d6;
-    --red: #c73a3a;
-    --red-soft: #ffe6e6;
-    --shadow: 0 18px 50px rgba(20, 33, 61, 0.08);
-    --radius-lg: 20px;
-    --radius-md: 14px;
-    --radius-sm: 10px;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f7faff;
+    --bg-tertiary: #ecf3fd;
+    --text-primary: #172844;
+    --text-secondary: #5f7190;
+    --text-tertiary: #99a9c0;
+    --border-light: rgba(31, 57, 114, 0.10);
+    --border-mid: rgba(31, 57, 114, 0.16);
+    --border-strong: rgba(31, 57, 114, 0.24);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    --blue-50: #e8f1ff;
+    --blue-200: #9fc2ff;
+    --blue-600: #2757c7;
+    --blue-800: #1b3c8d;
+    --amber-50: #fff2d8;
+    --amber-200: #f1c56e;
+    --amber-700: #9b6200;
+    --green-50: #e7f8ef;
+    --green-600: #13865e;
+    --green-800: #0d6848;
+    --purple-50: #eeedfe;
+    --purple-600: #5a4fc9;
+    --teal-50: #e6f7f4;
+    --teal-500: #148f7d;
+    --red-50: #fdecec;
+    --red-600: #b83838;
+    --red-200: #efb4b4;
+    --shadow-soft: 0 14px 34px rgba(17, 37, 72, 0.08);
   }
 
   body {
     font-family: Inter, "Segoe UI", system-ui, sans-serif;
-    background: linear-gradient(180deg, #edf3fc 0%, #e6edf8 100%);
-    color: var(--text);
-    min-height: 100vh;
+    background:
+      radial-gradient(circle at top left, rgba(80, 126, 230, 0.08), transparent 28%),
+      linear-gradient(180deg, #eef4fd 0%, #e8f0fb 100%);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 1.5;
   }
 
   .app {
-    min-height: 100vh;
     display: grid;
-    grid-template-rows: 72px 1fr;
+    grid-template-rows: 70px 1fr;
+    height: 100vh;
   }
 
   .topbar {
+    background: linear-gradient(180deg, #24427d 0%, #1f3972 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 0 24px;
-    background: rgba(255, 255, 255, 0.92);
-    border-bottom: 1px solid var(--line);
-    backdrop-filter: blur(14px);
-    position: sticky;
-    top: 0;
-    z-index: 4;
+    padding: 0 22px;
+    gap: 14px;
+    box-shadow: 0 10px 28px rgba(18, 36, 72, 0.18);
   }
 
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-width: 0;
-  }
-
-  .brand-badge {
-    width: 40px;
-    height: 40px;
+  .brand-chip {
+    width: 42px;
+    height: 42px;
     border-radius: 14px;
-    background: linear-gradient(180deg, #3c72ef 0%, #244dc7 100%);
+    background: linear-gradient(180deg, #4a7ef2 0%, #2757c7 100%);
     color: #fff;
     display: grid;
     place-items: center;
+    font-size: 22px;
     font-weight: 800;
-    font-size: 20px;
+    letter-spacing: -0.04em;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    flex-shrink: 0;
   }
 
-  .brand-copy strong {
-    display: block;
-    font-size: 17px;
+  .topbar-brand {
+    font-size: 18px;
     font-weight: 800;
-    letter-spacing: -0.02em;
+    color: #fff;
+    letter-spacing: -0.03em;
+    margin-right: 6px;
   }
 
-  .brand-copy span {
-    display: block;
-    font-size: 12px;
-    color: var(--text-soft);
-    margin-top: 2px;
+  .topbar-divider {
+    width: 1px;
+    height: 22px;
+    background: rgba(255, 255, 255, 0.12);
   }
 
-  .topbar-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .select,
-  .input,
-  .textarea,
+  select.syllabus-select,
   .btn {
     font: inherit;
   }
 
-  .select,
-  .input,
-  .textarea {
-    width: 100%;
-    border: 1px solid var(--line-strong);
-    border-radius: 12px;
-    background: var(--surface);
-    color: var(--text);
-    outline: none;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-
-  .select:focus,
-  .input:focus,
-  .textarea:focus {
-    border-color: #8eb1f4;
-    box-shadow: 0 0 0 4px rgba(49, 107, 232, 0.08);
-  }
-
-  .select {
-    padding: 10px 14px;
-    min-width: 220px;
-  }
-
-  .btn {
-    border: 1px solid var(--line-strong);
-    border-radius: 12px;
-    padding: 10px 14px;
-    background: var(--surface);
-    color: var(--text);
-    font-weight: 700;
+  select.syllabus-select {
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    border-radius: var(--radius-md);
+    padding: 8px 11px;
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--text-primary);
     cursor: pointer;
-    display: inline-flex;
+    appearance: none;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235f7190' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+  }
+
+  .topbar-meta {
+    display: flex;
     align-items: center;
     gap: 8px;
-    justify-content: center;
-    transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
-  }
-
-  .btn:hover {
-    background: var(--surface-soft);
-    border-color: #b2c4e4;
-  }
-
-  .btn:active {
-    transform: scale(0.985);
-  }
-
-  .btn-primary {
-    background: var(--navy);
-    border-color: var(--navy);
-    color: #fff;
-  }
-
-  .btn-primary:hover {
-    background: #1a3267;
-    border-color: #1a3267;
-  }
-
-  .btn-success {
-    background: #18845c;
-    border-color: #18845c;
-    color: #fff;
-  }
-
-  .btn-success:hover {
-    background: #146b4b;
-    border-color: #146b4b;
-  }
-
-  .btn-danger {
-    color: var(--red);
-    border-color: #f0b8b8;
-    background: #fffafa;
-  }
-
-  .btn-danger:hover {
-    background: var(--red-soft);
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
   }
 
   .pill {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    border-radius: 999px;
-    padding: 6px 12px;
-    font-size: 12px;
+    gap: 4px;
+    font-size: 11px;
     font-weight: 800;
+    padding: 5px 10px;
+    border-radius: 999px;
+    letter-spacing: 0.01em;
     white-space: nowrap;
   }
 
-  .pill-blue { background: var(--blue-soft); color: var(--blue); }
-  .pill-amber { background: var(--amber-soft); color: var(--amber); }
-  .pill-teal { background: var(--teal-soft); color: var(--teal); }
-  .pill-neutral { background: #f3f5f9; color: var(--text-soft); }
+  .pill-gs { background: rgba(232, 241, 255, 0.94); color: var(--blue-600); }
+  .pill-empty { background: var(--amber-50); color: var(--amber-700); }
+  .pill-building { background: var(--purple-50); color: var(--purple-600); }
+  .pill-ready { background: var(--green-50); color: var(--green-600); }
+
+  .meta-text {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.76);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 9px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-mid);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, transform 0.12s;
+    white-space: nowrap;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  }
+
+  .btn:hover { background: var(--bg-secondary); border-color: var(--border-strong); }
+  .btn:active { transform: scale(0.985); }
+
+  .btn-danger {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.10);
+    box-shadow: none;
+  }
+
+  .btn-danger:hover { background: rgba(255, 255, 255, 0.16); }
+
+  .btn-primary {
+    background: var(--blue-600);
+    color: #fff;
+    border-color: var(--blue-600);
+    box-shadow: none;
+  }
+
+  .btn-primary:hover { background: var(--blue-800); border-color: var(--blue-800); }
+
+  .btn-success {
+    background: var(--green-600);
+    color: #fff;
+    border-color: var(--green-600);
+    box-shadow: none;
+  }
+
+  .btn-success:hover { background: var(--green-800); border-color: var(--green-800); }
 
   .main {
-    padding: 18px;
     display: grid;
-    grid-template-columns: 300px minmax(0, 1fr) 360px;
-    gap: 16px;
-    min-height: 0;
+    grid-template-columns: 284px 1fr 316px;
+    overflow: hidden;
+    padding: 14px;
+    gap: 14px;
   }
 
   .panel {
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid rgba(191, 208, 233, 0.92);
-    border-radius: 22px;
-    box-shadow: var(--shadow);
-    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    border-radius: 22px;
+    border: 1px solid rgba(191, 208, 233, 0.92);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .left-panel,
+  .right-panel {
+    background: rgba(255, 255, 255, 0.95);
+  }
+
+  .mid-panel {
+    background: rgba(247, 250, 255, 0.96);
   }
 
   .panel-head {
-    padding: 18px 18px 14px;
-    border-bottom: 1px solid var(--line);
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
   }
 
-  .eyebrow {
+  .panel-label {
     font-size: 11px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--text-faint);
-    margin-bottom: 6px;
-  }
-
-  .title-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .title-row h2,
-  .title-row h3 {
-    margin: 0;
-    letter-spacing: -0.03em;
-  }
-
-  .title-row h2 { font-size: 28px; line-height: 1.05; }
-  .title-row h3 { font-size: 22px; line-height: 1.1; }
-
-  .subcopy {
-    font-size: 13px;
-    color: var(--text-soft);
-    line-height: 1.55;
-    margin-top: 8px;
+    color: var(--text-tertiary);
   }
 
   .panel-body {
-    padding: 16px 18px 18px;
-    overflow: auto;
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
   }
 
-  .left-meta {
-    display: grid;
-    gap: 12px;
+  .panel-body::-webkit-scrollbar,
+  .insp-body::-webkit-scrollbar {
+    width: 6px;
   }
 
-  .applies-card,
-  .quick-create,
-  .mid-summary,
-  .inspector-metrics,
-  .topic-composer,
-  .scope-card,
-  .publish-card {
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    background: var(--surface-soft);
+  .panel-body::-webkit-scrollbar-thumb,
+  .insp-body::-webkit-scrollbar-thumb {
+    background: rgba(31, 57, 114, 0.16);
+    border-radius: 10px;
   }
 
-  .applies-card,
-  .quick-create,
-  .mid-summary,
-  .scope-card,
-  .publish-card {
-    padding: 14px;
-  }
-
-  .applies-card strong {
-    display: block;
-    font-size: 14px;
-    margin-bottom: 8px;
-  }
-
-  .chip-row {
+  .applies-row {
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-light);
     display: flex;
+    align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
   }
 
-  .mini-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 10px;
-    border-radius: 12px;
-    border: 1px solid var(--line-strong);
-    background: var(--surface);
-    font-size: 12px;
+  .applies-chip {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-mid);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
     font-weight: 700;
-    color: var(--text);
+    color: var(--text-primary);
   }
 
   .search-wrap {
-    margin-top: 12px;
-    position: relative;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
   }
 
-  .search-wrap i {
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-faint);
-    font-size: 15px;
+  .search-wrap input,
+  .quick-add input,
+  .add-topic-row input,
+  .scope-tab-section textarea,
+  .paste-area textarea {
+    font: inherit;
   }
 
-  .search-wrap .input {
-    padding: 11px 12px 11px 36px;
+  .search-wrap input {
+    width: 100%;
+    font-size: 13px;
+    padding: 10px 12px 10px 36px;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2399a9c0' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 12px center;
+  }
+
+  .search-wrap input:focus,
+  .quick-add input:focus,
+  .add-topic-row input:focus,
+  .scope-tab-section textarea:focus,
+  .paste-area textarea:focus {
+    outline: none;
+    border-color: var(--blue-200);
+    box-shadow: 0 0 0 4px rgba(39, 87, 199, 0.08);
   }
 
   .filter-row {
     display: flex;
-    gap: 8px;
+    gap: 6px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
     flex-wrap: wrap;
-    margin-top: 12px;
   }
 
   .filter-btn {
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    padding: 8px 12px;
-    background: var(--surface);
-    color: var(--text-soft);
     font-size: 12px;
-    font-weight: 800;
+    font-weight: 700;
+    padding: 7px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--border-mid);
+    background: var(--bg-primary);
     cursor: pointer;
+    color: var(--text-secondary);
+    font-family: inherit;
+    transition: all 0.12s;
   }
+
+  .filter-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
 
   .filter-btn.active {
-    background: var(--navy);
-    border-color: var(--navy);
+    background: var(--blue-600);
     color: #fff;
+    border-color: var(--blue-600);
   }
 
-  .chapter-list {
-    display: grid;
-    gap: 10px;
-    margin-top: 14px;
-  }
-
-  .chapter-card {
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    background: var(--surface);
-    padding: 14px;
-    display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) auto;
-    gap: 12px;
+  .chapter-item {
+    display: flex;
     align-items: center;
-    cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
-  }
-
-  .chapter-card:hover {
-    border-color: #abc2ec;
-    background: var(--surface-soft);
-  }
-
-  .chapter-card.active {
-    background: var(--blue-soft);
-    border-color: #9cb8ea;
-  }
-
-  .chapter-number {
-    width: 42px;
-    height: 42px;
+    gap: 10px;
+    padding: 11px 12px;
     border-radius: 14px;
-    display: grid;
-    place-items: center;
-    background: var(--navy);
-    color: #fff;
-    font-size: 18px;
-    font-weight: 900;
+    cursor: pointer;
+    border: 1px solid transparent;
+    margin-bottom: 5px;
+    transition: background 0.1s, border-color 0.1s, transform 0.12s;
   }
 
-  .chapter-copy {
-    min-width: 0;
+  .chapter-item:hover {
+    background: var(--bg-secondary);
+    border-color: rgba(39, 87, 199, 0.10);
   }
+
+  .chapter-item.active {
+    background: var(--blue-50);
+    border-color: rgba(39, 87, 199, 0.18);
+  }
+
+  .chapter-num {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    flex-shrink: 0;
+    background: #e6edf9;
+    color: var(--text-secondary);
+    transition: background 0.1s, color 0.1s;
+  }
+
+  .chapter-item.active .chapter-num {
+    background: var(--blue-600);
+    color: #fff;
+  }
+
+  .chapter-info { flex: 1; min-width: 0; }
 
   .chapter-name {
-    font-size: 16px;
-    font-weight: 900;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .chapter-note {
+  .chapter-sub {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--border-mid);
+  }
+
+  .status-dot.empty { background: var(--amber-200); }
+  .status-dot.building { background: #aba4ef; }
+  .status-dot.ready { background: #8ac665; }
+
+  .quick-add {
+    padding: 12px 14px;
+    border-top: 1px solid var(--border-light);
+    flex-shrink: 0;
+    background: rgba(236, 243, 253, 0.55);
+  }
+
+  .quick-add input {
+    width: 100%;
+    font-size: 13px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  .quick-add-hint {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 5px;
+    padding-left: 2px;
+  }
+
+  .mid-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+    gap: 8px;
+    text-align: center;
+  }
+
+  .mid-empty i { font-size: 32px; color: var(--text-tertiary); }
+  .mid-empty p { font-size: 14px; }
+
+  .scope-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .scope-card {
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    padding: 13px;
+    text-align: center;
+  }
+
+  .scope-val {
+    font-size: 23px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .scope-lbl {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .depth-section { margin-bottom: 20px; }
+
+  .depth-label {
     font-size: 12px;
-    color: var(--text-soft);
+    color: var(--text-secondary);
+    font-weight: 700;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .depth-track {
+    height: 8px;
+    background: #dde9fb;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .depth-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--blue-600) 0%, #4f86f5 100%);
+    transition: width 0.4s ease;
+  }
+
+  .depth-subtext {
+    font-size: 12px;
+    color: var(--text-tertiary);
     margin-top: 6px;
   }
 
-  .chapter-meta {
+  .chapter-summary-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 15px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-light);
+    letter-spacing: -0.02em;
+  }
+
+  .insp-head {
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+  }
+
+  .insp-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+  }
+
+  .insp-meta {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
     flex-wrap: wrap;
-    margin-top: 8px;
   }
 
-  .bar {
-    height: 8px;
-    border-radius: 999px;
-    background: #dfebfb;
-    overflow: hidden;
-    min-width: 120px;
-  }
-
-  .bar > span {
-    display: block;
-    height: 100%;
-    border-radius: 999px;
-    background: var(--blue);
-  }
-
-  .quick-create .row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 8px;
-    margin-top: 10px;
-  }
-
-  .input {
-    padding: 11px 12px;
-  }
-
-  .textarea {
-    padding: 11px 12px;
-    min-height: 96px;
-    resize: vertical;
-    line-height: 1.55;
-  }
-
-  .mid-grid {
-    display: grid;
+  .insp-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-light);
+    padding: 0 18px;
+    flex-shrink: 0;
     gap: 16px;
   }
 
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+  .insp-tab {
+    font-size: 13px;
+    font-weight: 700;
+    padding: 12px 0;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    font-family: inherit;
+    transition: color 0.12s, border-color 0.12s;
   }
 
-  .summary-metric {
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: var(--surface);
-    padding: 14px;
+  .insp-tab:hover { color: var(--text-primary); }
+  .insp-tab.active { color: var(--blue-600); border-bottom-color: var(--blue-600); }
+
+  .insp-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 18px;
   }
 
-  .summary-metric span {
-    display: block;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-faint);
-    font-weight: 800;
-    margin-bottom: 8px;
-  }
-
-  .summary-metric strong {
-    font-size: 28px;
-    line-height: 1;
-    letter-spacing: -0.03em;
-  }
-
-  .summary-metric p {
-    font-size: 12px;
-    color: var(--text-soft);
-    margin-top: 6px;
-  }
-
-  .topic-list {
-    display: grid;
-    gap: 10px;
-    margin-top: 14px;
-  }
-
-  .topic-pill {
+  .topic-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border: 1px solid var(--line);
+    gap: 8px;
+    padding: 9px 11px;
     border-radius: 14px;
-    background: var(--surface);
+    border: 1px solid var(--border-light);
+    background: var(--bg-primary);
+    margin-bottom: 6px;
+    transition: border-color 0.1s, background 0.1s;
   }
 
-  .topic-pill strong {
+  .topic-row:hover {
+    border-color: var(--border-mid);
+    background: var(--bg-secondary);
+  }
+
+  .topic-drag {
+    color: var(--text-tertiary);
+    font-size: 16px;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+
+  .topic-name {
+    flex: 1;
     font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 600;
   }
 
-  .topic-pill span {
-    font-size: 12px;
-    color: var(--text-soft);
-  }
-
-  .topic-actions {
-    display: flex;
-    gap: 6px;
-  }
-
-  .icon-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-    border: 1px solid var(--line-strong);
-    background: var(--surface);
-    color: var(--text-soft);
-    display: grid;
-    place-items: center;
+  .topic-del {
+    color: var(--text-tertiary);
+    font-size: 15px;
     cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s, color 0.12s;
+    background: none;
+    border: none;
+    padding: 4px 5px;
+    border-radius: 8px;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
   }
 
-  .icon-btn.danger { color: var(--red); border-color: #f0b8b8; }
+  .topic-row:hover .topic-del { opacity: 1; }
+  .topic-del:hover { color: var(--red-600); background: var(--red-50); }
 
-  .topic-composer {
-    padding: 14px;
-    margin-top: 14px;
-  }
-
-  .topic-composer .row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+  .add-topic-row {
+    display: flex;
     gap: 8px;
-  }
-
-  .scope-card,
-  .publish-card {
-    display: grid;
-    gap: 12px;
-  }
-
-  .label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-faint);
-    font-weight: 800;
-  }
-
-  .inspector-body {
-    padding: 16px 18px 18px;
-    overflow: auto;
-    display: grid;
-    gap: 14px;
-  }
-
-  .inspector-metrics {
-    padding: 14px;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .inspector-metric {
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: var(--surface);
-    padding: 12px;
-  }
-
-  .inspector-metric span {
-    display: block;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-faint);
-    font-weight: 800;
-  }
-
-  .inspector-metric strong {
-    display: block;
     margin-top: 10px;
-    font-size: 24px;
-    letter-spacing: -0.03em;
   }
 
-  .tab-row {
+  .add-topic-row input {
+    flex: 1;
+    font-size: 13px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  .paste-area {
+    margin-top: 14px;
+    display: none;
+  }
+
+  .paste-area.open { display: block; }
+
+  .paste-area textarea {
+    width: 100%;
+    font-size: 13px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    resize: vertical;
+    min-height: 104px;
+  }
+
+  .paste-hint {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 5px;
+  }
+
+  .insp-footer {
+    padding: 12px 18px;
+    border-top: 1px solid var(--border-light);
     display: flex;
     gap: 8px;
-    flex-wrap: wrap;
+    align-items: center;
+    flex-shrink: 0;
+    background: rgba(236, 243, 253, 0.45);
   }
 
-  .tab-btn {
-    border: 1px solid var(--line-strong);
-    border-radius: 12px;
-    padding: 9px 12px;
-    background: var(--surface);
-    color: var(--text-soft);
+  .insp-footer-note {
+    flex: 1;
     font-size: 12px;
-    font-weight: 800;
-    cursor: pointer;
+    color: var(--text-tertiary);
   }
 
-  .tab-btn.active {
-    background: var(--navy);
-    border-color: var(--navy);
-    color: #fff;
-  }
+  .scope-tab-section { margin-bottom: 20px; }
 
-  .range-wrap {
-    display: grid;
-    gap: 8px;
+  .scope-tab-section label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
   }
 
   input[type="range"] {
     width: 100%;
-    accent-color: var(--teal);
+    accent-color: var(--teal-500);
+    cursor: pointer;
   }
 
-  .footer-actions {
+  .scope-tab-section textarea {
+    width: 100%;
+    font-size: 13px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 28px 16px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .empty-state i {
+    font-size: 30px;
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-tertiary);
+  }
+
+  .move-btns {
     display: flex;
-    gap: 10px;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 8px;
+    gap: 6px;
   }
 
-  .footer-note {
+  .btn-sm {
     font-size: 12px;
-    color: var(--text-faint);
+    padding: 7px 11px;
   }
 
-  @media (max-width: 1220px) {
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--text-primary);
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 700;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    z-index: 999;
+    box-shadow: 0 16px 28px rgba(16, 28, 56, 0.22);
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (max-width: 980px) {
     .main {
-      grid-template-columns: 280px minmax(0, 1fr);
+      grid-template-columns: 250px 1fr;
     }
+
     .right-panel {
       display: none;
     }
-  }
-
-  @media (max-width: 840px) {
-    .app {
-      grid-template-rows: auto 1fr;
-    }
 
     .topbar {
-      padding: 16px;
-      align-items: flex-start;
-      flex-direction: column;
-    }
-
-    .topbar-actions,
-    .topbar-meta {
-      width: 100%;
-    }
-
-    .main {
-      grid-template-columns: 1fr;
-      padding: 12px;
-    }
-
-    .summary-grid,
-    .inspector-metrics {
-      grid-template-columns: 1fr;
-    }
-
-    .quick-create .row,
-    .topic-composer .row {
-      grid-template-columns: 1fr;
+      flex-wrap: wrap;
+      height: auto;
+      padding: 14px 18px;
     }
   }
 </style>
 </head>
 <body>
+
 <div class="app">
+
   <div class="topbar">
-    <div class="brand">
-      <div class="brand-badge">L</div>
-      <div class="brand-copy">
-        <strong>Ledgr syllabus studio</strong>
-        <span>Prototype inspired by the 3-panel builder cue</span>
-      </div>
-    </div>
-    <div class="topbar-actions">
-      <select class="select">
+    <span class="brand-chip">L</span>
+    <span class="topbar-brand">Ledgr</span>
+    <div class="topbar-divider"></div>
+    <div class="topbar-meta">
+      <select class="syllabus-select" id="syllabus-select">
         <option>GS syllabus</option>
-        <option>Science syllabus</option>
-        <option>History revision plan</option>
+        <option>Science &amp; Technology</option>
+        <option>CSAT Preparation</option>
       </select>
-      <span class="pill pill-blue">GS</span>
-      <span class="pill pill-neutral">1 institute</span>
-      <span class="pill pill-neutral">1 section</span>
-      <button class="btn btn-danger"><i class="ti ti-trash"></i> Delete syllabus</button>
+      <span class="pill pill-gs">GS</span>
+      <span class="meta-text">1 institute - 1 section</span>
+      <span class="meta-text">-</span>
+      <span class="meta-text" id="stats-summary">0 ready - 0 building - 7 empty</span>
     </div>
+    <button class="btn btn-danger" onclick="confirmDelete()">
+      <i class="ti ti-trash"></i> Delete syllabus
+    </button>
   </div>
 
   <div class="main">
-    <section class="panel">
+
+    <div class="panel left-panel">
+      <div class="applies-row">
+        <i class="ti ti-building-school" style="font-size:14px"></i>
+        <span>KIS SIP, Karnal, Haryana</span>
+        <span class="applies-chip">Madhav 3</span>
+      </div>
+
+      <div class="search-wrap">
+        <input type="text" id="search-input" placeholder="Search chapters..." oninput="filterChapters(this.value)" autocomplete="off">
+      </div>
+
+      <div class="filter-row">
+        <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+        <button class="filter-btn" onclick="setFilter('empty', this)">Empty</button>
+        <button class="filter-btn" onclick="setFilter('building', this)">Building</button>
+        <button class="filter-btn" onclick="setFilter('ready', this)">Ready</button>
+      </div>
+
+      <div class="panel-body" id="chapter-list"></div>
+
+      <div class="quick-add">
+        <input type="text" id="new-chapter-input" placeholder="+ Add chapter..." onkeydown="handleAddChapter(event)" autocomplete="off">
+        <p class="quick-add-hint">Press Enter to add</p>
+      </div>
+    </div>
+
+    <div class="panel mid-panel">
       <div class="panel-head">
-        <div class="title-row">
-          <div>
-            <div class="eyebrow">Chapter map</div>
-            <h3>Overview rail</h3>
-            <div class="subcopy">Scan every chapter quickly, then jump into the one that needs work.</div>
-          </div>
+        <span class="panel-label" id="mid-panel-title">Overview</span>
+        <div class="move-btns" id="mid-move-btns" style="display:none">
+          <button class="btn btn-sm" onclick="moveChapter(-1)"><i class="ti ti-arrow-up"></i> Move up</button>
+          <button class="btn btn-sm" onclick="moveChapter(1)"><i class="ti ti-arrow-down"></i> Move down</button>
         </div>
       </div>
-      <div class="panel-body">
-        <div class="left-meta">
-          <div class="applies-card">
-            <strong>Applies to</strong>
-            <div class="chip-row">
-              <span class="mini-chip"><i class="ti ti-building"></i> KIS SIP, Karnal, Haryana</span>
-              <span class="mini-chip"><i class="ti ti-school"></i> Madhav 3</span>
-            </div>
-          </div>
-
-          <div>
-            <div class="search-wrap">
-              <i class="ti ti-search"></i>
-              <input class="input" placeholder="Search chapters or topics">
-            </div>
-            <div class="filter-row">
-              <button class="filter-btn active">All</button>
-              <button class="filter-btn">Empty</button>
-              <button class="filter-btn">Building</button>
-              <button class="filter-btn">Ready</button>
-            </div>
-          </div>
-
-          <div class="chapter-list">
-            <article class="chapter-card active">
-              <div class="chapter-number">1</div>
-              <div class="chapter-copy">
-                <div class="chapter-name">Ancient Indian History</div>
-                <div class="chapter-meta">
-                  <span class="pill pill-neutral">0 topics</span>
-                  <span class="pill pill-blue">8% depth</span>
-                  <span class="pill pill-amber">Empty</span>
-                </div>
-                <div class="chapter-note">Add the first topic.</div>
-              </div>
-              <div class="bar"><span style="width:8%"></span></div>
-            </article>
-
-            <article class="chapter-card">
-              <div class="chapter-number">2</div>
-              <div class="chapter-copy">
-                <div class="chapter-name">Medieval Indian History</div>
-                <div class="chapter-meta">
-                  <span class="pill pill-neutral">0 topics</span>
-                  <span class="pill pill-blue">8% depth</span>
-                  <span class="pill pill-amber">Empty</span>
-                </div>
-                <div class="chapter-note">Add the first topic.</div>
-              </div>
-              <div class="bar"><span style="width:8%"></span></div>
-            </article>
-
-            <article class="chapter-card">
-              <div class="chapter-number">3</div>
-              <div class="chapter-copy">
-                <div class="chapter-name">Modern Indian History</div>
-                <div class="chapter-meta">
-                  <span class="pill pill-neutral">3 topics</span>
-                  <span class="pill pill-blue">42% depth</span>
-                  <span class="pill pill-teal">Ready</span>
-                </div>
-                <div class="chapter-note">Structured for publishing.</div>
-              </div>
-              <div class="bar"><span style="width:42%"></span></div>
-            </article>
-
-            <article class="chapter-card">
-              <div class="chapter-number">4</div>
-              <div class="chapter-copy">
-                <div class="chapter-name">Physical Geography</div>
-                <div class="chapter-meta">
-                  <span class="pill pill-neutral">1 topic</span>
-                  <span class="pill pill-blue">21% depth</span>
-                  <span class="pill pill-neutral">Building</span>
-                </div>
-                <div class="chapter-note">Needs more detail before publish.</div>
-              </div>
-              <div class="bar"><span style="width:21%"></span></div>
-            </article>
-
-            <article class="chapter-card">
-              <div class="chapter-number">5</div>
-              <div class="chapter-copy">
-                <div class="chapter-name">Indian Geography</div>
-                <div class="chapter-meta">
-                  <span class="pill pill-neutral">0 topics</span>
-                  <span class="pill pill-blue">8% depth</span>
-                  <span class="pill pill-amber">Empty</span>
-                </div>
-                <div class="chapter-note">Add the first topic.</div>
-              </div>
-              <div class="bar"><span style="width:8%"></span></div>
-            </article>
-          </div>
-
-          <div class="quick-create">
-            <div class="label">Quick create</div>
-            <div class="row">
-              <input class="input" value="Add next chapter quickly">
-              <button class="btn">Paste list</button>
-              <button class="btn btn-primary">Add</button>
-            </div>
-          </div>
+      <div class="panel-body" id="mid-panel-body">
+        <div class="mid-empty">
+          <i class="ti ti-list-details"></i>
+          <p>Select a chapter to see its overview</p>
         </div>
       </div>
-    </section>
+    </div>
 
-    <section class="panel">
-      <div class="panel-head">
-        <div class="title-row">
-          <div>
-            <div class="eyebrow">Working chapter</div>
-            <h2>Ancient Indian History</h2>
-            <div class="subcopy">Compact chapter summary in the middle, with no full-page form sprawl.</div>
-          </div>
-          <span class="pill pill-amber">Empty</span>
+    <div class="panel right-panel">
+      <div id="inspector" style="display:flex;flex-direction:column;height:100%">
+        <div class="mid-empty">
+          <i class="ti ti-click"></i>
+          <p>Pick a chapter to edit it</p>
         </div>
       </div>
-      <div class="panel-body">
-        <div class="mid-grid">
-          <div class="mid-summary">
-            <div class="summary-grid">
-              <div class="summary-metric">
-                <span>Topics</span>
-                <strong>0</strong>
-                <p>No topics added yet</p>
-              </div>
-              <div class="summary-metric">
-                <span>Depth</span>
-                <strong>8%</strong>
-                <p>Lightly scoped for now</p>
-              </div>
-              <div class="summary-metric">
-                <span>Status</span>
-                <strong>Empty</strong>
-                <p>Needs the first topic</p>
-              </div>
-            </div>
-          </div>
+    </div>
 
-          <div class="mid-summary">
-            <div class="label">Coverage depth</div>
-            <div class="bar" style="margin-top:10px; min-width:0;"><span style="width:8%"></span></div>
-            <div class="subcopy" style="margin-top:10px;">This chapter is still at the starting line. Add 2-3 topic bullets and it moves into Building.</div>
-          </div>
-
-          <div class="mid-summary">
-            <div class="title-row" style="align-items:center;">
-              <div>
-                <div class="label">Topic preview</div>
-                <div class="subcopy" style="margin-top:6px;">What teachers will eventually see under this chapter.</div>
-              </div>
-              <button class="btn"><i class="ti ti-eye"></i> Preview</button>
-            </div>
-            <div class="topic-list">
-              <div class="topic-pill">
-                <div>
-                  <strong>No topics yet</strong>
-                  <span>Add the first topic in the inspector.</span>
-                </div>
-                <span class="pill pill-amber">Waiting</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head">
-        <div class="title-row">
-          <div>
-            <div class="eyebrow">Inspector</div>
-            <h3>Ancient Indian History</h3>
-            <div class="subcopy">Edit only the selected chapter here. The rest of the page stays calm.</div>
-          </div>
-        </div>
-      </div>
-      <div class="inspector-body">
-        <div class="tab-row">
-          <button class="tab-btn active">Topics</button>
-          <button class="tab-btn">Scope</button>
-          <button class="tab-btn">Publish</button>
-        </div>
-
-        <div class="inspector-metrics">
-          <div class="inspector-metric">
-            <span>Topics</span>
-            <strong>0</strong>
-          </div>
-          <div class="inspector-metric">
-            <span>Depth</span>
-            <strong>8%</strong>
-          </div>
-          <div class="inspector-metric">
-            <span>Position</span>
-            <strong>1/7</strong>
-          </div>
-        </div>
-
-        <div class="topic-composer">
-          <div class="label">Add next topic</div>
-          <div class="row" style="margin-top:10px;">
-            <input class="input" value="Add first topic for Ancient Indian History">
-            <button class="btn btn-primary">Add topic</button>
-          </div>
-        </div>
-
-        <div class="scope-card">
-          <div class="label">Scope weight</div>
-          <div class="range-wrap">
-            <input type="range" min="1" max="30" value="8">
-            <div class="subcopy" style="margin-top:0;">8% of the exam scope</div>
-          </div>
-        </div>
-
-        <div class="publish-card">
-          <div class="label">Teacher note</div>
-          <textarea class="textarea" placeholder="Context, references, or instructions for teachers covering this chapter..."></textarea>
-          <div class="footer-actions">
-            <div class="footer-note">Draft changes are ready to save.</div>
-            <div style="display:flex; gap:10px;">
-              <button class="btn">Save draft</button>
-              <button class="btn btn-success">Publish version</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
   </div>
 </div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let chapters = [
+  { id:1, name:"Ancient Indian History",  topics:[], status:"empty", published:false, depth:8,  notes:"" },
+  { id:2, name:"Medieval Indian History", topics:[], status:"empty", published:false, depth:8,  notes:"" },
+  { id:3, name:"Modern Indian History",   topics:[], status:"empty", published:false, depth:8,  notes:"" },
+  { id:4, name:"Physical Geography",      topics:[], status:"empty", published:false, depth:8,  notes:"" },
+  { id:5, name:"Indian Geography",        topics:[], status:"empty", published:false, depth:8,  notes:"" },
+  { id:6, name:"Indian Polity",           topics:[], status:"empty", published:false, depth:8,  notes:"" },
+  { id:7, name:"Indian Economy",          topics:[], status:"empty", published:false, depth:8,  notes:"" }
+];
+
+let selectedId = null;
+let activeFilter = "all";
+let activeTab = "topics";
+let pasteOpen = false;
+
+function getStatus(chapter) {
+  if (chapter.published) return "ready";
+  if (chapter.topics.length > 0) return "building";
+  return "empty";
+}
+
+function syncStatuses() {
+  chapters.forEach((chapter) => {
+    chapter.status = getStatus(chapter);
+  });
+}
+
+function showToast(message) {
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 2200);
+}
+
+function confirmDelete() {
+  if (confirm("Delete this syllabus? This cannot be undone.")) {
+    showToast("Syllabus deleted.");
+  }
+}
+
+function renderChapterList(searchText = "") {
+  syncStatuses();
+  const search = searchText.toLowerCase();
+  const visible = chapters.filter((chapter) => {
+    const matchText = chapter.name.toLowerCase().includes(search);
+    const matchFilter = activeFilter === "all" || chapter.status === activeFilter;
+    return matchText && matchFilter;
+  });
+
+  document.getElementById("chapter-list").innerHTML = visible.map((chapter) => {
+    const index = chapters.indexOf(chapter) + 1;
+    return `
+      <div class="chapter-item${chapter.id === selectedId ? " active" : ""}" onclick="selectChapter(${chapter.id})">
+        <div class="chapter-num">${index}</div>
+        <div class="chapter-info">
+          <div class="chapter-name">${escHtml(chapter.name)}</div>
+          <div class="chapter-sub">${chapter.topics.length} topic${chapter.topics.length !== 1 ? "s" : ""}</div>
+        </div>
+        <div class="status-dot ${chapter.status}" title="${chapter.status}"></div>
+      </div>`;
+  }).join("");
+
+  updateStats();
+}
+
+function updateStats() {
+  const ready = chapters.filter((chapter) => chapter.status === "ready").length;
+  const building = chapters.filter((chapter) => chapter.status === "building").length;
+  const empty = chapters.filter((chapter) => chapter.status === "empty").length;
+  document.getElementById("stats-summary").textContent = `${ready} ready - ${building} building - ${empty} empty`;
+}
+
+function selectChapter(id) {
+  selectedId = id;
+  activeTab = "topics";
+  pasteOpen = false;
+  renderAll();
+}
+
+function renderMidPanel() {
+  const chapter = chapters.find((item) => item.id === selectedId);
+  const title = document.getElementById("mid-panel-title");
+  const body = document.getElementById("mid-panel-body");
+  const moveButtons = document.getElementById("mid-move-btns");
+
+  if (!chapter) {
+    title.textContent = "Overview";
+    moveButtons.style.display = "none";
+    body.innerHTML = '<div class="mid-empty"><i class="ti ti-list-details"></i><p>Select a chapter to see its overview</p></div>';
+    return;
+  }
+
+  title.textContent = escHtml(chapter.name);
+  moveButtons.style.display = "flex";
+
+  const index = chapters.indexOf(chapter) + 1;
+  const total = chapters.length;
+  const percent = Math.min(100, chapter.topics.length * 12);
+
+  body.innerHTML = `
+    <div class="chapter-summary-title">${escHtml(chapter.name)}</div>
+
+    <div class="depth-section">
+      <div class="depth-label">Coverage depth</div>
+      <div class="depth-track"><div class="depth-fill" style="width:${percent}%"></div></div>
+      <div class="depth-subtext">${percent}% filled - ${chapter.topics.length} topic${chapter.topics.length !== 1 ? "s" : ""} added</div>
+    </div>
+
+    <div class="scope-grid">
+      <div class="scope-card">
+        <div class="scope-val">${chapter.topics.length}</div>
+        <div class="scope-lbl">Topics</div>
+      </div>
+      <div class="scope-card">
+        <div class="scope-val">${index} / ${total}</div>
+        <div class="scope-lbl">Order</div>
+      </div>
+      <div class="scope-card">
+        <div class="scope-val"><span class="pill pill-${chapter.status}">${capitalize(chapter.status)}</span></div>
+        <div class="scope-lbl">Status</div>
+      </div>
+      <div class="scope-card">
+        <div class="scope-val">${chapter.depth}%</div>
+        <div class="scope-lbl">Scope weight</div>
+      </div>
+    </div>
+
+    ${chapter.notes ? `<div style="background:var(--bg-primary);border:1px solid var(--border-light);border-radius:16px;padding:12px;font-size:13px;color:var(--text-secondary);line-height:1.6">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:6px">Teacher notes</div>
+      ${escHtml(chapter.notes)}
+    </div>` : ""}
+
+    ${chapter.topics.length === 0 ? '<div class="empty-state"><i class="ti ti-pencil-plus"></i>Add topics in the inspector -></div>' : ""}
+  `;
+}
+
+function renderInspector() {
+  const chapter = chapters.find((item) => item.id === selectedId);
+  const inspector = document.getElementById("inspector");
+
+  if (!chapter) {
+    inspector.innerHTML = '<div class="mid-empty"><i class="ti ti-click"></i><p>Pick a chapter to edit it</p></div>';
+    return;
+  }
+
+  inspector.innerHTML = `
+    <div class="insp-head">
+      <div class="insp-title">${escHtml(chapter.name)}</div>
+      <div class="insp-meta">
+        <span class="pill pill-${chapter.status}">${capitalize(chapter.status)}</span>
+        <span style="font-size:12px;color:var(--text-secondary)">${chapter.topics.length} topic${chapter.topics.length !== 1 ? "s" : ""}</span>
+      </div>
+    </div>
+    <div class="insp-tabs">
+      <button class="insp-tab${activeTab === "topics" ? " active" : ""}" onclick="setTab('topics')">Topics</button>
+      <button class="insp-tab${activeTab === "scope" ? " active" : ""}" onclick="setTab('scope')">Scope</button>
+    </div>
+    <div class="insp-body" id="insp-body"></div>
+    <div class="insp-footer">
+      <span class="insp-footer-note">${chapter.hasDraft ? "Unsaved changes" : "All changes saved"}</span>
+      <button class="btn" onclick="saveDraft()"><i class="ti ti-device-floppy"></i> Save draft</button>
+      <button class="btn btn-success" onclick="publishChapter()"><i class="ti ti-check"></i> Publish</button>
+    </div>
+  `;
+
+  renderInspectorBody();
+}
+
+function renderInspectorBody() {
+  const chapter = chapters.find((item) => item.id === selectedId);
+  const body = document.getElementById("insp-body");
+  if (!chapter || !body) return;
+
+  if (activeTab === "topics") {
+    const topicRows = chapter.topics.map((topic, index) => `
+      <div class="topic-row">
+        <i class="ti ti-grip-vertical topic-drag"></i>
+        <span class="topic-name">${escHtml(topic)}</span>
+        <button class="topic-del" onclick="deleteTopic(${index})" title="Remove topic"><i class="ti ti-x"></i></button>
+      </div>`).join("");
+
+    const emptyState = chapter.topics.length === 0
+      ? '<div class="empty-state"><i class="ti ti-notes"></i>No topics yet.<br>Add the first one below.</div>'
+      : "";
+
+    body.innerHTML = `
+      ${emptyState}
+      ${topicRows}
+      <div class="add-topic-row">
+        <input type="text" id="new-topic-input" placeholder="Add next topic..." onkeydown="handleAddTopic(event)" autocomplete="off">
+        <button class="btn" onclick="addTopic()"><i class="ti ti-plus"></i></button>
+      </div>
+      <div style="margin-top:10px">
+        <button class="btn btn-sm" onclick="togglePaste()" style="width:100%;justify-content:center">
+          <i class="ti ti-clipboard-list"></i> ${pasteOpen ? "Cancel paste" : "Paste list of topics"}
+        </button>
+        <div class="paste-area${pasteOpen ? " open" : ""}" id="paste-area">
+          <textarea id="paste-input" placeholder="Paste topics here, one per line..." rows="5"></textarea>
+          <p class="paste-hint">Each line becomes a separate topic.</p>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="btn btn-primary" onclick="importPaste()" style="flex:1;justify-content:center">Import</button>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    body.innerHTML = `
+      <div class="scope-tab-section">
+        <label>Scope weight (% of exam)</label>
+        <input type="range" min="1" max="30" value="${chapter.depth}" step="1" oninput="setDepth(this.value)" id="depth-slider">
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px" id="depth-val">${chapter.depth}% of exam scope</div>
+      </div>
+      <div class="scope-tab-section">
+        <label>Notes for teachers</label>
+        <textarea rows="6" placeholder="Context, references, or instructions for teachers covering this chapter..." oninput="setNotes(this.value)">${escHtml(chapter.notes)}</textarea>
+      </div>
+    `;
+  }
+}
+
+function setTab(tab) {
+  activeTab = tab;
+  pasteOpen = false;
+  renderInspector();
+}
+
+function handleAddTopic(event) {
+  if (event.key === "Enter") addTopic();
+}
+
+function addTopic() {
+  const input = document.getElementById("new-topic-input");
+  if (!input || !input.value.trim()) return;
+  const chapter = chapters.find((item) => item.id === selectedId);
+  if (!chapter) return;
+  chapter.topics.push(input.value.trim());
+  chapter.hasDraft = true;
+  input.value = "";
+  renderAll();
+  setTimeout(() => {
+    const nextInput = document.getElementById("new-topic-input");
+    if (nextInput) nextInput.focus();
+  }, 10);
+}
+
+function deleteTopic(index) {
+  const chapter = chapters.find((item) => item.id === selectedId);
+  if (!chapter) return;
+  chapter.topics.splice(index, 1);
+  chapter.hasDraft = true;
+  renderAll();
+}
+
+function togglePaste() {
+  pasteOpen = !pasteOpen;
+  renderInspectorBody();
+}
+
+function importPaste() {
+  const textArea = document.getElementById("paste-input");
+  if (!textArea) return;
+  const chapter = chapters.find((item) => item.id === selectedId);
+  if (!chapter) return;
+  const lines = textArea.value.split("\n").map((line) => line.trim()).filter(Boolean);
+  chapter.topics.push(...lines);
+  chapter.hasDraft = true;
+  pasteOpen = false;
+  showToast(`Added ${lines.length} topic${lines.length !== 1 ? "s" : ""}`);
+  renderAll();
+}
+
+function saveDraft() {
+  const chapter = chapters.find((item) => item.id === selectedId);
+  if (chapter) chapter.hasDraft = false;
+  showToast("Draft saved");
+  renderInspector();
+}
+
+function publishChapter() {
+  const chapter = chapters.find((item) => item.id === selectedId);
+  if (!chapter) return;
+  chapter.published = true;
+  chapter.hasDraft = false;
+  chapter.status = "ready";
+  showToast(`"${chapter.name}" published`);
+  renderAll();
+}
+
+function setDepth(value) {
+  const chapter = chapters.find((item) => item.id === selectedId);
+  if (chapter) {
+    chapter.depth = parseInt(value, 10);
+    chapter.hasDraft = true;
+  }
+  const depthValue = document.getElementById("depth-val");
+  if (depthValue) depthValue.textContent = `${value}% of exam scope`;
+}
+
+function setNotes(value) {
+  const chapter = chapters.find((item) => item.id === selectedId);
+  if (chapter) {
+    chapter.notes = value;
+    chapter.hasDraft = true;
+  }
+}
+
+function moveChapter(direction) {
+  const index = chapters.findIndex((item) => item.id === selectedId);
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= chapters.length) return;
+  [chapters[index], chapters[newIndex]] = [chapters[newIndex], chapters[index]];
+  renderAll();
+}
+
+function handleAddChapter(event) {
+  if (event.key !== "Enter") return;
+  const input = document.getElementById("new-chapter-input");
+  if (!input.value.trim()) return;
+  const newId = Math.max(...chapters.map((chapter) => chapter.id), 0) + 1;
+  chapters.push({ id:newId, name:input.value.trim(), topics:[], status:"empty", published:false, depth:8, notes:"" });
+  input.value = "";
+  renderAll();
+  selectChapter(newId);
+}
+
+function filterChapters(value) {
+  renderChapterList(value);
+}
+
+function setFilter(filter, button) {
+  activeFilter = filter;
+  document.querySelectorAll(".filter-btn").forEach((item) => item.classList.remove("active"));
+  button.classList.add("active");
+  renderChapterList(document.getElementById("search-input").value);
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function capitalize(value) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function renderAll() {
+  syncStatuses();
+  renderChapterList(document.getElementById("search-input").value);
+  renderMidPanel();
+  renderInspector();
+}
+
+renderAll();
+</script>
 </body>
 </html>
