@@ -8850,6 +8850,7 @@ function SyllabusBuilder({
   const [chapterFilter,setChapterFilter] = useState("all");
   const [activeInspectorTab,setActiveInspectorTab] = useState("topics");
   const hydratedExistingTemplateRef = React.useRef(false);
+  const inspectorRef = React.useRef(null);
 
   const draft = working.draft || emptySyllabusDraft(subject).draft;
   const draftScope = normaliseSyllabusScope(draft.scope,draft.instituteName,draft.sectionName);
@@ -9112,6 +9113,14 @@ function SyllabusBuilder({
         ? {bg:"#FFF4DE",text:"#9A5A00",border:"#EFD3A0"}
         : {bg:"#EEF4FF",text:G.blue,border:"#C7D7F5"};
     return {...pill(theme.bg,theme.text,theme.border),cursor:"default",fontWeight:800};
+  };
+
+  const openChapterInspector = chapterId => {
+    setSelectedChapterId(chapterId);
+    setActiveInspectorTab("topics");
+    requestAnimationFrame(()=>{
+      inspectorRef.current?.scrollIntoView({behavior:"smooth",block:"nearest"});
+    });
   };
 
   const chapterMetrics = useMemo(()=>{
@@ -9406,7 +9415,8 @@ function SyllabusBuilder({
                           return (
                             <button
                               key={chapter.id}
-                              onClick={()=>{setSelectedChapterId(chapter.id);setActiveInspectorTab("topics");}}
+                              type="button"
+                              onClick={()=>openChapterInspector(chapter.id)}
                               style={{width:"100%",textAlign:"left",background:selected?"#EEF4FF":"#FFFFFF",border:"none",borderBottom:`1px solid ${G.border}`,padding:"15px 16px",cursor:"pointer"}}
                             >
                               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
@@ -9432,10 +9442,9 @@ function SyllabusBuilder({
                         }
 
                         return (
-                          <button
+                          <div
                             key={chapter.id}
-                            onClick={()=>{setSelectedChapterId(chapter.id);setActiveInspectorTab("topics");}}
-                            style={{width:"100%",textAlign:"left",background:selected?"#EEF4FF":"#FFFFFF",border:"none",borderBottom:`1px solid ${G.border}`,padding:"15px 16px",cursor:"pointer"}}
+                            style={{background:selected?"#EEF4FF":"#FFFFFF",borderBottom:`1px solid ${G.border}`,padding:"15px 16px"}}
                           >
                             <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
                               <div style={{width:40,height:40,borderRadius:12,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:850,flexShrink:0}}>
@@ -9443,7 +9452,11 @@ function SyllabusBuilder({
                               </div>
                               <div style={{minWidth:0,flex:1}}>
                                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-                                  <div style={{minWidth:0,flex:1}}>
+                                  <button
+                                    type="button"
+                                    onClick={()=>openChapterInspector(chapter.id)}
+                                    style={{minWidth:0,flex:1,textAlign:"left",background:"transparent",border:"none",padding:0,cursor:"pointer"}}
+                                  >
                                     <div style={{fontSize:17,fontWeight:850,color:G.text,lineHeight:1.28}}>{chapter.title || "Untitled chapter"}</div>
                                     <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:8}}>
                                       <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>{status.topicCount} topic{status.topicCount===1?"":"s"}</span>
@@ -9451,19 +9464,25 @@ function SyllabusBuilder({
                                       <span style={chapterStatusPillStyle(status)}>{status.label}</span>
                                     </div>
                                     <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:8}}>{status.note}</div>
-                                  </div>
+                                  </button>
                                   <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
                                     <div style={{width:120}}>
                                       <div style={{height:8,borderRadius:999,background:"#E6EDF8",overflow:"hidden"}}>
                                         <div style={{width:`${status.depthPct}%`,height:"100%",borderRadius:999,background:G.blue}}/>
                                       </div>
                                     </div>
-                                    <span style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800,cursor:"default"}}>Open</span>
+                                    <button
+                                      type="button"
+                                      onClick={()=>openChapterInspector(chapter.id)}
+                                      style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800,cursor:"pointer"}}
+                                    >
+                                      Open
+                                    </button>
                                   </div>
                                 </div>
                               </div>
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -9472,7 +9491,7 @@ function SyllabusBuilder({
               </div>
             </div>
 
-            <div style={stickyInspectorStyle}>
+            <div ref={inspectorRef} style={stickyInspectorStyle}>
               <div style={{padding:"16px 18px",borderBottom:`1px solid ${G.border}`}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                   <div style={{minWidth:0,flex:1}}>
