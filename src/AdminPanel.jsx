@@ -14294,7 +14294,7 @@ function AdminPanelInner({user}){
           entries.forEach(({entry})=>{
             entryCount += 1;
             const duration = entryDurationMinutes(entry);
-            const subject = (t.subject || cls.subjects?.[0] || "No subject").trim() || "No subject";
+            const subject = resolveAdminTeacherClassSubject(t.uid, t.classId, t.subject || cls.subjects?.[0] || "No subject").trim() || "No subject";
             if(duration>0){
               totalMinutes += duration;
               subjectTotals.set(subject, (subjectTotals.get(subject) || 0) + duration);
@@ -14319,7 +14319,7 @@ function AdminPanelInner({user}){
       })
       .filter(item=>item.entryCount>0)
       .sort(compareClassCardsByActivity);
-  },[selInst,instClasses,fullData,periodDays,periodStartKey,periodEndKey]);
+  },[selInst,instClasses,fullData,periodDays,periodStartKey,periodEndKey,resolveAdminTeacherClassSubject]);
 
   const classSubjectSummary = useMemo(()=>{
     return classSubjectTime.reduce((acc,item)=>{
@@ -19419,7 +19419,7 @@ function AdminPanelInner({user}){
                           if(tab==="teacher") setSelP3({teacherUid:selP2,classId:item.classId,teacherName:fullData[selP2]?.profile?.name||"",className:item.display,subject:item.subject,institute:item.institute||selInst});
                           else {
                             const clsObj=instClasses.find(c=>c.raw===selP2);
-                            const subjectText = item.subject || clsObj?.subjects?.join(", ") || "";
+                            const subjectText = resolveAdminTeacherClassSubject(item.uid, item.classId, item.subject || clsObj?.subjects?.join(", ") || "");
                             setSelP3({teacherUid:item.uid,classId:item.classId,teacherName:item.name,className:normaliseName(selP2),subject:subjectText});
                             ensureFullData(item.uid);
                           }
@@ -20453,7 +20453,7 @@ function AdminPanelInner({user}){
                           classId:clsObj?.classId,
                           teacherName:t.name,
                           className:normaliseName(selP2),
-                          subject:clsObj?.subject || cls?.subjects?.join(", ") || "",
+                          subject:resolveAdminTeacherClassSubject(t.uid, clsObj?.classId, clsObj?.subject || cls?.subjects?.join(", ") || ""),
                         });
                         setMobileStep(3);
                       }}
