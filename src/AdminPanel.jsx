@@ -1507,6 +1507,44 @@ function groupAdminPanelEntries(entries){
       entries:[...group.entries].sort(compareAdminPanelEntries),
     }));
 }
+function cleanAdminSubjectName(value){
+  return String(value || "").trim();
+}
+function adminSubjectNameKey(value){
+  return cleanAdminSubjectName(value).toLowerCase();
+}
+function collectAdminTeacherSubjectNames(teacher, teacherData, subjectCatalog = []){
+  const seen = new Set();
+  const names = [];
+  const addName = value => {
+    const clean = cleanAdminSubjectName(value);
+    const key = adminSubjectNameKey(clean);
+    if(!key || seen.has(key)) return;
+    seen.add(key);
+    names.push(clean);
+  };
+  const catalogById = new Map(
+    (Array.isArray(subjectCatalog) ? subjectCatalog : [])
+      .map(item => [String(item?.id || "").trim(), cleanAdminSubjectName(item?.name)])
+      .filter(([id, name]) => id && name)
+  );
+  (Array.isArray(teacher?.assignedSubjects) ? teacher.assignedSubjects : []).forEach(item => addName(item?.name));
+  (Array.isArray(teacher?.assignedSubjectIds) ? teacher.assignedSubjectIds : []).forEach(id => addName(catalogById.get(String(id || "").trim())));
+  (Array.isArray(teacher?.subjects) ? teacher.subjects : []).forEach(addName);
+  (Array.isArray(teacherData?.profile?.subjects) ? teacherData.profile.subjects : []).forEach(addName);
+  return names;
+}
+function resolveAdminTeacherClassSubjectLabel(teacher, teacherData, cls, subjectCatalog = [], fallbackSubject = ""){
+  const classSubject = cleanAdminSubjectName(cls?.subject || fallbackSubject);
+  const teacherSubjects = collectAdminTeacherSubjectNames(teacher, teacherData, subjectCatalog);
+  if(classSubject){
+    const matched = teacherSubjects.find(name => adminSubjectNameKey(name) === adminSubjectNameKey(classSubject));
+    if(matched) return matched;
+  }
+  if(teacherSubjects.length === 1) return teacherSubjects[0];
+  if(classSubject) return classSubject;
+  return teacherSubjects[0] || "";
+}
 function fmt12(t){
   if(!t) return "";
   const[h,m]=t.split(":").map(Number);
@@ -13674,6 +13712,22 @@ function AdminPanelInner({user}){
     return teachers.filter(t=>teacherBelongsToInstitute(t, selInst));
   },[selInst, teacherBelongsToInstitute, teachers]);
 
+  const teacherByUid = useMemo(
+    ()=>Object.fromEntries((teachers || []).map(teacher => [teacher.uid, teacher])),
+    [teachers]
+  );
+
+  const resolveAdminTeacherClassSubject = React.useCallback((teacherUid, classId, fallbackSubject = "") => {
+    const cleanUid = String(teacherUid || "").trim();
+    const cleanClassId = String(classId || "").trim();
+    const teacher = teacherByUid[cleanUid] || null;
+    const teacherData = fullData[cleanUid] || null;
+    const cls = cleanClassId
+      ? (Array.isArray(teacherData?.classes) ? teacherData.classes : []).find(item => String(item?.id || "").trim() === cleanClassId) || null
+      : null;
+    return resolveAdminTeacherClassSubjectLabel(teacher, teacherData, cls, globalSubjects, fallbackSubject);
+  }, [teacherByUid, fullData, globalSubjects]);
+
   // ── Classes at selected institute ─────────────────────────────────────────
   const instClasses=useMemo(()=>{
     if(!selInst) return [];
@@ -13689,18 +13743,19 @@ function AdminPanelInner({user}){
         const key = normaliseSectionKey(resolvedSection);
         if(!key) return;
         if(!map[key]) map[key]={raw:resolvedSection,display:normaliseName(resolvedSection),subjects:new Set(),teachers:[],lastActivityTs:0};
-        if(c.subject) map[key].subjects.add(c.subject.trim());
+        const subjectLabel = resolveAdminTeacherClassSubjectLabel(t, d, c, globalSubjects, c.subject);
+        if(subjectLabel) map[key].subjects.add(subjectLabel);
         const entryCount=Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0);
         const lastActive=lastEntryTs((d.notes||{})[c.id]||{});
         const activityTs=Math.max(lastActive || 0, Number(c.created || 0) || 0);
         map[key].lastActivityTs=Math.max(map[key].lastActivityTs || 0, activityTs);
-        map[key].teachers.push({uid:t.uid,name:d.profile?.name||t.name,entryCount,lastActive,classId:c.id,subject:c.subject,lastActivityTs:activityTs});
+        map[key].teachers.push({uid:t.uid,name:d.profile?.name||t.name,entryCount,lastActive,classId:c.id,subject:subjectLabel,lastActivityTs:activityTs});
       });
     });
     return Object.values(map)
       .map(c=>({...c,subjects:[...c.subjects].sort((a,b)=>exportTextSorter.compare(a,b))}))
       .sort(compareClassCardsByActivity);
-  },[selInst,teachers,fullData,instSectionsAll]);
+  },[selInst,teachers,fullData,instSectionsAll,globalSubjects]);
 
   const instSearchKey = instSearch.trim().toLowerCase();
   const suppressMobileCurrentViewSearch = isMobile && mobileSurface !== "profile" && mobileStep === 1;
@@ -13860,6 +13915,7 @@ function AdminPanelInner({user}){
     if(tab==="teacher"){
       // P2 = teacher → P3 = their classes at this institute only
       const d=fullData[selP2];
+      const teacher = teacherByUid[selP2] || null;
       if(!d) return [];
       return (d.classes||[])
         .filter(c=>(c.institute||"").trim().toLowerCase()===(selInst||"").trim().toLowerCase())
@@ -13869,7 +13925,7 @@ function AdminPanelInner({user}){
           return ({
           display:normaliseName(resolvedSection),
           raw:resolvedSection,
-          subject:c.subject,
+          subject:resolveAdminTeacherClassSubjectLabel(teacher, d, c, globalSubjects, c.subject),
           institute:c.institute||"",
           classId:c.id,
           entryCount:Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0),
@@ -13883,7 +13939,7 @@ function AdminPanelInner({user}){
       if(!cls) return [];
       return [...cls.teachers].sort((a,b)=>b.entryCount-a.entryCount);
     }
-  },[selP2,tab,selInst,fullData,instClasses,instSectionsAll]);
+  },[selP2,tab,selInst,fullData,instClasses,instSectionsAll,teacherByUid,globalSubjects]);
 
   const p3SearchKey = p3Search.trim().toLowerCase();
   const visibleP3Items = useMemo(()=>{
@@ -14014,6 +14070,7 @@ function AdminPanelInner({user}){
   const collectEntriesForTeacherClass = (teacherUid, teacherName, classId, className, subject, instituteName = selInst, days = periodDays, sk = periodStartKey, ek = periodEndKey) => {
     const d = fullData[teacherUid];
     if(!d) return [];
+    const subjectLabel = resolveAdminTeacherClassSubject(teacherUid, classId, subject);
     return getEntriesInRange((d.notes||{})[classId]||{}, days, sk, ek).map(({dateKey, entry})=>({
       id: entry.id,
       dateKey,
@@ -14027,7 +14084,7 @@ function AdminPanelInner({user}){
       teacherName,
       classId,
       className,
-      subject: subject || "",
+      subject: subjectLabel,
       institute: instituteName || selInst,
     }));
   };
@@ -14067,7 +14124,7 @@ function AdminPanelInner({user}){
         .sort(compareAdminPanelEntries);
     }
     return [];
-  },[fullView,selInst,fullData,instClasses,periodDays,periodStartKey,periodEndKey,instSectionsAll]);
+  },[fullView,selInst,fullData,instClasses,periodDays,periodStartKey,periodEndKey,instSectionsAll,resolveAdminTeacherClassSubject]);
 
   const fullViewGroups = useMemo(()=>{
     if(!fullView) return [];
@@ -14124,7 +14181,7 @@ function AdminPanelInner({user}){
           ));
       })
       .sort(compareAdminPanelEntries);
-  },[isAggregateSelection,selInst,teachers,fullData,periodDays,periodStartKey,periodEndKey,instSectionsAll]);
+  },[isAggregateSelection,selInst,teachers,fullData,periodDays,periodStartKey,periodEndKey,instSectionsAll,resolveAdminTeacherClassSubject]);
 
   const aggregateGroups=useMemo(()=>{
     if(!isAggregateSelection) return [];
@@ -14284,6 +14341,7 @@ function AdminPanelInner({user}){
         .filter(c=>!selInst || sameInstituteName(c.institute, selInst))
         .forEach(c=>{
           const className = normaliseName(resolveAdminSectionName(c.section, c.institute, instSectionsAll) || c.section);
+          const subjectLabel = resolveAdminTeacherClassSubject(t.uid, c.id, c.subject);
           Object.entries((d.notes||{})[c.id]||{}).forEach(([dk, arr])=>{
             if(!Array.isArray(arr)) return;
             arr.forEach(entry=>{
@@ -14295,7 +14353,7 @@ function AdminPanelInner({user}){
                 title: entry.title || "Untitled entry",
                 teacherName,
                 className,
-                subject: c.subject || "",
+                subject: subjectLabel,
                 institute: c.institute || "",
                 status: entry.status || "",
               });
@@ -14309,7 +14367,7 @@ function AdminPanelInner({user}){
         return (b.timeStart||"").localeCompare(a.timeStart||"");
       })
       .slice(0,6);
-  },[teachers,fullData,selInst,instSectionsAll]);
+  },[teachers,fullData,selInst,instSectionsAll,resolveAdminTeacherClassSubject]);
 
   const globalInstituteHighlights = useMemo(()=>{
     return institutes
@@ -15133,6 +15191,7 @@ function AdminPanelInner({user}){
   const rowsForTeacherClass = (teacherUid, teacherName, classId, className, subject, startKey, endKey, instituteName = selInst) => {
     const d = fullData[teacherUid];
     if (!d) return [];
+    const subjectLabel = resolveAdminTeacherClassSubject(teacherUid, classId, subject);
     const classNotes = (d.notes || {})[classId] || {};
     const result = [];
     Object.entries(classNotes || {}).forEach(([dk, arr]) => {
@@ -15149,7 +15208,7 @@ function AdminPanelInner({user}){
     return result.map(({dateKey: dk, entry: e}) => ({
       date: dk, start_time: e.timeStart||"", end_time: e.timeEnd||"",
       teacher: teacherName, institute: instituteName || selInst,
-      class: className, subject: subject,
+      class: className, subject: subjectLabel,
       type: e.tag||"", title: e.title||"",
       notes: (e.body||"").replace(/\n/g," "),
     })).sort(compareExportRows);
