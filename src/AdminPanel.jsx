@@ -9105,6 +9105,15 @@ function SyllabusBuilder({
     return {label:"Ready",tone:"green",note:"Structured for publishing.",topicCount,depthPct};
   };
 
+  const chapterStatusPillStyle = status => {
+    const theme = status?.tone==="green"
+      ? {bg:"#E8F7EF",text:"#137A45",border:"#B9E5CA"}
+      : status?.tone==="amber"
+        ? {bg:"#FFF4DE",text:"#9A5A00",border:"#EFD3A0"}
+        : {bg:"#EEF4FF",text:G.blue,border:"#C7D7F5"};
+    return {...pill(theme.bg,theme.text,theme.border),cursor:"default",fontWeight:800};
+  };
+
   const chapterMetrics = useMemo(()=>{
     const maxTopics = Math.max(1,...draft.chapters.map(chapter=>(chapter.topics||[]).filter(topic=>String(topic?.title||"").trim()).length));
     let readyCount = 0;
@@ -9279,7 +9288,7 @@ function SyllabusBuilder({
             <div style={{fontSize:13,color:G.textM,marginTop:5}}>The chapter workspace will appear after the syllabus scope is selected.</div>
           </div>
         ) : (
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.2fr) minmax(360px,0.92fr)",gap:16,alignItems:"start",marginTop:18}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.34fr) minmax(360px,0.9fr)",gap:16,alignItems:"start",marginTop:18}}>
             <div style={{display:"grid",gap:14,minWidth:0}}>
               <div style={{...softCardStyle,padding:isMobile?"14px":"16px"}}>
                 <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:14,alignItems:"start"}}>
@@ -9295,7 +9304,7 @@ function SyllabusBuilder({
                   </div>
                 </div>
 
-                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) minmax(290px,360px)",gap:12,alignItems:"start",marginTop:14}}>
+                <div style={{display:"grid",gap:12,marginTop:14}}>
                   <div>
                     <div style={labelStyle}>Search</div>
                     <input
@@ -9305,9 +9314,14 @@ function SyllabusBuilder({
                       style={fieldStyle}
                     />
                   </div>
-                  <div style={{...cardStyle,padding:"12px"}}>
-                    <div style={labelStyle}>Quick create</div>
-                    <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto auto",gap:8,alignItems:"center"}}>
+                  <div style={{...cardStyle,padding:"12px 12px 10px"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                      <div style={labelStyle}>Quick create</div>
+                      <div style={{fontSize:12,color:G.textM}}>
+                        {draft.chapters.length} chapter{draft.chapters.length===1?"":"s"} total
+                      </div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto auto",gap:8,alignItems:"center",marginTop:8}}>
                       <input
                         value={chapterInput}
                         onChange={event=>setChapterInput(event.target.value)}
@@ -9326,6 +9340,17 @@ function SyllabusBuilder({
                       <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
                         <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={15}/> Add</span>
                       </button>
+                    </div>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
+                      <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>
+                        {chapterMetrics.readyCount} ready
+                      </span>
+                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>
+                        {chapterMetrics.needsWorkCount} building
+                      </span>
+                      <span style={{...pill("#FFF4DE","#9A5A00","#EFD3A0"),cursor:"default",fontWeight:800}}>
+                        {chapterMetrics.emptyCount} empty
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -9361,16 +9386,17 @@ function SyllabusBuilder({
                   </div>
                 ) : (
                   <>
-                    {!isMobile&&(
-                      <div style={{display:"grid",gridTemplateColumns:"60px minmax(0,1.8fr) 110px 170px 190px 150px",gap:12,alignItems:"center",padding:"12px 16px",background:"#F8FAFD",borderBottom:`1px solid ${G.border}`,fontSize:11.5,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.7}}>
-                        <div>#</div>
-                        <div>Chapter</div>
-                        <div>Topics</div>
-                        <div>Depth</div>
-                        <div>Status</div>
-                        <div>Action</div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",padding:"12px 16px",background:"#F8FAFD",borderBottom:`1px solid ${G.border}`}}>
+                      <div>
+                        <div style={{fontSize:13.5,fontWeight:850,color:G.text}}>Chapter rail</div>
+                        <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
+                          {visibleChapters.length} visible chapter{visibleChapters.length===1?"":"s"} • select one to edit in the inspector
+                        </div>
                       </div>
-                    )}
+                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>
+                        {selectedChapter ? `Editing ${selectedChapterIndex+1}` : "Nothing selected"}
+                      </span>
+                    </div>
                     <div>
                       {visibleChapters.map(chapter=>{
                         const chapterIndex = draft.chapters.findIndex(item=>item.id===chapter.id);
@@ -9390,17 +9416,16 @@ function SyllabusBuilder({
                                   </div>
                                   <div style={{minWidth:0}}>
                                     <div style={{fontSize:16,fontWeight:850,color:G.text,lineHeight:1.35}}>{chapter.title || "Untitled chapter"}</div>
-                                    <div style={{fontSize:12.5,color:G.textM,marginTop:4,lineHeight:1.45}}>{status.note}</div>
+                                    <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:7}}>
+                                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>{status.topicCount} topic{status.topicCount===1?"":"s"}</span>
+                                      <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>{status.depthPct}% depth</span>
+                                    </div>
+                                    <div style={{fontSize:12.5,color:G.textM,marginTop:6,lineHeight:1.45}}>{status.note}</div>
                                   </div>
                                 </div>
-                                <span style={{...pill(status.tone==="green"?"#E8F7EF":status.tone==="amber"?"#FFF4DE":"#EEF4FF",status.tone==="green"?"#137A45":status.tone==="amber"?"#9A5A00":G.blue,status.tone==="green"?"#B9E5CA":status.tone==="amber"?"#EFD3A0":"#C7D7F5"),cursor:"default",fontWeight:800}}>
+                                <span style={chapterStatusPillStyle(status)}>
                                   {status.label}
                                 </span>
-                              </div>
-                              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginTop:12}}>
-                                <div><div style={labelStyle}>Topics</div><div style={{fontSize:18,fontWeight:850,color:G.text}}>{status.topicCount}</div></div>
-                                <div><div style={labelStyle}>Depth</div><div style={{height:8,borderRadius:999,background:"#E6EDF8",overflow:"hidden",marginTop:6}}><div style={{width:`${status.depthPct}%`,height:"100%",borderRadius:999,background:G.blue}}/></div></div>
-                                <div><div style={labelStyle}>Action</div><div style={{fontSize:13,fontWeight:800,color:G.blue,marginTop:3}}>Open inspector</div></div>
                               </div>
                             </button>
                           );
@@ -9410,34 +9435,32 @@ function SyllabusBuilder({
                           <button
                             key={chapter.id}
                             onClick={()=>{setSelectedChapterId(chapter.id);setActiveInspectorTab("topics");}}
-                            style={{width:"100%",textAlign:"left",background:selected?"#EEF4FF":"#FFFFFF",border:"none",borderBottom:`1px solid ${G.border}`,padding:"14px 16px",cursor:"pointer"}}
+                            style={{width:"100%",textAlign:"left",background:selected?"#EEF4FF":"#FFFFFF",border:"none",borderBottom:`1px solid ${G.border}`,padding:"15px 16px",cursor:"pointer"}}
                           >
-                            <div style={{display:"grid",gridTemplateColumns:"60px minmax(0,1.8fr) 110px 170px 190px 150px",gap:12,alignItems:"center"}}>
-                              <div style={{width:40,height:40,borderRadius:12,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:850}}>
+                            <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                              <div style={{width:40,height:40,borderRadius:12,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:850,flexShrink:0}}>
                                 {chapterIndex+1}
                               </div>
-                              <div style={{minWidth:0}}>
-                                <div style={{fontSize:16,fontWeight:850,color:G.text,lineHeight:1.35}}>{chapter.title || "Untitled chapter"}</div>
-                                <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:4}}>{status.note}</div>
-                              </div>
-                              <div>
-                                <div style={{fontSize:24,fontWeight:850,color:G.text,lineHeight:1}}>{status.topicCount}</div>
-                                <div style={{fontSize:12,color:G.textM,marginTop:6}}>topic{status.topicCount===1?"":"s"}</div>
-                              </div>
-                              <div>
-                                <div style={{height:8,borderRadius:999,background:"#E6EDF8",overflow:"hidden"}}>
-                                  <div style={{width:`${status.depthPct}%`,height:"100%",borderRadius:999,background:G.blue}}/>
+                              <div style={{minWidth:0,flex:1}}>
+                                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+                                  <div style={{minWidth:0,flex:1}}>
+                                    <div style={{fontSize:17,fontWeight:850,color:G.text,lineHeight:1.28}}>{chapter.title || "Untitled chapter"}</div>
+                                    <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:8}}>
+                                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>{status.topicCount} topic{status.topicCount===1?"":"s"}</span>
+                                      <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>{status.depthPct}% depth</span>
+                                      <span style={chapterStatusPillStyle(status)}>{status.label}</span>
+                                    </div>
+                                    <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:8}}>{status.note}</div>
+                                  </div>
+                                  <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                                    <div style={{width:120}}>
+                                      <div style={{height:8,borderRadius:999,background:"#E6EDF8",overflow:"hidden"}}>
+                                        <div style={{width:`${status.depthPct}%`,height:"100%",borderRadius:999,background:G.blue}}/>
+                                      </div>
+                                    </div>
+                                    <span style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800,cursor:"default"}}>Open</span>
+                                  </div>
                                 </div>
-                                <div style={{fontSize:12,color:G.textM,marginTop:8}}>{status.depthPct}% depth</div>
-                              </div>
-                              <div>
-                                <span style={{...pill(status.tone==="green"?"#E8F7EF":status.tone==="amber"?"#FFF4DE":"#EEF4FF",status.tone==="green"?"#137A45":status.tone==="amber"?"#9A5A00":G.blue,status.tone==="green"?"#B9E5CA":status.tone==="amber"?"#EFD3A0":"#C7D7F5"),cursor:"default",fontWeight:800}}>
-                                  {status.label}
-                                </span>
-                                <div style={{fontSize:12,color:G.textM,marginTop:8,lineHeight:1.45}}>{status.note}</div>
-                              </div>
-                              <div>
-                                <span style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800,cursor:"default"}}>Open</span>
                               </div>
                             </div>
                           </button>
@@ -9510,6 +9533,7 @@ function SyllabusBuilder({
                           <div style={{...cardStyle,padding:"12px"}}>
                             <div style={labelStyle}>Status</div>
                             <div style={{fontSize:18,fontWeight:850,color:G.text}}>{selectedChapterStatus?.label || "Draft"}</div>
+                            <div style={{fontSize:12,color:G.textM,marginTop:6,lineHeight:1.45}}>{selectedChapterStatus?.note || "Keep building this chapter."}</div>
                           </div>
                         </div>
 
