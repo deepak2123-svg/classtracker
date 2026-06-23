@@ -8814,7 +8814,7 @@ function SyllabusBuilder({
   );
   const scopedTemplate = subjectTemplates.find(item=>syllabusScopeKey(syllabusTemplateScope(item))===resolvedInitialScopeKey)
     || (hasInitialTargets ? subjectTemplates.find(item=>syllabusTemplateMatchesTargets(item, initialTargets)) : null);
-  const firstInitialScope=resolvedInitialScope[0]||{instituteName:initialInstitute,sectionNames:[initialSection].filter(Boolean)};
+  const firstInitialScope = resolvedInitialScope[0] || {instituteName:initialInstitute,sectionNames:[initialSection].filter(Boolean)};
   const newScopedTemplate = {
     ...emptySyllabusDraft(subject),
     draft:{
@@ -8838,16 +8838,21 @@ function SyllabusBuilder({
         },
       }
     : ((initialInstitute&&initialSection ? newScopedTemplate : subjectTemplates[0]) || newScopedTemplate);
+
   const [working,setWorking] = useState(initialTemplate);
   const [selectedId,setSelectedId] = useState(initialTemplate.id || "__new");
   const [chapterInput,setChapterInput] = useState("");
   const [topicInputs,setTopicInputs] = useState({});
   const [showBulkChapterInput,setShowBulkChapterInput] = useState(false);
   const [bulkChapterInput,setBulkChapterInput] = useState("");
+  const [selectedChapterId,setSelectedChapterId] = useState(initialTemplate?.draft?.chapters?.[0]?.id || null);
+  const [chapterQuery,setChapterQuery] = useState("");
+  const [chapterFilter,setChapterFilter] = useState("all");
+  const [activeInspectorTab,setActiveInspectorTab] = useState("topics");
   const hydratedExistingTemplateRef = React.useRef(false);
 
   const draft = working.draft || emptySyllabusDraft(subject).draft;
-  const draftScope=normaliseSyllabusScope(draft.scope,draft.instituteName,draft.sectionName);
+  const draftScope = normaliseSyllabusScope(draft.scope,draft.instituteName,draft.sectionName);
   const selectedInstituteConfig = getInstituteSectionConfig(instituteSections,draft.instituteName) || {};
   const sectionOptions = uniqueSectionNames([
     ...(selectedInstituteConfig.gradeGroups||[]).flatMap(group=>group.sections||[]),
@@ -8855,12 +8860,38 @@ function SyllabusBuilder({
   ]);
   const scopeReady = draftScope.length>0;
   const affectedSummary = getAffectedSummary(draftScope,subject);
+  const totalTopics = draft.chapters.reduce((sum,chapter)=>sum+(chapter.topics||[]).filter(topic=>String(topic?.title||"").trim()).length,0);
+
   const fieldStyle = {
-    width:"100%",boxSizing:"border-box",border:`1.5px solid ${G.borderM}`,borderRadius:10,
-    padding:"11px 13px",fontSize:14,fontFamily:G.sans,fontWeight:650,color:G.text,
-    background:"#FFFFFF",outline:"none",
+    width:"100%",
+    boxSizing:"border-box",
+    border:`1.5px solid ${G.borderM}`,
+    borderRadius:12,
+    padding:"11px 13px",
+    fontSize:14,
+    fontFamily:G.sans,
+    fontWeight:650,
+    color:G.text,
+    background:"#FFFFFF",
+    outline:"none",
   };
   const labelStyle = {fontSize:11.5,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6};
+  const cardStyle = {background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16};
+  const softCardStyle = {...cardStyle,background:"#F8FAFD"};
+  const stickyInspectorStyle = {
+    ...cardStyle,
+    overflow:"hidden",
+    position:isMobile?"static":"sticky",
+    top:isMobile?undefined:18,
+  };
+  const mutedCopyStyle = {fontSize:13,lineHeight:1.5,color:G.textM};
+  const toolbarButtonStyle = active => ({
+    ...pill(active?G.navy:"#FFFFFF",active?"#FFFFFF":G.textS,active?G.navy:G.borderM),
+    padding:"8px 12px",
+    fontSize:12.5,
+    fontWeight:800,
+  });
+
   useEffect(()=>{
     if(hydratedExistingTemplateRef.current) return;
     if(selectedId!=="__new") return;
@@ -8874,20 +8905,25 @@ function SyllabusBuilder({
     hydratedExistingTemplateRef.current = true;
     setWorking(initialTemplate);
     setSelectedId(initialTemplate.id);
+    setSelectedChapterId(initialTemplate?.draft?.chapters?.[0]?.id || null);
   }, [initialTemplate, selectedId, subject.name, working]);
+
   const updateDraft = patch => setWorking(current=>({
     ...current,
     subjectId:subject.id,
     subjectName:subject.name,
     draft:{...current.draft,...patch},
   }));
+
   const chooseInstitute = instituteName => updateDraft({
     instituteName,
     sectionName:"",
   });
+
   const updateChapter = (chapterId,patch) => updateDraft({
     chapters:draft.chapters.map(chapter=>chapter.id===chapterId?{...chapter,...patch}:chapter),
   });
+
   const chooseTemplate = value => {
     setSelectedId(value);
     const selectedTemplate = subjectTemplates.find(item=>item.id===value);
@@ -8920,7 +8956,12 @@ function SyllabusBuilder({
     setTopicInputs({});
     setShowBulkChapterInput(false);
     setBulkChapterInput("");
+    setChapterQuery("");
+    setChapterFilter("all");
+    setActiveInspectorTab("topics");
+    setSelectedChapterId(next?.draft?.chapters?.[0]?.id || null);
   };
+
   const addChapter = () => {
     const title = chapterInput.trim();
     if(!title) return;
@@ -8931,7 +8972,10 @@ function SyllabusBuilder({
     };
     updateDraft({chapters:[...draft.chapters,chapter]});
     setChapterInput("");
+    setSelectedChapterId(chapter.id);
+    setActiveInspectorTab("topics");
   };
+
   const addBulkChapters = () => {
     const titles = bulkChapterInput
       .split(/\r?\n|;/)
@@ -8944,12 +8988,15 @@ function SyllabusBuilder({
         .filter(Boolean)
     );
     const nextChapters = [...draft.chapters];
+    let firstAddedId = "";
     titles.forEach(title => {
       const key = title.toLowerCase();
       if(knownTitles.has(key)) return;
       knownTitles.add(key);
+      const id = makeSyllabusLocalId("chapter");
+      if(!firstAddedId) firstAddedId = id;
       nextChapters.push({
-        id:makeSyllabusLocalId("chapter"),
+        id,
         title,
         topics:[],
       });
@@ -8957,7 +9004,12 @@ function SyllabusBuilder({
     updateDraft({ chapters:nextChapters });
     setBulkChapterInput("");
     setShowBulkChapterInput(false);
+    if(firstAddedId){
+      setSelectedChapterId(firstAddedId);
+      setActiveInspectorTab("topics");
+    }
   };
+
   const moveChapter = (index,direction) => {
     const nextIndex = index + direction;
     if(nextIndex<0 || nextIndex>=draft.chapters.length) return;
@@ -8965,10 +9017,12 @@ function SyllabusBuilder({
     [next[index],next[nextIndex]]=[next[nextIndex],next[index]];
     updateDraft({chapters:next});
   };
+
   const removeChapter = chapterId => {
     if(!window.confirm("Remove this chapter from the draft?")) return;
     updateDraft({chapters:draft.chapters.filter(chapter=>chapter.id!==chapterId)});
   };
+
   const addTopic = chapter => {
     const title = String(topicInputs[chapter.id]||"").trim();
     if(!title) return;
@@ -8976,8 +9030,29 @@ function SyllabusBuilder({
       topics:[...(chapter.topics||[]),{id:makeSyllabusLocalId("topic"),title}],
     });
     setTopicInputs(current=>({...current,[chapter.id]:""}));
+    setSelectedChapterId(chapter.id);
   };
-  const totalTopics = draft.chapters.reduce((sum,chapter)=>sum+(chapter.topics||[]).filter(topic=>topic.title.trim()).length,0);
+
+  const updateTopicTitle = (chapter,topicId,title) => {
+    updateChapter(chapter.id,{
+      topics:(chapter.topics||[]).map(topic=>topic.id===topicId?{...topic,title}:topic),
+    });
+  };
+
+  const moveTopic = (chapter,index,direction) => {
+    const nextIndex = index + direction;
+    const topics = [...(chapter.topics||[])];
+    if(nextIndex<0 || nextIndex>=topics.length) return;
+    [topics[index],topics[nextIndex]]=[topics[nextIndex],topics[index]];
+    updateChapter(chapter.id,{topics});
+  };
+
+  const removeTopic = (chapter,topicId) => {
+    updateChapter(chapter.id,{
+      topics:(chapter.topics||[]).filter(topic=>topic.id!==topicId),
+    });
+  };
+
   const save = async () => {
     const saved = await onSave(working);
     if(saved){
@@ -8986,6 +9061,7 @@ function SyllabusBuilder({
     }
     return saved;
   };
+
   const publish = async () => {
     if(!window.confirm("Publish this syllabus version? The published history will remain permanent.")) return;
     const saved = await save();
@@ -8993,6 +9069,7 @@ function SyllabusBuilder({
     const published = await onPublish(saved.id);
     if(published) setWorking(published);
   };
+
   const removeSyllabus = async () => {
     if(!working.id || !onDelete) return;
     if(!window.confirm("Delete this syllabus, its published copy, and all saved versions permanently?")) return;
@@ -9004,34 +9081,119 @@ function SyllabusBuilder({
     setTopicInputs({});
     setShowBulkChapterInput(false);
     setBulkChapterInput("");
+    setSelectedChapterId(newScopedTemplate?.draft?.chapters?.[0]?.id || null);
+    setChapterQuery("");
+    setChapterFilter("all");
+    setActiveInspectorTab("topics");
   };
 
+  const describeChapter = (chapter,maxTopics) => {
+    const title = String(chapter?.title || "").trim();
+    const topicCount = (chapter?.topics || []).filter(topic=>String(topic?.title || "").trim()).length;
+    const depthPct = topicCount===0
+      ? 8
+      : Math.max(18, Math.min(100, Math.round((topicCount / Math.max(1,maxTopics)) * 100)));
+    if(!title){
+      return {label:"Needs title",tone:"amber",note:"Rename this chapter before publishing.",topicCount,depthPct};
+    }
+    if(topicCount===0){
+      return {label:"Empty",tone:"amber",note:"Add the first topic.",topicCount,depthPct};
+    }
+    if(topicCount===1){
+      return {label:"Building",tone:"blue",note:"Add more detail for this chapter.",topicCount,depthPct};
+    }
+    return {label:"Ready",tone:"green",note:"Structured for publishing.",topicCount,depthPct};
+  };
+
+  const chapterMetrics = useMemo(()=>{
+    const maxTopics = Math.max(1,...draft.chapters.map(chapter=>(chapter.topics||[]).filter(topic=>String(topic?.title||"").trim()).length));
+    let readyCount = 0;
+    let needsWorkCount = 0;
+    let emptyCount = 0;
+    draft.chapters.forEach(chapter=>{
+      const status = describeChapter(chapter,maxTopics);
+      if(status.label==="Ready") readyCount += 1;
+      else if(status.label==="Empty" || status.label==="Needs title") emptyCount += 1;
+      else needsWorkCount += 1;
+    });
+    return {maxTopics,readyCount,needsWorkCount,emptyCount};
+  }, [draft.chapters]);
+
+  const visibleChapters = useMemo(()=>{
+    const query = chapterQuery.trim().toLowerCase();
+    return draft.chapters.filter(chapter=>{
+      const status = describeChapter(chapter,chapterMetrics.maxTopics);
+      const title = String(chapter?.title || "").toLowerCase();
+      const topicText = (chapter.topics||[]).map(topic=>String(topic?.title || "").toLowerCase()).join(" ");
+      const matchesQuery = !query || title.includes(query) || topicText.includes(query);
+      if(!matchesQuery) return false;
+      if(chapterFilter==="ready") return status.label==="Ready";
+      if(chapterFilter==="needs-work") return status.label==="Building";
+      if(chapterFilter==="empty") return status.label==="Empty" || status.label==="Needs title";
+      return true;
+    });
+  }, [draft.chapters, chapterFilter, chapterMetrics.maxTopics, chapterQuery]);
+
+  useEffect(()=>{
+    if(!draft.chapters.length){
+      if(selectedChapterId!==null) setSelectedChapterId(null);
+      return;
+    }
+    if(selectedChapterId && draft.chapters.some(chapter=>chapter.id===selectedChapterId)) return;
+    setSelectedChapterId(draft.chapters[0].id);
+  }, [draft.chapters, selectedChapterId]);
+
+  useEffect(()=>{
+    if(!visibleChapters.length){
+      setSelectedChapterId(null);
+      return;
+    }
+    if(selectedChapterId && visibleChapters.some(chapter=>chapter.id===selectedChapterId)) return;
+    setSelectedChapterId(visibleChapters[0].id);
+  }, [visibleChapters, selectedChapterId]);
+
+  const selectedChapter = draft.chapters.find(chapter=>chapter.id===selectedChapterId) || null;
+  const selectedChapterIndex = selectedChapter ? draft.chapters.findIndex(chapter=>chapter.id===selectedChapter.id) : -1;
+  const selectedChapterStatus = selectedChapter ? describeChapter(selectedChapter,chapterMetrics.maxTopics) : null;
+  const scopePairs = syllabusScopePairs(draftScope);
+
   return (
-    <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden",marginBottom:24}}>
+    <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",marginBottom:24}}>
       <div style={{padding:isMobile?"16px":"20px 22px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD"}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
           <div style={{minWidth:0}}>
             <button onClick={onClose} style={{...pill("#FFFFFF",G.textS,G.border),padding:"7px 11px",marginBottom:13}}>
               <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconChevronLeft} size={15}/> Subjects</span>
             </button>
-            <div style={{fontSize:isMobile?23:28,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.15}}>Syllabus builder</div>
+            <div style={{fontSize:isMobile?23:30,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.1}}>Syllabus studio</div>
             <div style={{fontSize:16,fontWeight:750,color:G.blue,marginTop:5}}>{subject.name}</div>
+            <div style={{...mutedCopyStyle,marginTop:8,maxWidth:760}}>
+              Scan all chapters in one calm overview, then edit the selected chapter in the inspector without turning the whole page into a long form.
+            </div>
           </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <span style={{...pill(working.currentVersion?"#E8F7EF":"#FFF7E6",working.currentVersion?"#137A45":"#9A5A00",working.currentVersion?"#B9E5CA":"#F1D49A"),cursor:"default",fontWeight:750}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:isMobile?"flex-start":"flex-end"}}>
+            <span style={{...pill(working.currentVersion?"#E8F7EF":"#FFF7E6",working.currentVersion?"#137A45":"#9A5A00",working.currentVersion?"#B9E5CA":"#F1D49A"),cursor:"default",fontWeight:800}}>
               {working.currentVersion?`Published v${working.currentVersion}`:"Draft only"}
             </span>
-            <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:750}}>
+            <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>
               {draft.chapters.length} chapters · {totalTopics} topics
             </span>
+            <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>
+              {scopePairs.length} section{scopePairs.length===1?"":"s"}
+            </span>
+            {simpleScope&&initialTargets.length>0&&(
+              <span style={{...pill("#E8F7EF","#137A45","#B9E5CA"),cursor:"default",fontWeight:800}}>
+                {initialTargets.length} bound class{initialTargets.length===1?"":"es"}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
       <div style={{padding:isMobile?"16px":"22px"}}>
-        <div style={{display:"flex",alignItems:"flex-end",gap:12,flexWrap:"wrap"}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(260px,360px) minmax(220px,1fr) auto",gap:12,alignItems:"end"}}>
           {subjectTemplates.length>0&&(
-            <div style={{flex:"1 1 320px"}}>
+            <div>
               <div style={labelStyle}>Saved syllabus</div>
               <select value={selectedId} onChange={event=>chooseTemplate(event.target.value)} style={fieldStyle}>
                 <option value="__new">Create a fresh syllabus</option>
@@ -9043,50 +9205,62 @@ function SyllabusBuilder({
               </select>
             </div>
           )}
-          <div style={{flex:"1 1 260px",padding:"11px 13px",border:`1px solid ${G.border}`,borderRadius:10,background:"#F8FAFD"}}>
+
+          <div style={{...softCardStyle,padding:"12px 14px"}}>
             <div style={labelStyle}>Syllabus</div>
-            <div style={{fontSize:14,fontWeight:850,color:G.text}}>{draft.name||`${subject.name} syllabus`}</div>
+            <div style={{fontSize:15,fontWeight:850,color:G.text}}>{draft.name || `${subject.name} syllabus`}</div>
+            <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
+              {chapterMetrics.readyCount} ready · {chapterMetrics.needsWorkCount} building · {chapterMetrics.emptyCount} empty
+            </div>
           </div>
+
           {working.id&&(
-            <button onClick={removeSyllabus} disabled={busy} style={{...pill(G.redL,G.red,"#F5CACA"),padding:"10px 13px",fontWeight:800}}>
+            <button onClick={removeSyllabus} disabled={busy} style={{...pill(G.redL,G.red,"#F5CACA"),padding:"10px 13px",fontWeight:800,justifyContent:"center"}}>
               <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconTrash} size={16}/> Delete syllabus</span>
             </button>
           )}
         </div>
 
-        {!simpleScope&&<div style={{marginTop:16,padding:isMobile?"14px":"16px",background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:12}}>
-          <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display}}>Choose where this syllabus applies</div>
-          <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:3,marginBottom:13}}>
-            Select an existing institute first, then one of its admin-defined sections.
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(220px,1fr))",gap:12}}>
-            <div>
-              <div style={labelStyle}>Institute</div>
-              <select value={draft.instituteName||""} onChange={event=>chooseInstitute(event.target.value)} style={fieldStyle}>
-                <option value="">Select institute</option>
-                {institutes.map(institute=><option key={institute} value={institute}>{institute}</option>)}
-              </select>
+        {!simpleScope && (
+          <div style={{...softCardStyle,marginTop:16,padding:isMobile?"14px":"16px"}}>
+            <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display}}>Choose where this syllabus applies</div>
+            <div style={{...mutedCopyStyle,marginTop:4,marginBottom:13}}>
+              Select an existing institute first, then one of its admin-defined sections.
             </div>
-            <div>
-              <div style={labelStyle}>Section</div>
-              <select value={draft.sectionName||""} onChange={event=>updateDraft({sectionName:event.target.value})} disabled={!draft.instituteName||sectionOptions.length===0} style={{...fieldStyle,opacity:!draft.instituteName||sectionOptions.length===0?0.55:1}}>
-                <option value="">{!draft.instituteName?"Select institute first":sectionOptions.length?"Select section":"No configured sections"}</option>
-                {sectionOptions.map(section=><option key={section} value={section}>{section}</option>)}
-              </select>
-              {draft.instituteName&&sectionOptions.length===0&&(
-                <div style={{fontSize:12,color:G.red,marginTop:6}}>Create sections for this institute in Control Centre → Sections first.</div>
-              )}
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(220px,1fr))",gap:12}}>
+              <div>
+                <div style={labelStyle}>Institute</div>
+                <select value={draft.instituteName||""} onChange={event=>chooseInstitute(event.target.value)} style={fieldStyle}>
+                  <option value="">Select institute</option>
+                  {institutes.map(institute=><option key={institute} value={institute}>{institute}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={labelStyle}>Section</div>
+                <select
+                  value={draft.sectionName||""}
+                  onChange={event=>updateDraft({sectionName:event.target.value})}
+                  disabled={!draft.instituteName||sectionOptions.length===0}
+                  style={{...fieldStyle,opacity:!draft.instituteName||sectionOptions.length===0?0.55:1}}
+                >
+                  <option value="">{!draft.instituteName?"Select institute first":sectionOptions.length?"Select section":"No configured sections"}</option>
+                  {sectionOptions.map(section=><option key={section} value={section}>{section}</option>)}
+                </select>
+                {draft.instituteName&&sectionOptions.length===0&&(
+                  <div style={{fontSize:12,color:G.red,marginTop:6}}>Create sections for this institute in Control Centre → Sections first.</div>
+                )}
+              </div>
             </div>
           </div>
-        </div>}
+        )}
 
         {simpleScope&&(
-          <div style={{marginTop:16,padding:"12px 14px",background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:12}}>
+          <div style={{...softCardStyle,marginTop:16,padding:"12px 14px"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <span style={{fontSize:11,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.7}}>Applies to</span>
               <span style={{...pill(G.blueL,G.blue,"#B8CCF7"),cursor:"default",fontWeight:800}}>{subject.name}</span>
               <span style={{fontSize:12.5,fontWeight:750,color:G.textM}}>
-                {draftScope.length} institute{draftScope.length===1?"":"s"} · {syllabusScopePairs(draftScope).length} section{syllabusScopePairs(draftScope).length===1?"":"s"}
+                {draftScope.length} institute{draftScope.length===1?"":"s"} · {scopePairs.length} section{scopePairs.length===1?"":"s"}
               </span>
             </div>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:9}}>
@@ -9099,189 +9273,440 @@ function SyllabusBuilder({
           </div>
         )}
 
-        {simpleScope&&initialTargets.length>0&&(
-          <div style={{marginTop:12,padding:"12px 14px",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:12}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:850,color:G.text}}>Matching teachers and classes</div>
-                <div style={{fontSize:12,color:G.textM,marginTop:3}}>Publishing binds this syllabus to these existing class records.</div>
-              </div>
-              <span style={{...pill("#E8F7EF","#137A45","#B9E5CA"),cursor:"default",fontWeight:800}}>{initialTargets.length} class{initialTargets.length===1?"":"es"}</span>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:8,marginTop:11}}>
-              {initialTargets.map(target=>(
-                <div key={`${target.teacherUid}::${target.classId}`} style={{padding:"10px 11px",border:`1px solid ${G.border}`,borderRadius:10,background:"#F8FAFD",minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:850,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{target.teacherName||"Teacher"}</div>
-                  <div style={{fontSize:11.5,color:G.textM,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{target.instituteName} · {target.sectionName}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {!scopeReady ? (
-          <div style={{marginTop:16,border:`2px dashed ${G.borderM}`,borderRadius:12,padding:"28px 18px",textAlign:"center"}}>
+          <div style={{marginTop:16,border:`2px dashed ${G.borderM}`,borderRadius:14,padding:"28px 18px",textAlign:"center"}}>
             <div style={{fontSize:16,fontWeight:800,color:G.text}}>Select at least one institute and section.</div>
-            <div style={{fontSize:13,color:G.textM,marginTop:5}}>The chapter builder will appear after the syllabus scope is selected.</div>
-          </div>
-        ) : (<>
-        {!simpleScope&&<>
-        <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display,marginTop:18,marginBottom:10}}>Add syllabus details</div>
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(150px,1fr))",gap:12,alignItems:"end",marginTop:16}}>
-          <div>
-            <div style={labelStyle}>Academic year</div>
-            <input value={draft.academicYear} onChange={event=>updateDraft({academicYear:event.target.value})} placeholder="2026-27" style={fieldStyle}/>
-          </div>
-          <div>
-            <div style={labelStyle}>Curriculum / board</div>
-            <input value={draft.curriculum} onChange={event=>updateDraft({curriculum:event.target.value})} placeholder="CBSE, UPSC, State Board" style={fieldStyle}/>
-          </div>
-          <div>
-            <div style={labelStyle}>Grade / course / programme</div>
-            <input value={draft.gradeLabel} onChange={event=>updateDraft({gradeLabel:event.target.value})} placeholder="Class 11, NDA, Foundation" style={fieldStyle}/>
-          </div>
-        </div>
-
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10,marginTop:16,padding:"13px 15px",background:"#F8FAFD",border:`1px solid ${G.border}`,borderRadius:11}}>
-          <div><div style={labelStyle}>Affected classes</div><div style={{fontSize:20,fontWeight:850,color:G.text}}>{affectedSummary.classCount}</div></div>
-          <div><div style={labelStyle}>Institutes</div><div style={{fontSize:20,fontWeight:850,color:G.text}}>{affectedSummary.instituteCount}</div></div>
-          <div><div style={labelStyle}>Teachers</div><div style={{fontSize:20,fontWeight:850,color:G.text}}>{affectedSummary.teacherCount}</div></div>
-        </div>
-        {affectedSummary.classes.length>0&&(
-          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:9}}>
-            {affectedSummary.classes.slice(0,8).map(item=>(
-              <span key={item} title={item} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:700,color:G.textS}}>
-                {item}
-              </span>
-            ))}
-            {affectedSummary.classes.length>8&&(
-              <span style={{background:"#EEF4FF",border:"1px solid #C7D7F5",borderRadius:999,padding:"5px 9px",fontSize:11.5,fontWeight:800,color:G.blue}}>
-                +{affectedSummary.classes.length-8} more
-              </span>
-            )}
-          </div>
-        )}
-        </>}
-
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginTop:24,marginBottom:12}}>
-          <div>
-            <div style={{fontSize:19,fontWeight:850,color:G.text,fontFamily:G.display}}>Chapters</div>
-            <div style={{fontSize:13,color:G.textM,marginTop:3}}>Add one chapter quickly, or paste the full chapter list at once.</div>
-          </div>
-          <button
-            onClick={()=>setShowBulkChapterInput(current=>!current)}
-            style={{...pill(showBulkChapterInput?G.navy:"#FFFFFF",showBulkChapterInput?"#FFFFFF":G.textS,showBulkChapterInput?G.navy:G.borderM),padding:"8px 12px",fontSize:12.5,fontWeight:800}}
-          >
-            {showBulkChapterInput ? "Hide paste list" : "Paste chapter list"}
-          </button>
-        </div>
-
-        <div style={{display:"flex",flexDirection:isMobile?"column":"row",gap:9,alignItems:"stretch",marginBottom:12}}>
-          <input
-            value={chapterInput}
-            onChange={event=>setChapterInput(event.target.value)}
-            onKeyDown={event=>{
-              if(event.key==="Enter"){
-                event.preventDefault();
-                addChapter();
-              }
-            }}
-            placeholder="Write a chapter name"
-            style={{...fieldStyle,flex:1}}
-          />
-          <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"10px 13px",fontWeight:750,whiteSpace:"nowrap",minHeight:isMobile?44:undefined}}>
-            <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={16}/> Add</span>
-          </button>
-        </div>
-
-        {showBulkChapterInput&&(
-          <div style={{marginBottom:12,padding:"12px 13px",border:`1px solid ${G.border}`,borderRadius:12,background:"#F8FAFD"}}>
-            <div style={{fontSize:12,fontWeight:800,color:G.text,fontFamily:G.sans,marginBottom:6}}>Paste one chapter per line</div>
-            <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginBottom:10}}>
-              Useful when you already have the chapter list. Duplicate titles are skipped automatically.
-            </div>
-            <textarea
-              value={bulkChapterInput}
-              onChange={event=>setBulkChapterInput(event.target.value)}
-              placeholder={"Chapter 1\nChapter 2\nChapter 3"}
-              style={{...fieldStyle,minHeight:118,resize:"vertical",lineHeight:1.5}}
-            />
-            <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:10,flexWrap:"wrap"}}>
-              <button onClick={()=>{setBulkChapterInput("");setShowBulkChapterInput(false);}} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:750}}>
-                Cancel
-              </button>
-              <button onClick={addBulkChapters} disabled={!bulkChapterInput.trim()} style={{...pill(bulkChapterInput.trim()?G.navy:G.bg,"#FFFFFF",bulkChapterInput.trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
-                Add all chapters
-              </button>
-            </div>
-          </div>
-        )}
-
-        {draft.chapters.length===0 ? (
-          <div style={{border:`2px dashed ${G.borderM}`,borderRadius:12,padding:"30px 18px",textAlign:"center",color:G.textM}}>
-            Add the first chapter to begin this syllabus.
+            <div style={{fontSize:13,color:G.textM,marginTop:5}}>The chapter workspace will appear after the syllabus scope is selected.</div>
           </div>
         ) : (
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {draft.chapters.map((chapter,index)=>{
-              return (
-                <div key={chapter.id} style={{border:`1.5px solid ${G.border}`,borderRadius:12,background:"#FFFFFF",padding:"12px 13px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:isMobile?"wrap":"nowrap"}}>
-                    <div style={{width:34,height:34,borderRadius:10,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:850,flexShrink:0}}>{index+1}</div>
-                    <input value={chapter.title} onChange={event=>updateChapter(chapter.id,{title:event.target.value})} aria-label={`Chapter ${index+1} title`} style={{...fieldStyle,flex:1,minWidth:isMobile?"calc(100% - 44px)":0,padding:"9px 11px"}}/>
-                    <div style={{display:"flex",gap:7,marginLeft:isMobile?44:0}}>
-                      <button title="Move up" onClick={()=>moveChapter(index,-1)} disabled={index===0} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:index===0?0.4:1}}><AppIcon icon={IconArrowUp} size={15}/></button>
-                      <button title="Move down" onClick={()=>moveChapter(index,1)} disabled={index===draft.chapters.length-1} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:index===draft.chapters.length-1?0.4:1}}><AppIcon icon={IconArrowDown} size={15}/></button>
-                      <button title="Delete chapter" onClick={()=>removeChapter(chapter.id)} style={{...pill(G.redL,G.red,"#F5CACA"),padding:7}}><AppIcon icon={IconTrash} size={15}/></button>
-                    </div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.2fr) minmax(360px,0.92fr)",gap:16,alignItems:"start",marginTop:18}}>
+            <div style={{display:"grid",gap:14,minWidth:0}}>
+              <div style={{...softCardStyle,padding:isMobile?"14px":"16px"}}>
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:14,alignItems:"start"}}>
+                  <div>
+                    <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>Syllabus map</div>
+                    <div style={{...mutedCopyStyle,marginTop:4}}>Keep the overview compact. Open only the chapter you want to change.</div>
                   </div>
-                  <div style={{marginLeft:isMobile?0:44,marginTop:10,paddingTop:10,borderTop:`1px solid ${G.border}`}}>
-                    {(chapter.topics||[]).length>0&&(
-                      <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:9}}>
-                        {chapter.topics.map((topic,topicIndex)=>(
-                          <span key={topic.id} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#F3F7FD",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 7px 5px 10px",fontSize:12.5,fontWeight:700,color:G.textS}}>
-                            {topicIndex+1}. {topic.title}
-                            <button title="Remove topic" onClick={()=>updateChapter(chapter.id,{topics:chapter.topics.filter(item=>item.id!==topic.id)})} style={{border:"none",background:"transparent",color:G.red,cursor:"pointer",padding:1,display:"inline-flex"}}><AppIcon icon={IconX} size={13}/></button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{display:"flex",flexDirection:isMobile?"column":"row",gap:8}}>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:isMobile?"flex-start":"flex-end"}}>
+                    <button onClick={()=>setChapterFilter("all")} style={toolbarButtonStyle(chapterFilter==="all")}>All</button>
+                    <button onClick={()=>setChapterFilter("needs-work")} style={toolbarButtonStyle(chapterFilter==="needs-work")}>Needs work</button>
+                    <button onClick={()=>setChapterFilter("empty")} style={toolbarButtonStyle(chapterFilter==="empty")}>Empty</button>
+                    <button onClick={()=>setChapterFilter("ready")} style={toolbarButtonStyle(chapterFilter==="ready")}>Ready</button>
+                  </div>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) minmax(290px,360px)",gap:12,alignItems:"start",marginTop:14}}>
+                  <div>
+                    <div style={labelStyle}>Search</div>
+                    <input
+                      value={chapterQuery}
+                      onChange={event=>setChapterQuery(event.target.value)}
+                      placeholder="Search chapter or topic"
+                      style={fieldStyle}
+                    />
+                  </div>
+                  <div style={{...cardStyle,padding:"12px"}}>
+                    <div style={labelStyle}>Quick create</div>
+                    <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto auto",gap:8,alignItems:"center"}}>
                       <input
-                        value={topicInputs[chapter.id]||""}
-                        onChange={event=>setTopicInputs(current=>({...current,[chapter.id]:event.target.value}))}
+                        value={chapterInput}
+                        onChange={event=>setChapterInput(event.target.value)}
                         onKeyDown={event=>{
                           if(event.key==="Enter"){
                             event.preventDefault();
-                            addTopic(chapter);
+                            addChapter();
                           }
                         }}
-                        placeholder="Add a topic (optional)"
-                        style={{...fieldStyle,flex:1,padding:"8px 10px",fontSize:13}}
+                        placeholder="Add next chapter quickly"
+                        style={{...fieldStyle,padding:"10px 12px"}}
                       />
-                      <button onClick={()=>addTopic(chapter)} disabled={!String(topicInputs[chapter.id]||"").trim()} style={{...pill("#EEF4FF",G.blue,"#C7D7F5"),padding:"9px 10px",fontSize:12,fontWeight:750,minHeight:isMobile?42:undefined}}>Add topic</button>
+                      <button onClick={()=>setShowBulkChapterInput(current=>!current)} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:800}}>
+                        {showBulkChapterInput ? "Hide paste" : "Paste list"}
+                      </button>
+                      <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={15}/> Add</span>
+                      </button>
                     </div>
                   </div>
                 </div>
-              );
-            })}
+
+                {showBulkChapterInput&&(
+                  <div style={{...cardStyle,padding:"12px 13px",marginTop:12}}>
+                    <div style={{fontSize:12,fontWeight:800,color:G.text,marginBottom:6}}>Paste one chapter per line</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginBottom:10}}>
+                      Useful when you already have the chapter list. Duplicate titles are skipped automatically.
+                    </div>
+                    <textarea
+                      value={bulkChapterInput}
+                      onChange={event=>setBulkChapterInput(event.target.value)}
+                      placeholder={"Chapter 1\nChapter 2\nChapter 3"}
+                      style={{...fieldStyle,minHeight:118,resize:"vertical",lineHeight:1.5}}
+                    />
+                    <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:10,flexWrap:"wrap"}}>
+                      <button onClick={()=>{setBulkChapterInput("");setShowBulkChapterInput(false);}} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:750}}>
+                        Cancel
+                      </button>
+                      <button onClick={addBulkChapters} disabled={!bulkChapterInput.trim()} style={{...pill(bulkChapterInput.trim()?G.navy:G.bg,"#FFFFFF",bulkChapterInput.trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
+                        Add all chapters
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{...cardStyle,overflow:"hidden"}}>
+                {!visibleChapters.length ? (
+                  <div style={{padding:"28px 20px",textAlign:"center",color:G.textM}}>
+                    No chapters match the current search or filter.
+                  </div>
+                ) : (
+                  <>
+                    {!isMobile&&(
+                      <div style={{display:"grid",gridTemplateColumns:"60px minmax(0,1.8fr) 110px 170px 190px 150px",gap:12,alignItems:"center",padding:"12px 16px",background:"#F8FAFD",borderBottom:`1px solid ${G.border}`,fontSize:11.5,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.7}}>
+                        <div>#</div>
+                        <div>Chapter</div>
+                        <div>Topics</div>
+                        <div>Depth</div>
+                        <div>Status</div>
+                        <div>Action</div>
+                      </div>
+                    )}
+                    <div>
+                      {visibleChapters.map(chapter=>{
+                        const chapterIndex = draft.chapters.findIndex(item=>item.id===chapter.id);
+                        const status = describeChapter(chapter,chapterMetrics.maxTopics);
+                        const selected = selectedChapter?.id===chapter.id;
+                        if(isMobile){
+                          return (
+                            <button
+                              key={chapter.id}
+                              onClick={()=>{setSelectedChapterId(chapter.id);setActiveInspectorTab("topics");}}
+                              style={{width:"100%",textAlign:"left",background:selected?"#EEF4FF":"#FFFFFF",border:"none",borderBottom:`1px solid ${G.border}`,padding:"15px 16px",cursor:"pointer"}}
+                            >
+                              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                                <div style={{display:"flex",alignItems:"flex-start",gap:10,minWidth:0}}>
+                                  <div style={{width:36,height:36,borderRadius:11,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:850,flexShrink:0}}>
+                                    {chapterIndex+1}
+                                  </div>
+                                  <div style={{minWidth:0}}>
+                                    <div style={{fontSize:16,fontWeight:850,color:G.text,lineHeight:1.35}}>{chapter.title || "Untitled chapter"}</div>
+                                    <div style={{fontSize:12.5,color:G.textM,marginTop:4,lineHeight:1.45}}>{status.note}</div>
+                                  </div>
+                                </div>
+                                <span style={{...pill(status.tone==="green"?"#E8F7EF":status.tone==="amber"?"#FFF4DE":"#EEF4FF",status.tone==="green"?"#137A45":status.tone==="amber"?"#9A5A00":G.blue,status.tone==="green"?"#B9E5CA":status.tone==="amber"?"#EFD3A0":"#C7D7F5"),cursor:"default",fontWeight:800}}>
+                                  {status.label}
+                                </span>
+                              </div>
+                              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginTop:12}}>
+                                <div><div style={labelStyle}>Topics</div><div style={{fontSize:18,fontWeight:850,color:G.text}}>{status.topicCount}</div></div>
+                                <div><div style={labelStyle}>Depth</div><div style={{height:8,borderRadius:999,background:"#E6EDF8",overflow:"hidden",marginTop:6}}><div style={{width:`${status.depthPct}%`,height:"100%",borderRadius:999,background:G.blue}}/></div></div>
+                                <div><div style={labelStyle}>Action</div><div style={{fontSize:13,fontWeight:800,color:G.blue,marginTop:3}}>Open inspector</div></div>
+                              </div>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <button
+                            key={chapter.id}
+                            onClick={()=>{setSelectedChapterId(chapter.id);setActiveInspectorTab("topics");}}
+                            style={{width:"100%",textAlign:"left",background:selected?"#EEF4FF":"#FFFFFF",border:"none",borderBottom:`1px solid ${G.border}`,padding:"14px 16px",cursor:"pointer"}}
+                          >
+                            <div style={{display:"grid",gridTemplateColumns:"60px minmax(0,1.8fr) 110px 170px 190px 150px",gap:12,alignItems:"center"}}>
+                              <div style={{width:40,height:40,borderRadius:12,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:850}}>
+                                {chapterIndex+1}
+                              </div>
+                              <div style={{minWidth:0}}>
+                                <div style={{fontSize:16,fontWeight:850,color:G.text,lineHeight:1.35}}>{chapter.title || "Untitled chapter"}</div>
+                                <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:4}}>{status.note}</div>
+                              </div>
+                              <div>
+                                <div style={{fontSize:24,fontWeight:850,color:G.text,lineHeight:1}}>{status.topicCount}</div>
+                                <div style={{fontSize:12,color:G.textM,marginTop:6}}>topic{status.topicCount===1?"":"s"}</div>
+                              </div>
+                              <div>
+                                <div style={{height:8,borderRadius:999,background:"#E6EDF8",overflow:"hidden"}}>
+                                  <div style={{width:`${status.depthPct}%`,height:"100%",borderRadius:999,background:G.blue}}/>
+                                </div>
+                                <div style={{fontSize:12,color:G.textM,marginTop:8}}>{status.depthPct}% depth</div>
+                              </div>
+                              <div>
+                                <span style={{...pill(status.tone==="green"?"#E8F7EF":status.tone==="amber"?"#FFF4DE":"#EEF4FF",status.tone==="green"?"#137A45":status.tone==="amber"?"#9A5A00":G.blue,status.tone==="green"?"#B9E5CA":status.tone==="amber"?"#EFD3A0":"#C7D7F5"),cursor:"default",fontWeight:800}}>
+                                  {status.label}
+                                </span>
+                                <div style={{fontSize:12,color:G.textM,marginTop:8,lineHeight:1.45}}>{status.note}</div>
+                              </div>
+                              <div>
+                                <span style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800,cursor:"default"}}>Open</span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div style={stickyInspectorStyle}>
+              <div style={{padding:"16px 18px",borderBottom:`1px solid ${G.border}`}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:11.5,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Chapter inspector</div>
+                    {selectedChapter ? (
+                      <>
+                        <input
+                          value={selectedChapter.title}
+                          onChange={event=>updateChapter(selectedChapter.id,{title:event.target.value})}
+                          placeholder="Chapter title"
+                          style={{...fieldStyle,border:"none",padding:0,fontSize:isMobile?22:28,fontWeight:850,background:"transparent"}}
+                        />
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                          <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>Chapter {selectedChapterIndex+1}</span>
+                          {selectedChapterStatus&&(
+                            <span style={{...pill(selectedChapterStatus.tone==="green"?"#E8F7EF":selectedChapterStatus.tone==="amber"?"#FFF4DE":"#EEF4FF",selectedChapterStatus.tone==="green"?"#137A45":selectedChapterStatus.tone==="amber"?"#9A5A00":G.blue,selectedChapterStatus.tone==="green"?"#B9E5CA":selectedChapterStatus.tone==="amber"?"#EFD3A0":"#C7D7F5"),cursor:"default",fontWeight:800}}>
+                              {selectedChapterStatus.label}
+                            </span>
+                          )}
+                          <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>
+                            {selectedChapterStatus?.topicCount || 0} topic{selectedChapterStatus?.topicCount===1?"":"s"}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{fontSize:18,fontWeight:850,color:G.text}}>Select a chapter</div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+                  <button onClick={()=>setActiveInspectorTab("topics")} style={toolbarButtonStyle(activeInspectorTab==="topics")}>Topics</button>
+                  <button onClick={()=>setActiveInspectorTab("scope")} style={toolbarButtonStyle(activeInspectorTab==="scope")}>Scope</button>
+                  <button onClick={()=>setActiveInspectorTab("publish")} style={toolbarButtonStyle(activeInspectorTab==="publish")}>Publish</button>
+                </div>
+              </div>
+
+              {!selectedChapter ? (
+                <div style={{padding:"30px 20px",textAlign:"center",color:G.textM}}>
+                  Select a chapter from the overview to edit its topics and publish context here.
+                </div>
+              ) : (
+                <>
+                  <div style={{padding:"16px 18px",background:"#FBFDFF",display:"grid",gap:14}}>
+                    {activeInspectorTab==="topics"&&(
+                      <>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}}>
+                          <div style={{...cardStyle,padding:"12px"}}>
+                            <div style={labelStyle}>Topics</div>
+                            <div style={{fontSize:22,fontWeight:850,color:G.text}}>{selectedChapterStatus?.topicCount || 0}</div>
+                          </div>
+                          <div style={{...cardStyle,padding:"12px"}}>
+                            <div style={labelStyle}>Depth</div>
+                            <div style={{height:8,borderRadius:999,background:"#E6EDF8",overflow:"hidden",marginTop:10}}>
+                              <div style={{width:`${selectedChapterStatus?.depthPct || 8}%`,height:"100%",borderRadius:999,background:G.blue}}/>
+                            </div>
+                          </div>
+                          <div style={{...cardStyle,padding:"12px"}}>
+                            <div style={labelStyle}>Status</div>
+                            <div style={{fontSize:18,fontWeight:850,color:G.text}}>{selectedChapterStatus?.label || "Draft"}</div>
+                          </div>
+                        </div>
+
+                        <div style={{...cardStyle,overflow:"hidden"}}>
+                          <div style={{padding:"12px 14px",borderBottom:`1px solid ${G.border}`}}>
+                            <div style={{fontSize:14,fontWeight:850,color:G.text}}>Topic editor</div>
+                            <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>The overview stays clean. All topic editing happens here.</div>
+                          </div>
+                          <div style={{padding:"12px",display:"grid",gap:8}}>
+                            {(selectedChapter.topics||[]).length===0 ? (
+                              <div style={{padding:"14px 12px",border:`1px dashed ${G.borderM}`,borderRadius:12,background:"#FFFFFF",fontSize:13,color:G.textM,lineHeight:1.5}}>
+                                No topics yet. Add the first topic for this chapter below.
+                              </div>
+                            ) : (
+                              selectedChapter.topics.map((topic,topicIndex)=>(
+                                <div key={topic.id} style={{display:"grid",gridTemplateColumns:isMobile?"34px minmax(0,1fr)":"34px minmax(0,1fr) auto auto auto",gap:8,alignItems:"center",padding:"8px",border:`1px solid ${G.border}`,borderRadius:12,background:"#FFFFFF"}}>
+                                  <div style={{width:34,height:34,borderRadius:10,border:`1px solid ${G.border}`,background:"#F4F7FB",display:"flex",alignItems:"center",justifyContent:"center",color:G.textM,fontWeight:850}}>
+                                    {topicIndex+1}
+                                  </div>
+                                  <input
+                                    value={topic.title}
+                                    onChange={event=>updateTopicTitle(selectedChapter,topic.id,event.target.value)}
+                                    placeholder="Topic title"
+                                    style={{...fieldStyle,padding:"9px 10px"}}
+                                  />
+                                  <button title="Move up" onClick={()=>moveTopic(selectedChapter,topicIndex,-1)} disabled={topicIndex===0} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:topicIndex===0?0.4:1}}>
+                                    <AppIcon icon={IconArrowUp} size={15}/>
+                                  </button>
+                                  <button title="Move down" onClick={()=>moveTopic(selectedChapter,topicIndex,1)} disabled={topicIndex===selectedChapter.topics.length-1} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:topicIndex===selectedChapter.topics.length-1?0.4:1}}>
+                                    <AppIcon icon={IconArrowDown} size={15}/>
+                                  </button>
+                                  <button title="Remove topic" onClick={()=>removeTopic(selectedChapter,topic.id)} style={{...pill(G.redL,G.red,"#F5CACA"),padding:7}}>
+                                    <AppIcon icon={IconTrash} size={15}/>
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <div style={{padding:"12px",borderTop:`1px solid ${G.border}`,background:"#F8FAFD",display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:8}}>
+                            <input
+                              value={topicInputs[selectedChapter.id]||""}
+                              onChange={event=>setTopicInputs(current=>({...current,[selectedChapter.id]:event.target.value}))}
+                              onKeyDown={event=>{
+                                if(event.key==="Enter"){
+                                  event.preventDefault();
+                                  addTopic(selectedChapter);
+                                }
+                              }}
+                              placeholder="Add next topic"
+                              style={fieldStyle}
+                            />
+                            <button onClick={()=>addTopic(selectedChapter)} disabled={!String(topicInputs[selectedChapter.id]||"").trim()} style={{...pill(String(topicInputs[selectedChapter.id]||"").trim()?G.navy:G.bg,"#FFFFFF",String(topicInputs[selectedChapter.id]||"").trim()?G.navy:G.border),padding:"10px 12px",fontWeight:800,justifyContent:"center"}}>
+                              Add topic
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {activeInspectorTab==="scope"&&(
+                      <>
+                        <div style={{...cardStyle,padding:"12px 14px"}}>
+                          <div style={{fontSize:14,fontWeight:850,color:G.text}}>Template details</div>
+                          <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Keep the metadata close to the chapter editor so the page does not sprawl.</div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginTop:12}}>
+                            <div>
+                              <div style={labelStyle}>Academic year</div>
+                              <input value={draft.academicYear} onChange={event=>updateDraft({academicYear:event.target.value})} placeholder="2026-27" style={fieldStyle}/>
+                            </div>
+                            <div>
+                              <div style={labelStyle}>Curriculum</div>
+                              <input value={draft.curriculum} onChange={event=>updateDraft({curriculum:event.target.value})} placeholder="CBSE, UPSC, State Board" style={fieldStyle}/>
+                            </div>
+                            <div>
+                              <div style={labelStyle}>Programme</div>
+                              <input value={draft.gradeLabel} onChange={event=>updateDraft({gradeLabel:event.target.value})} placeholder="Class 11, Foundation" style={fieldStyle}/>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{...softCardStyle,padding:"12px 14px"}}>
+                          <div style={{fontSize:14,fontWeight:850,color:G.text}}>Applies to</div>
+                          <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>This syllabus currently targets these institute-section combinations.</div>
+                          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
+                            {draftScope.map(item=>(
+                              <span key={item.instituteName} title={item.sectionNames.join(", ")} style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:750}}>
+                                {item.instituteName} · {item.sectionNames.join(", ")}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {simpleScope&&initialTargets.length>0 ? (
+                          <div style={{...cardStyle,padding:"12px 14px"}}>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                              <div>
+                                <div style={{fontSize:14,fontWeight:850,color:G.text}}>Matching teachers and classes</div>
+                                <div style={{fontSize:12,color:G.textM,marginTop:4}}>Publishing binds this syllabus to these existing class records.</div>
+                              </div>
+                              <span style={{...pill("#E8F7EF","#137A45","#B9E5CA"),cursor:"default",fontWeight:800}}>{initialTargets.length} class{initialTargets.length===1?"":"es"}</span>
+                            </div>
+                            <div style={{display:"grid",gridTemplateColumns:"1fr",gap:8,marginTop:10}}>
+                              {initialTargets.map(target=>(
+                                <div key={`${target.teacherUid}::${target.classId}`} style={{padding:"10px 11px",border:`1px solid ${G.border}`,borderRadius:10,background:"#F8FAFD"}}>
+                                  <div style={{fontSize:13,fontWeight:850,color:G.text}}>{target.teacherName||"Teacher"}</div>
+                                  <div style={{fontSize:11.5,color:G.textM,marginTop:4,lineHeight:1.45}}>{target.instituteName} · {target.sectionName}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{...cardStyle,padding:"12px 14px"}}>
+                            <div style={{fontSize:14,fontWeight:850,color:G.text}}>Reach</div>
+                            <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginTop:10}}>
+                              <div style={{...softCardStyle,padding:"12px"}}><div style={labelStyle}>Classes</div><div style={{fontSize:22,fontWeight:850,color:G.text}}>{affectedSummary.classCount}</div></div>
+                              <div style={{...softCardStyle,padding:"12px"}}><div style={labelStyle}>Institutes</div><div style={{fontSize:22,fontWeight:850,color:G.text}}>{affectedSummary.instituteCount}</div></div>
+                              <div style={{...softCardStyle,padding:"12px"}}><div style={labelStyle}>Teachers</div><div style={{fontSize:22,fontWeight:850,color:G.text}}>{affectedSummary.teacherCount}</div></div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {activeInspectorTab==="publish"&&(
+                      <>
+                        <div style={{...softCardStyle,padding:"12px 14px"}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                            <div>
+                              <div style={{fontSize:14,fontWeight:850,color:G.text}}>Publishing effect</div>
+                              <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Teachers see this same structure and chapter order in the beta app.</div>
+                            </div>
+                            <AppIcon icon={IconClock} size={18} color={G.blue}/>
+                          </div>
+                        </div>
+
+                        <div style={{display:"grid",gap:10}}>
+                          <div style={{...cardStyle,padding:"12px 14px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:850,color:G.text}}>Version posture</div>
+                              <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>
+                                {working.currentVersion ? `Published version ${working.currentVersion} is live. Draft changes remain local until you publish again.` : "This syllabus has not been published yet."}
+                              </div>
+                            </div>
+                            <span style={{...pill(working.currentVersion?"#E8F7EF":"#FFF7E6",working.currentVersion?"#137A45":"#9A5A00",working.currentVersion?"#B9E5CA":"#F1D49A"),cursor:"default",fontWeight:800}}>
+                              {working.currentVersion?`Live v${working.currentVersion}`:"Draft only"}
+                            </span>
+                          </div>
+
+                          <div style={{...cardStyle,padding:"12px 14px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:850,color:G.text}}>Current chapter risk</div>
+                              <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>
+                                {selectedChapterStatus?.label==="Ready"
+                                  ? "Low. This chapter is already structured and unlikely to confuse the live class."
+                                  : selectedChapterStatus?.label==="Building"
+                                    ? "Medium. Publishing now is okay, but the class will still see a partially built structure."
+                                    : "High. This chapter is still empty or unnamed."}
+                              </div>
+                            </div>
+                            {selectedChapterStatus&&(
+                              <span style={{...pill(selectedChapterStatus.tone==="green"?"#E8F7EF":selectedChapterStatus.tone==="amber"?"#FFF4DE":"#EEF4FF",selectedChapterStatus.tone==="green"?"#137A45":selectedChapterStatus.tone==="amber"?"#9A5A00":G.blue,selectedChapterStatus.tone==="green"?"#B9E5CA":selectedChapterStatus.tone==="amber"?"#EFD3A0":"#C7D7F5"),cursor:"default",fontWeight:800}}>
+                                {selectedChapterStatus.label}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div style={{padding:"14px 18px",borderTop:`1px solid ${G.border}`,display:"flex",flexDirection:isMobile?"column":"row",justifyContent:"space-between",alignItems:isMobile?"stretch":"center",gap:10,background:"#FFFFFF"}}>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.45}}>
+                      {busy ? "Saving changes..." : working.id ? "Draft changes are ready to save." : "New syllabus draft."}
+                    </div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <button onClick={()=>removeChapter(selectedChapter.id)} style={{...pill(G.redL,G.red,"#F5CACA"),padding:"10px 12px",fontWeight:800}}>
+                        Delete chapter
+                      </button>
+                      <button onClick={()=>moveChapter(selectedChapterIndex,-1)} disabled={selectedChapterIndex<=0} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"10px 12px",fontWeight:800,opacity:selectedChapterIndex<=0?0.5:1}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowUp} size={15}/> Up</span>
+                      </button>
+                      <button onClick={()=>moveChapter(selectedChapterIndex,1)} disabled={selectedChapterIndex===draft.chapters.length-1} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"10px 12px",fontWeight:800,opacity:selectedChapterIndex===draft.chapters.length-1?0.5:1}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowDown} size={15}/> Down</span>
+                      </button>
+                      <button onClick={save} disabled={busy} style={{...pill("#FFFFFF",G.navy,G.borderM),padding:"10px 12px",fontWeight:800}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconDeviceFloppy} size={15}/>{busy?"Saving...":"Save draft"}</span>
+                      </button>
+                      <button onClick={publish} disabled={busy||!draft.chapters.length} style={{...pill(draft.chapters.length?"#16845B":G.bg,"#FFFFFF",draft.chapters.length?"#16845B":G.border),padding:"10px 12px",fontWeight:800,opacity:busy||!draft.chapters.length?0.65:1}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconCheck} size={15}/> Publish version</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
-
-        <div style={{display:"flex",flexDirection:isMobile?"column":"row",justifyContent:"space-between",alignItems:isMobile?"stretch":"center",gap:12,flexWrap:"wrap",marginTop:20,paddingTop:18,borderTop:`1px solid ${G.border}`}}>
-          <div style={{fontSize:12.5,color:G.textM,maxWidth:520,lineHeight:1.5}}>
-            Saving updates the private draft. Publishing creates a permanent version and makes it available for future teacher syllabus views.
-          </div>
-          <div style={{display:"flex",flexDirection:isMobile?"column":"row",gap:9,flexWrap:"wrap",width:isMobile?"100%":"auto"}}>
-            <button onClick={save} disabled={busy} style={{...pill("#FFFFFF",G.navy,G.borderM),padding:"11px 15px",fontWeight:800,minHeight:isMobile?46:undefined,width:isMobile?"100%":"auto",justifyContent:"center"}}>
-              <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconDeviceFloppy} size={16}/>{busy?"Saving...":"Save draft"}</span>
-            </button>
-            <button onClick={publish} disabled={busy||!draft.chapters.length} style={{...pill(draft.chapters.length?"#16845B":G.bg,"#FFFFFF",draft.chapters.length?"#16845B":G.border),padding:"11px 15px",fontWeight:800,minHeight:isMobile?46:undefined,width:isMobile?"100%":"auto",justifyContent:"center"}}>
-              <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconCheck} size={16}/> Publish version</span>
-            </button>
-          </div>
-        </div>
-        </>)}
       </div>
     </div>
   );
