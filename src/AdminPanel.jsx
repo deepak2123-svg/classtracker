@@ -9235,6 +9235,47 @@ function SyllabusBuilder({
   const selectedChapterIndex = selectedChapter ? draft.chapters.findIndex(chapter=>chapter.id===selectedChapter.id) : -1;
   const selectedChapterStatus = selectedChapter ? describeChapter(selectedChapter,chapterMetrics.maxTopics) : null;
   const scopePairs = syllabusScopePairs(draftScope);
+  const selectedChapterTopicTitles = selectedChapter
+    ? (selectedChapter.topics||[])
+        .map(topic=>String(topic?.title || "").trim())
+        .filter(Boolean)
+    : [];
+  const selectedChapterPreviewTopics = selectedChapterTopicTitles.slice(0,6);
+  const hiddenSelectedTopicCount = Math.max(0,selectedChapterTopicTitles.length - selectedChapterPreviewTopics.length);
+  const primaryScopeLabel = draftScope.length===1
+    ? draftScope[0].instituteName
+    : `${draftScope.length} institutes`;
+  const secondaryScopeLabel = scopePairs.length===1
+    ? scopePairs[0].sectionName
+    : `${scopePairs.length} sections`;
+  const chapterWorkspacePanelStyle = {
+    ...cardStyle,
+    background:"#FFFFFF",
+    overflow:"hidden",
+    display:"flex",
+    flexDirection:"column",
+    minHeight:isMobile?undefined:620,
+  };
+  const chapterWorkspaceHeaderStyle = {
+    padding:isMobile?"14px 16px":"14px 16px",
+    borderBottom:`1px solid ${G.border}`,
+    background:"#F8FAFD",
+  };
+  const chapterWorkspaceBodyStyle = {
+    flex:1,
+    overflowY:"auto",
+    background:"#FFFFFF",
+  };
+  const chapterMetricCardStyle = {
+    ...cardStyle,
+    padding:"14px",
+    background:"#FFFFFF",
+  };
+  const chapterChipStyle = (bg,text,borderColor) => ({
+    ...pill(bg,text,borderColor),
+    cursor:"default",
+    fontWeight:800,
+  });
 
   return (
     <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",marginBottom:24}}>
@@ -9358,84 +9399,144 @@ function SyllabusBuilder({
             <div style={{fontSize:13,color:G.textM,marginTop:5}}>The chapter workspace will appear after the syllabus scope is selected.</div>
           </div>
         ) : (
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.34fr) minmax(360px,0.9fr)",gap:16,alignItems:"start",marginTop:18}}>
-            <div style={{display:"grid",gap:14,minWidth:0}}>
-              <div style={{...softCardStyle,padding:isMobile?"14px":"16px"}}>
-                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:14,alignItems:"start"}}>
-                  <div>
-                    <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>Syllabus map</div>
-                    <div style={{...mutedCopyStyle,marginTop:4}}>Keep the overview compact. Open only the chapter you want to change.</div>
-                  </div>
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:isMobile?"flex-start":"flex-end"}}>
-                    <button onClick={()=>setChapterFilter("all")} style={toolbarButtonStyle(chapterFilter==="all")}>All</button>
-                    <button onClick={()=>setChapterFilter("needs-work")} style={toolbarButtonStyle(chapterFilter==="needs-work")}>Needs work</button>
-                    <button onClick={()=>setChapterFilter("empty")} style={toolbarButtonStyle(chapterFilter==="empty")}>Empty</button>
-                    <button onClick={()=>setChapterFilter("ready")} style={toolbarButtonStyle(chapterFilter==="ready")}>Ready</button>
-                  </div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"280px minmax(0,1fr) 360px",gap:16,alignItems:"start",marginTop:18}}>
+            <div style={chapterWorkspacePanelStyle}>
+              <div style={chapterWorkspaceHeaderStyle}>
+                <div style={labelStyle}>Applies to</div>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <span style={chapterChipStyle("#FFFFFF",G.textS,G.borderM)}>{primaryScopeLabel}</span>
+                  <span style={chapterChipStyle("#EEF4FF",G.blue,"#C7D7F5")}>{secondaryScopeLabel}</span>
                 </div>
+              </div>
 
-                <div style={{display:"grid",gap:12,marginTop:14}}>
+              <div style={{padding:"14px 14px 10px",borderBottom:`1px solid ${G.border}`}}>
+                <div style={labelStyle}>Search</div>
+                <input
+                  value={chapterQuery}
+                  onChange={event=>setChapterQuery(event.target.value)}
+                  placeholder="Search chapter or topic"
+                  style={fieldStyle}
+                />
+              </div>
+
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",padding:"12px 14px",borderBottom:`1px solid ${G.border}`,background:"#FBFDFF"}}>
+                <button onClick={()=>setChapterFilter("all")} style={toolbarButtonStyle(chapterFilter==="all")}>All</button>
+                <button onClick={()=>setChapterFilter("empty")} style={toolbarButtonStyle(chapterFilter==="empty")}>Empty</button>
+                <button onClick={()=>setChapterFilter("needs-work")} style={toolbarButtonStyle(chapterFilter==="needs-work")}>Building</button>
+                <button onClick={()=>setChapterFilter("ready")} style={toolbarButtonStyle(chapterFilter==="ready")}>Ready</button>
+              </div>
+
+              <div style={{padding:"12px 14px",borderBottom:`1px solid ${G.border}`,background:"#FFFFFF"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
                   <div>
-                    <div style={labelStyle}>Search</div>
-                    <input
-                      value={chapterQuery}
-                      onChange={event=>setChapterQuery(event.target.value)}
-                      placeholder="Search chapter or topic"
-                      style={fieldStyle}
-                    />
-                  </div>
-                  <div style={{...cardStyle,padding:"12px 12px 10px"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-                      <div style={labelStyle}>Quick create</div>
-                      <div style={{fontSize:12,color:G.textM}}>
-                        {draft.chapters.length} chapter{draft.chapters.length===1?"":"s"} total
-                      </div>
+                    <div style={{fontSize:13.5,fontWeight:850,color:G.text}}>Chapter rail</div>
+                    <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
+                      {visibleChapters.length} visible chapter{visibleChapters.length===1?"":"s"}
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto auto",gap:8,alignItems:"center",marginTop:8}}>
-                      <input
-                        value={chapterInput}
-                        onChange={event=>setChapterInput(event.target.value)}
-                        onKeyDown={event=>{
-                          if(event.key==="Enter"){
-                            event.preventDefault();
-                            addChapter();
-                          }
+                  </div>
+                  <span style={chapterChipStyle("#FFFFFF",G.textS,G.borderM)}>
+                    {selectedChapter ? `Editing ${selectedChapterIndex+1}` : "Nothing selected"}
+                  </span>
+                </div>
+              </div>
+
+              <div style={chapterWorkspaceBodyStyle}>
+                {!visibleChapters.length ? (
+                  <div style={{padding:"28px 20px",textAlign:"center",color:G.textM}}>
+                    No chapters match the current search or filter.
+                  </div>
+                ) : (
+                  visibleChapters.map(chapter=>{
+                    const chapterIndex = draft.chapters.findIndex(item=>item.id===chapter.id);
+                    const status = describeChapter(chapter,chapterMetrics.maxTopics);
+                    const selected = selectedChapter?.id===chapter.id;
+                    return (
+                      <div
+                        key={chapter.id}
+                        style={{
+                          padding:"14px 14px",
+                          borderBottom:`1px solid ${G.border}`,
+                          background:selected?"#EEF4FF":"#FFFFFF",
                         }}
-                        placeholder="Add next chapter quickly"
-                        style={{...fieldStyle,padding:"10px 12px"}}
-                      />
-                      <button onClick={()=>setShowBulkChapterInput(current=>!current)} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:800}}>
-                        {showBulkChapterInput ? "Hide paste" : "Paste list"}
-                      </button>
-                      <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
-                        <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconPlus} size={15}/> Add</span>
-                      </button>
-                    </div>
-                    <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
-                      <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>
-                        {chapterMetrics.readyCount} ready
-                      </span>
-                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>
-                        {chapterMetrics.needsWorkCount} building
-                      </span>
-                      <span style={{...pill("#FFF4DE","#9A5A00","#EFD3A0"),cursor:"default",fontWeight:800}}>
-                        {chapterMetrics.emptyCount} empty
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                      >
+                        <div style={{display:"grid",gridTemplateColumns:isMobile?"44px minmax(0,1fr)":"44px minmax(0,1fr) 116px 92px",gap:12,alignItems:"center"}}>
+                          <div style={{width:44,height:44,borderRadius:14,background:selected?G.navy:"#E6EDF9",color:selected?"#FFFFFF":G.textS,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:850,flexShrink:0}}>
+                            {chapterIndex+1}
+                          </div>
 
+                          <button
+                            type="button"
+                            onClick={()=>openChapterInspector(chapter.id)}
+                            style={{textAlign:"left",background:"transparent",border:"none",padding:0,cursor:"pointer",minWidth:0}}
+                          >
+                            <div style={{fontSize:15.5,fontWeight:850,color:G.text,lineHeight:1.28,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                              {chapter.title || "Untitled chapter"}
+                            </div>
+                            <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:7}}>
+                              <span style={chapterChipStyle("#FFFFFF",G.textS,G.borderM)}>{status.topicCount} topic{status.topicCount===1?"":"s"}</span>
+                              <span style={chapterChipStyle("#EEF4FF",G.blue,"#C7D7F5")}>{status.depthPct}% depth</span>
+                              <span style={chapterStatusPillStyle(status)}>{status.label}</span>
+                            </div>
+                            <div style={{fontSize:12.5,color:G.textM,marginTop:6,lineHeight:1.45}}>
+                              {status.note}
+                            </div>
+                          </button>
+
+                          {!isMobile && (
+                            <div style={{minWidth:0}}>
+                              <div style={{height:8,borderRadius:999,background:"#E6EDF8",overflow:"hidden"}}>
+                                <div style={{width:`${status.depthPct}%`,height:"100%",borderRadius:999,background:G.blue}}/>
+                              </div>
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={()=>openChapterInspector(chapter.id)}
+                            style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800,justifyContent:"center"}}
+                          >
+                            Open
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div style={{padding:"14px",borderTop:`1px solid ${G.border}`,background:"#EEF4FF"}}>
+                <div style={labelStyle}>Quick create</div>
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:8,alignItems:"center"}}>
+                  <input
+                    value={chapterInput}
+                    onChange={event=>setChapterInput(event.target.value)}
+                    onKeyDown={event=>{
+                      if(event.key==="Enter"){
+                        event.preventDefault();
+                        addChapter();
+                      }
+                    }}
+                    placeholder="Add next chapter"
+                    style={fieldStyle}
+                  />
+                  <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"10px 12px",fontWeight:800,justifyContent:"center"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconPlus} size={15}/> Add</span>
+                  </button>
+                </div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:8,flexWrap:"wrap"}}>
+                  <div style={{fontSize:11.5,color:G.textM}}>Press Enter to add quickly.</div>
+                  <button onClick={()=>setShowBulkChapterInput(current=>!current)} style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800}}>
+                    {showBulkChapterInput ? "Hide paste" : "Paste list"}
+                  </button>
+                </div>
                 {showBulkChapterInput&&(
-                  <div style={{...cardStyle,padding:"12px 13px",marginTop:12}}>
+                  <div style={{...cardStyle,padding:"12px",marginTop:10}}>
                     <div style={{fontSize:12,fontWeight:800,color:G.text,marginBottom:6}}>Paste one chapter per line</div>
-                    <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginBottom:10}}>
-                      Useful when you already have the chapter list. Duplicate titles are skipped automatically.
-                    </div>
                     <textarea
                       value={bulkChapterInput}
                       onChange={event=>setBulkChapterInput(event.target.value)}
                       placeholder={"Chapter 1\nChapter 2\nChapter 3"}
-                      style={{...fieldStyle,minHeight:118,resize:"vertical",lineHeight:1.5}}
+                      style={{...fieldStyle,minHeight:110,resize:"vertical",lineHeight:1.5}}
                     />
                     <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:10,flexWrap:"wrap"}}>
                       <button onClick={()=>{setBulkChapterInput("");setShowBulkChapterInput(false);}} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:750}}>
@@ -9448,108 +9549,149 @@ function SyllabusBuilder({
                   </div>
                 )}
               </div>
+            </div>
 
-              <div style={{...cardStyle,overflow:"hidden"}}>
-                {!visibleChapters.length ? (
-                  <div style={{padding:"28px 20px",textAlign:"center",color:G.textM}}>
-                    No chapters match the current search or filter.
+            <div style={{...chapterWorkspacePanelStyle,background:"#F8FAFD"}}>
+              {!selectedChapter ? (
+                <div style={{padding:"34px 22px",textAlign:"center",color:G.textM}}>
+                  Pick a chapter from the rail to review it before editing.
+                </div>
+              ) : (
+                <>
+                  <div style={{...chapterWorkspaceHeaderStyle,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={labelStyle}>Overview</div>
+                      <div style={{fontSize:isMobile?26:32,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.08}}>
+                        {selectedChapter.title || "Untitled chapter"}
+                      </div>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                        <span style={chapterChipStyle("#FFFFFF",G.textS,G.borderM)}>Chapter {selectedChapterIndex+1}</span>
+                        <span style={chapterChipStyle("#EEF4FF",G.blue,"#C7D7F5")}>{selectedChapterStatus?.topicCount || 0} topic{selectedChapterStatus?.topicCount===1?"":"s"}</span>
+                        {selectedChapterStatus&&<span style={chapterStatusPillStyle(selectedChapterStatus)}>{selectedChapterStatus.label}</span>}
+                      </div>
+                      <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:10,maxWidth:720}}>
+                        {selectedChapterStatus?.note || "Open the inspector when you want to edit topics, scope, or publish settings."}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <button onClick={()=>moveChapter(selectedChapterIndex,-1)} disabled={selectedChapterIndex<=0} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"10px 12px",fontWeight:800,opacity:selectedChapterIndex<=0?0.5:1}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowUp} size={15}/> Up</span>
+                      </button>
+                      <button onClick={()=>moveChapter(selectedChapterIndex,1)} disabled={selectedChapterIndex===draft.chapters.length-1} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"10px 12px",fontWeight:800,opacity:selectedChapterIndex===draft.chapters.length-1?0.5:1}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowDown} size={15}/> Down</span>
+                      </button>
+                    </div>
                   </div>
-                ) : (
-                  <>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",padding:"12px 16px",background:"#F8FAFD",borderBottom:`1px solid ${G.border}`}}>
-                      <div>
-                        <div style={{fontSize:13.5,fontWeight:850,color:G.text}}>Chapter rail</div>
-                        <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
-                          {visibleChapters.length} visible chapter{visibleChapters.length===1?"":"s"} • select one to edit in the inspector
+
+                  <div style={{padding:isMobile?"16px":"18px 20px",display:"grid",gap:16}}>
+                    <div style={{...cardStyle,padding:"16px"}}>
+                      <div style={labelStyle}>Coverage depth</div>
+                      <div style={{height:10,borderRadius:999,background:"#DDE9FB",overflow:"hidden"}}>
+                        <div style={{width:`${selectedChapterStatus?.depthPct || 8}%`,height:"100%",borderRadius:999,background:"linear-gradient(90deg, #1D4ED8 0%, #4F86F5 100%)"}}/>
+                      </div>
+                      <div style={{fontSize:12.5,color:G.textM,marginTop:8}}>
+                        {selectedChapterStatus?.depthPct || 8}% filled • {selectedChapterStatus?.topicCount || 0} topic{selectedChapterStatus?.topicCount===1?"":"s"} added
+                      </div>
+                    </div>
+
+                    <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:12}}>
+                      <div style={chapterMetricCardStyle}>
+                        <div style={labelStyle}>Topics</div>
+                        <div style={{fontSize:28,fontWeight:850,color:G.text,lineHeight:1}}>{selectedChapterStatus?.topicCount || 0}</div>
+                      </div>
+                      <div style={chapterMetricCardStyle}>
+                        <div style={labelStyle}>Order</div>
+                        <div style={{fontSize:28,fontWeight:850,color:G.text,lineHeight:1}}>{selectedChapterIndex+1}/{draft.chapters.length}</div>
+                      </div>
+                      <div style={chapterMetricCardStyle}>
+                        <div style={labelStyle}>State</div>
+                        <div style={{fontSize:18,fontWeight:850,color:G.text,lineHeight:1.2}}>{selectedChapterStatus?.label || "Draft"}</div>
+                      </div>
+                      <div style={chapterMetricCardStyle}>
+                        <div style={labelStyle}>Classes in scope</div>
+                        <div style={{fontSize:28,fontWeight:850,color:G.text,lineHeight:1}}>{simpleScope ? initialTargets.length : affectedSummary.classCount}</div>
+                      </div>
+                    </div>
+
+                    <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.2fr) minmax(280px,0.8fr)",gap:16}}>
+                      <div style={{...cardStyle,overflow:"hidden"}}>
+                        <div style={{padding:"14px 16px",borderBottom:`1px solid ${G.border}`}}>
+                          <div style={{fontSize:15,fontWeight:850,color:G.text}}>Topic preview</div>
+                          <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>The rail stays compact. The selected chapter is easier to scan here before you edit it.</div>
+                        </div>
+                        <div style={{padding:"12px 14px",display:"grid",gap:8}}>
+                          {selectedChapterPreviewTopics.length===0 ? (
+                            <div style={{padding:"18px 14px",border:`1px dashed ${G.borderM}`,borderRadius:12,background:"#FFFFFF",fontSize:13,color:G.textM,lineHeight:1.55}}>
+                              No topics yet. Open the inspector to add the first one.
+                            </div>
+                          ) : (
+                            selectedChapterPreviewTopics.map((topicTitle,index)=>(
+                              <div key={`${selectedChapter.id}_${index}`} style={{display:"grid",gridTemplateColumns:"30px minmax(0,1fr)",gap:10,alignItems:"center",padding:"10px 11px",border:`1px solid ${G.border}`,borderRadius:12,background:"#FFFFFF"}}>
+                                <div style={{width:30,height:30,borderRadius:10,background:"#E6EDF9",color:G.textS,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:850}}>
+                                  {index+1}
+                                </div>
+                                <div style={{fontSize:13.5,fontWeight:700,color:G.text,lineHeight:1.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                                  {topicTitle}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                          {hiddenSelectedTopicCount>0&&(
+                            <div style={{fontSize:12.5,color:G.textM,padding:"4px 2px 0"}}>
+                              +{hiddenSelectedTopicCount} more topic{hiddenSelectedTopicCount===1?"":"s"} in this chapter.
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>
-                        {selectedChapter ? `Editing ${selectedChapterIndex+1}` : "Nothing selected"}
-                      </span>
-                    </div>
-                    <div>
-                      {visibleChapters.map(chapter=>{
-                        const chapterIndex = draft.chapters.findIndex(item=>item.id===chapter.id);
-                        const status = describeChapter(chapter,chapterMetrics.maxTopics);
-                        const selected = selectedChapter?.id===chapter.id;
-                        if(isMobile){
-                          return (
-                            <button
-                              key={chapter.id}
-                              type="button"
-                              onClick={()=>openChapterInspector(chapter.id)}
-                              style={{width:"100%",textAlign:"left",background:selected?"#EEF4FF":"#FFFFFF",border:"none",borderBottom:`1px solid ${G.border}`,padding:"15px 16px",cursor:"pointer"}}
-                            >
-                              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-                                <div style={{display:"flex",alignItems:"flex-start",gap:10,minWidth:0}}>
-                                  <div style={{width:36,height:36,borderRadius:11,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:850,flexShrink:0}}>
-                                    {chapterIndex+1}
-                                  </div>
-                                  <div style={{minWidth:0}}>
-                                    <div style={{fontSize:16,fontWeight:850,color:G.text,lineHeight:1.35}}>{chapter.title || "Untitled chapter"}</div>
-                                    <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:7}}>
-                                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>{status.topicCount} topic{status.topicCount===1?"":"s"}</span>
-                                      <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>{status.depthPct}% depth</span>
-                                    </div>
-                                    <div style={{fontSize:12.5,color:G.textM,marginTop:6,lineHeight:1.45}}>{status.note}</div>
-                                  </div>
-                                </div>
-                                <span style={chapterStatusPillStyle(status)}>
-                                  {status.label}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        }
 
-                        return (
-                          <div
-                            key={chapter.id}
-                            style={{background:selected?"#EEF4FF":"#FFFFFF",borderBottom:`1px solid ${G.border}`,padding:"15px 16px"}}
-                          >
-                            <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                              <div style={{width:40,height:40,borderRadius:12,background:G.navy,color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:850,flexShrink:0}}>
-                                {chapterIndex+1}
-                              </div>
-                              <div style={{minWidth:0,flex:1}}>
-                                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-                                  <button
-                                    type="button"
-                                    onClick={()=>openChapterInspector(chapter.id)}
-                                    style={{minWidth:0,flex:1,textAlign:"left",background:"transparent",border:"none",padding:0,cursor:"pointer"}}
-                                  >
-                                    <div style={{fontSize:17,fontWeight:850,color:G.text,lineHeight:1.28}}>{chapter.title || "Untitled chapter"}</div>
-                                    <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:8}}>
-                                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>{status.topicCount} topic{status.topicCount===1?"":"s"}</span>
-                                      <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>{status.depthPct}% depth</span>
-                                      <span style={chapterStatusPillStyle(status)}>{status.label}</span>
-                                    </div>
-                                    <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:8}}>{status.note}</div>
-                                  </button>
-                                  <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                                    <div style={{width:120}}>
-                                      <div style={{height:8,borderRadius:999,background:"#E6EDF8",overflow:"hidden"}}>
-                                        <div style={{width:`${status.depthPct}%`,height:"100%",borderRadius:999,background:G.blue}}/>
-                                      </div>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={()=>openChapterInspector(chapter.id)}
-                                      style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800,cursor:"pointer"}}
-                                    >
-                                      Open
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
+                      <div style={{...cardStyle,overflow:"hidden"}}>
+                        <div style={{padding:"14px 16px",borderBottom:`1px solid ${G.border}`}}>
+                          <div style={{fontSize:15,fontWeight:850,color:G.text}}>
+                            {simpleScope&&initialTargets.length>0 ? "Matching teachers and classes" : "Publishing reach"}
                           </div>
-                        );
-                      })}
+                          <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
+                            {simpleScope&&initialTargets.length>0
+                              ? "Publishing binds this syllabus to the current live class records."
+                              : "This syllabus currently targets these institute-section combinations."}
+                          </div>
+                        </div>
+                        <div style={{padding:"12px 14px",display:"grid",gap:8}}>
+                          {simpleScope&&initialTargets.length>0 ? (
+                            <>
+                              {initialTargets.slice(0,3).map(target=>(
+                                <div key={`${target.teacherUid}::${target.classId}`} style={{padding:"10px 11px",border:`1px solid ${G.border}`,borderRadius:12,background:"#F8FAFD"}}>
+                                  <div style={{fontSize:13.5,fontWeight:850,color:G.text}}>{target.teacherName||"Teacher"}</div>
+                                  <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>{target.instituteName} · {target.sectionName}</div>
+                                </div>
+                              ))}
+                              {initialTargets.length>3&&(
+                                <div style={{fontSize:12.5,color:G.textM,padding:"4px 2px 0"}}>
+                                  +{initialTargets.length-3} more bound class{initialTargets.length-3===1?"":"es"}.
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}}>
+                                <div style={{...softCardStyle,padding:"12px"}}><div style={labelStyle}>Classes</div><div style={{fontSize:24,fontWeight:850,color:G.text}}>{affectedSummary.classCount}</div></div>
+                                <div style={{...softCardStyle,padding:"12px"}}><div style={labelStyle}>Institutes</div><div style={{fontSize:24,fontWeight:850,color:G.text}}>{affectedSummary.instituteCount}</div></div>
+                                <div style={{...softCardStyle,padding:"12px"}}><div style={labelStyle}>Teachers</div><div style={{fontSize:24,fontWeight:850,color:G.text}}>{affectedSummary.teacherCount}</div></div>
+                              </div>
+                              <div style={{display:"flex",gap:7,flexWrap:"wrap",paddingTop:2}}>
+                                {draftScope.map(item=>(
+                                  <span key={item.instituteName} title={item.sectionNames.join(", ")} style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:750}}>
+                                    {item.instituteName} · {item.sectionNames.join(", ")}
+                                  </span>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </>
-                )}
-              </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div ref={inspectorRef} style={stickyInspectorStyle}>
