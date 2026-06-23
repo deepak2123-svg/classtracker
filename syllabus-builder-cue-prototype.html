@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledgr Syllabus Studio Prototype</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  :root {
+    --bg: #eef3fb;
+    --surface: #ffffff;
+    --surface-soft: #f8fbff;
+    --surface-muted: #f2f5fb;
+    --text: #14213d;
+    --text-soft: #5c6d8a;
+    --text-faint: #8d9bb3;
+    --line: #d8e2f0;
+    --line-strong: #bfd0e9;
+    --navy: #1f3972;
+    --blue: #316be8;
+    --blue-soft: #e9f1ff;
+    --teal: #0d8f7b;
+    --teal-soft: #e5f8f3;
+    --amber: #a56500;
+    --amber-soft: #fff1d6;
+    --red: #c73a3a;
+    --red-soft: #ffe6e6;
+    --shadow: 0 18px 50px rgba(20, 33, 61, 0.08);
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 10px;
+  }
+
+  body {
+    font-family: Inter, "Segoe UI", system-ui, sans-serif;
+    background: linear-gradient(180deg, #edf3fc 0%, #e6edf8 100%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  .app {
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: 72px 1fr;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 24px;
+    background: rgba(255, 255, 255, 0.92);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(14px);
+    position: sticky;
+    top: 0;
+    z-index: 4;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .brand-badge {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #3c72ef 0%, #244dc7 100%);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    font-size: 20px;
+  }
+
+  .brand-copy strong {
+    display: block;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .brand-copy span {
+    display: block;
+    font-size: 12px;
+    color: var(--text-soft);
+    margin-top: 2px;
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .select,
+  .input,
+  .textarea,
+  .btn {
+    font: inherit;
+  }
+
+  .select,
+  .input,
+  .textarea {
+    width: 100%;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .select:focus,
+  .input:focus,
+  .textarea:focus {
+    border-color: #8eb1f4;
+    box-shadow: 0 0 0 4px rgba(49, 107, 232, 0.08);
+  }
+
+  .select {
+    padding: 10px 14px;
+    min-width: 220px;
+  }
+
+  .btn {
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .btn:hover {
+    background: var(--surface-soft);
+    border-color: #b2c4e4;
+  }
+
+  .btn:active {
+    transform: scale(0.985);
+  }
+
+  .btn-primary {
+    background: var(--navy);
+    border-color: var(--navy);
+    color: #fff;
+  }
+
+  .btn-primary:hover {
+    background: #1a3267;
+    border-color: #1a3267;
+  }
+
+  .btn-success {
+    background: #18845c;
+    border-color: #18845c;
+    color: #fff;
+  }
+
+  .btn-success:hover {
+    background: #146b4b;
+    border-color: #146b4b;
+  }
+
+  .btn-danger {
+    color: var(--red);
+    border-color: #f0b8b8;
+    background: #fffafa;
+  }
+
+  .btn-danger:hover {
+    background: var(--red-soft);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .pill-blue { background: var(--blue-soft); color: var(--blue); }
+  .pill-amber { background: var(--amber-soft); color: var(--amber); }
+  .pill-teal { background: var(--teal-soft); color: var(--teal); }
+  .pill-neutral { background: #f3f5f9; color: var(--text-soft); }
+
+  .main {
+    padding: 18px;
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr) 360px;
+    gap: 16px;
+    min-height: 0;
+  }
+
+  .panel {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(191, 208, 233, 0.92);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-head {
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-bottom: 6px;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .title-row h2,
+  .title-row h3 {
+    margin: 0;
+    letter-spacing: -0.03em;
+  }
+
+  .title-row h2 { font-size: 28px; line-height: 1.05; }
+  .title-row h3 { font-size: 22px; line-height: 1.1; }
+
+  .subcopy {
+    font-size: 13px;
+    color: var(--text-soft);
+    line-height: 1.55;
+    margin-top: 8px;
+  }
+
+  .panel-body {
+    padding: 16px 18px 18px;
+    overflow: auto;
+  }
+
+  .left-meta {
+    display: grid;
+    gap: 12px;
+  }
+
+  .applies-card,
+  .quick-create,
+  .mid-summary,
+  .inspector-metrics,
+  .topic-composer,
+  .scope-card,
+  .publish-card {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface-soft);
+  }
+
+  .applies-card,
+  .quick-create,
+  .mid-summary,
+  .scope-card,
+  .publish-card {
+    padding: 14px;
+  }
+
+  .applies-card strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .chip-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .mini-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .search-wrap {
+    margin-top: 12px;
+    position: relative;
+  }
+
+  .search-wrap i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-faint);
+    font-size: 15px;
+  }
+
+  .search-wrap .input {
+    padding: 11px 12px 11px 36px;
+  }
+
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+
+  .filter-btn {
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: var(--surface);
+    color: var(--text-soft);
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .filter-btn.active {
+    background: var(--navy);
+    border-color: var(--navy);
+    color: #fff;
+  }
+
+  .chapter-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .chapter-card {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--surface);
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+  }
+
+  .chapter-card:hover {
+    border-color: #abc2ec;
+    background: var(--surface-soft);
+  }
+
+  .chapter-card.active {
+    background: var(--blue-soft);
+    border-color: #9cb8ea;
+  }
+
+  .chapter-number {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    background: var(--navy);
+    color: #fff;
+    font-size: 18px;
+    font-weight: 900;
+  }
+
+  .chapter-copy {
+    min-width: 0;
+  }
+
+  .chapter-name {
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .chapter-note {
+    font-size: 12px;
+    color: var(--text-soft);
+    margin-top: 6px;
+  }
+
+  .chapter-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .bar {
+    height: 8px;
+    border-radius: 999px;
+    background: #dfebfb;
+    overflow: hidden;
+    min-width: 120px;
+  }
+
+  .bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--blue);
+  }
+
+  .quick-create .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .input {
+    padding: 11px 12px;
+  }
+
+  .textarea {
+    padding: 11px 12px;
+    min-height: 96px;
+    resize: vertical;
+    line-height: 1.55;
+  }
+
+  .mid-grid {
+    display: grid;
+    gap: 16px;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .summary-metric {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 14px;
+  }
+
+  .summary-metric span {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+
+  .summary-metric strong {
+    font-size: 28px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  .summary-metric p {
+    font-size: 12px;
+    color: var(--text-soft);
+    margin-top: 6px;
+  }
+
+  .topic-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .topic-pill {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+  }
+
+  .topic-pill strong {
+    font-size: 13px;
+  }
+
+  .topic-pill span {
+    font-size: 12px;
+    color: var(--text-soft);
+  }
+
+  .topic-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--text-soft);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .icon-btn.danger { color: var(--red); border-color: #f0b8b8; }
+
+  .topic-composer {
+    padding: 14px;
+    margin-top: 14px;
+  }
+
+  .topic-composer .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .scope-card,
+  .publish-card {
+    display: grid;
+    gap: 12px;
+  }
+
+  .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    font-weight: 800;
+  }
+
+  .inspector-body {
+    padding: 16px 18px 18px;
+    overflow: auto;
+    display: grid;
+    gap: 14px;
+  }
+
+  .inspector-metrics {
+    padding: 14px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .inspector-metric {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 12px;
+  }
+
+  .inspector-metric span {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    font-weight: 800;
+  }
+
+  .inspector-metric strong {
+    display: block;
+    margin-top: 10px;
+    font-size: 24px;
+    letter-spacing: -0.03em;
+  }
+
+  .tab-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 9px 12px;
+    background: var(--surface);
+    color: var(--text-soft);
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .tab-btn.active {
+    background: var(--navy);
+    border-color: var(--navy);
+    color: #fff;
+  }
+
+  .range-wrap {
+    display: grid;
+    gap: 8px;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--teal);
+  }
+
+  .footer-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 8px;
+  }
+
+  .footer-note {
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+
+  @media (max-width: 1220px) {
+    .main {
+      grid-template-columns: 280px minmax(0, 1fr);
+    }
+    .right-panel {
+      display: none;
+    }
+  }
+
+  @media (max-width: 840px) {
+    .app {
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      padding: 16px;
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .topbar-actions,
+    .topbar-meta {
+      width: 100%;
+    }
+
+    .main {
+      grid-template-columns: 1fr;
+      padding: 12px;
+    }
+
+    .summary-grid,
+    .inspector-metrics {
+      grid-template-columns: 1fr;
+    }
+
+    .quick-create .row,
+    .topic-composer .row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-badge">L</div>
+      <div class="brand-copy">
+        <strong>Ledgr syllabus studio</strong>
+        <span>Prototype inspired by the 3-panel builder cue</span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <select class="select">
+        <option>GS syllabus</option>
+        <option>Science syllabus</option>
+        <option>History revision plan</option>
+      </select>
+      <span class="pill pill-blue">GS</span>
+      <span class="pill pill-neutral">1 institute</span>
+      <span class="pill pill-neutral">1 section</span>
+      <button class="btn btn-danger"><i class="ti ti-trash"></i> Delete syllabus</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <section class="panel">
+      <div class="panel-head">
+        <div class="title-row">
+          <div>
+            <div class="eyebrow">Chapter map</div>
+            <h3>Overview rail</h3>
+            <div class="subcopy">Scan every chapter quickly, then jump into the one that needs work.</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="left-meta">
+          <div class="applies-card">
+            <strong>Applies to</strong>
+            <div class="chip-row">
+              <span class="mini-chip"><i class="ti ti-building"></i> KIS SIP, Karnal, Haryana</span>
+              <span class="mini-chip"><i class="ti ti-school"></i> Madhav 3</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="search-wrap">
+              <i class="ti ti-search"></i>
+              <input class="input" placeholder="Search chapters or topics">
+            </div>
+            <div class="filter-row">
+              <button class="filter-btn active">All</button>
+              <button class="filter-btn">Empty</button>
+              <button class="filter-btn">Building</button>
+              <button class="filter-btn">Ready</button>
+            </div>
+          </div>
+
+          <div class="chapter-list">
+            <article class="chapter-card active">
+              <div class="chapter-number">1</div>
+              <div class="chapter-copy">
+                <div class="chapter-name">Ancient Indian History</div>
+                <div class="chapter-meta">
+                  <span class="pill pill-neutral">0 topics</span>
+                  <span class="pill pill-blue">8% depth</span>
+                  <span class="pill pill-amber">Empty</span>
+                </div>
+                <div class="chapter-note">Add the first topic.</div>
+              </div>
+              <div class="bar"><span style="width:8%"></span></div>
+            </article>
+
+            <article class="chapter-card">
+              <div class="chapter-number">2</div>
+              <div class="chapter-copy">
+                <div class="chapter-name">Medieval Indian History</div>
+                <div class="chapter-meta">
+                  <span class="pill pill-neutral">0 topics</span>
+                  <span class="pill pill-blue">8% depth</span>
+                  <span class="pill pill-amber">Empty</span>
+                </div>
+                <div class="chapter-note">Add the first topic.</div>
+              </div>
+              <div class="bar"><span style="width:8%"></span></div>
+            </article>
+
+            <article class="chapter-card">
+              <div class="chapter-number">3</div>
+              <div class="chapter-copy">
+                <div class="chapter-name">Modern Indian History</div>
+                <div class="chapter-meta">
+                  <span class="pill pill-neutral">3 topics</span>
+                  <span class="pill pill-blue">42% depth</span>
+                  <span class="pill pill-teal">Ready</span>
+                </div>
+                <div class="chapter-note">Structured for publishing.</div>
+              </div>
+              <div class="bar"><span style="width:42%"></span></div>
+            </article>
+
+            <article class="chapter-card">
+              <div class="chapter-number">4</div>
+              <div class="chapter-copy">
+                <div class="chapter-name">Physical Geography</div>
+                <div class="chapter-meta">
+                  <span class="pill pill-neutral">1 topic</span>
+                  <span class="pill pill-blue">21% depth</span>
+                  <span class="pill pill-neutral">Building</span>
+                </div>
+                <div class="chapter-note">Needs more detail before publish.</div>
+              </div>
+              <div class="bar"><span style="width:21%"></span></div>
+            </article>
+
+            <article class="chapter-card">
+              <div class="chapter-number">5</div>
+              <div class="chapter-copy">
+                <div class="chapter-name">Indian Geography</div>
+                <div class="chapter-meta">
+                  <span class="pill pill-neutral">0 topics</span>
+                  <span class="pill pill-blue">8% depth</span>
+                  <span class="pill pill-amber">Empty</span>
+                </div>
+                <div class="chapter-note">Add the first topic.</div>
+              </div>
+              <div class="bar"><span style="width:8%"></span></div>
+            </article>
+          </div>
+
+          <div class="quick-create">
+            <div class="label">Quick create</div>
+            <div class="row">
+              <input class="input" value="Add next chapter quickly">
+              <button class="btn">Paste list</button>
+              <button class="btn btn-primary">Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div class="title-row">
+          <div>
+            <div class="eyebrow">Working chapter</div>
+            <h2>Ancient Indian History</h2>
+            <div class="subcopy">Compact chapter summary in the middle, with no full-page form sprawl.</div>
+          </div>
+          <span class="pill pill-amber">Empty</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="mid-grid">
+          <div class="mid-summary">
+            <div class="summary-grid">
+              <div class="summary-metric">
+                <span>Topics</span>
+                <strong>0</strong>
+                <p>No topics added yet</p>
+              </div>
+              <div class="summary-metric">
+                <span>Depth</span>
+                <strong>8%</strong>
+                <p>Lightly scoped for now</p>
+              </div>
+              <div class="summary-metric">
+                <span>Status</span>
+                <strong>Empty</strong>
+                <p>Needs the first topic</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="mid-summary">
+            <div class="label">Coverage depth</div>
+            <div class="bar" style="margin-top:10px; min-width:0;"><span style="width:8%"></span></div>
+            <div class="subcopy" style="margin-top:10px;">This chapter is still at the starting line. Add 2-3 topic bullets and it moves into Building.</div>
+          </div>
+
+          <div class="mid-summary">
+            <div class="title-row" style="align-items:center;">
+              <div>
+                <div class="label">Topic preview</div>
+                <div class="subcopy" style="margin-top:6px;">What teachers will eventually see under this chapter.</div>
+              </div>
+              <button class="btn"><i class="ti ti-eye"></i> Preview</button>
+            </div>
+            <div class="topic-list">
+              <div class="topic-pill">
+                <div>
+                  <strong>No topics yet</strong>
+                  <span>Add the first topic in the inspector.</span>
+                </div>
+                <span class="pill pill-amber">Waiting</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div class="title-row">
+          <div>
+            <div class="eyebrow">Inspector</div>
+            <h3>Ancient Indian History</h3>
+            <div class="subcopy">Edit only the selected chapter here. The rest of the page stays calm.</div>
+          </div>
+        </div>
+      </div>
+      <div class="inspector-body">
+        <div class="tab-row">
+          <button class="tab-btn active">Topics</button>
+          <button class="tab-btn">Scope</button>
+          <button class="tab-btn">Publish</button>
+        </div>
+
+        <div class="inspector-metrics">
+          <div class="inspector-metric">
+            <span>Topics</span>
+            <strong>0</strong>
+          </div>
+          <div class="inspector-metric">
+            <span>Depth</span>
+            <strong>8%</strong>
+          </div>
+          <div class="inspector-metric">
+            <span>Position</span>
+            <strong>1/7</strong>
+          </div>
+        </div>
+
+        <div class="topic-composer">
+          <div class="label">Add next topic</div>
+          <div class="row" style="margin-top:10px;">
+            <input class="input" value="Add first topic for Ancient Indian History">
+            <button class="btn btn-primary">Add topic</button>
+          </div>
+        </div>
+
+        <div class="scope-card">
+          <div class="label">Scope weight</div>
+          <div class="range-wrap">
+            <input type="range" min="1" max="30" value="8">
+            <div class="subcopy" style="margin-top:0;">8% of the exam scope</div>
+          </div>
+        </div>
+
+        <div class="publish-card">
+          <div class="label">Teacher note</div>
+          <textarea class="textarea" placeholder="Context, references, or instructions for teachers covering this chapter..."></textarea>
+          <div class="footer-actions">
+            <div class="footer-note">Draft changes are ready to save.</div>
+            <div style="display:flex; gap:10px;">
+              <button class="btn">Save draft</button>
+              <button class="btn btn-success">Publish version</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+</body>
+</html>
