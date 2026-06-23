@@ -8703,6 +8703,44 @@ function syllabusScopeKey(scope){
     .join("|");
 }
 
+function syllabusSubjectIdentityKey(value){
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^class-subject-/, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function syllabusTemplateMatchesSubject(template, subject){
+  const templateKeys = new Set([
+    syllabusSubjectIdentityKey(template?.subjectId),
+    syllabusSubjectIdentityKey(template?.subjectName),
+  ].filter(Boolean));
+  const subjectKeys = [
+    syllabusSubjectIdentityKey(subject?.id),
+    syllabusSubjectIdentityKey(subject?.name),
+  ].filter(Boolean);
+  return subjectKeys.some(key => templateKeys.has(key));
+}
+
+function syllabusTargetIdentityKey(target){
+  const teacherUid = String(target?.teacherUid || "").trim();
+  const classId = String(target?.classId || "").trim();
+  return teacherUid && classId ? `${teacherUid}::${classId}` : "";
+}
+
+function syllabusTemplateMatchesTargets(template, targets = []){
+  const templateKeys = new Set([
+    ...((Array.isArray(template?.draft?.targets) ? template.draft.targets : []).map(syllabusTargetIdentityKey)),
+    ...((Array.isArray(template?.published?.targets) ? template.published.targets : []).map(syllabusTargetIdentityKey)),
+  ].filter(Boolean));
+  if(!templateKeys.size) return false;
+  return (Array.isArray(targets) ? targets : [])
+    .map(syllabusTargetIdentityKey)
+    .filter(Boolean)
+    .some(key => templateKeys.has(key));
+}
+
 function syllabusTemplateScope(template){
   const draft=template?.draft||template||{};
   const published=template?.published||{};
@@ -8762,19 +8800,20 @@ function SyllabusBuilder({
     [initialScope,initialInstitute,initialSection],
   );
   const resolvedInitialScopeKey = useMemo(()=>syllabusScopeKey(resolvedInitialScope),[resolvedInitialScope]);
+  const hasInitialTargets = Array.isArray(initialTargets) && initialTargets.length>0;
   const subjectTemplates = useMemo(
     ()=>templates
-      .filter(item=>
-        item.subjectId===subject.id
-        && (
-          !simpleScope
-          || syllabusScopeKey(syllabusTemplateScope(item))===resolvedInitialScopeKey
-        )
-      )
+      .filter(item=>{
+        if(!syllabusTemplateMatchesSubject(item, subject)) return false;
+        if(!simpleScope) return true;
+        const matchesScope = syllabusScopeKey(syllabusTemplateScope(item))===resolvedInitialScopeKey;
+        return matchesScope || (hasInitialTargets && syllabusTemplateMatchesTargets(item, initialTargets));
+      })
       .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)),
-    [templates,subject.id,simpleScope,resolvedInitialScopeKey],
+    [templates,subject.id,subject.name,simpleScope,resolvedInitialScopeKey,hasInitialTargets,initialTargets],
   );
-  const scopedTemplate = subjectTemplates.find(item=>syllabusScopeKey(syllabusTemplateScope(item))===resolvedInitialScopeKey);
+  const scopedTemplate = subjectTemplates.find(item=>syllabusScopeKey(syllabusTemplateScope(item))===resolvedInitialScopeKey)
+    || (hasInitialTargets ? subjectTemplates.find(item=>syllabusTemplateMatchesTargets(item, initialTargets)) : null);
   const firstInitialScope=resolvedInitialScope[0]||{instituteName:initialInstitute,sectionNames:[initialSection].filter(Boolean)};
   const newScopedTemplate = {
     ...emptySyllabusDraft(subject),
@@ -8805,6 +8844,7 @@ function SyllabusBuilder({
   const [topicInputs,setTopicInputs] = useState({});
   const [showBulkChapterInput,setShowBulkChapterInput] = useState(false);
   const [bulkChapterInput,setBulkChapterInput] = useState("");
+  const hydratedExistingTemplateRef = React.useRef(false);
 
   const draft = working.draft || emptySyllabusDraft(subject).draft;
   const draftScope=normaliseSyllabusScope(draft.scope,draft.instituteName,draft.sectionName);
@@ -8821,6 +8861,20 @@ function SyllabusBuilder({
     background:"#FFFFFF",outline:"none",
   };
   const labelStyle = {fontSize:11.5,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6};
+  useEffect(()=>{
+    if(hydratedExistingTemplateRef.current) return;
+    if(selectedId!=="__new") return;
+    if(!initialTemplate?.id) return;
+    const currentDraft = working?.draft || {};
+    const currentHasContent =
+      Boolean(working?.id)
+      || (Array.isArray(currentDraft.chapters) && currentDraft.chapters.length>0)
+      || String(currentDraft.name || "").trim() !== `${subject.name} syllabus`;
+    if(currentHasContent) return;
+    hydratedExistingTemplateRef.current = true;
+    setWorking(initialTemplate);
+    setSelectedId(initialTemplate.id);
+  }, [initialTemplate, selectedId, subject.name, working]);
   const updateDraft = patch => setWorking(current=>({
     ...current,
     subjectId:subject.id,
@@ -9381,7 +9435,11 @@ function SimpleSyllabusFlow({
             ) : (
               <div style={{display:"grid",gridTemplateColumns:"1fr",gap:7,maxHeight:isMobile?280:360,overflowY:"auto"}}>
                 {activeSubjects.map(subject=>{
-                  const matching=templates.filter(item=>item.subjectId===subject.id&&sameInstituteName(item.draft?.instituteName,selectedInstitute)&&String(item.draft?.sectionName||"").trim().toLowerCase()===selectedSection.trim().toLowerCase());
+                  const matching=templates.filter(item=>
+                    syllabusTemplateMatchesSubject(item, subject)
+                    && sameInstituteName(item.draft?.instituteName,selectedInstitute)
+                    && String(item.draft?.sectionName||"").trim().toLowerCase()===selectedSection.trim().toLowerCase()
+                  );
                   const published=matching.some(item=>item.currentVersion>0);
                   return (
                     <button key={subject.id} onClick={()=>{onSelectSubject?.(subject);setSelectedSubject(subject);}} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:9,border:`1px solid ${G.border}`,background:"#FFFFFF",borderRadius:11,padding:"10px 11px",fontFamily:G.sans,textAlign:"left",cursor:"pointer"}}>
@@ -9635,7 +9693,10 @@ function SharedSyllabusFlow({
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:9}}>
                 {subjectAvailability.items.map(subject=>{
                   const selected=selectedSubject?.id===subject.id;
-                  const matching=templates.filter(item=>item.subjectId===subject.id&&syllabusScopeKey(syllabusTemplateScope(item))===syllabusScopeKey(selectedScope));
+                  const matching=templates.filter(item=>
+                    syllabusTemplateMatchesSubject(item, subject)
+                    && syllabusScopeKey(syllabusTemplateScope(item))===syllabusScopeKey(selectedScope)
+                  );
                   const published=matching.some(item=>item.currentVersion>0);
                   return (
                     <button key={subject.id} onClick={()=>selectSubject(subject)} style={selectionCard(selected)}>
@@ -10071,7 +10132,13 @@ function ClassBoundSyllabusFlow({
               </div>
               {availableSubjects.map(subject=>{
                 const selected=selectedSubject?.id===subject.id;
-                const matching=templates.filter(item=>item.subjectId===subject.id&&syllabusScopeKey(syllabusTemplateScope(item))===syllabusScopeKey(selectedScope));
+                const matching=templates.filter(item=>
+                  syllabusTemplateMatchesSubject(item, subject)
+                  && (
+                    syllabusScopeKey(syllabusTemplateScope(item))===syllabusScopeKey(selectedScope)
+                    || syllabusTemplateMatchesTargets(item, subject.targets)
+                  )
+                );
                 const published=matching.some(item=>item.currentVersion>0);
                 return (
                   <div key={subject.id} style={{display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2fr) 108px 108px 104px",gap:12,alignItems:"center",padding:isMobile?"12px":"12px 14px",borderTop:`1px solid ${G.border}`,background:selected?"#F8FBFF":"#FFFFFF"}}>
@@ -16901,7 +16968,7 @@ function AdminPanelInner({user}){
               ) : (
                 <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
                   {globalSubjects.map(subject=>{
-                    const subjectSyllabi=syllabusTemplates.filter(item=>item.subjectId===subject.id);
+                    const subjectSyllabi=syllabusTemplates.filter(item=>syllabusTemplateMatchesSubject(item, subject));
                     const publishedCount=subjectSyllabi.filter(item=>item.currentVersion>0).length;
                     return (
                     <div key={subject.id} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",borderRadius:12,border:`1px solid ${subject.active?G.border:"#F5CACA"}`,background:subject.active?G.bg:G.redL,flexWrap:"wrap"}}>
