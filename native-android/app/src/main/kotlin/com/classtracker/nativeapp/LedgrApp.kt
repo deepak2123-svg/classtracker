@@ -2,6 +2,7 @@ package com.classtracker.nativeapp
 
 import android.app.Activity
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -103,6 +104,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrOfflineBanner
 import com.classtracker.core.designsystem.LedgrTheme
@@ -374,13 +376,11 @@ fun LedgrApp(
             teacher = requireNotNull(state.teacher),
             snapshot = requireNotNull(state.snapshot),
             errorMessage = state.errorMessage,
-            savingEntry = state.savingEntry,
             savingClass = state.savingClass,
             deletingClassId = state.deletingClassId,
             deletingAllTrashedEntries = state.deletingAllTrashedEntries,
             deletingTrashedEntryId = state.deletingTrashedEntryId,
             deletingAccount = state.deletingAccount,
-            entrySaved = state.entrySaved,
             classSaved = state.classSaved,
             syncSummary = state.syncSummary,
             feedbackConversation = state.feedbackConversation,
@@ -395,7 +395,6 @@ fun LedgrApp(
             reminderPreferences = reminderPreferences,
             onReminderPreferencesChange = onReminderPreferencesChange,
             onClearError = viewModel::clearError,
-            onSaveEntry = viewModel::saveEntry,
             onCreateClass = viewModel::createClass,
             onDeleteClass = viewModel::deleteClass,
             onDeleteEntry = viewModel::deleteEntry,
@@ -403,7 +402,6 @@ fun LedgrApp(
             onDeleteAllTrashedEntries = viewModel::deleteAllTrashedEntries,
             onDeleteTrashedEntry = viewModel::deleteTrashedEntry,
             onDeleteAccount = viewModel::deleteAccount,
-            onConsumeEntrySaved = viewModel::consumeEntrySaved,
             onConsumeClassSaved = viewModel::consumeClassSaved,
             onRetrySync = viewModel::retrySync,
             onSendFeedback = viewModel::sendFeedback,
@@ -421,13 +419,11 @@ private fun TeacherApp(
     teacher: AuthenticatedTeacher,
     snapshot: TeacherSnapshot,
     errorMessage: String?,
-    savingEntry: Boolean,
     savingClass: Boolean,
     deletingClassId: String?,
     deletingAllTrashedEntries: Boolean,
     deletingTrashedEntryId: String?,
     deletingAccount: Boolean,
-    entrySaved: Boolean,
     classSaved: Boolean,
     syncSummary: TeacherSyncSummary,
     feedbackConversation: com.classtracker.core.model.TeacherFeedbackConversation,
@@ -442,7 +438,6 @@ private fun TeacherApp(
     reminderPreferences: ReminderPreferences,
     onReminderPreferencesChange: (ReminderPreferences) -> Unit,
     onClearError: () -> Unit,
-    onSaveEntry: (TeacherEntryDraft) -> Unit,
     onCreateClass: (TeacherClassDraft) -> Unit,
     onDeleteClass: (TeacherClass) -> Unit,
     onDeleteEntry: (TeacherEntry, TeacherClass) -> Unit,
@@ -450,7 +445,6 @@ private fun TeacherApp(
     onDeleteAllTrashedEntries: () -> Unit,
     onDeleteTrashedEntry: (TeacherTrashedEntry) -> Unit,
     onDeleteAccount: () -> Unit,
-    onConsumeEntrySaved: () -> Unit,
     onConsumeClassSaved: () -> Unit,
     onRetrySync: () -> Unit,
     onSendFeedback: (String) -> Unit,
@@ -798,26 +792,24 @@ private fun TeacherApp(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     composable(AppDestination.Home.route) {
-                        HomeScreen(
-                            dashboard = dashboard,
-                            classes = snapshot.classes,
-                            entries = snapshot.entries,
-                            publishedSyllabi = publishedSyllabi,
+                        HomeRoute(
                             teacherUid = teacher.uid,
-                            orderStorageKey = teacher.uid,
+                            bootstrapSnapshot = snapshot,
+                            bootstrapPublishedSyllabi = publishedSyllabi,
                             onClassClick = { teacherClass ->
                                 navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
                             },
                             onClassHistoryClick = { teacherClass ->
                                 navController.navigate("class/${Uri.encode(teacherClass.id)}")
                             },
-                            onClassSyllabusClick = {
+                            onClassSyllabusClick = { _ ->
                                 navController.navigate(AppDestination.Syllabus.route)
                             },
                             classCreateEnabled = BuildConfig.NATIVE_CLASS_CREATE_ENABLED,
                             onAddClassClick = {
                                 navController.navigate(AddClassRoute)
                             },
+                            modifier = Modifier.fillMaxSize(),
                         )
                     }
                     composable(
@@ -859,6 +851,29 @@ private fun TeacherApp(
                         )
                     }
                     composable(AppDestination.Syllabus.route) {
+                        val context = LocalContext.current
+                        val syllabusEntryFlowViewModel: EntryFlowViewModel = hiltViewModel()
+                        val syllabusEntryFlowState by syllabusEntryFlowViewModel.state.collectAsStateWithLifecycle()
+
+                        LaunchedEffect(teacher.uid, snapshot.revision) {
+                            syllabusEntryFlowViewModel.prime(
+                                teacher = teacher,
+                                snapshot = snapshot,
+                            )
+                        }
+
+                        LaunchedEffect(syllabusEntryFlowState.errorMessage) {
+                            val message = syllabusEntryFlowState.errorMessage ?: return@LaunchedEffect
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            syllabusEntryFlowViewModel.consumeError()
+                        }
+
+                        LaunchedEffect(syllabusEntryFlowState.entrySaved) {
+                            if (syllabusEntryFlowState.entrySaved) {
+                                syllabusEntryFlowViewModel.consumeEntrySaved()
+                            }
+                        }
+
                         SyllabusScreen(
                             teacherUid = teacher.uid,
                             classes = snapshot.classes,
@@ -870,7 +885,7 @@ private fun TeacherApp(
                                 navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
                             },
                             onSaveProgress = { teacherClass, syllabus, unitIds ->
-                                onSaveEntry(
+                                syllabusEntryFlowViewModel.saveEntry(
                                     TeacherEntryDraft(
                                         mutationId = "native_${UUID.randomUUID()}",
                                         classId = teacherClass.id,
@@ -1039,8 +1054,6 @@ private fun TeacherApp(
                                 createEnabled = BuildConfig.NATIVE_ENTRY_CREATE_ENABLED,
                                 editEnabled = BuildConfig.NATIVE_ENTRY_EDIT_ENABLED,
                                 deleteEnabled = BuildConfig.NATIVE_ENTRY_DELETE_ENABLED,
-                                savingEntry = savingEntry,
-                                entrySaved = entrySaved,
                                 draftStore = draftStore,
                                 todayKey = todayKey,
                                 onNavigateToClass = { targetClassId ->
@@ -1062,8 +1075,6 @@ private fun TeacherApp(
                                 },
                                 onDeleteEntry = onDeleteEntry,
                                 onRestoreEntry = onRestoreEntry,
-                                onSaveEntry = onSaveEntry,
-                                onConsumeEntrySaved = onConsumeEntrySaved,
                                 onSaved = {
                                     navController.navigate(AppDestination.Home.route) {
                                         popUpTo(navController.graph.startDestinationId) {
@@ -1152,15 +1163,12 @@ private fun TeacherApp(
                         } else {
                             EntryEditorRoute(
                                 teacher = teacher,
+                                snapshot = snapshot,
                                 teacherClass = teacherClass,
                                 existingEntry = null,
                                 initialDateKey = dateKey,
                                 existingEntries = entriesByClass[classId].orEmpty(),
-                                saving = savingEntry,
-                                entrySaved = entrySaved,
                                 draftStore = draftStore,
-                                onSaveEntry = onSaveEntry,
-                                onConsumeEntrySaved = onConsumeEntrySaved,
                                 onSaved = { navController.navigateUp() },
                             )
                         }
@@ -1194,17 +1202,14 @@ private fun TeacherApp(
                             }
                             EntryEditorRoute(
                                 teacher = teacher,
+                                snapshot = snapshot,
                                 teacherClass = teacherClass,
                                 existingEntry = null,
                                 initialDateKey = sourceEntry.dateKey,
                                 initialDraft = duplicateDraft,
                                 existingEntries = classEntries,
                                 draftStoreEntryId = "duplicate-${sourceEntry.id}",
-                                saving = savingEntry,
-                                entrySaved = entrySaved,
                                 draftStore = draftStore,
-                                onSaveEntry = onSaveEntry,
-                                onConsumeEntrySaved = onConsumeEntrySaved,
                                 onSaved = { navController.navigateUp() },
                             )
                         }
@@ -1233,15 +1238,12 @@ private fun TeacherApp(
                         } else {
                             EntryEditorRoute(
                                 teacher = teacher,
+                                snapshot = snapshot,
                                 teacherClass = teacherClass,
                                 existingEntry = existingEntry,
                                 initialDateKey = existingEntry.dateKey,
                                 existingEntries = classEntries,
-                                saving = savingEntry,
-                                entrySaved = entrySaved,
                                 draftStore = draftStore,
-                                onSaveEntry = onSaveEntry,
-                                onConsumeEntrySaved = onConsumeEntrySaved,
                                 onSaved = { navController.navigateUp() },
                             )
                         }
@@ -1597,6 +1599,48 @@ private fun LazyListState.centeredReminderItemIndex(itemCount: Int): Int {
         ?: firstVisibleItemIndex.coerceIn(0, itemCount - 1)
 }
 
+@Composable
+private fun HomeRoute(
+    teacherUid: String,
+    bootstrapSnapshot: TeacherSnapshot,
+    bootstrapPublishedSyllabi: List<com.classtracker.core.model.PublishedSyllabus>,
+    onClassClick: (TeacherClass) -> Unit,
+    onClassHistoryClick: (TeacherClass) -> Unit,
+    onClassSyllabusClick: (TeacherClass) -> Unit,
+    classCreateEnabled: Boolean,
+    onAddClassClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    homeViewModel: HomeViewModel = hiltViewModel(),
+) {
+    val homeState by homeViewModel.state.collectAsStateWithLifecycle()
+    val effectiveTeacherUid = homeState.teacherUid.ifBlank { teacherUid }
+    val snapshot = homeState.snapshot ?: bootstrapSnapshot
+    val publishedSyllabi = if (
+        homeState.teacherUid == teacherUid && homeState.syllabiLoaded
+    ) {
+        homeState.publishedSyllabi
+    } else {
+        bootstrapPublishedSyllabi
+    }
+    val todayKey = todayKey()
+    val dashboard = remember(snapshot, todayKey) { snapshot.dashboard(todayKey) }
+
+    HomeScreen(
+        dashboard = dashboard,
+        classes = snapshot.classes,
+        entries = snapshot.entries,
+        publishedSyllabi = publishedSyllabi,
+        teacherUid = effectiveTeacherUid,
+        orderStorageKey = effectiveTeacherUid,
+        onClassClick = onClassClick,
+        onClassHistoryClick = onClassHistoryClick,
+        onClassSyllabusClick = onClassSyllabusClick,
+        classCreateEnabled = classCreateEnabled,
+        onAddClassClick = onAddClassClick,
+        modifier = modifier,
+    )
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ClassEntryPagerRoute(
@@ -1609,8 +1653,6 @@ private fun ClassEntryPagerRoute(
     createEnabled: Boolean,
     editEnabled: Boolean,
     deleteEnabled: Boolean,
-    savingEntry: Boolean,
-    entrySaved: Boolean,
     draftStore: EntryDraftStore,
     todayKey: String,
     onNavigateToClass: (String) -> Unit,
@@ -1618,8 +1660,6 @@ private fun ClassEntryPagerRoute(
     onDuplicateEntry: (classId: String, entry: TeacherEntry) -> Unit,
     onDeleteEntry: (TeacherEntry, TeacherClass) -> Unit,
     onRestoreEntry: (TeacherTrashedEntry) -> Unit,
-    onSaveEntry: (TeacherEntryDraft) -> Unit,
-    onConsumeEntrySaved: () -> Unit,
     onSaved: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1627,6 +1667,19 @@ private fun ClassEntryPagerRoute(
     val pagerState = rememberPagerState(initialPage = initialPage) { snapshot.classes.size }
     val scope = rememberCoroutineScope()
     val haptics = rememberLedgrHaptics()
+    val context = LocalContext.current
+    val entryFlowViewModel: EntryFlowViewModel = hiltViewModel()
+    val entryFlowState by entryFlowViewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(teacher.uid, snapshot.revision) {
+        entryFlowViewModel.prime(teacher = teacher, snapshot = snapshot)
+    }
+
+    LaunchedEffect(entryFlowState.errorMessage) {
+        val message = entryFlowState.errorMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        entryFlowViewModel.consumeError()
+    }
 
     LaunchedEffect(initialPage, snapshot.classes.size) {
         if (pagerState.currentPage != initialPage) pagerState.scrollToPage(initialPage)
@@ -1710,8 +1763,8 @@ private fun ClassEntryPagerRoute(
                 }
             }
 
-            LaunchedEffect(entrySaved, pageClass.id, pagerState.currentPage) {
-                if (entrySaved && pagerState.currentPage == page) {
+            LaunchedEffect(entryFlowState.entrySaved, pageClass.id, pagerState.currentPage) {
+                if (entryFlowState.entrySaved && pagerState.currentPage == page) {
                     draftStore.clear(
                         uid = teacher.uid,
                         classId = pageClass.id,
@@ -1723,7 +1776,7 @@ private fun ClassEntryPagerRoute(
                     saveCompletedVisible = true
                     delay(EntrySaveSuccessRevealMillis)
                     draft = baseDraft.copy(mutationId = "native_${UUID.randomUUID()}")
-                    onConsumeEntrySaved()
+                    entryFlowViewModel.consumeEntrySaved()
                     onSaved()
                 }
             }
@@ -1733,7 +1786,7 @@ private fun ClassEntryPagerRoute(
                 entries = classEntries,
                 trashedEntries = classTrashedEntries,
                 draft = draft,
-                saving = savingEntry,
+                saving = entryFlowState.saving,
                 saveCompleted = saveCompletedVisible,
                 recoveredDraft = recoveredDraftVisible,
                 createEnabled = createEnabled,
@@ -1749,7 +1802,7 @@ private fun ClassEntryPagerRoute(
                         entryId = draftKeyEntryId,
                     )
                 },
-                onSave = onSaveEntry,
+                onSave = entryFlowViewModel::saveEntry,
                 onAddAnotherEntry = { editorVisible = true },
                 onOpenPastEntries = {
                     onNavigateToClass(pageClass.id)
@@ -1908,23 +1961,23 @@ private fun SyncStatusBanner(
 @Composable
 private fun EntryEditorRoute(
     teacher: AuthenticatedTeacher,
+    snapshot: TeacherSnapshot,
     teacherClass: com.classtracker.core.model.TeacherClass,
     existingEntry: TeacherEntry?,
     initialDateKey: String,
     initialDraft: TeacherEntryDraft? = null,
     existingEntries: List<TeacherEntry>,
     draftStoreEntryId: String? = null,
-    saving: Boolean,
-    entrySaved: Boolean,
     draftStore: EntryDraftStore,
-    onSaveEntry: (TeacherEntryDraft) -> Unit,
-    onConsumeEntrySaved: () -> Unit,
     onSaved: () -> Unit,
 ) {
     val entryId = existingEntry?.id
     val draftKeyEntryId = draftStoreEntryId ?: entryId
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    val entryFlowViewModel: EntryFlowViewModel = hiltViewModel()
+    val entryFlowState by entryFlowViewModel.state.collectAsStateWithLifecycle()
     val baseDraft = remember(teacherClass.id, entryId, initialDateKey, initialDraft) {
         initialDraft ?: existingEntry?.toDraft() ?: TeacherEntryDraft(
             mutationId = "native_${UUID.randomUUID()}",
@@ -1954,6 +2007,16 @@ private fun EntryEditorRoute(
         mutableStateOf(resolvedDraft.draft)
     }
 
+    LaunchedEffect(teacher.uid, snapshot.revision) {
+        entryFlowViewModel.prime(teacher = teacher, snapshot = snapshot)
+    }
+
+    LaunchedEffect(entryFlowState.errorMessage) {
+        val message = entryFlowState.errorMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        entryFlowViewModel.consumeError()
+    }
+
     LaunchedEffect(resolvedDraft.clearStoredDraft, teacher.uid, teacherClass.id, draftKeyEntryId) {
         if (resolvedDraft.clearStoredDraft) {
             draftStore.clear(
@@ -1964,8 +2027,8 @@ private fun EntryEditorRoute(
         }
     }
 
-    LaunchedEffect(entrySaved) {
-        if (entrySaved) {
+    LaunchedEffect(entryFlowState.entrySaved) {
+        if (entryFlowState.entrySaved) {
             draftStore.clear(
                 uid = teacher.uid,
                 classId = teacherClass.id,
@@ -1973,7 +2036,7 @@ private fun EntryEditorRoute(
             )
             focusManager.clearFocus(force = true)
             keyboardController?.hide()
-            onConsumeEntrySaved()
+            entryFlowViewModel.consumeEntrySaved()
             onSaved()
         }
     }
@@ -1982,7 +2045,7 @@ private fun EntryEditorRoute(
         teacherClass = teacherClass,
         draft = draft,
         existingEntries = existingEntries,
-        saving = saving,
+        saving = entryFlowState.saving,
         recoveredDraft = recovered != null,
         onDraftChanged = { updated ->
             draft = updated
@@ -1992,7 +2055,7 @@ private fun EntryEditorRoute(
                 entryId = draftKeyEntryId,
             )
         },
-        onSave = onSaveEntry,
+        onSave = entryFlowViewModel::saveEntry,
     )
 }
 
