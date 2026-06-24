@@ -91,60 +91,50 @@ private const val HomeClassOrderPrefs = "ledgr_home_class_order"
 private const val HomeClassOrderDelimiter = "|"
 private const val HomeSwipeHorizontalBias = 1.45f
 private const val HomeSwipeTouchSlopMultiplier = 1.15f
-private val HomeCanvas = Color(0xFFEAF4FF)
-private val HomeInk = Color(0xFF10204A)
-private val HomeMuted = Color(0xFF85837D)
-private val HomeBorder = Color(0xFFD4D0C7)
-private val HomeChip = Color(0xFFECEAE4)
-private val HomeWarning = Color(0xFFFFF0BF)
-private val HomePanelSurface = Color(0xFFDCE7FF)
-private val HomePanelBorder = Color(0xFFB4C7F3)
-private val HomeHeroPanelBorder = Color(0xFF324A86)
-private val HomeHeroTextMuted = Color(0xFFD4E0FF)
 
 @Composable
 private fun homeCanvasColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else HomeCanvas
+    colors.canvas
 
 @Composable
 private fun homeSurfaceColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surface else Color.White
+    MaterialTheme.colorScheme.surface
 
 @Composable
 private fun homePanelSurfaceColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surface else HomePanelSurface
+    colors.panelSurface
 
 @Composable
 private fun homeInkColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else HomeInk
+    MaterialTheme.colorScheme.onSurface
 
 @Composable
 private fun homeMutedColor() =
-    if (LedgrTheme.isDark) colors.textMuted else HomeMuted
+    colors.textMuted
 
 @Composable
 private fun homeBorderColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else HomeBorder
+    colors.borderSoft
 
 @Composable
 private fun homePanelBorderColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else HomePanelBorder
+    colors.panelBorder
 
 @Composable
 private fun homeChipColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else HomeChip
+    colors.chipSurface
 
 @Composable
 private fun homeWarningColor() =
-    if (LedgrTheme.isDark) colors.warningSurface else HomeWarning
+    colors.warningSurfaceStrong
 
 @Composable
 private fun homeHeroPanelSurfaceColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surface else HomeInk
+    colors.heroPanelSurface
 
 @Composable
 private fun homeHeroPanelBorderColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else HomeHeroPanelBorder
+    colors.heroPanelBorder
 
 @Composable
 private fun homeHeroTextColor() =
@@ -152,23 +142,25 @@ private fun homeHeroTextColor() =
 
 @Composable
 private fun homeHeroMutedColor() =
-    if (LedgrTheme.isDark) colors.textMuted else HomeHeroTextMuted
+    colors.heroTextMuted
 
 @Composable
 private fun homeStrongTextColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF111827)
+    MaterialTheme.colorScheme.onSurface
 
 @Composable
 private fun homeClassBorderColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFF111827).copy(alpha = 0.68f)
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant
+    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f)
 
 @Composable
 private fun homeLoggedIndicatorColor() =
-    if (LedgrTheme.isDark) Color(0xFF22C55E) else Color(0xFF047A3C)
+    colors.successStrong
 
 @Composable
 private fun homeDragHandleColor() =
-    if (LedgrTheme.isDark) colors.textMuted.copy(alpha = 0.78f) else Color(0xFF111827).copy(alpha = 0.48f)
+    if (LedgrTheme.isDark) colors.textMuted.copy(alpha = 0.78f)
+    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f)
 
 @Composable
 fun HomeScreen(
@@ -586,9 +578,9 @@ fun NewClassScreen(
                     if (availableInstitutes.isEmpty()) {
                         Surface(
                             color = colors.warningSurface,
-                            contentColor = Color(0xFF9A3412),
+                            contentColor = colors.warningTextStrong,
                             shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, Color(0xFFFED7AA)),
+                            border = BorderStroke(1.dp, colors.warningBorder),
                         ) {
                             Text(
                                 text = "Your admin hasn't created any institutes yet. Contact them before adding a class.",
@@ -686,9 +678,9 @@ fun NewClassScreen(
                     if (subjectOptions.isEmpty()) {
                         Surface(
                             color = colors.warningSurface,
-                            contentColor = Color(0xFF9A3412),
+                            contentColor = colors.warningTextStrong,
                             shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, Color(0xFFFED7AA)),
+                            border = BorderStroke(1.dp, colors.warningBorder),
                         ) {
                             Text(
                                 text = "Your administrator has not assigned a subject yet. Contact them before adding a class.",
@@ -964,9 +956,9 @@ private fun SummaryPill(
         shape = RoundedCornerShape(999.dp),
         color = if (warning) homeWarningColor() else homeChipColor(),
         contentColor = if (warning) {
-            if (LedgrTheme.isDark) Color(0xFFFDE68A) else Color(0xFF9A6700)
+            colors.warningText
         } else {
-            if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF4A5568)
+            if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurfaceVariant else colors.textSecondary
         },
     ) {
         Row(
@@ -1529,7 +1521,7 @@ private fun LoggedClassIndicator(
     val inactive = if (LedgrTheme.isDark) {
         MaterialTheme.colorScheme.outlineVariant
     } else {
-        Color(0xFFBDBEC4)
+        colors.indicatorInactive
     }
 
     Box(
