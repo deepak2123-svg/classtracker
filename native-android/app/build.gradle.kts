@@ -5,8 +5,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.ksp)
 }
 
 fun loadFirebaseProperties(): Properties {
@@ -144,8 +144,7 @@ androidComponents {
             ?.second
 
         if (
-            (environment == "production" && variant.buildType == "debug") ||
-            (environment == "beta" && variant.buildType == "release")
+            environment == "production" && variant.buildType == "debug"
         ) {
             variant.enable = false
         }
@@ -174,7 +173,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.googleid)
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
+    ksp(libs.hilt.compiler)
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
@@ -197,10 +196,6 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
-}
-
-kapt {
-    correctErrorTypes = true
 }
 
 hilt {

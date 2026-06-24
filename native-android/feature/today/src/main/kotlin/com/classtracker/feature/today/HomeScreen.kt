@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrPill
+import com.classtracker.core.designsystem.ledgrPressScale
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.designsystem.ledgrSectionTone
@@ -1155,6 +1157,7 @@ private fun HomeClassCard(
 ) {
     val tone = ledgrSectionTone(teacherClass.sectionName)
     val haptics = rememberLedgrHaptics()
+    val cardInteractionSource = remember(teacherClass.id) { MutableInteractionSource() }
     val cardShape = RoundedCornerShape(18.dp)
     val revealDistancePx = with(LocalDensity.current) { 92.dp.toPx() }
     val panelSlideDistancePx = with(LocalDensity.current) { 22.dp.toPx() }
@@ -1338,7 +1341,14 @@ private fun HomeClassCard(
                         .graphicsLayer {
                             translationX = cardTranslationX
                         }
-                        .clickable {
+                        .ledgrPressScale(
+                            interactionSource = cardInteractionSource,
+                            enabled = !isDragging,
+                        )
+                        .clickable(
+                            interactionSource = cardInteractionSource,
+                            indication = null,
+                        ) {
                             if (revealState == HomeClassRevealState.Center) {
                                 onClick()
                             } else {

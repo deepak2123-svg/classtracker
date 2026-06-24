@@ -5,6 +5,11 @@ import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -12,11 +17,16 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -24,12 +34,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerSnapDistance
@@ -45,9 +58,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -67,6 +77,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -86,6 +97,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -95,6 +107,7 @@ import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrOfflineBanner
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrThemeMode
+import com.classtracker.core.designsystem.ledgrPressScale
 import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherClass
@@ -145,8 +158,104 @@ private const val ManageClassesRoute = "manage-classes"
 private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
 private const val EditEntryRoute = "entry/edit/{classId}/{entryId}"
 private const val DuplicateEntryRoute = "entry/duplicate/{classId}/{entryId}"
+private const val PushTransitionMillis = 280
+private const val ModalTransitionMillis = 320
 private val HomeCanvas = Color(0xFFEAF4FF)
 private val HomeInk = Color(0xFF10204A)
+private val PushMotionRoutes = setOf(
+    ClassEntryRoute,
+    ClassHistoryRoute,
+)
+private val ModalMotionRoutes = setOf(
+    AddClassRoute,
+    ManageClassesRoute,
+    ReportsRoute,
+    FeedbackRoute,
+    RecycleBinRoute,
+    NewEntryRoute,
+    EditEntryRoute,
+    DuplicateEntryRoute,
+)
+
+private fun String?.usesPushMotion() = this in PushMotionRoutes
+
+private fun String?.usesModalMotion() = this in ModalMotionRoutes
+
+private val pushEnterTransition:
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+    slideIntoContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Left,
+        animationSpec = tween(
+            durationMillis = PushTransitionMillis,
+            easing = FastOutSlowInEasing,
+        ),
+    ) + fadeIn(animationSpec = tween(durationMillis = 220))
+}
+
+private val pushExitTransition:
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+    slideOutOfContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Left,
+        animationSpec = tween(
+            durationMillis = PushTransitionMillis,
+            easing = FastOutSlowInEasing,
+        ),
+    ) + fadeOut(animationSpec = tween(durationMillis = 180))
+}
+
+private val pushPopEnterTransition:
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+    slideIntoContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Right,
+        animationSpec = tween(
+            durationMillis = PushTransitionMillis,
+            easing = FastOutSlowInEasing,
+        ),
+    ) + fadeIn(animationSpec = tween(durationMillis = 220))
+}
+
+private val pushPopExitTransition:
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+    slideOutOfContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Right,
+        animationSpec = tween(
+            durationMillis = PushTransitionMillis,
+            easing = FastOutSlowInEasing,
+        ),
+    ) + fadeOut(animationSpec = tween(durationMillis = 180))
+}
+
+private val modalEnterTransition:
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+    slideInVertically(
+        initialOffsetY = { it / 4 },
+        animationSpec = tween(
+            durationMillis = ModalTransitionMillis,
+            easing = FastOutSlowInEasing,
+        ),
+    ) + fadeIn(animationSpec = tween(durationMillis = 220))
+}
+
+private val modalExitTransition:
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+    fadeOut(animationSpec = tween(durationMillis = 160))
+}
+
+private val modalPopEnterTransition:
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+    fadeIn(animationSpec = tween(durationMillis = 180))
+}
+
+private val modalPopExitTransition:
+    AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+    slideOutVertically(
+        targetOffsetY = { it / 3 },
+        animationSpec = tween(
+            durationMillis = ModalTransitionMillis,
+            easing = FastOutSlowInEasing,
+        ),
+    ) + fadeOut(animationSpec = tween(durationMillis = 180))
+}
 
 @Composable
 private fun appHomeCanvasColor() =
@@ -649,49 +758,19 @@ private fun TeacherApp(
         },
         bottomBar = {
             if (!isDetailRoute) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 8.dp,
-                ) {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 0.dp,
-                    ) {
-                        AppDestination.entries.forEach { destination ->
-                            val selected = currentDestination
-                                ?.hierarchy
-                                ?.any { it.route == destination.route } == true
-
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = {
-                                    haptics.selection()
-                                    navController.navigate(destination.route) {
-                                        popUpTo(navController.graph.startDestinationId) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = destination.icon,
-                                        contentDescription = destination.label,
-                                    )
-                                },
-                                label = { Text(destination.label) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                    unselectedIconColor = LedgrTheme.colors.textMuted,
-                                    unselectedTextColor = LedgrTheme.colors.textMuted,
-                                ),
-                            )
+                LedgrBottomBar(
+                    currentDestination = currentDestination,
+                    onNavigate = { destination ->
+                        haptics.selection()
+                        navController.navigate(destination.route) {
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                    }
-                }
+                    },
+                )
             }
         },
     ) { innerPadding ->
@@ -741,7 +820,13 @@ private fun TeacherApp(
                             },
                         )
                     }
-                    composable(AddClassRoute) {
+                    composable(
+                        route = AddClassRoute,
+                        enterTransition = modalEnterTransition,
+                        exitTransition = modalExitTransition,
+                        popEnterTransition = modalPopEnterTransition,
+                        popExitTransition = modalPopExitTransition,
+                    ) {
                         NewClassScreen(
                             availableInstitutes = snapshot.availableInstitutes,
                             availableSectionsByInstitute = snapshot.availableSectionsByInstitute,
@@ -850,7 +935,13 @@ private fun TeacherApp(
                             onDeleteAccount = onDeleteAccount,
                         )
                     }
-                    composable(ManageClassesRoute) {
+                    composable(
+                        route = ManageClassesRoute,
+                        enterTransition = modalEnterTransition,
+                        exitTransition = modalExitTransition,
+                        popEnterTransition = modalPopEnterTransition,
+                        popExitTransition = modalPopExitTransition,
+                    ) {
                         ManageClassesScreen(
                             classes = snapshot.classes,
                             entries = snapshot.entries,
@@ -873,7 +964,13 @@ private fun TeacherApp(
                             },
                         )
                     }
-                    composable(RecycleBinRoute) {
+                    composable(
+                        route = RecycleBinRoute,
+                        enterTransition = modalEnterTransition,
+                        exitTransition = modalExitTransition,
+                        popEnterTransition = modalPopEnterTransition,
+                        popExitTransition = modalPopExitTransition,
+                    ) {
                         RecycleBinScreen(
                             trashedEntries = snapshot.trashedEntries,
                             onRestoreEntry = onRestoreEntry,
@@ -884,14 +981,26 @@ private fun TeacherApp(
                             onDeleteEntry = onDeleteTrashedEntry,
                         )
                     }
-                    composable(ReportsRoute) {
+                    composable(
+                        route = ReportsRoute,
+                        enterTransition = modalEnterTransition,
+                        exitTransition = modalExitTransition,
+                        popEnterTransition = modalPopEnterTransition,
+                        popExitTransition = modalPopExitTransition,
+                    ) {
                         ReportsScreen(
                             snapshot = snapshot,
                             todayKey = todayKey,
                             syllabi = publishedSyllabi,
                         )
                     }
-                    composable(FeedbackRoute) {
+                    composable(
+                        route = FeedbackRoute,
+                        enterTransition = modalEnterTransition,
+                        exitTransition = modalExitTransition,
+                        popEnterTransition = modalPopEnterTransition,
+                        popExitTransition = modalPopExitTransition,
+                    ) {
                         LaunchedEffect(Unit) {
                             onMarkFeedbackRead()
                         }
@@ -904,7 +1013,13 @@ private fun TeacherApp(
                             onSentConsumed = onConsumeFeedbackSent,
                         )
                     }
-                    composable(ClassEntryRoute) { entry ->
+                    composable(
+                        route = ClassEntryRoute,
+                        enterTransition = pushEnterTransition,
+                        exitTransition = pushExitTransition,
+                        popEnterTransition = pushPopEnterTransition,
+                        popExitTransition = pushPopExitTransition,
+                    ) { entry ->
                         val classId = Uri.decode(entry.arguments?.getString("classId").orEmpty())
                         val teacherClass = classesById[classId]
                         if (teacherClass == null) {
@@ -960,7 +1075,13 @@ private fun TeacherApp(
                             )
                         }
                     }
-                    composable(ClassHistoryRoute) { entry ->
+                    composable(
+                        route = ClassHistoryRoute,
+                        enterTransition = pushEnterTransition,
+                        exitTransition = pushExitTransition,
+                        popEnterTransition = pushPopEnterTransition,
+                        popExitTransition = pushPopExitTransition,
+                    ) { entry ->
                         val classId = Uri.decode(entry.arguments?.getString("classId").orEmpty())
                         val teacherClass = classesById[classId]
                         if (teacherClass == null) {
@@ -1010,7 +1131,13 @@ private fun TeacherApp(
                             )
                         }
                     }
-                    composable(NewEntryRoute) { entry ->
+                    composable(
+                        route = NewEntryRoute,
+                        enterTransition = modalEnterTransition,
+                        exitTransition = modalExitTransition,
+                        popEnterTransition = modalPopEnterTransition,
+                        popExitTransition = modalPopExitTransition,
+                    ) { entry ->
                         val classId = Uri.decode(
                             entry.arguments?.getString("classId").orEmpty(),
                         )
@@ -1038,7 +1165,13 @@ private fun TeacherApp(
                             )
                         }
                     }
-                    composable(DuplicateEntryRoute) { entry ->
+                    composable(
+                        route = DuplicateEntryRoute,
+                        enterTransition = modalEnterTransition,
+                        exitTransition = modalExitTransition,
+                        popEnterTransition = modalPopEnterTransition,
+                        popExitTransition = modalPopExitTransition,
+                    ) { entry ->
                         val classId = Uri.decode(
                             entry.arguments?.getString("classId").orEmpty(),
                         )
@@ -1076,7 +1209,13 @@ private fun TeacherApp(
                             )
                         }
                     }
-                    composable(EditEntryRoute) { entry ->
+                    composable(
+                        route = EditEntryRoute,
+                        enterTransition = modalEnterTransition,
+                        exitTransition = modalExitTransition,
+                        popEnterTransition = modalPopEnterTransition,
+                        popExitTransition = modalPopExitTransition,
+                    ) { entry ->
                         val classId = Uri.decode(
                             entry.arguments?.getString("classId").orEmpty(),
                         )
@@ -1110,6 +1249,125 @@ private fun TeacherApp(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LedgrBottomBar(
+    currentDestination: androidx.navigation.NavDestination?,
+    onNavigate: (AppDestination) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = if (LedgrTheme.isDark) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            Color.White
+        },
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (LedgrTheme.isDark) {
+                MaterialTheme.colorScheme.outlineVariant
+            } else {
+                Color(0xFFD9E2EC)
+            },
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AppDestination.entries.forEach { destination ->
+                val selected = currentDestination
+                    ?.hierarchy
+                    ?.any { it.route == destination.route } == true
+                LedgrBottomBarItem(
+                    destination = destination,
+                    selected = selected,
+                    onClick = {
+                        if (!selected) {
+                            onNavigate(destination)
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.LedgrBottomBarItem(
+    destination: AppDestination,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember(destination.route) { MutableInteractionSource() }
+    val iconAndLabelColor by animateColorAsState(
+        targetValue = if (selected) {
+            LedgrTheme.colors.teal
+        } else {
+            LedgrTheme.colors.textMuted
+        },
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "bottomBarItemColor",
+    )
+    val indicatorColor by animateColorAsState(
+        targetValue = if (selected) {
+            LedgrTheme.colors.teal
+        } else {
+            Color.Transparent
+        },
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "bottomBarIndicatorColor",
+    )
+    Column(
+        modifier = modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(18.dp))
+            .ledgrPressScale(
+                interactionSource = interactionSource,
+                enabled = !selected,
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(
+            imageVector = destination.icon,
+            contentDescription = destination.label,
+            tint = iconAndLabelColor,
+            modifier = Modifier.size(22.dp),
+        )
+        Text(
+            text = destination.label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            ),
+            color = iconAndLabelColor,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+        )
+        Box(
+            modifier = Modifier
+                .width(18.dp)
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(indicatorColor),
+        )
     }
 }
 

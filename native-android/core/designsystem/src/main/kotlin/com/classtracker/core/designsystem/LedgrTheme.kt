@@ -166,6 +166,13 @@ val LedgrDisplayFontFamily = FontFamily(
     Font(R.font.poppins_extrabold, FontWeight.ExtraBold),
 )
 
+val LedgrBodyFontFamily = FontFamily(
+    Font(R.font.inter_variable, FontWeight.Normal),
+    Font(R.font.inter_variable, FontWeight.Medium),
+    Font(R.font.inter_variable, FontWeight.SemiBold),
+    Font(R.font.inter_variable, FontWeight.Bold),
+)
+
 private val LedgrTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = LedgrDisplayFontFamily,
@@ -231,43 +238,43 @@ private val LedgrTypography = Typography(
         letterSpacing = 0.sp,
     ),
     bodyLarge = TextStyle(
-        fontFamily = LedgrDisplayFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = LedgrBodyFontFamily,
+        fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.sp,
     ),
     bodyMedium = TextStyle(
-        fontFamily = LedgrDisplayFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = LedgrBodyFontFamily,
+        fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.sp,
     ),
     bodySmall = TextStyle(
-        fontFamily = LedgrDisplayFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = LedgrBodyFontFamily,
+        fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 17.sp,
         letterSpacing = 0.sp,
     ),
     labelLarge = TextStyle(
-        fontFamily = LedgrDisplayFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = LedgrBodyFontFamily,
+        fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.sp,
     ),
     labelMedium = TextStyle(
-        fontFamily = LedgrDisplayFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = LedgrBodyFontFamily,
+        fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 17.sp,
         letterSpacing = 0.sp,
     ),
     labelSmall = TextStyle(
-        fontFamily = LedgrDisplayFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontFamily = LedgrBodyFontFamily,
+        fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.sp,
