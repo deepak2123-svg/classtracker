@@ -38,13 +38,11 @@ data class MainUiState(
     val snapshot: TeacherSnapshot? = null,
     val loadingData: Boolean = false,
     val authenticating: Boolean = false,
-    val refreshing: Boolean = false,
     val savingClass: Boolean = false,
     val deletingClassId: String? = null,
     val deletingAllTrashedEntries: Boolean = false,
     val deletingTrashedEntryId: String? = null,
     val deletingAccount: Boolean = false,
-    val mutatingEntry: Boolean = false,
     val classSaved: Boolean = false,
     val errorMessage: String? = null,
 )
@@ -61,6 +59,7 @@ class MainViewModel @Inject constructor(
     private var snapshotJob: Job? = null
     private var loadedUid: String? = null
     private var availableSectionsByInstitute: Map<String, List<String>> = emptyMap()
+    private var entryMutationInFlight = false
 
     init {
         viewModelScope.launch {
@@ -269,7 +268,7 @@ class MainViewModel @Inject constructor(
         val current = mutableState.value
         val teacher = current.teacher ?: return
         val snapshot = current.snapshot ?: return
-        if (current.mutatingEntry) return
+        if (entryMutationInFlight) return
         if (entry.syncState != TeacherEntrySyncState.Synced) {
             mutableState.update {
                 it.copy(errorMessage = "Wait for this entry to sync before deleting it.")
@@ -295,7 +294,7 @@ class MainViewModel @Inject constructor(
         val current = mutableState.value
         val teacher = current.teacher ?: return
         val snapshot = current.snapshot ?: return
-        if (current.mutatingEntry) return
+        if (entryMutationInFlight) return
         if (entry.syncState == TeacherEntrySyncState.Syncing) {
             mutableState.update {
                 it.copy(errorMessage = "Wait for this entry to sync before restoring it.")
@@ -500,54 +499,49 @@ class MainViewModel @Inject constructor(
 
     private fun runEntryMutation(action: suspend () -> TeacherSnapshot) {
         val teacher = mutableState.value.teacher ?: return
+        if (entryMutationInFlight) return
+        entryMutationInFlight = true
         viewModelScope.launch {
-            mutableState.update {
-                it.copy(
-                    mutatingEntry = true,
-                    errorMessage = null,
-                )
-            }
-            runCatching { action() }
-                .onSuccess { updatedSnapshot ->
-                    val mergedSnapshot = updatedSnapshot.withAvailableSections()
-                    mutableState.update {
-                        it.copy(
-                            snapshot = mergedSnapshot,
-                            mutatingEntry = false,
-                            errorMessage = null,
-                        )
-                    }
+            try {
+                if (mutableState.value.errorMessage != null) {
+                    mutableState.update { it.copy(errorMessage = null) }
                 }
-                .onFailure { error ->
-                    if (error is TeacherRevisionConflictException) {
-                        runCatching { dataRepository.loadTeacherSnapshot(teacher) }
-                            .onSuccess { latestSnapshot ->
-                                val mergedSnapshot = latestSnapshot.withAvailableSections()
-                                mutableState.update {
-                                    it.copy(
-                                        snapshot = mergedSnapshot,
-                                        mutatingEntry = false,
-                                        errorMessage = "Newer web changes were loaded. Review and try again.",
-                                    )
-                                }
-                            }
-                            .onFailure { refreshError ->
-                                mutableState.update {
-                                    it.copy(
-                                        mutatingEntry = false,
-                                        errorMessage = refreshError.toFriendlyMessage(),
-                                    )
-                                }
-                            }
-                    } else {
+                runCatching { action() }
+                    .onSuccess { updatedSnapshot ->
+                        val mergedSnapshot = updatedSnapshot.withAvailableSections()
                         mutableState.update {
                             it.copy(
-                                mutatingEntry = false,
-                                errorMessage = error.toFriendlyMessage(),
+                                snapshot = mergedSnapshot,
+                                errorMessage = null,
                             )
                         }
                     }
-                }
+                    .onFailure { error ->
+                        if (error is TeacherRevisionConflictException) {
+                            runCatching { dataRepository.loadTeacherSnapshot(teacher) }
+                                .onSuccess { latestSnapshot ->
+                                    val mergedSnapshot = latestSnapshot.withAvailableSections()
+                                    mutableState.update {
+                                        it.copy(
+                                            snapshot = mergedSnapshot,
+                                            errorMessage = "Newer web changes were loaded. Review and try again.",
+                                        )
+                                    }
+                                }
+                                .onFailure { refreshError ->
+                                    mutableState.update {
+                                        it.copy(errorMessage = refreshError.toFriendlyMessage())
+                                    }
+                                }
+                        } else {
+                            mutableState.update {
+                                it.copy(errorMessage = error.toFriendlyMessage())
+                            }
+                        }
+                    }
+            } finally {
+                entryMutationInFlight = false
+            }
         }
     }
 
@@ -560,7 +554,6 @@ class MainViewModel @Inject constructor(
             mutableState.update {
                 it.copy(
                     loadingData = !refresh && it.snapshot == null,
-                    refreshing = refresh,
                     errorMessage = null,
                 )
             }
@@ -571,7 +564,6 @@ class MainViewModel @Inject constructor(
                         it.copy(
                             snapshot = mergedSnapshot,
                             loadingData = false,
-                            refreshing = false,
                             errorMessage = null,
                         )
                     }
@@ -580,7 +572,6 @@ class MainViewModel @Inject constructor(
                     mutableState.update {
                         it.copy(
                             loadingData = false,
-                            refreshing = false,
                             errorMessage = error.toFriendlyMessage(),
                         )
                     }
