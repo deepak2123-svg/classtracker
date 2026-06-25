@@ -54,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -151,6 +152,10 @@ private fun homeStrongTextColor() =
 @Composable
 private fun homeClassBorderColor() =
     colors.classCardBorder
+
+@Composable
+private fun homeFloatingShadowColor() =
+    colors.forest
 
 @Composable
 private fun homeLoggedIndicatorColor() =
@@ -827,9 +832,18 @@ private fun AddClassCard(
     onClick: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val cardShape = RoundedCornerShape(26.dp)
+    val shadowColor = homeFloatingShadowColor()
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 10.dp,
+                shape = cardShape,
+                clip = false,
+                ambientColor = shadowColor.copy(alpha = 0.08f),
+                spotColor = shadowColor.copy(alpha = 0.12f),
+            )
             .ledgrPressScale(interactionSource = interactionSource)
             .clickable(
                 interactionSource = interactionSource,
@@ -837,19 +851,19 @@ private fun AddClassCard(
                 onClick = onClick,
             ),
         color = homePanelSurfaceColor(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, homePanelBorderColor()),
-        shadowElevation = 2.dp,
+        shape = cardShape,
+        border = BorderStroke(0.75.dp, homeClassBorderColor()),
+        shadowElevation = 0.dp,
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(13.dp),
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(50.dp),
                 color = colors.surfaceSoft,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(18.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -1166,7 +1180,8 @@ private fun HomeClassCard(
     val tone = ledgrSectionTone(teacherClass.sectionName)
     val haptics = rememberLedgrHaptics()
     val cardInteractionSource = remember(teacherClass.id) { MutableInteractionSource() }
-    val cardShape = RoundedCornerShape(18.dp)
+    val cardShape = RoundedCornerShape(26.dp)
+    val shadowColor = homeFloatingShadowColor()
     val revealDistancePx = with(LocalDensity.current) { 92.dp.toPx() }
     val panelSlideDistancePx = with(LocalDensity.current) { 22.dp.toPx() }
     var revealState by remember(teacherClass.id) { mutableStateOf(HomeClassRevealState.Center) }
@@ -1281,16 +1296,23 @@ private fun HomeClassCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(76.dp)
+            .height(84.dp)
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxSize(),
+                .fillMaxSize()
+                .shadow(
+                    elevation = if (isDragging) 14.dp else 10.dp,
+                    shape = cardShape,
+                    clip = false,
+                    ambientColor = shadowColor.copy(alpha = 0.08f),
+                    spotColor = shadowColor.copy(alpha = 0.13f),
+                ),
             color = tone.surface,
             contentColor = tone.text,
             shape = cardShape,
-            border = BorderStroke(0.95.dp, homeClassBorderColor()),
-            shadowElevation = if (isDragging) 4.dp else 0.dp,
+            border = BorderStroke(0.75.dp, homeClassBorderColor()),
+            shadowElevation = 0.dp,
         ) {
             Box(
                 modifier = Modifier
@@ -1370,8 +1392,8 @@ private fun HomeClassCard(
                     shape = cardShape,
                 ) {
                     Row(
-                        modifier = Modifier.padding(start = 16.dp, top = 11.dp, end = 14.dp, bottom = 11.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(start = 18.dp, top = 13.dp, end = 16.dp, bottom = 13.dp),
+                        horizontalArrangement = Arrangement.spacedBy(13.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
@@ -1382,13 +1404,13 @@ private fun HomeClassCard(
                             contentAlignment = Alignment.CenterStart,
                         ) {
                             Column(
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(7.dp),
                             ) {
                                 Text(
                                     text = teacherClass.sectionName,
                                     style = MaterialTheme.typography.titleLarge.copy(
-                                        fontSize = 18.sp,
-                                        lineHeight = 20.sp,
+                                        fontSize = 19.sp,
+                                        lineHeight = 21.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = homeStrongTextColor(),
                                     ),
@@ -1396,7 +1418,7 @@ private fun HomeClassCard(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(7.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     MiniHomePill(
@@ -1473,7 +1495,7 @@ private fun HomeClassActionPanel(
         color = homeHeroPanelSurfaceColor(),
         contentColor = homeHeroTextColor(),
         shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, homeHeroPanelBorderColor()),
+        border = BorderStroke(0.75.dp, homeHeroPanelBorderColor()),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -1582,30 +1604,30 @@ private fun MiniHomePill(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.height(if (prominent) 23.dp else 20.dp),
+        modifier = modifier.height(if (prominent) 22.dp else 20.dp),
         color = if (prominent) colors.miniPillProminentSurface else colors.miniPillSurface,
-        contentColor = homeStrongTextColor(),
+        contentColor = colors.textSecondary,
         shape = RoundedCornerShape(999.dp),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = if (prominent) 10.dp else 9.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (prominent) 7.dp else 6.dp),
+            modifier = Modifier.padding(horizontal = if (prominent) 12.dp else 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (prominent) 6.dp else 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             dotColor?.let {
                 Box(
                     modifier = Modifier
-                        .size(if (prominent) 8.dp else 7.dp)
+                        .size(if (prominent) 7.dp else 6.dp)
                         .background(it, CircleShape),
                 )
             }
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelMedium.copy(
-                    fontSize = if (prominent) 11.sp else 10.sp,
-                    lineHeight = if (prominent) 14.sp else 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = homeStrongTextColor(),
+                    fontSize = if (prominent) 10.sp else 9.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textSecondary,
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

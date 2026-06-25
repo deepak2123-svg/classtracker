@@ -64,14 +64,14 @@ fun ledgrSectionTone(seed: String): LedgrSectionTone {
         )[index]
     } else {
         listOf(
-            LedgrSectionTone(Color(0xFF1D4ED8), Color(0xFFDCE9FF), Color(0xFFAFCBFF), Color(0xFF1E3A8A)),
-            LedgrSectionTone(Color(0xFF2563EB), Color(0xFFDFEBFF), Color(0xFFBED4FF), Color(0xFF1D4ED8)),
-            LedgrSectionTone(Color(0xFF0F766E), Color(0xFFD7F0EA), Color(0xFFA7DED1), Color(0xFF115E59)),
-            LedgrSectionTone(Color(0xFF0891B2), Color(0xFFD9F0F7), Color(0xFFA9DAE8), Color(0xFF0E7490)),
-            LedgrSectionTone(Color(0xFF15803D), Color(0xFFDCF7E7), Color(0xFFB7E6C8), Color(0xFF166534)),
-            LedgrSectionTone(Color(0xFF0F6B78), Color(0xFFD8ECEF), Color(0xFFB0D8DE), Color(0xFF155E75)),
-            LedgrSectionTone(Color(0xFF1E40AF), Color(0xFFD9E5FF), Color(0xFFAFC3F1), Color(0xFF1E3A8A)),
-            LedgrSectionTone(Color(0xFF047857), Color(0xFFD8F4E8), Color(0xFFAFE2CA), Color(0xFF065F46)),
+            LedgrSectionTone(Color(0xFF2563EB), Color(0xFFE8F1FF), Color(0xFFC7D9F7), Color(0xFF173A68)),
+            LedgrSectionTone(Color(0xFF4F46E5), Color(0xFFEDEBFF), Color(0xFFD4CEFF), Color(0xFF373078)),
+            LedgrSectionTone(Color(0xFF0F766E), Color(0xFFDDF7EA), Color(0xFFBFE8D0), Color(0xFF17603E)),
+            LedgrSectionTone(Color(0xFF0891B2), Color(0xFFDFF5F8), Color(0xFFBFE5EA), Color(0xFF155E75)),
+            LedgrSectionTone(Color(0xFF159B55), Color(0xFFE2F8EC), Color(0xFFC7EBD4), Color(0xFF17603E)),
+            LedgrSectionTone(Color(0xFF0F6B78), Color(0xFFE2F5F7), Color(0xFFC6E3E8), Color(0xFF155E75)),
+            LedgrSectionTone(Color(0xFF6366F1), Color(0xFFEAEFFF), Color(0xFFD1DBFF), Color(0xFF1E3A8A)),
+            LedgrSectionTone(Color(0xFF047857), Color(0xFFDDF6EB), Color(0xFFBFE6D0), Color(0xFF065F46)),
         )[index]
     }
 }
