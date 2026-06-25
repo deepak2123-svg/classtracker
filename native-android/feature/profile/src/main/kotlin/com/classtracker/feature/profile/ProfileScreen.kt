@@ -56,8 +56,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
-import com.classtracker.core.designsystem.LedgrForest
-import com.classtracker.core.designsystem.LedgrTeal
 import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.designsystem.LedgrThemeMode
@@ -226,7 +224,7 @@ fun ProfileScreen(
                 icon = Icons.Outlined.BarChart,
                 title = "View Stats",
                 subtitle = "See teaching hours and class breakdowns.",
-                accent = Color(0xFF1455B3),
+                accent = colors.blue,
                 onClick = onOpenStats,
             )
         }
@@ -235,7 +233,7 @@ fun ProfileScreen(
                 icon = Icons.Outlined.School,
                 title = "Manage Classes",
                 subtitle = "Review active classes or move a class to the recycle bin.",
-                accent = Color(0xFF0F766E),
+                accent = colors.teal,
                 onClick = onOpenManageClasses,
             )
         }
@@ -248,7 +246,7 @@ fun ProfileScreen(
                 } else {
                     "Set one daily reminder, Monday to Saturday."
                 },
-                accent = Color(0xFFD97706),
+                accent = colors.amber,
                 onClick = onOpenReminderSettings,
             )
         }
@@ -317,7 +315,7 @@ private fun ProfileHero(
             .clip(RoundedCornerShape(28.dp))
             .background(
                 Brush.linearGradient(
-                    colors = listOf(LedgrForest, LedgrTeal),
+                    colors = listOf(colors.forest, colors.teal),
                 ),
             )
             .padding(horizontal = 20.dp, vertical = 20.dp),
@@ -589,9 +587,13 @@ private fun ThemePreview(
     modifier: Modifier = Modifier,
 ) {
     val dark = previewMode == LedgrThemeMode.Dark
-    val previewBackground = if (dark) Color(0xFF0A1420) else Color(0xFFF5F7FA)
-    val previewSurface = if (dark) Color(0xFF202B39) else Color.White
-    val accent = Color(0xFF4DB7C8)
+    val previewBackground = if (dark) colors.forestStrong else colors.surfaceSoft
+    val previewSurface = if (dark) colors.surfaceAlt else MaterialTheme.colorScheme.surface
+    val systemLightBackground = colors.surfaceSoft
+    val systemDarkBackground = colors.forestStrong
+    val systemLightRail = colors.borderSoft
+    val systemDarkCard = colors.surfaceAlt
+    val accent = colors.teal
     Surface(
         modifier = modifier
             .height(150.dp)
@@ -619,13 +621,13 @@ private fun ThemePreview(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxSize()
-                                .background(Color(0xFFF5F7FA)),
+                                .background(systemLightBackground),
                         )
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxSize()
-                                .background(Color(0xFF0A1420)),
+                                .background(systemDarkBackground),
                         )
                     }
                 } else {
@@ -681,7 +683,7 @@ private fun ThemePreview(
                                 .height(10.dp)
                                 .background(
                                     if (previewMode == LedgrThemeMode.System) {
-                                        Color(0xFFDDE3EA)
+                                        systemLightRail
                                     } else {
                                         previewSurface
                                     },
@@ -699,7 +701,7 @@ private fun ThemePreview(
                                                 previewMode == LedgrThemeMode.System &&
                                                 index == 1
                                             ) {
-                                                Color(0xFF202B39)
+                                                systemDarkCard
                                             } else {
                                                 previewSurface
                                             },

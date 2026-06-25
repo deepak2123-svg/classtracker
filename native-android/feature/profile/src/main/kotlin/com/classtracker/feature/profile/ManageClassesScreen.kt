@@ -29,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -163,12 +162,12 @@ fun ManageClassesScreen(
                             Icon(
                                 imageVector = Icons.Outlined.DeleteOutline,
                                 contentDescription = null,
-                                tint = Color(0xFFB42318),
+                                tint = colors.red,
                             )
                             Text(
                                 text = "Delete",
                                 modifier = Modifier.padding(start = 6.dp),
-                                color = Color(0xFFB42318),
+                                color = colors.red,
                             )
                         }
                     }
