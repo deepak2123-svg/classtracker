@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.classtracker.core.designsystem.LedgrPill
+import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.model.TeacherClass
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -34,10 +35,6 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 
-private val HeroInk = Color(0xFF202A55)
-private val HeroStatSurface = Color(0xFF3E486F)
-private val HeroMint = Color(0xFF63D9B5)
-private val HeroWarning = Color(0xFFFFF4C8)
 private const val HeroSwipeHorizontalBias = 1.3f
 private const val HeroSwipeTouchSlopMultiplier = 1.1f
 
@@ -129,7 +126,7 @@ internal fun ClassDetailHero(
         modifier = modifier
             .fillMaxWidth()
             .then(swipeModifier),
-        color = HeroInk,
+        color = colors.heroPanelSurface,
         shape = RoundedCornerShape(22.dp),
         shadowElevation = 0.dp,
     ) {
@@ -170,7 +167,7 @@ internal fun ClassDetailHero(
                                 containerColor = Color.White.copy(alpha = 0.14f),
                                 contentColor = Color.White,
                                 borderColor = Color.Transparent,
-                                leadingColor = HeroMint,
+                                leadingColor = colors.green,
                             )
                             if (teacherClass.subjectName.isNotBlank()) {
                                 LedgrPill(
@@ -205,8 +202,8 @@ internal fun ClassDetailHero(
 private fun TodayStatusPill(todayEntries: Int) {
     val logged = todayEntries > 0
     Surface(
-        color = if (logged) Color(0xFFDFF8E8) else HeroWarning,
-        contentColor = if (logged) Color(0xFF176B3D) else Color(0xFF805E00),
+        color = if (logged) colors.successSurface else colors.warningSurfaceStrong,
+        contentColor = if (logged) colors.successStrong else colors.warningTextStrong,
         shape = RoundedCornerShape(999.dp),
     ) {
         Row(
@@ -217,7 +214,7 @@ private fun TodayStatusPill(todayEntries: Int) {
             Box(
                 modifier = Modifier
                     .size(7.dp)
-                    .background(color = if (logged) Color(0xFF18A05A) else Color(0xFFF59E0B), shape = CircleShape),
+                    .background(color = if (logged) colors.green else colors.amber, shape = CircleShape),
             )
             Text(
                 text = if (logged) "Logged today" else "Not logged today",
@@ -235,7 +232,7 @@ private fun HeroStat(
 ) {
     Surface(
         modifier = modifier,
-        color = HeroStatSurface,
+        color = colors.heroPanelBorder,
         shape = RoundedCornerShape(14.dp),
     ) {
         Column(

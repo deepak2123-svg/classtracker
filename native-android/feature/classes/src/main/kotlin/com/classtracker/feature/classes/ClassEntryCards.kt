@@ -256,10 +256,10 @@ private fun EntryMetaRow(entry: TeacherEntry) {
 @Composable
 private fun StatusPill(status: String) {
     val tone = when (status) {
-        "started" -> StatusTone(Color(0xFFDBEAFE), Color(0xFF1D4ED8), "Started")
-        "inprogress" -> StatusTone(Color(0xFFFEF3C7), Color(0xFFB45309), "In Progress")
-        "completed" -> StatusTone(Color(0xFFD1FAE5), Color(0xFF065F46), "Completed")
-        "doubts" -> StatusTone(Color(0xFFFFEDD5), Color(0xFF9A3412), "Doubts")
+        "started" -> StatusTone(colors.chipSurface, colors.blue, "Started")
+        "inprogress" -> StatusTone(colors.warningSurface, colors.warningText, "In Progress")
+        "completed" -> StatusTone(colors.successSurface, colors.successStrong, "Completed")
+        "doubts" -> StatusTone(colors.errorSurface, colors.red, "Doubts")
         else -> StatusTone(colors.surfaceAlt, colors.textSecondary, status)
     }
     Surface(

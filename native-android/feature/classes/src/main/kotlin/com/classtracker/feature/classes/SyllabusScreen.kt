@@ -50,38 +50,37 @@ import com.classtracker.core.model.completedSyllabusUnitIds
 import com.classtracker.core.model.progressForCompletedUnitIds
 import com.classtracker.core.model.syllabusChapterCompletionMarker
 
-private val SyllabusLightCanvas = Color(0xFFEAF4FF)
-private val SyllabusInk = Color(0xFF10204A)
-private val SyllabusMuted = Color(0xFF85837D)
-private val SyllabusGreen = Color(0xFF0F7D6F)
-
 @Composable
 private fun syllabusCanvasColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else SyllabusLightCanvas
+    LedgrTheme.colors.canvas
 
 @Composable
 private fun syllabusCardColor() =
-    if (LedgrTheme.isDark) Color(0xFF1D1D1F) else Color.White
+    MaterialTheme.colorScheme.surface
 
 @Composable
 private fun syllabusCardInnerColor() =
-    if (LedgrTheme.isDark) Color(0xFF252527) else Color(0xFFF3F5F8)
+    LedgrTheme.colors.surfaceAlt
 
 @Composable
 private fun syllabusInkColor() =
-    if (LedgrTheme.isDark) Color.White else SyllabusInk
+    MaterialTheme.colorScheme.onSurface
 
 @Composable
 private fun syllabusMutedColor() =
-    if (LedgrTheme.isDark) Color(0xFF8C8C8C) else SyllabusMuted
+    LedgrTheme.colors.textMuted
 
 @Composable
 private fun syllabusBorderColor() =
-    if (LedgrTheme.isDark) Color(0xFF343437) else Color(0xFFD7DCE4)
+    MaterialTheme.colorScheme.outlineVariant
 
 @Composable
 private fun syllabusAccentColor() =
-    if (LedgrTheme.isDark) Color(0xFF0B806D) else SyllabusGreen
+    LedgrTheme.colors.teal
+
+@Composable
+private fun syllabusTrackColor() =
+    LedgrTheme.colors.chipSurface
 
 @Composable
 fun SyllabusScreen(
@@ -244,7 +243,7 @@ private fun SyllabusClassCard(
                     .fillMaxWidth()
                     .height(7.dp),
                 color = syllabusAccentColor(),
-                trackColor = if (LedgrTheme.isDark) Color(0xFF28282A) else Color(0xFFE8E0F5),
+                trackColor = syllabusTrackColor(),
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),

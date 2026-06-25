@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrSectionHeading
-import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherClass
@@ -470,11 +469,7 @@ private fun HistoryCalendarNavButton(
         modifier = Modifier
             .size(34.dp)
             .clickable(onClick = onClick),
-        color = if (LedgrTheme.isDark) {
-            MaterialTheme.colorScheme.surfaceVariant
-        } else {
-            Color(0xFFEAF4FF)
-        },
+        color = colors.surfaceAlt,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = CircleShape,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
@@ -522,7 +517,7 @@ private fun HistoryCalendarDayCell(
     val contentColor by animateColorAsState(
         targetValue = when {
             cell.selected -> Color.White
-            cell.sunday -> Color(0xFFEF4444)
+            cell.sunday -> MaterialTheme.colorScheme.error
             cell.canSelect || cell.entryCount > 0 -> MaterialTheme.colorScheme.onSurface
             else -> colors.textSubtle
         },
@@ -660,11 +655,7 @@ private fun ArchiveFilterSection(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = if (LedgrTheme.isDark) {
-            MaterialTheme.colorScheme.surfaceVariant
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         shadowElevation = 1.dp,
@@ -1101,4 +1092,4 @@ private val HistoryStatusFilters = listOf(
 
 @Composable
 private fun classHistoryCanvasColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else Color(0xFFEAF4FF)
+    colors.canvas

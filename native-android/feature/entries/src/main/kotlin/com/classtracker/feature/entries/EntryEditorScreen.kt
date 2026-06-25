@@ -92,52 +92,41 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-private val EntryCanvas = Color(0xFFEAF4FF)
-private val EntryInk = Color(0xFF202A55)
-private val EntryMuted = Color(0xFF85837D)
-private val EntryBorder = Color(0xFFD6D2CA)
-private val EntryPlaceholder = Color(0xFFBFBDB8)
-private val EntryGreen = Color(0xFF1AA079)
+@Composable
+private fun entryCanvasColor() = LedgrTheme.colors.canvas
 
 @Composable
-private fun entryCanvasColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else EntryCanvas
+private fun entrySurfaceColor() = MaterialTheme.colorScheme.surface
 
 @Composable
-private fun entrySurfaceColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surface else Color.White
+private fun entryFieldColor() = MaterialTheme.colorScheme.surface
 
 @Composable
-private fun entryFieldColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else Color.White
+private fun entryInkColor() = MaterialTheme.colorScheme.onSurface
 
 @Composable
-private fun entryInkColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else EntryInk
+private fun entryMutedColor() = LedgrTheme.colors.textMuted
 
 @Composable
-private fun entryMutedColor() =
-    if (LedgrTheme.isDark) LedgrTheme.colors.textMuted else EntryMuted
+private fun entryBorderColor() = MaterialTheme.colorScheme.outlineVariant
 
 @Composable
-private fun entryBorderColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else EntryBorder
+private fun entryPlaceholderColor() = LedgrTheme.colors.textSubtle
 
 @Composable
-private fun entryPlaceholderColor() =
-    if (LedgrTheme.isDark) LedgrTheme.colors.textSubtle else EntryPlaceholder
+private fun entryPrimaryControlColor() = LedgrTheme.colors.heroPanelSurface
 
 @Composable
-private fun entryPrimaryControlColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.primaryContainer else EntryInk
+private fun entryPrimaryControlContentColor() = Color.White
 
 @Composable
-private fun entryPrimaryControlContentColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onPrimaryContainer else Color.White
+private fun entrySubtleTextColor() = LedgrTheme.colors.textSubtle
 
 @Composable
-private fun entrySubtleTextColor() =
-    if (LedgrTheme.isDark) LedgrTheme.colors.textMuted else Color(0xFFB1ADA4)
+private fun entryRaisedFieldColor() = LedgrTheme.colors.surfaceAlt
+
+@Composable
+private fun entrySuccessColor() = LedgrTheme.colors.successStrong
 
 @Composable
 fun EntryEditorScreen(
@@ -799,7 +788,7 @@ private fun CalendarNavButton(
         modifier = Modifier
             .size(34.dp)
             .clickable(onClick = onClick),
-        color = if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else EntryCanvas,
+        color = entryRaisedFieldColor(),
         contentColor = entryInkColor(),
         shape = CircleShape,
         border = BorderStroke(1.dp, entryBorderColor()),
@@ -842,8 +831,8 @@ private fun CalendarDayCell(
 ) {
     val ink = entryInkColor()
     val selectedBackground = entryPrimaryControlColor()
-    val disabledColor = if (LedgrTheme.isDark) LedgrTheme.colors.textSubtle else Color(0xFFBDBAB4)
-    val dotColor = if (LedgrTheme.isDark) LedgrTheme.colors.green else EntryGreen
+    val disabledColor = LedgrTheme.colors.textSubtle
+    val dotColor = LedgrTheme.colors.green
     val background by animateColorAsState(
         targetValue = when {
             cell.selected -> selectedBackground
@@ -854,7 +843,7 @@ private fun CalendarDayCell(
     val contentColor by animateColorAsState(
         targetValue = when {
             cell.selected -> Color.White
-            cell.sunday -> Color(0xFFEF4444)
+            cell.sunday -> MaterialTheme.colorScheme.error
             cell.canSelect || cell.entryCount > 0 -> ink
             else -> disabledColor
         },
@@ -1010,7 +999,7 @@ private fun PickerField(
             .height(68.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
-        color = if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else EntryCanvas,
+        color = entryRaisedFieldColor(),
         border = BorderStroke(1.dp, entryBorderColor()),
     ) {
         Row(
@@ -1058,7 +1047,7 @@ private fun StatusChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tone = statusTone(status, LedgrTheme.isDark)
+    val tone = statusTone(status)
     Surface(
         modifier = modifier
             .height(48.dp)
@@ -1130,7 +1119,7 @@ private fun EntryTextAndSavePanel(
         label = "entrySaveButtonScale",
     )
     val buttonContainerColor by animateColorAsState(
-        targetValue = if (saveCompleted) EntryGreen else entryPrimaryControlColor(),
+        targetValue = if (saveCompleted) entrySuccessColor() else entryPrimaryControlColor(),
         animationSpec = spring(stiffness = 520f, dampingRatio = 0.92f),
         label = "entrySaveButtonContainer",
     )
@@ -1169,7 +1158,7 @@ private fun EntryTextAndSavePanel(
             } else {
                 "Required"
             },
-            color = if (showInvalid) Color(0xFFFF3B3B) else entrySubtleTextColor(),
+            color = if (showInvalid) MaterialTheme.colorScheme.error else entrySubtleTextColor(),
             style = MaterialTheme.typography.labelLarge.copy(
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
@@ -1196,8 +1185,8 @@ private fun EntryTextAndSavePanel(
         if (!saving && !saveCompleted && validation is TeacherEntryValidation.Overlap) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = if (LedgrTheme.isDark) LedgrTheme.colors.warningSurface else Color(0xFFFFF4C8),
-                contentColor = if (LedgrTheme.isDark) Color(0xFFFDE68A) else Color(0xFF805E00),
+                color = LedgrTheme.colors.warningSurface,
+                contentColor = LedgrTheme.colors.warningText,
                 shape = RoundedCornerShape(14.dp),
             ) {
                 Text(
@@ -1472,10 +1461,10 @@ private fun ScrollDrumTimeDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(10.dp),
-            color = Color(0xFF151925),
-            contentColor = Color.White,
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
             shape = RoundedCornerShape(24.dp),
-            border = BorderStroke(1.dp, Color(0xFF30364A)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
@@ -1506,7 +1495,7 @@ private fun ScrollDrumTimeDialog(
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.ExtraBold,
                         ),
-                        color = Color.White.copy(alpha = 0.76f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.76f),
                     )
                     DrumWheel(
                         items = minutes,
@@ -1580,9 +1569,9 @@ private fun DrumWheel(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(164.dp),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(1.dp, Color(0xFFD4D4D8)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Box(
@@ -1592,7 +1581,7 @@ private fun DrumWheel(
                         .height(48.dp)
                         .padding(horizontal = 8.dp)
                         .background(
-                            Color(0xFFF1F1F1).copy(alpha = 0.9f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
                             RoundedCornerShape(7.dp),
                         ),
                 )
@@ -1621,7 +1610,7 @@ private fun DrumWheel(
                                         FontWeight.Bold
                                     },
                                 ),
-                                color = Color.Black.copy(
+                                color = MaterialTheme.colorScheme.onSurface.copy(
                                     alpha = when (distance) {
                                         0 -> 1f
                                         1 -> 0.38f
@@ -1721,27 +1710,32 @@ private data class StatusTone(
     val label: String,
 )
 
-private fun statusTone(status: TeacherEntryStatus, dark: Boolean): StatusTone = when (status) {
-    TeacherEntryStatus.Started -> if (dark) {
-        StatusTone(Color(0xFF102A4F), Color(0xFFBFDBFE), Color(0xFF60A5FA), "Started")
-    } else {
-        StatusTone(Color(0xFFDBEAFE), Color(0xFF1D4ED8), Color(0xFF3B82F6), "Started")
-    }
-    TeacherEntryStatus.InProgress -> if (dark) {
-        StatusTone(Color(0xFF3A2A11), Color(0xFFFDE68A), Color(0xFFF59E0B), "In Progress")
-    } else {
-        StatusTone(Color(0xFFFEF3C7), Color(0xFFB45309), Color(0xFFF59E0B), "In Progress")
-    }
-    TeacherEntryStatus.Completed -> if (dark) {
-        StatusTone(Color(0xFF123528), Color(0xFFA7F3D0), Color(0xFF34D399), "Completed")
-    } else {
-        StatusTone(Color(0xFFD1FAE5), Color(0xFF065F46), Color(0xFF10B981), "Completed")
-    }
-    TeacherEntryStatus.Doubts -> if (dark) {
-        StatusTone(Color(0xFF3B2112), Color(0xFFFED7AA), Color(0xFFFB923C), "Doubts")
-    } else {
-        StatusTone(Color(0xFFFFEDD5), Color(0xFF9A3412), Color(0xFFF97316), "Doubts")
-    }
+@Composable
+private fun statusTone(status: TeacherEntryStatus): StatusTone = when (status) {
+    TeacherEntryStatus.Started -> StatusTone(
+        background = LedgrTheme.colors.chipSurface,
+        content = LedgrTheme.colors.blue,
+        dot = LedgrTheme.colors.blue,
+        label = "Started",
+    )
+    TeacherEntryStatus.InProgress -> StatusTone(
+        background = LedgrTheme.colors.warningSurface,
+        content = LedgrTheme.colors.warningText,
+        dot = LedgrTheme.colors.amber,
+        label = "In Progress",
+    )
+    TeacherEntryStatus.Completed -> StatusTone(
+        background = LedgrTheme.colors.successSurface,
+        content = LedgrTheme.colors.successStrong,
+        dot = LedgrTheme.colors.green,
+        label = "Completed",
+    )
+    TeacherEntryStatus.Doubts -> StatusTone(
+        background = LedgrTheme.colors.errorSurface,
+        content = LedgrTheme.colors.red,
+        dot = LedgrTheme.colors.red,
+        label = "Doubts",
+    )
 }
 
 private fun durationMinutes(start: String, end: String): Int? {

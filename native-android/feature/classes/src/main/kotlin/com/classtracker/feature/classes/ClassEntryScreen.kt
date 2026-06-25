@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrSectionHeading
-import com.classtracker.core.designsystem.LedgrTheme
 import com.classtracker.core.designsystem.LedgrTheme.colors
 import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.TeacherClass
@@ -282,4 +281,4 @@ private fun RecoveredDraftBanner() {
 
 @Composable
 private fun classEntryCanvasColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else Color(0xFFEAF4FF)
+    colors.canvas
