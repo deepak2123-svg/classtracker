@@ -85,6 +85,7 @@ data class LedgrExtendedColors(
     val appBrandMarkSurface: Color,
     val appBrandMarkContent: Color,
     val appTopButtonBorder: Color,
+    val pickerHighlightSurface: Color,
     val loadingInk: Color,
 )
 
@@ -130,6 +131,7 @@ private val LightExtendedColors = LedgrExtendedColors(
     appBrandMarkSurface = Color(0xFF10204A),
     appBrandMarkContent = Color.White,
     appTopButtonBorder = Color(0xFFD4D0C7),
+    pickerHighlightSurface = LedgrSurfaceAlt,
     loadingInk = Color(0xFF10204A),
 )
 
@@ -175,6 +177,7 @@ private val DarkExtendedColors = LedgrExtendedColors(
     appBrandMarkSurface = Color(0xFF173C45),
     appBrandMarkContent = Color(0xFFC5F1F7),
     appTopButtonBorder = Color(0xFF334155),
+    pickerHighlightSurface = Color.White.copy(alpha = 0.08f),
     loadingInk = Color(0xFF4DB7C8),
 )
 

@@ -1501,11 +1501,7 @@ private fun ReminderDrumWheel(
                         .height(42.dp)
                         .padding(horizontal = 7.dp)
                         .background(
-                            if (LedgrTheme.isDark) {
-                                Color.White.copy(alpha = 0.08f)
-                            } else {
-                                LedgrTheme.colors.surfaceAlt
-                            },
+                            LedgrTheme.colors.pickerHighlightSurface,
                             RoundedCornerShape(9.dp),
                         ),
                 )
