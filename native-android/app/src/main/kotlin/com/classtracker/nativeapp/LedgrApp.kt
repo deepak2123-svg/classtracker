@@ -143,6 +143,8 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -169,6 +171,24 @@ private val ModalMotionRoutes = setOf(
 private fun String?.usesPushMotion() = this in PushMotionRoutes
 
 private fun String?.usesModalMotion() = this in ModalMotionRoutes
+
+private data class LedgrShellState(
+    val checkingSession: Boolean,
+    val teacher: AuthenticatedTeacher?,
+    val snapshot: TeacherSnapshot?,
+    val loadingData: Boolean,
+    val authenticating: Boolean,
+    val errorMessage: String?,
+)
+
+private fun MainUiState.toShellState() = LedgrShellState(
+    checkingSession = checkingSession,
+    teacher = teacher,
+    snapshot = snapshot,
+    loadingData = loadingData,
+    authenticating = authenticating,
+    errorMessage = errorMessage,
+)
 
 private val pushEnterTransition:
     AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
@@ -307,7 +327,11 @@ fun LedgrApp(
     onReminderPreferencesChange: (ReminderPreferences) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val shellState by remember(viewModel.state) {
+        viewModel.state
+            .map { it.toShellState() }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = viewModel.state.value.toShellState())
     val context = LocalContext.current
     val activity = context as? Activity
     val scope = rememberCoroutineScope()
@@ -324,11 +348,11 @@ fun LedgrApp(
     when {
         keepStartupLoadingVisible -> FullScreenLoading(modifier = modifier)
 
-        state.checkingSession -> FullScreenLoading(modifier = modifier)
+        shellState.checkingSession -> FullScreenLoading(modifier = modifier)
 
-        state.teacher == null -> AuthScreen(
-            loading = state.authenticating,
-            errorMessage = state.errorMessage,
+        shellState.teacher == null -> AuthScreen(
+            loading = shellState.authenticating,
+            errorMessage = shellState.errorMessage,
             googleSignInConfigured = googleSignInConfigured,
             onGoogleSignIn = {
                 if (credentialReader == null) {
@@ -350,25 +374,20 @@ fun LedgrApp(
             modifier = modifier,
         )
 
-        state.snapshot == null && state.loadingData -> FullScreenLoading(modifier = modifier)
+        shellState.snapshot == null && shellState.loadingData -> FullScreenLoading(modifier = modifier)
 
-        state.snapshot == null -> FullScreenError(
-            message = state.errorMessage ?: "Teacher data could not be loaded.",
+        shellState.snapshot == null -> FullScreenError(
+            message = shellState.errorMessage ?: "Teacher data could not be loaded.",
             onRetry = viewModel::refresh,
             onSignOut = viewModel::signOut,
             modifier = modifier,
         )
 
         else -> TeacherApp(
-            teacher = requireNotNull(state.teacher),
-            snapshot = requireNotNull(state.snapshot),
-            errorMessage = state.errorMessage,
-            savingClass = state.savingClass,
-            deletingClassId = state.deletingClassId,
-            deletingAllTrashedEntries = state.deletingAllTrashedEntries,
-            deletingTrashedEntryId = state.deletingTrashedEntryId,
-            deletingAccount = state.deletingAccount,
-            classSaved = state.classSaved,
+            teacher = requireNotNull(shellState.teacher),
+            snapshot = requireNotNull(shellState.snapshot),
+            mainState = viewModel.state,
+            errorMessage = shellState.errorMessage,
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
             reminderPreferences = reminderPreferences,
@@ -393,13 +412,8 @@ fun LedgrApp(
 private fun TeacherApp(
     teacher: AuthenticatedTeacher,
     snapshot: TeacherSnapshot,
+    mainState: StateFlow<MainUiState>,
     errorMessage: String?,
-    savingClass: Boolean,
-    deletingClassId: String?,
-    deletingAllTrashedEntries: Boolean,
-    deletingTrashedEntryId: String?,
-    deletingAccount: Boolean,
-    classSaved: Boolean,
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
     reminderPreferences: ReminderPreferences,
@@ -420,6 +434,11 @@ private fun TeacherApp(
     val feedbackState by feedbackViewModel.state.collectAsStateWithLifecycle()
     val syncViewModel: SyncViewModel = hiltViewModel()
     val syncState by syncViewModel.state.collectAsStateWithLifecycle()
+    val classSaved by remember(mainState) {
+        mainState
+            .map { it.classSaved }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = mainState.value.classSaved)
     val haptics = rememberLedgrHaptics()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -796,6 +815,11 @@ private fun TeacherApp(
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) {
+                        val savingClass by remember(mainState) {
+                            mainState
+                                .map { it.savingClass }
+                                .distinctUntilChanged()
+                        }.collectAsStateWithLifecycle(initialValue = mainState.value.savingClass)
                         NewClassScreen(
                             availableInstitutes = snapshot.availableInstitutes,
                             availableSectionsByInstitute = snapshot.availableSectionsByInstitute,
@@ -887,6 +911,11 @@ private fun TeacherApp(
                         )
                     }
                     composable(AppDestination.Profile.route) {
+                        val deletingAccount by remember(mainState) {
+                            mainState
+                                .map { it.deletingAccount }
+                                .distinctUntilChanged()
+                        }.collectAsStateWithLifecycle(initialValue = mainState.value.deletingAccount)
                         ProfileScreen(
                             profile = snapshot.profile,
                             loggedToday = dashboard.loggedClassCountToday,
@@ -936,6 +965,11 @@ private fun TeacherApp(
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) {
+                        val deletingClassId by remember(mainState) {
+                            mainState
+                                .map { it.deletingClassId }
+                                .distinctUntilChanged()
+                        }.collectAsStateWithLifecycle(initialValue = mainState.value.deletingClassId)
                         ManageClassesScreen(
                             classes = snapshot.classes,
                             entries = snapshot.entries,
@@ -965,6 +999,20 @@ private fun TeacherApp(
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) {
+                        val deletingAllTrashedEntries by remember(mainState) {
+                            mainState
+                                .map { it.deletingAllTrashedEntries }
+                                .distinctUntilChanged()
+                        }.collectAsStateWithLifecycle(
+                            initialValue = mainState.value.deletingAllTrashedEntries,
+                        )
+                        val deletingTrashedEntryId by remember(mainState) {
+                            mainState
+                                .map { it.deletingTrashedEntryId }
+                                .distinctUntilChanged()
+                        }.collectAsStateWithLifecycle(
+                            initialValue = mainState.value.deletingTrashedEntryId,
+                        )
                         RecycleBinScreen(
                             trashedEntries = snapshot.trashedEntries,
                             onRestoreEntry = onRestoreEntry,
