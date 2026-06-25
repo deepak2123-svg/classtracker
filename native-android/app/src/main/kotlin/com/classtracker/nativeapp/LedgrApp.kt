@@ -1,7 +1,6 @@
 package com.classtracker.nativeapp
 
 import android.app.Activity
-import android.net.Uri
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -147,36 +146,24 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val ClassEntryRoute = "class-entry/{classId}"
-private const val ClassHistoryRoute = "class/{classId}"
-private const val RecycleBinRoute = "recycle-bin"
-private const val ReportsRoute = "reports"
-private const val FeedbackRoute = "feedback"
 private const val ClassPagerSnapMillis = 170
 private const val ClassPagerPositionalThreshold = 0.82f
 private const val EntrySaveSuccessRevealMillis = 160L
-private const val AddClassRoute = "add-class"
-private const val ManageClassesRoute = "manage-classes"
-private const val NewEntryRoute = "entry/new/{classId}/{dateKey}"
-private const val EditEntryRoute = "entry/edit/{classId}/{entryId}"
-private const val DuplicateEntryRoute = "entry/duplicate/{classId}/{entryId}"
 private const val PushTransitionMillis = 280
 private const val ModalTransitionMillis = 320
-private val HomeCanvas = Color(0xFFEAF4FF)
-private val HomeInk = Color(0xFF10204A)
 private val PushMotionRoutes = setOf(
-    ClassEntryRoute,
-    ClassHistoryRoute,
+    AppRoutes.ClassEntryPattern,
+    AppRoutes.ClassHistoryPattern,
 )
 private val ModalMotionRoutes = setOf(
-    AddClassRoute,
-    ManageClassesRoute,
-    ReportsRoute,
-    FeedbackRoute,
-    RecycleBinRoute,
-    NewEntryRoute,
-    EditEntryRoute,
-    DuplicateEntryRoute,
+    AppRoutes.AddClass,
+    AppRoutes.ManageClasses,
+    AppRoutes.Reports,
+    AppRoutes.Feedback,
+    AppRoutes.RecycleBin,
+    AppRoutes.NewEntryPattern,
+    AppRoutes.EditEntryPattern,
+    AppRoutes.DuplicateEntryPattern,
 )
 
 private fun String?.usesPushMotion() = this in PushMotionRoutes
@@ -261,19 +248,19 @@ private val modalPopExitTransition:
 
 @Composable
 private fun appHomeCanvasColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.background else HomeCanvas
+    LedgrTheme.colors.canvas
 
 @Composable
 private fun appHomeInkColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else HomeInk
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else LedgrTheme.colors.heroPanelSurface
 
 @Composable
 private fun appTopButtonSurfaceColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.surfaceVariant else Color.White
+    MaterialTheme.colorScheme.surface
 
 @Composable
 private fun appTopButtonBorderColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFD4D0C7)
+    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else LedgrTheme.colors.borderSoft
 
 private data class DraftResolution(
     val draft: TeacherEntryDraft,
@@ -382,14 +369,6 @@ fun LedgrApp(
             deletingTrashedEntryId = state.deletingTrashedEntryId,
             deletingAccount = state.deletingAccount,
             classSaved = state.classSaved,
-            syncSummary = state.syncSummary,
-            feedbackConversation = state.feedbackConversation,
-            feedbackErrorMessage = state.feedbackErrorMessage,
-            sendingFeedback = state.sendingFeedback,
-            feedbackSent = state.feedbackSent,
-            publishedSyllabi = state.publishedSyllabi,
-            loadingSyllabi = state.loadingSyllabi,
-            syllabusErrorMessage = state.syllabusErrorMessage,
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
             reminderPreferences = reminderPreferences,
@@ -403,10 +382,6 @@ fun LedgrApp(
             onDeleteTrashedEntry = viewModel::deleteTrashedEntry,
             onDeleteAccount = viewModel::deleteAccount,
             onConsumeClassSaved = viewModel::consumeClassSaved,
-            onRetrySync = viewModel::retrySync,
-            onSendFeedback = viewModel::sendFeedback,
-            onMarkFeedbackRead = viewModel::markFeedbackRead,
-            onConsumeFeedbackSent = viewModel::consumeFeedbackSent,
             onSignOut = viewModel::signOut,
             modifier = modifier,
         )
@@ -425,14 +400,6 @@ private fun TeacherApp(
     deletingTrashedEntryId: String?,
     deletingAccount: Boolean,
     classSaved: Boolean,
-    syncSummary: TeacherSyncSummary,
-    feedbackConversation: com.classtracker.core.model.TeacherFeedbackConversation,
-    feedbackErrorMessage: String?,
-    sendingFeedback: Boolean,
-    feedbackSent: Boolean,
-    publishedSyllabi: List<com.classtracker.core.model.PublishedSyllabus>,
-    loadingSyllabi: Boolean,
-    syllabusErrorMessage: String?,
     themeMode: LedgrThemeMode,
     onThemeModeChange: (LedgrThemeMode) -> Unit,
     reminderPreferences: ReminderPreferences,
@@ -446,28 +413,28 @@ private fun TeacherApp(
     onDeleteTrashedEntry: (TeacherTrashedEntry) -> Unit,
     onDeleteAccount: () -> Unit,
     onConsumeClassSaved: () -> Unit,
-    onRetrySync: () -> Unit,
-    onSendFeedback: (String) -> Unit,
-    onMarkFeedbackRead: () -> Unit,
-    onConsumeFeedbackSent: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val feedbackViewModel: FeedbackViewModel = hiltViewModel()
+    val feedbackState by feedbackViewModel.state.collectAsStateWithLifecycle()
+    val syncViewModel: SyncViewModel = hiltViewModel()
+    val syncState by syncViewModel.state.collectAsStateWithLifecycle()
     val haptics = rememberLedgrHaptics()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
-    val isClassEntry = currentRoute == ClassEntryRoute
-    val isClassHistory = currentRoute == ClassHistoryRoute
-    val isRecycleBin = currentRoute == RecycleBinRoute
-    val isReports = currentRoute == ReportsRoute
-    val isFeedback = currentRoute == FeedbackRoute
-    val isAddClass = currentRoute == AddClassRoute
-    val isManageClasses = currentRoute == ManageClassesRoute
-    val isEntryEditor = currentRoute == NewEntryRoute ||
-        currentRoute == EditEntryRoute ||
-        currentRoute == DuplicateEntryRoute
+    val isClassEntry = currentRoute == AppRoutes.ClassEntryPattern
+    val isClassHistory = currentRoute == AppRoutes.ClassHistoryPattern
+    val isRecycleBin = currentRoute == AppRoutes.RecycleBin
+    val isReports = currentRoute == AppRoutes.Reports
+    val isFeedback = currentRoute == AppRoutes.Feedback
+    val isAddClass = currentRoute == AppRoutes.AddClass
+    val isManageClasses = currentRoute == AppRoutes.ManageClasses
+    val isEntryEditor = currentRoute == AppRoutes.NewEntryPattern ||
+        currentRoute == AppRoutes.EditEntryPattern ||
+        currentRoute == AppRoutes.DuplicateEntryPattern
     val isDetailRoute = isClassEntry || isClassHistory || isRecycleBin ||
         isReports || isFeedback || isAddClass || isManageClasses || isEntryEditor
     val snackbarHostState = remember { SnackbarHostState() }
@@ -499,10 +466,29 @@ private fun TeacherApp(
     val showSubjectAssignmentDialog =
         snapshot.profile.subjectAssignmentVersion > acknowledgedSubjectVersion
 
+    LaunchedEffect(teacher.uid) {
+        feedbackViewModel.prime(teacher.uid)
+        syncViewModel.prime(teacher.uid)
+    }
+
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             onClearError()
+        }
+    }
+
+    LaunchedEffect(feedbackState.errorMessage) {
+        feedbackState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            feedbackViewModel.consumeError()
+        }
+    }
+
+    LaunchedEffect(syncState.errorMessage) {
+        syncState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            syncViewModel.consumeError()
         }
     }
 
@@ -604,8 +590,8 @@ private fun TeacherApp(
                     if (isEntryEditor) {
                         Text(
                             text = when (currentRoute) {
-                                NewEntryRoute -> "Add entry"
-                                DuplicateEntryRoute -> "Duplicate entry"
+                                AppRoutes.NewEntryPattern -> "Add entry"
+                                AppRoutes.DuplicateEntryPattern -> "Duplicate entry"
                                 else -> "Edit entry"
                             },
                             style = MaterialTheme.typography.titleLarge,
@@ -655,7 +641,7 @@ private fun TeacherApp(
                                 color = if (LedgrTheme.isDark) {
                                     MaterialTheme.colorScheme.primaryContainer
                                 } else {
-                                    HomeInk
+                                    LedgrTheme.colors.heroPanelSurface
                                 },
                                 contentColor = if (LedgrTheme.isDark) {
                                     MaterialTheme.colorScheme.onPrimaryContainer
@@ -778,10 +764,10 @@ private fun TeacherApp(
                     modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp),
                 )
             }
-            if (syncSummary.hasWork) {
+            if (syncState.summary.hasWork) {
                 SyncStatusBanner(
-                    summary = syncSummary,
-                    onRetry = onRetrySync,
+                    summary = syncState.summary,
+                    onRetry = syncViewModel::retry,
                     modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp),
                 )
             }
@@ -795,25 +781,24 @@ private fun TeacherApp(
                         HomeRoute(
                             teacherUid = teacher.uid,
                             bootstrapSnapshot = snapshot,
-                            bootstrapPublishedSyllabi = publishedSyllabi,
                             onClassClick = { teacherClass ->
-                                navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
+                                navController.navigate(AppRoutes.classEntry(teacherClass.id))
                             },
                             onClassHistoryClick = { teacherClass ->
-                                navController.navigate("class/${Uri.encode(teacherClass.id)}")
+                                navController.navigate(AppRoutes.classHistory(teacherClass.id))
                             },
                             onClassSyllabusClick = { _ ->
                                 navController.navigate(AppDestination.Syllabus.route)
                             },
                             classCreateEnabled = BuildConfig.NATIVE_CLASS_CREATE_ENABLED,
                             onAddClassClick = {
-                                navController.navigate(AddClassRoute)
+                                navController.navigate(AppRoutes.AddClass)
                             },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
                     composable(
-                        route = AddClassRoute,
+                        route = AppRoutes.AddClass,
                         enterTransition = modalEnterTransition,
                         exitTransition = modalExitTransition,
                         popEnterTransition = modalPopEnterTransition,
@@ -846,7 +831,7 @@ private fun TeacherApp(
                             classes = snapshot.classes,
                             entries = snapshot.entries,
                             onClassClick = { teacherClass ->
-                                navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
+                                navController.navigate(AppRoutes.classEntry(teacherClass.id))
                             },
                         )
                     }
@@ -854,6 +839,8 @@ private fun TeacherApp(
                         val context = LocalContext.current
                         val syllabusEntryFlowViewModel: EntryFlowViewModel = hiltViewModel()
                         val syllabusEntryFlowState by syllabusEntryFlowViewModel.state.collectAsStateWithLifecycle()
+                        val syllabiViewModel: SyllabiViewModel = hiltViewModel()
+                        val syllabiState by syllabiViewModel.state.collectAsStateWithLifecycle()
 
                         LaunchedEffect(teacher.uid, snapshot.revision) {
                             syllabusEntryFlowViewModel.prime(
@@ -878,11 +865,11 @@ private fun TeacherApp(
                             teacherUid = teacher.uid,
                             classes = snapshot.classes,
                             entries = snapshot.entries,
-                            syllabi = publishedSyllabi,
-                            loading = loadingSyllabi,
-                            errorMessage = syllabusErrorMessage,
+                            syllabi = syllabiState.publishedSyllabi,
+                            loading = syllabiState.loading,
+                            errorMessage = syllabiState.errorMessage,
                             onClassClick = { teacherClass ->
-                                navController.navigate("class-entry/${Uri.encode(teacherClass.id)}")
+                                navController.navigate(AppRoutes.classEntry(teacherClass.id))
                             },
                             onSaveProgress = { teacherClass, syllabus, unitIds ->
                                 syllabusEntryFlowViewModel.saveEntry(
@@ -927,23 +914,23 @@ private fun TeacherApp(
                                 }
                             },
                             onOpenManageClasses = {
-                                navController.navigate(ManageClassesRoute)
+                                navController.navigate(AppRoutes.ManageClasses)
                             },
                             onOpenReports = {
-                                navController.navigate(ReportsRoute)
+                                navController.navigate(AppRoutes.Reports)
                             },
                             onOpenRecycleBin = {
-                                navController.navigate(RecycleBinRoute)
+                                navController.navigate(AppRoutes.RecycleBin)
                             },
                             reminderEnabled = reminderPreferences.enabled,
                             reminderTimeLabel = reminderPreferences.timeLabel,
                             onOpenReminderSettings = {
                                 showReminderDialog = true
                             },
-                            feedbackUnreadCount = feedbackConversation.unreadByTeacher,
+                            feedbackUnreadCount = feedbackState.conversation.unreadByTeacher,
                             onOpenFeedback = {
-                                onMarkFeedbackRead()
-                                navController.navigate(FeedbackRoute)
+                                feedbackViewModel.markFeedbackRead()
+                                navController.navigate(AppRoutes.Feedback)
                             },
                             onSignOut = onSignOut,
                             deletingAccount = deletingAccount,
@@ -951,7 +938,7 @@ private fun TeacherApp(
                         )
                     }
                     composable(
-                        route = ManageClassesRoute,
+                        route = AppRoutes.ManageClasses,
                         enterTransition = modalEnterTransition,
                         exitTransition = modalExitTransition,
                         popEnterTransition = modalPopEnterTransition,
@@ -980,7 +967,7 @@ private fun TeacherApp(
                         )
                     }
                     composable(
-                        route = RecycleBinRoute,
+                        route = AppRoutes.RecycleBin,
                         enterTransition = modalEnterTransition,
                         exitTransition = modalExitTransition,
                         popEnterTransition = modalPopEnterTransition,
@@ -997,45 +984,54 @@ private fun TeacherApp(
                         )
                     }
                     composable(
-                        route = ReportsRoute,
+                        route = AppRoutes.Reports,
                         enterTransition = modalEnterTransition,
                         exitTransition = modalExitTransition,
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) {
+                        val syllabiViewModel: SyllabiViewModel = hiltViewModel()
+                        val syllabiState by syllabiViewModel.state.collectAsStateWithLifecycle()
+
                         ReportsScreen(
                             snapshot = snapshot,
                             todayKey = todayKey,
-                            syllabi = publishedSyllabi,
+                            syllabi = syllabiState.publishedSyllabi,
                         )
                     }
                     composable(
-                        route = FeedbackRoute,
+                        route = AppRoutes.Feedback,
                         enterTransition = modalEnterTransition,
                         exitTransition = modalExitTransition,
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) {
                         LaunchedEffect(Unit) {
-                            onMarkFeedbackRead()
+                            feedbackViewModel.markFeedbackRead()
                         }
                         FeedbackScreen(
-                            conversation = feedbackConversation,
-                            unavailableMessage = feedbackErrorMessage,
-                            sending = sendingFeedback,
-                            sent = feedbackSent,
-                            onSend = onSendFeedback,
-                            onSentConsumed = onConsumeFeedbackSent,
+                            conversation = feedbackState.conversation,
+                            unavailableMessage = feedbackState.unavailableMessage,
+                            sending = feedbackState.sending,
+                            sent = feedbackState.sent,
+                            onSend = { body ->
+                                feedbackViewModel.sendFeedback(
+                                    teacher = teacher,
+                                    profile = snapshot.profile,
+                                    body = body,
+                                )
+                            },
+                            onSentConsumed = feedbackViewModel::consumeSent,
                         )
                     }
                     composable(
-                        route = ClassEntryRoute,
+                        route = AppRoutes.ClassEntryPattern,
                         enterTransition = pushEnterTransition,
                         exitTransition = pushExitTransition,
                         popEnterTransition = pushPopEnterTransition,
                         popExitTransition = pushPopExitTransition,
                     ) { entry ->
-                        val classId = Uri.decode(entry.arguments?.getString("classId").orEmpty())
+                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
                         val teacherClass = classesById[classId]
                         if (teacherClass == null) {
                             FullScreenError(
@@ -1044,11 +1040,14 @@ private fun TeacherApp(
                                 onSignOut = onSignOut,
                             )
                         } else {
+                            val syllabiViewModel: SyllabiViewModel = hiltViewModel()
+                            val syllabiState by syllabiViewModel.state.collectAsStateWithLifecycle()
+
                             ClassEntryPagerRoute(
                                 initialClassId = classId,
                                 teacher = teacher,
                                 snapshot = snapshot,
-                                publishedSyllabi = publishedSyllabi,
+                                publishedSyllabi = syllabiState.publishedSyllabi,
                                 entriesByClass = entriesByClass,
                                 trashedEntriesByClass = trashedEntriesByClass,
                                 createEnabled = BuildConfig.NATIVE_ENTRY_CREATE_ENABLED,
@@ -1058,19 +1057,19 @@ private fun TeacherApp(
                                 todayKey = todayKey,
                                 onNavigateToClass = { targetClassId ->
                                     navController.navigate(
-                                        "class/${Uri.encode(targetClassId)}",
+                                        AppRoutes.classHistory(targetClassId),
                                     ) {
                                         launchSingleTop = true
                                     }
                                 },
                                 onEditEntry = { targetClassId, teacherEntry ->
                                     navController.navigate(
-                                        "entry/edit/${Uri.encode(targetClassId)}/${Uri.encode(teacherEntry.id)}",
+                                        AppRoutes.editEntry(targetClassId, teacherEntry.id),
                                     )
                                 },
                                 onDuplicateEntry = { targetClassId, teacherEntry ->
                                     navController.navigate(
-                                        "entry/duplicate/${Uri.encode(targetClassId)}/${Uri.encode(teacherEntry.id)}",
+                                        AppRoutes.duplicateEntry(targetClassId, teacherEntry.id),
                                     )
                                 },
                                 onDeleteEntry = onDeleteEntry,
@@ -1087,13 +1086,13 @@ private fun TeacherApp(
                         }
                     }
                     composable(
-                        route = ClassHistoryRoute,
+                        route = AppRoutes.ClassHistoryPattern,
                         enterTransition = pushEnterTransition,
                         exitTransition = pushExitTransition,
                         popEnterTransition = pushPopEnterTransition,
                         popExitTransition = pushPopExitTransition,
                     ) { entry ->
-                        val classId = Uri.decode(entry.arguments?.getString("classId").orEmpty())
+                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
                         val teacherClass = classesById[classId]
                         if (teacherClass == null) {
                             FullScreenError(
@@ -1112,9 +1111,9 @@ private fun TeacherApp(
                                 deleteEnabled = BuildConfig.NATIVE_ENTRY_DELETE_ENABLED,
                                 onNavigateToClass = { targetClassId ->
                                     navController.navigate(
-                                        "class/${Uri.encode(targetClassId)}",
+                                        AppRoutes.classHistory(targetClassId),
                                     ) {
-                                        popUpTo(ClassHistoryRoute) {
+                                        popUpTo(AppRoutes.ClassHistoryPattern) {
                                             inclusive = true
                                         }
                                         launchSingleTop = true
@@ -1122,19 +1121,17 @@ private fun TeacherApp(
                                 },
                                 onAddEntry = { targetClassId, dateKey ->
                                     navController.navigate(
-                                        "entry/new/${Uri.encode(targetClassId)}/${Uri.encode(dateKey)}",
+                                        AppRoutes.newEntry(targetClassId, dateKey),
                                     )
                                 },
                                 onEditEntry = { targetClassId, teacherEntry ->
                                     navController.navigate(
-                                        "entry/edit/${Uri.encode(targetClassId)}/" +
-                                            Uri.encode(teacherEntry.id),
+                                        AppRoutes.editEntry(targetClassId, teacherEntry.id),
                                     )
                                 },
                                 onDuplicateEntry = { targetClassId, teacherEntry ->
                                     navController.navigate(
-                                        "entry/duplicate/${Uri.encode(targetClassId)}/" +
-                                            Uri.encode(teacherEntry.id),
+                                        AppRoutes.duplicateEntry(targetClassId, teacherEntry.id),
                                     )
                                 },
                                 onDeleteEntry = onDeleteEntry,
@@ -1143,17 +1140,15 @@ private fun TeacherApp(
                         }
                     }
                     composable(
-                        route = NewEntryRoute,
+                        route = AppRoutes.NewEntryPattern,
                         enterTransition = modalEnterTransition,
                         exitTransition = modalExitTransition,
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) { entry ->
-                        val classId = Uri.decode(
-                            entry.arguments?.getString("classId").orEmpty(),
-                        )
-                        val dateKey = Uri.decode(
-                            entry.arguments?.getString("dateKey").orEmpty(),
+                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
+                        val dateKey = AppRoutes.decodeArgument(
+                            entry.arguments?.getString("dateKey"),
                         ).ifBlank { todayKey() }
                         val teacherClass = classesById[classId]
                         if (teacherClass == null) {
@@ -1174,18 +1169,14 @@ private fun TeacherApp(
                         }
                     }
                     composable(
-                        route = DuplicateEntryRoute,
+                        route = AppRoutes.DuplicateEntryPattern,
                         enterTransition = modalEnterTransition,
                         exitTransition = modalExitTransition,
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) { entry ->
-                        val classId = Uri.decode(
-                            entry.arguments?.getString("classId").orEmpty(),
-                        )
-                        val entryId = Uri.decode(
-                            entry.arguments?.getString("entryId").orEmpty(),
-                        )
+                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
+                        val entryId = AppRoutes.decodeArgument(entry.arguments?.getString("entryId"))
                         val teacherClass = classesById[classId]
                         val classEntries = entriesByClass[classId].orEmpty()
                         val sourceEntry = classEntries.firstOrNull { it.id == entryId }
@@ -1215,18 +1206,14 @@ private fun TeacherApp(
                         }
                     }
                     composable(
-                        route = EditEntryRoute,
+                        route = AppRoutes.EditEntryPattern,
                         enterTransition = modalEnterTransition,
                         exitTransition = modalExitTransition,
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) { entry ->
-                        val classId = Uri.decode(
-                            entry.arguments?.getString("classId").orEmpty(),
-                        )
-                        val entryId = Uri.decode(
-                            entry.arguments?.getString("entryId").orEmpty(),
-                        )
+                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
+                        val entryId = AppRoutes.decodeArgument(entry.arguments?.getString("entryId"))
                         val teacherClass = classesById[classId]
                         val classEntries = entriesByClass[classId].orEmpty()
                         val existingEntry = classEntries.firstOrNull { it.id == entryId }
@@ -1262,20 +1249,12 @@ private fun LedgrBottomBar(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = if (LedgrTheme.isDark) {
-            MaterialTheme.colorScheme.surface
-        } else {
-            Color.White
-        },
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = if (LedgrTheme.isDark) {
-                MaterialTheme.colorScheme.outlineVariant
-            } else {
-                Color(0xFFD9E2EC)
-            },
+            color = MaterialTheme.colorScheme.outlineVariant,
         ),
     ) {
         Row(
@@ -1518,7 +1497,7 @@ private fun ReminderDrumWheel(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(132.dp),
-            color = if (LedgrTheme.isDark) Color(0xFF151925) else Color.White,
+            color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(18.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         ) {
@@ -1533,7 +1512,7 @@ private fun ReminderDrumWheel(
                             if (LedgrTheme.isDark) {
                                 Color.White.copy(alpha = 0.08f)
                             } else {
-                                Color(0xFFF1F1F1)
+                                LedgrTheme.colors.surfaceAlt
                             },
                             RoundedCornerShape(9.dp),
                         ),
@@ -1603,7 +1582,6 @@ private fun LazyListState.centeredReminderItemIndex(itemCount: Int): Int {
 private fun HomeRoute(
     teacherUid: String,
     bootstrapSnapshot: TeacherSnapshot,
-    bootstrapPublishedSyllabi: List<com.classtracker.core.model.PublishedSyllabus>,
     onClassClick: (TeacherClass) -> Unit,
     onClassHistoryClick: (TeacherClass) -> Unit,
     onClassSyllabusClick: (TeacherClass) -> Unit,
@@ -1615,13 +1593,7 @@ private fun HomeRoute(
     val homeState by homeViewModel.state.collectAsStateWithLifecycle()
     val effectiveTeacherUid = homeState.teacherUid.ifBlank { teacherUid }
     val snapshot = homeState.snapshot ?: bootstrapSnapshot
-    val publishedSyllabi = if (
-        homeState.teacherUid == teacherUid && homeState.syllabiLoaded
-    ) {
-        homeState.publishedSyllabi
-    } else {
-        bootstrapPublishedSyllabi
-    }
+    val publishedSyllabi = homeState.publishedSyllabi
     val todayKey = todayKey()
     val dashboard = remember(snapshot, todayKey) { snapshot.dashboard(todayKey) }
 
@@ -2089,8 +2061,12 @@ private fun MissingClassScreen(
 private fun FullScreenLoading(
     modifier: Modifier = Modifier,
 ) {
-    val loadingBackground = Color(0xFFDCE6F2)
-    val loadingInk = Color(0xFF1A2A52)
+    val loadingBackground = LedgrTheme.colors.canvas
+    val loadingInk = if (LedgrTheme.isDark) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        LedgrTheme.colors.heroPanelSurface
+    }
     val infiniteTransition = rememberInfiniteTransition(label = "ledgr-loading")
     val wheelRotation by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -2127,18 +2103,22 @@ private fun FullScreenLoading(
     LaunchedEffect(Unit) {
         appeared = true
     }
-    DisposableEffect(view, restoreDarkBars) {
+    DisposableEffect(view, restoreDarkBars, loadingBackground) {
         val activity = view.context as? ComponentActivity
+        val loadingStyle = if (restoreDarkBars) {
+            SystemBarStyle.dark(loadingBackground.toArgb())
+        } else {
+            SystemBarStyle.light(loadingBackground.toArgb(), loadingBackground.toArgb())
+        }
         activity?.enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(loadingBackground.toArgb(), loadingBackground.toArgb()),
-            navigationBarStyle = SystemBarStyle.light(loadingBackground.toArgb(), loadingBackground.toArgb()),
+            statusBarStyle = loadingStyle,
+            navigationBarStyle = loadingStyle,
         )
         onDispose {
-            val restored = if (restoreDarkBars) Color(0xFF08111B) else Color(0xFFEAF4FF)
             val restoredStyle = if (restoreDarkBars) {
-                SystemBarStyle.dark(restored.toArgb())
+                SystemBarStyle.dark(loadingBackground.toArgb())
             } else {
-                SystemBarStyle.light(restored.toArgb(), restored.toArgb())
+                SystemBarStyle.light(loadingBackground.toArgb(), loadingBackground.toArgb())
             }
             activity?.enableEdgeToEdge(
                 statusBarStyle = restoredStyle,

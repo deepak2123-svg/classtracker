@@ -765,12 +765,18 @@ private fun BorderedDropdownOption(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val interactionSource = remember(text, selected) { MutableInteractionSource() }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
             .heightIn(min = 48.dp)
-            .clickable(onClick = onClick),
+            .ledgrPressScale(interactionSource = interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
         color = if (selected) {
             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.36f)
         } else {
@@ -822,10 +828,16 @@ private fun String.normalizedLabel(): String =
 private fun AddClassCard(
     onClick: () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .ledgrPressScale(interactionSource = interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
         color = homePanelSurfaceColor(),
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, homePanelBorderColor()),
@@ -1055,6 +1067,7 @@ private fun InstituteOption(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember(label, selected) { MutableInteractionSource() }
     val allClasses = label == AllInstitutes
     val tone = ledgrSectionTone(toneSeed)
     val background = if (allClasses) {
@@ -1090,7 +1103,12 @@ private fun InstituteOption(
     Surface(
         modifier = modifier
             .height(42.dp)
-            .clickable(onClick = onClick),
+            .ledgrPressScale(interactionSource = interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
         color = background,
         contentColor = textColor,
         shape = RoundedCornerShape(15.dp),
@@ -1404,14 +1422,22 @@ private fun HomeClassCard(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             DragHandleAffordance(modifier = reorderHandleModifier)
+                            val indicatorInteractionSource = remember(teacherClass.id, loggedToday) {
+                                MutableInteractionSource()
+                            }
                             LoggedClassIndicator(
                                 loggedToday = loggedToday,
-                                modifier = Modifier.clickable {
-                                    haptics.selection()
-                                    revealState = HomeClassRevealState.Center
-                                    dragDeltaPx = 0f
-                                    onSyllabusClick()
-                                },
+                                modifier = Modifier
+                                    .ledgrPressScale(interactionSource = indicatorInteractionSource)
+                                    .clickable(
+                                        interactionSource = indicatorInteractionSource,
+                                        indication = null,
+                                    ) {
+                                        haptics.selection()
+                                        revealState = HomeClassRevealState.Center
+                                        dragDeltaPx = 0f
+                                        onSyllabusClick()
+                                    },
                             )
                         }
                     }
@@ -1431,11 +1457,21 @@ private fun HomeClassActionPanel(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember(title, visible) { MutableInteractionSource() }
     Surface(
         modifier = modifier
             .width(96.dp)
             .fillMaxHeight()
-            .clickable(enabled = visible, onClick = onClick),
+            .ledgrPressScale(
+                interactionSource = interactionSource,
+                enabled = visible,
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = visible,
+                onClick = onClick,
+            ),
         color = homeHeroPanelSurfaceColor(),
         contentColor = homeHeroTextColor(),
         shape = RoundedCornerShape(18.dp),

@@ -7,25 +7,17 @@ import com.classtracker.core.firebase.TeacherAuthRepository
 import com.classtracker.core.firebase.TeacherDataMissingException
 import com.classtracker.core.firebase.TeacherDataRepository
 import com.classtracker.core.firebase.TeacherEntryConflictException
-import com.classtracker.core.firebase.TeacherFeedbackRepository
 import com.classtracker.core.firebase.TeacherRevisionConflictException
-import com.classtracker.core.firebase.TeacherSyllabusRepository
 import com.classtracker.core.model.AuthenticatedTeacher
-import com.classtracker.core.model.PublishedSyllabus
 import com.classtracker.core.model.TeacherClass
 import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherClassValidation
 import com.classtracker.core.model.TeacherEntry
-import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherEntrySyncState
-import com.classtracker.core.model.TeacherEntryValidation
-import com.classtracker.core.model.TeacherFeedbackConversation
 import com.classtracker.core.model.TeacherSnapshot
-import com.classtracker.core.model.TeacherSyncSummary
 import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.toTrashedEntry
 import com.classtracker.core.model.validateTeacherClassDraft
-import com.classtracker.core.model.validateTeacherEntryDraft
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
@@ -36,7 +28,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -48,23 +39,13 @@ data class MainUiState(
     val loadingData: Boolean = false,
     val authenticating: Boolean = false,
     val refreshing: Boolean = false,
-    val savingEntry: Boolean = false,
     val savingClass: Boolean = false,
     val deletingClassId: String? = null,
     val deletingAllTrashedEntries: Boolean = false,
     val deletingTrashedEntryId: String? = null,
     val deletingAccount: Boolean = false,
     val mutatingEntry: Boolean = false,
-    val entrySaved: Boolean = false,
     val classSaved: Boolean = false,
-    val syncSummary: TeacherSyncSummary = TeacherSyncSummary.Idle,
-    val feedbackConversation: TeacherFeedbackConversation = TeacherFeedbackConversation(),
-    val feedbackErrorMessage: String? = null,
-    val sendingFeedback: Boolean = false,
-    val feedbackSent: Boolean = false,
-    val publishedSyllabi: List<PublishedSyllabus> = emptyList(),
-    val loadingSyllabi: Boolean = false,
-    val syllabusErrorMessage: String? = null,
     val errorMessage: String? = null,
 )
 
@@ -72,16 +53,12 @@ data class MainUiState(
 class MainViewModel @Inject constructor(
     private val authRepository: TeacherAuthRepository,
     private val dataRepository: TeacherDataRepository,
-    private val feedbackRepository: TeacherFeedbackRepository,
-    private val syllabusRepository: TeacherSyllabusRepository,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(MainUiState())
     val state: StateFlow<MainUiState> = mutableState.asStateFlow()
 
     private var loadJob: Job? = null
     private var snapshotJob: Job? = null
-    private var syncSummaryJob: Job? = null
-    private var feedbackJob: Job? = null
     private var loadedUid: String? = null
     private var availableSectionsByInstitute: Map<String, List<String>> = emptyMap()
 
@@ -97,8 +74,6 @@ class MainViewModel @Inject constructor(
                         availableSectionsByInstitute = emptyMap()
                         loadJob?.cancel()
                         snapshotJob?.cancel()
-                        syncSummaryJob?.cancel()
-                        feedbackJob?.cancel()
                         mutableState.value = MainUiState(checkingSession = false)
                     }
                     is AuthSession.SignedIn -> {
@@ -113,8 +88,6 @@ class MainViewModel @Inject constructor(
                         if (loadedUid != session.teacher.uid) {
                             loadedUid = session.teacher.uid
                             observeLocalData(session.teacher.uid)
-                            observeFeedback(session.teacher.uid)
-                            loadPublishedSyllabi(session.teacher.uid)
                             loadTeacherData(session.teacher, refresh = false)
                         }
                     }
@@ -141,185 +114,12 @@ class MainViewModel @Inject constructor(
 
     fun refresh() {
         val teacher = mutableState.value.teacher ?: return
-        loadPublishedSyllabi(teacher.uid)
         loadTeacherData(teacher, refresh = true)
-    }
-
-    private fun loadPublishedSyllabi(uid: String) {
-        viewModelScope.launch {
-            mutableState.update {
-                it.copy(loadingSyllabi = true, syllabusErrorMessage = null)
-            }
-            runCatching { syllabusRepository.loadPublishedSyllabi(uid) }
-                .onSuccess { syllabi ->
-                    mutableState.update {
-                        it.copy(
-                            publishedSyllabi = syllabi,
-                            loadingSyllabi = false,
-                            syllabusErrorMessage = null,
-                        )
-                    }
-                }
-                .onFailure { error ->
-                    mutableState.update {
-                        it.copy(
-                            loadingSyllabi = false,
-                            syllabusErrorMessage = error.toFriendlyMessage(),
-                        )
-                    }
-                }
-        }
     }
 
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
-        }
-    }
-
-    fun retrySync() {
-        val uid = mutableState.value.teacher?.uid ?: return
-        viewModelScope.launch {
-            dataRepository.retryFailed(uid)
-        }
-    }
-
-    fun sendFeedback(body: String) {
-        val current = mutableState.value
-        val teacher = current.teacher ?: return
-        val profile = current.snapshot?.profile ?: return
-        if (current.sendingFeedback) return
-
-        viewModelScope.launch {
-            mutableState.update {
-                it.copy(
-                    sendingFeedback = true,
-                    feedbackSent = false,
-                    errorMessage = null,
-                )
-            }
-            runCatching {
-                feedbackRepository.sendMessage(
-                    teacher = teacher,
-                    profile = profile,
-                    body = body,
-                )
-            }.onSuccess {
-                mutableState.update {
-                    it.copy(
-                        sendingFeedback = false,
-                        feedbackSent = true,
-                    )
-                }
-            }.onFailure { error ->
-                mutableState.update {
-                    it.copy(
-                        sendingFeedback = false,
-                        errorMessage = error.toFriendlyMessage(),
-                    )
-                }
-            }
-        }
-    }
-
-    fun markFeedbackRead() {
-        val uid = mutableState.value.teacher?.uid ?: return
-        if (mutableState.value.feedbackConversation.unreadByTeacher == 0) return
-        viewModelScope.launch {
-            runCatching { feedbackRepository.markTeacherRead(uid) }
-        }
-    }
-
-    fun consumeFeedbackSent() {
-        mutableState.update { it.copy(feedbackSent = false) }
-    }
-
-    fun saveEntry(draft: TeacherEntryDraft) {
-        val current = mutableState.value
-        val teacher = current.teacher ?: return
-        val snapshot = current.snapshot ?: return
-        if (current.savingEntry) return
-
-        when (
-            val validation = validateTeacherEntryDraft(
-                draft = draft,
-                existingEntries = snapshot.entriesForClass(draft.classId),
-            )
-        ) {
-            TeacherEntryValidation.Valid -> Unit
-            is TeacherEntryValidation.Overlap -> Unit // UI soft-warned; allow save
-            is TeacherEntryValidation.Invalid -> {
-                mutableState.update { it.copy(errorMessage = validation.message) }
-                return
-            }
-        }
-
-        viewModelScope.launch {
-            mutableState.update {
-                it.copy(
-                    savingEntry = true,
-                    entrySaved = false,
-                    errorMessage = null,
-                )
-            }
-            runCatching {
-                dataRepository.saveEntry(
-                    teacher = teacher,
-                    expectedRevision = snapshot.revision,
-                    draft = draft,
-                )
-            }.onSuccess { updatedSnapshot ->
-                val mergedSnapshot = updatedSnapshot.withAvailableSections()
-                mutableState.update {
-                    it.copy(
-                        snapshot = mergedSnapshot,
-                        savingEntry = false,
-                        entrySaved = true,
-                        errorMessage = null,
-                    )
-                }
-            }.onFailure { error ->
-                if (error is TeacherRevisionConflictException) {
-                    runCatching { dataRepository.loadTeacherSnapshot(teacher) }
-                        .onSuccess { latestSnapshot ->
-                            val mergedSnapshot = latestSnapshot.withAvailableSections()
-                            val alreadySaved = latestSnapshot.entries.any { entry ->
-                                entry.id == draft.resolvedIdOrNull() &&
-                                    entry.classId == draft.classId &&
-                                    entry.dateKey == draft.dateKey &&
-                                    entry.title == draft.title.trim() &&
-                                    entry.timeStart.orEmpty() == draft.timeStart.trim()
-                            }
-                            mutableState.update {
-                                it.copy(
-                                    snapshot = mergedSnapshot,
-                                    savingEntry = false,
-                                    entrySaved = alreadySaved,
-                                    errorMessage = if (alreadySaved) {
-                                        null
-                                    } else {
-                                        "Newer web changes were loaded. Review and save again."
-                                    },
-                                )
-                            }
-                        }
-                        .onFailure { refreshError ->
-                            mutableState.update {
-                                it.copy(
-                                    savingEntry = false,
-                                    errorMessage = refreshError.toFriendlyMessage(),
-                                )
-                            }
-                        }
-                } else {
-                    mutableState.update {
-                        it.copy(
-                            savingEntry = false,
-                            errorMessage = error.toFriendlyMessage(),
-                        )
-                    }
-                }
-            }
         }
     }
 
@@ -456,10 +256,6 @@ class MainViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    fun consumeEntrySaved() {
-        mutableState.update { it.copy(entrySaved = false) }
     }
 
     fun consumeClassSaved() {
@@ -807,36 +603,6 @@ class MainViewModel @Inject constructor(
                 }
             }
         }
-
-        syncSummaryJob?.cancel()
-        syncSummaryJob = viewModelScope.launch {
-            dataRepository.observeSyncSummary(uid).collectLatest { summary ->
-                mutableState.update { it.copy(syncSummary = summary) }
-            }
-        }
-    }
-
-    private fun observeFeedback(uid: String) {
-        feedbackJob?.cancel()
-        feedbackJob = viewModelScope.launch {
-            feedbackRepository.observeConversation(uid)
-                .catch {
-                    mutableState.update {
-                        it.copy(
-                            feedbackConversation = TeacherFeedbackConversation(),
-                            feedbackErrorMessage = "Feedback is temporarily unavailable.",
-                        )
-                    }
-                }
-                .collectLatest { conversation ->
-                    mutableState.update {
-                        it.copy(
-                            feedbackConversation = conversation,
-                            feedbackErrorMessage = null,
-                        )
-                    }
-                }
-        }
     }
 
     private fun TeacherSnapshot.withAvailableSections(): TeacherSnapshot {
@@ -852,9 +618,6 @@ class MainViewModel @Inject constructor(
         }
     }
 }
-
-private fun TeacherEntryDraft.resolvedIdOrNull(): String? =
-    entryId ?: mutationId.takeIf(String::isNotBlank)
 
 private fun Throwable.toFriendlyMessage(): String = when (this) {
     is TeacherDataMissingException -> message.orEmpty()
