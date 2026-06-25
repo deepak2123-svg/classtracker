@@ -252,7 +252,7 @@ private fun appHomeCanvasColor() =
 
 @Composable
 private fun appHomeInkColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else LedgrTheme.colors.heroPanelSurface
+    LedgrTheme.colors.appHomeInk
 
 @Composable
 private fun appTopButtonSurfaceColor() =
@@ -260,7 +260,7 @@ private fun appTopButtonSurfaceColor() =
 
 @Composable
 private fun appTopButtonBorderColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant else LedgrTheme.colors.borderSoft
+    LedgrTheme.colors.appTopButtonBorder
 
 private data class DraftResolution(
     val draft: TeacherEntryDraft,
@@ -638,16 +638,8 @@ private fun TeacherApp(
                         ) {
                             Surface(
                                 modifier = Modifier.size(44.dp),
-                                color = if (LedgrTheme.isDark) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    LedgrTheme.colors.heroPanelSurface
-                                },
-                                contentColor = if (LedgrTheme.isDark) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    Color.White
-                                },
+                                color = LedgrTheme.colors.appBrandMarkSurface,
+                                contentColor = LedgrTheme.colors.appBrandMarkContent,
                                 shape = RoundedCornerShape(13.dp),
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -2062,11 +2054,7 @@ private fun FullScreenLoading(
     modifier: Modifier = Modifier,
 ) {
     val loadingBackground = LedgrTheme.colors.canvas
-    val loadingInk = if (LedgrTheme.isDark) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        LedgrTheme.colors.heroPanelSurface
-    }
+    val loadingInk = LedgrTheme.colors.loadingInk
     val infiniteTransition = rememberInfiniteTransition(label = "ledgr-loading")
     val wheelRotation by infiniteTransition.animateFloat(
         initialValue = 0f,

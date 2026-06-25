@@ -138,7 +138,7 @@ private fun homeHeroPanelBorderColor() =
 
 @Composable
 private fun homeHeroTextColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurface else Color.White
+    colors.heroText
 
 @Composable
 private fun homeHeroMutedColor() =
@@ -150,8 +150,7 @@ private fun homeStrongTextColor() =
 
 @Composable
 private fun homeClassBorderColor() =
-    if (LedgrTheme.isDark) MaterialTheme.colorScheme.outlineVariant
-    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f)
+    colors.classCardBorder
 
 @Composable
 private fun homeLoggedIndicatorColor() =
@@ -159,8 +158,7 @@ private fun homeLoggedIndicatorColor() =
 
 @Composable
 private fun homeDragHandleColor() =
-    if (LedgrTheme.isDark) colors.textMuted.copy(alpha = 0.78f)
-    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f)
+    colors.dragHandle
 
 @Composable
 fun HomeScreen(
@@ -970,7 +968,7 @@ private fun SummaryPill(
         contentColor = if (warning) {
             colors.warningText
         } else {
-            if (LedgrTheme.isDark) MaterialTheme.colorScheme.onSurfaceVariant else colors.textSecondary
+            colors.chipText
         },
     ) {
         Row(
@@ -1554,11 +1552,7 @@ private fun LoggedClassIndicator(
     modifier: Modifier = Modifier,
 ) {
     val active = homeLoggedIndicatorColor()
-    val inactive = if (LedgrTheme.isDark) {
-        MaterialTheme.colorScheme.outlineVariant
-    } else {
-        colors.indicatorInactive
-    }
+    val inactive = colors.loggedIndicatorInactive
 
     Box(
         modifier = modifier.size(28.dp),
@@ -1589,11 +1583,7 @@ private fun MiniHomePill(
 ) {
     Surface(
         modifier = modifier.height(if (prominent) 23.dp else 20.dp),
-        color = if (LedgrTheme.isDark) {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
-        } else {
-            Color.White.copy(alpha = if (prominent) 0.82f else 0.62f)
-        },
+        color = if (prominent) colors.miniPillProminentSurface else colors.miniPillSurface,
         contentColor = homeStrongTextColor(),
         shape = RoundedCornerShape(999.dp),
     ) {
