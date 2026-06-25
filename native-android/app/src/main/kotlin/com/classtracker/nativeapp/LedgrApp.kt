@@ -99,11 +99,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.classtracker.core.designsystem.LedgrEmptyState
 import com.classtracker.core.designsystem.LedgrOfflineBanner
 import com.classtracker.core.designsystem.LedgrTheme
@@ -1023,7 +1023,7 @@ private fun TeacherApp(
                         popEnterTransition = pushPopEnterTransition,
                         popExitTransition = pushPopExitTransition,
                     ) { entry ->
-                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
+                        val classId = AppRoutes.classId(entry)
                         val teacherClass = classesById[classId]
                         if (teacherClass == null) {
                             FullScreenError(
@@ -1084,7 +1084,7 @@ private fun TeacherApp(
                         popEnterTransition = pushPopEnterTransition,
                         popExitTransition = pushPopExitTransition,
                     ) { entry ->
-                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
+                        val classId = AppRoutes.classId(entry)
                         val teacherClass = classesById[classId]
                         if (teacherClass == null) {
                             FullScreenError(
@@ -1138,10 +1138,8 @@ private fun TeacherApp(
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) { entry ->
-                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
-                        val dateKey = AppRoutes.decodeArgument(
-                            entry.arguments?.getString("dateKey"),
-                        ).ifBlank { todayKey() }
+                        val classId = AppRoutes.classId(entry)
+                        val dateKey = AppRoutes.dateKey(entry).ifBlank { todayKey() }
                         val teacherClass = classesById[classId]
                         if (teacherClass == null) {
                             MissingClassScreen(
@@ -1167,8 +1165,8 @@ private fun TeacherApp(
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) { entry ->
-                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
-                        val entryId = AppRoutes.decodeArgument(entry.arguments?.getString("entryId"))
+                        val classId = AppRoutes.classId(entry)
+                        val entryId = AppRoutes.entryId(entry)
                         val teacherClass = classesById[classId]
                         val classEntries = entriesByClass[classId].orEmpty()
                         val sourceEntry = classEntries.firstOrNull { it.id == entryId }
@@ -1204,8 +1202,8 @@ private fun TeacherApp(
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) { entry ->
-                        val classId = AppRoutes.decodeArgument(entry.arguments?.getString("classId"))
-                        val entryId = AppRoutes.decodeArgument(entry.arguments?.getString("entryId"))
+                        val classId = AppRoutes.classId(entry)
+                        val entryId = AppRoutes.entryId(entry)
                         val teacherClass = classesById[classId]
                         val classEntries = entriesByClass[classId].orEmpty()
                         val existingEntry = classEntries.firstOrNull { it.id == entryId }
