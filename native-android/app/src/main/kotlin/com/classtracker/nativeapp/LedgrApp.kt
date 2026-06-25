@@ -99,6 +99,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavHostController
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -171,6 +172,84 @@ private val ModalMotionRoutes = setOf(
 private fun String?.usesPushMotion() = this in PushMotionRoutes
 
 private fun String?.usesModalMotion() = this in ModalMotionRoutes
+
+private fun NavHostController.navigateToTopLevel(destination: AppDestination) {
+    navigate(destination.route) {
+        popUpTo(graph.startDestinationId) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
+private fun NavHostController.navigateToSyllabus() {
+    navigate(AppDestination.Syllabus.route)
+}
+
+private fun NavHostController.navigateHomeAfterMutation() {
+    navigate(AppDestination.Home.route) {
+        popUpTo(graph.startDestinationId) {
+            inclusive = false
+        }
+        launchSingleTop = true
+    }
+}
+
+private fun NavHostController.navigateToClassEntry(classId: String) {
+    navigate(AppRoutes.classEntry(classId))
+}
+
+private fun NavHostController.navigateToClassHistory(classId: String) {
+    navigate(AppRoutes.classHistory(classId))
+}
+
+private fun NavHostController.replaceClassHistory(classId: String) {
+    navigate(AppRoutes.classHistory(classId)) {
+        popUpTo(AppRoutes.ClassHistoryPattern) {
+            inclusive = true
+        }
+        launchSingleTop = true
+    }
+}
+
+private fun NavHostController.navigateToClassHistorySingleTop(classId: String) {
+    navigate(AppRoutes.classHistory(classId)) {
+        launchSingleTop = true
+    }
+}
+
+private fun NavHostController.navigateToNewEntry(classId: String, dateKey: String) {
+    navigate(AppRoutes.newEntry(classId, dateKey))
+}
+
+private fun NavHostController.navigateToEditEntry(classId: String, entryId: String) {
+    navigate(AppRoutes.editEntry(classId, entryId))
+}
+
+private fun NavHostController.navigateToDuplicateEntry(classId: String, entryId: String) {
+    navigate(AppRoutes.duplicateEntry(classId, entryId))
+}
+
+private fun NavHostController.navigateToAddClass() {
+    navigate(AppRoutes.AddClass)
+}
+
+private fun NavHostController.navigateToManageClasses() {
+    navigate(AppRoutes.ManageClasses)
+}
+
+private fun NavHostController.navigateToReports() {
+    navigate(AppRoutes.Reports)
+}
+
+private fun NavHostController.navigateToRecycleBin() {
+    navigate(AppRoutes.RecycleBin)
+}
+
+private fun NavHostController.navigateToFeedback() {
+    navigate(AppRoutes.Feedback)
+}
 
 private data class LedgrShellState(
     val checkingSession: Boolean,
@@ -514,13 +593,7 @@ private fun TeacherApp(
     LaunchedEffect(classSaved) {
         if (classSaved) {
             onConsumeClassSaved()
-            navController.navigate(AppDestination.Home.route) {
-                popUpTo(navController.graph.startDestinationId) {
-                    inclusive = false
-                    saveState = false
-                }
-                launchSingleTop = true
-            }
+            navController.navigateHomeAfterMutation()
             snackbarHostState.showSnackbar(
                 message = "✓ Class added successfully",
                 duration = androidx.compose.material3.SnackbarDuration.Short,
@@ -753,13 +826,7 @@ private fun TeacherApp(
                     currentDestination = currentDestination,
                     onNavigate = { destination ->
                         haptics.selection()
-                        navController.navigate(destination.route) {
-                            popUpTo(navController.graph.startDestinationId) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navController.navigateToTopLevel(destination)
                     },
                 )
             }
@@ -793,17 +860,17 @@ private fun TeacherApp(
                             teacherUid = teacher.uid,
                             bootstrapSnapshot = snapshot,
                             onClassClick = { teacherClass ->
-                                navController.navigate(AppRoutes.classEntry(teacherClass.id))
+                                navController.navigateToClassEntry(teacherClass.id)
                             },
                             onClassHistoryClick = { teacherClass ->
-                                navController.navigate(AppRoutes.classHistory(teacherClass.id))
+                                navController.navigateToClassHistory(teacherClass.id)
                             },
                             onClassSyllabusClick = { _ ->
-                                navController.navigate(AppDestination.Syllabus.route)
+                                navController.navigateToSyllabus()
                             },
                             classCreateEnabled = BuildConfig.NATIVE_CLASS_CREATE_ENABLED,
                             onAddClassClick = {
-                                navController.navigate(AppRoutes.AddClass)
+                                navController.navigateToAddClass()
                             },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -833,12 +900,7 @@ private fun TeacherApp(
                                         duration = androidx.compose.material3.SnackbarDuration.Short,
                                     )
                                 }
-                                navController.navigate(AppDestination.Home.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        inclusive = false
-                                    }
-                                    launchSingleTop = true
-                                }
+                                navController.navigateHomeAfterMutation()
                             },
                         )
                     }
@@ -847,7 +909,7 @@ private fun TeacherApp(
                             classes = snapshot.classes,
                             entries = snapshot.entries,
                             onClassClick = { teacherClass ->
-                                navController.navigate(AppRoutes.classEntry(teacherClass.id))
+                                navController.navigateToClassEntry(teacherClass.id)
                             },
                         )
                     }
@@ -885,7 +947,7 @@ private fun TeacherApp(
                             loading = syllabiState.loading,
                             errorMessage = syllabiState.errorMessage,
                             onClassClick = { teacherClass ->
-                                navController.navigate(AppRoutes.classEntry(teacherClass.id))
+                                navController.navigateToClassEntry(teacherClass.id)
                             },
                             onSaveProgress = { teacherClass, syllabus, unitIds ->
                                 syllabusEntryFlowViewModel.saveEntry(
@@ -926,22 +988,16 @@ private fun TeacherApp(
                             themeMode = themeMode,
                             onThemeModeChange = onThemeModeChange,
                             onOpenStats = {
-                                navController.navigate(AppDestination.Stats.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
+                                navController.navigateToTopLevel(AppDestination.Stats)
                             },
                             onOpenManageClasses = {
-                                navController.navigate(AppRoutes.ManageClasses)
+                                navController.navigateToManageClasses()
                             },
                             onOpenReports = {
-                                navController.navigate(AppRoutes.Reports)
+                                navController.navigateToReports()
                             },
                             onOpenRecycleBin = {
-                                navController.navigate(AppRoutes.RecycleBin)
+                                navController.navigateToRecycleBin()
                             },
                             reminderEnabled = reminderPreferences.enabled,
                             reminderTimeLabel = reminderPreferences.timeLabel,
@@ -951,7 +1007,7 @@ private fun TeacherApp(
                             feedbackUnreadCount = feedbackState.conversation.unreadByTeacher,
                             onOpenFeedback = {
                                 feedbackViewModel.markFeedbackRead()
-                                navController.navigate(AppRoutes.Feedback)
+                                navController.navigateToFeedback()
                             },
                             onSignOut = onSignOut,
                             deletingAccount = deletingAccount,
@@ -977,12 +1033,7 @@ private fun TeacherApp(
                             deleteEnabled = BuildConfig.NATIVE_CLASS_DELETE_ENABLED,
                             onDeleteClass = { teacherClass ->
                                 onDeleteClass(teacherClass)
-                                navController.navigate(AppDestination.Home.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        inclusive = false
-                                    }
-                                    launchSingleTop = true
-                                }
+                                navController.navigateHomeAfterMutation()
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         message = "Moving class to recycle bin...",
@@ -1096,31 +1147,18 @@ private fun TeacherApp(
                                 draftStore = draftStore,
                                 todayKey = todayKey,
                                 onNavigateToClass = { targetClassId ->
-                                    navController.navigate(
-                                        AppRoutes.classHistory(targetClassId),
-                                    ) {
-                                        launchSingleTop = true
-                                    }
+                                    navController.navigateToClassHistorySingleTop(targetClassId)
                                 },
                                 onEditEntry = { targetClassId, teacherEntry ->
-                                    navController.navigate(
-                                        AppRoutes.editEntry(targetClassId, teacherEntry.id),
-                                    )
+                                    navController.navigateToEditEntry(targetClassId, teacherEntry.id)
                                 },
                                 onDuplicateEntry = { targetClassId, teacherEntry ->
-                                    navController.navigate(
-                                        AppRoutes.duplicateEntry(targetClassId, teacherEntry.id),
-                                    )
+                                    navController.navigateToDuplicateEntry(targetClassId, teacherEntry.id)
                                 },
                                 onDeleteEntry = onDeleteEntry,
                                 onRestoreEntry = onRestoreEntry,
                                 onSaved = {
-                                    navController.navigate(AppDestination.Home.route) {
-                                        popUpTo(navController.graph.startDestinationId) {
-                                            inclusive = false
-                                        }
-                                        launchSingleTop = true
-                                    }
+                                    navController.navigateHomeAfterMutation()
                                 },
                             )
                         }
@@ -1150,29 +1188,16 @@ private fun TeacherApp(
                                 editEnabled = BuildConfig.NATIVE_ENTRY_EDIT_ENABLED,
                                 deleteEnabled = BuildConfig.NATIVE_ENTRY_DELETE_ENABLED,
                                 onNavigateToClass = { targetClassId ->
-                                    navController.navigate(
-                                        AppRoutes.classHistory(targetClassId),
-                                    ) {
-                                        popUpTo(AppRoutes.ClassHistoryPattern) {
-                                            inclusive = true
-                                        }
-                                        launchSingleTop = true
-                                    }
+                                    navController.replaceClassHistory(targetClassId)
                                 },
                                 onAddEntry = { targetClassId, dateKey ->
-                                    navController.navigate(
-                                        AppRoutes.newEntry(targetClassId, dateKey),
-                                    )
+                                    navController.navigateToNewEntry(targetClassId, dateKey)
                                 },
                                 onEditEntry = { targetClassId, teacherEntry ->
-                                    navController.navigate(
-                                        AppRoutes.editEntry(targetClassId, teacherEntry.id),
-                                    )
+                                    navController.navigateToEditEntry(targetClassId, teacherEntry.id)
                                 },
                                 onDuplicateEntry = { targetClassId, teacherEntry ->
-                                    navController.navigate(
-                                        AppRoutes.duplicateEntry(targetClassId, teacherEntry.id),
-                                    )
+                                    navController.navigateToDuplicateEntry(targetClassId, teacherEntry.id)
                                 },
                                 onDeleteEntry = onDeleteEntry,
                                 onRestoreEntry = onRestoreEntry,
