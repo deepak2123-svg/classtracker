@@ -838,11 +838,11 @@ private fun AddClassCard(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 10.dp,
+                elevation = 16.dp,
                 shape = cardShape,
                 clip = false,
-                ambientColor = shadowColor.copy(alpha = 0.08f),
-                spotColor = shadowColor.copy(alpha = 0.12f),
+                ambientColor = shadowColor.copy(alpha = 0.1f),
+                spotColor = shadowColor.copy(alpha = 0.15f),
             )
             .ledgrPressScale(interactionSource = interactionSource)
             .clickable(
@@ -852,11 +852,11 @@ private fun AddClassCard(
             ),
         color = homePanelSurfaceColor(),
         shape = cardShape,
-        border = BorderStroke(0.75.dp, homeClassBorderColor()),
+        border = BorderStroke(0.5.dp, homeClassBorderColor()),
         shadowElevation = 0.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 17.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -880,7 +880,7 @@ private fun AddClassCard(
                 Text(
                     text = "Create new class",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = "Add a class.",
@@ -1296,22 +1296,22 @@ private fun HomeClassCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(84.dp)
+            .height(88.dp)
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
                 .shadow(
-                    elevation = if (isDragging) 14.dp else 10.dp,
+                    elevation = if (isDragging) 20.dp else 16.dp,
                     shape = cardShape,
                     clip = false,
-                    ambientColor = shadowColor.copy(alpha = 0.08f),
-                    spotColor = shadowColor.copy(alpha = 0.13f),
+                    ambientColor = shadowColor.copy(alpha = 0.1f),
+                    spotColor = shadowColor.copy(alpha = 0.16f),
                 ),
             color = tone.surface,
             contentColor = tone.text,
             shape = cardShape,
-            border = BorderStroke(0.75.dp, homeClassBorderColor()),
+            border = BorderStroke(0.5.dp, homeClassBorderColor()),
             shadowElevation = 0.dp,
         ) {
             Box(
@@ -1392,8 +1392,8 @@ private fun HomeClassCard(
                     shape = cardShape,
                 ) {
                     Row(
-                        modifier = Modifier.padding(start = 18.dp, top = 13.dp, end = 16.dp, bottom = 13.dp),
-                        horizontalArrangement = Arrangement.spacedBy(13.dp),
+                        modifier = Modifier.padding(start = 20.dp, top = 15.dp, end = 18.dp, bottom = 15.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
@@ -1410,15 +1410,15 @@ private fun HomeClassCard(
                                     text = teacherClass.sectionName,
                                     style = MaterialTheme.typography.titleLarge.copy(
                                         fontSize = 19.sp,
-                                        lineHeight = 21.sp,
-                                        fontWeight = FontWeight.ExtraBold,
+                                        lineHeight = 22.sp,
+                                        fontWeight = FontWeight.Bold,
                                         color = homeStrongTextColor(),
                                     ),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     MiniHomePill(
@@ -1437,7 +1437,7 @@ private fun HomeClassCard(
                             }
                         }
                         Row(
-                            modifier = Modifier.width(70.dp),
+                            modifier = Modifier.width(72.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -1604,13 +1604,13 @@ private fun MiniHomePill(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.height(if (prominent) 22.dp else 20.dp),
+        modifier = modifier.height(if (prominent) 21.dp else 20.dp),
         color = if (prominent) colors.miniPillProminentSurface else colors.miniPillSurface,
         contentColor = colors.textSecondary,
         shape = RoundedCornerShape(999.dp),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = if (prominent) 12.dp else 10.dp),
+            modifier = Modifier.padding(horizontal = if (prominent) 11.dp else 10.dp),
             horizontalArrangement = Arrangement.spacedBy(if (prominent) 6.dp else 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1626,8 +1626,8 @@ private fun MiniHomePill(
                 style = MaterialTheme.typography.labelMedium.copy(
                     fontSize = if (prominent) 10.sp else 9.sp,
                     lineHeight = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.textSecondary,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textMuted,
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

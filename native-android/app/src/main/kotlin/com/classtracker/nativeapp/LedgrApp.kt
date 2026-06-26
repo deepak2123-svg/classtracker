@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -78,6 +79,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -1318,36 +1320,57 @@ private fun LedgrBottomBar(
     onNavigate: (AppDestination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant,
-        ),
+    val dockShape = RoundedCornerShape(28.dp)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 12.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .shadow(
+                    elevation = 18.dp,
+                    shape = dockShape,
+                    clip = false,
+                    ambientColor = LedgrTheme.colors.forest.copy(alpha = 0.1f),
+                    spotColor = LedgrTheme.colors.forest.copy(alpha = 0.16f),
+                ),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = if (LedgrTheme.isDark) 0.96f else 0.98f),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            shape = dockShape,
+            border = BorderStroke(
+                width = 0.75.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(
+                    alpha = if (LedgrTheme.isDark) 0.45f else 0.62f,
+                ),
+            ),
         ) {
-            AppDestination.entries.forEach { destination ->
-                val selected = currentDestination
-                    ?.hierarchy
-                    ?.any { it.route == destination.route } == true
-                LedgrBottomBarItem(
-                    destination = destination,
-                    selected = selected,
-                    onClick = {
-                        if (!selected) {
-                            onNavigate(destination)
-                        }
-                    },
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppDestination.entries.forEach { destination ->
+                    val selected = currentDestination
+                        ?.hierarchy
+                        ?.any { it.route == destination.route } == true
+                    LedgrBottomBarItem(
+                        destination = destination,
+                        selected = selected,
+                        onClick = {
+                            if (!selected) {
+                                onNavigate(destination)
+                            }
+                        },
+                    )
+                }
             }
         }
     }
@@ -1379,10 +1402,21 @@ private fun RowScope.LedgrBottomBarItem(
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
         label = "bottomBarIndicatorColor",
     )
+    val itemBackgroundColor by animateColorAsState(
+        targetValue = if (selected) {
+            LedgrTheme.colors.teal.copy(alpha = if (LedgrTheme.isDark) 0.2f else 0.1f)
+        } else {
+            Color.Transparent
+        },
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "bottomBarItemBackground",
+    )
     Column(
         modifier = modifier
             .weight(1f)
-            .clip(RoundedCornerShape(18.dp))
+            .height(56.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(itemBackgroundColor)
             .ledgrPressScale(
                 interactionSource = interactionSource,
                 enabled = !selected,
@@ -1392,22 +1426,22 @@ private fun RowScope.LedgrBottomBarItem(
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 4.dp, vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(
             imageVector = destination.icon,
             contentDescription = destination.label,
             tint = iconAndLabelColor,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(21.dp),
         )
         Text(
             text = destination.label,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontSize = 11.sp,
-                lineHeight = 14.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                lineHeight = 13.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             ),
             color = iconAndLabelColor,
             maxLines = 1,
@@ -1415,7 +1449,7 @@ private fun RowScope.LedgrBottomBarItem(
         )
         Box(
             modifier = Modifier
-                .width(18.dp)
+                .width(20.dp)
                 .height(4.dp)
                 .clip(CircleShape)
                 .background(indicatorColor),
