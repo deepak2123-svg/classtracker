@@ -113,7 +113,6 @@ import com.classtracker.core.designsystem.ledgrPressScale
 import com.classtracker.core.designsystem.rememberLedgrHaptics
 import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherClass
-import com.classtracker.core.model.TeacherClassDraft
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntryDraft
 import com.classtracker.core.model.TeacherEntryStatus
@@ -472,14 +471,11 @@ fun LedgrApp(
             reminderPreferences = reminderPreferences,
             onReminderPreferencesChange = onReminderPreferencesChange,
             onClearError = viewModel::clearError,
-            onCreateClass = viewModel::createClass,
-            onDeleteClass = viewModel::deleteClass,
             onDeleteEntry = viewModel::deleteEntry,
             onRestoreEntry = viewModel::restoreEntry,
             onDeleteAllTrashedEntries = viewModel::deleteAllTrashedEntries,
             onDeleteTrashedEntry = viewModel::deleteTrashedEntry,
             onDeleteAccount = viewModel::deleteAccount,
-            onConsumeClassSaved = viewModel::consumeClassSaved,
             onSignOut = viewModel::signOut,
             modifier = modifier,
         )
@@ -498,14 +494,11 @@ private fun TeacherApp(
     reminderPreferences: ReminderPreferences,
     onReminderPreferencesChange: (ReminderPreferences) -> Unit,
     onClearError: () -> Unit,
-    onCreateClass: (TeacherClassDraft) -> Unit,
-    onDeleteClass: (TeacherClass) -> Unit,
     onDeleteEntry: (TeacherEntry, TeacherClass) -> Unit,
     onRestoreEntry: (TeacherTrashedEntry) -> Unit,
     onDeleteAllTrashedEntries: () -> Unit,
     onDeleteTrashedEntry: (TeacherTrashedEntry) -> Unit,
     onDeleteAccount: () -> Unit,
-    onConsumeClassSaved: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -513,11 +506,6 @@ private fun TeacherApp(
     val feedbackState by feedbackViewModel.state.collectAsStateWithLifecycle()
     val syncViewModel: SyncViewModel = hiltViewModel()
     val syncState by syncViewModel.state.collectAsStateWithLifecycle()
-    val classSaved by remember(mainState) {
-        mainState
-            .map { it.classSaved }
-            .distinctUntilChanged()
-    }.collectAsStateWithLifecycle(initialValue = mainState.value.classSaved)
     val haptics = rememberLedgrHaptics()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -587,18 +575,6 @@ private fun TeacherApp(
         syncState.errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             syncViewModel.consumeError()
-        }
-    }
-
-    LaunchedEffect(classSaved) {
-        if (classSaved) {
-            onConsumeClassSaved()
-            navController.navigateHomeAfterMutation()
-            snackbarHostState.showSnackbar(
-                message = "✓ Class added successfully",
-                duration = androidx.compose.material3.SnackbarDuration.Short,
-                withDismissAction = true,
-            )
         }
     }
 
@@ -882,25 +858,47 @@ private fun TeacherApp(
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) {
-                        val savingClass by remember(mainState) {
-                            mainState
-                                .map { it.savingClass }
-                                .distinctUntilChanged()
-                        }.collectAsStateWithLifecycle(initialValue = mainState.value.savingClass)
+                        val classMutationViewModel: ClassMutationViewModel = hiltViewModel()
+                        val classMutationState by classMutationViewModel.state.collectAsStateWithLifecycle()
+
+                        LaunchedEffect(teacher.uid, snapshot.revision) {
+                            classMutationViewModel.prime(
+                                teacher = teacher,
+                                snapshot = snapshot,
+                            )
+                        }
+
+                        LaunchedEffect(classMutationState.errorMessage) {
+                            val message = classMutationState.errorMessage ?: return@LaunchedEffect
+                            snackbarHostState.showSnackbar(message)
+                            classMutationViewModel.consumeError()
+                        }
+
+                        LaunchedEffect(classMutationState.classSaved) {
+                            if (classMutationState.classSaved) {
+                                classMutationViewModel.consumeClassSaved()
+                                navController.navigateHomeAfterMutation()
+                                snackbarHostState.showSnackbar(
+                                    message = "✓ Class added successfully",
+                                    duration = androidx.compose.material3.SnackbarDuration.Short,
+                                    withDismissAction = true,
+                                )
+                            }
+                        }
+
                         NewClassScreen(
                             availableInstitutes = snapshot.availableInstitutes,
                             availableSectionsByInstitute = snapshot.availableSectionsByInstitute,
                             subjectOptions = snapshot.profile.subjects,
-                            saving = savingClass,
+                            saving = classMutationState.savingClass,
                             onSaveClass = { draft ->
-                                onCreateClass(draft)
+                                classMutationViewModel.createClass(draft)
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         message = "Adding class...",
                                         duration = androidx.compose.material3.SnackbarDuration.Short,
                                     )
                                 }
-                                navController.navigateHomeAfterMutation()
                             },
                         )
                     }
@@ -1021,19 +1019,29 @@ private fun TeacherApp(
                         popEnterTransition = modalPopEnterTransition,
                         popExitTransition = modalPopExitTransition,
                     ) {
-                        val deletingClassId by remember(mainState) {
-                            mainState
-                                .map { it.deletingClassId }
-                                .distinctUntilChanged()
-                        }.collectAsStateWithLifecycle(initialValue = mainState.value.deletingClassId)
+                        val classMutationViewModel: ClassMutationViewModel = hiltViewModel()
+                        val classMutationState by classMutationViewModel.state.collectAsStateWithLifecycle()
+
+                        LaunchedEffect(teacher.uid, snapshot.revision) {
+                            classMutationViewModel.prime(
+                                teacher = teacher,
+                                snapshot = snapshot,
+                            )
+                        }
+
+                        LaunchedEffect(classMutationState.errorMessage) {
+                            val message = classMutationState.errorMessage ?: return@LaunchedEffect
+                            snackbarHostState.showSnackbar(message)
+                            classMutationViewModel.consumeError()
+                        }
+
                         ManageClassesScreen(
                             classes = snapshot.classes,
                             entries = snapshot.entries,
-                            deletingClassId = deletingClassId,
+                            deletingClassId = classMutationState.deletingClassId,
                             deleteEnabled = BuildConfig.NATIVE_CLASS_DELETE_ENABLED,
                             onDeleteClass = { teacherClass ->
-                                onDeleteClass(teacherClass)
-                                navController.navigateHomeAfterMutation()
+                                classMutationViewModel.deleteClass(teacherClass)
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         message = "Moving class to recycle bin...",

@@ -10,14 +10,11 @@ import com.classtracker.core.firebase.TeacherEntryConflictException
 import com.classtracker.core.firebase.TeacherRevisionConflictException
 import com.classtracker.core.model.AuthenticatedTeacher
 import com.classtracker.core.model.TeacherClass
-import com.classtracker.core.model.TeacherClassDraft
-import com.classtracker.core.model.TeacherClassValidation
 import com.classtracker.core.model.TeacherEntry
 import com.classtracker.core.model.TeacherEntrySyncState
 import com.classtracker.core.model.TeacherSnapshot
 import com.classtracker.core.model.TeacherTrashedEntry
 import com.classtracker.core.model.toTrashedEntry
-import com.classtracker.core.model.validateTeacherClassDraft
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
@@ -38,12 +35,9 @@ data class MainUiState(
     val snapshot: TeacherSnapshot? = null,
     val loadingData: Boolean = false,
     val authenticating: Boolean = false,
-    val savingClass: Boolean = false,
-    val deletingClassId: String? = null,
     val deletingAllTrashedEntries: Boolean = false,
     val deletingTrashedEntryId: String? = null,
     val deletingAccount: Boolean = false,
-    val classSaved: Boolean = false,
     val errorMessage: String? = null,
 )
 
@@ -120,145 +114,6 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.signOut()
         }
-    }
-
-    fun createClass(draft: TeacherClassDraft) {
-        val current = mutableState.value
-        val teacher = current.teacher ?: return
-        val snapshot = current.snapshot ?: return
-        if (current.savingClass) return
-
-        when (val validation = validateTeacherClassDraft(draft)) {
-            TeacherClassValidation.Valid -> Unit
-            is TeacherClassValidation.Invalid -> {
-                mutableState.update { it.copy(errorMessage = validation.message) }
-                return
-            }
-        }
-
-        viewModelScope.launch {
-            mutableState.update {
-                it.copy(
-                    savingClass = true,
-                    classSaved = false,
-                    errorMessage = null,
-                )
-            }
-            runCatching {
-                dataRepository.createClass(
-                    teacher = teacher,
-                    expectedRevision = snapshot.revision,
-                    draft = draft,
-                )
-            }.onSuccess { updatedSnapshot ->
-                val mergedSnapshot = updatedSnapshot.withAvailableSections()
-                mutableState.update {
-                    it.copy(
-                        snapshot = mergedSnapshot,
-                        savingClass = false,
-                        classSaved = true,
-                        errorMessage = null,
-                    )
-                }
-            }.onFailure { error ->
-                if (error is TeacherRevisionConflictException) {
-                    runCatching { dataRepository.loadTeacherSnapshot(teacher) }
-                        .onSuccess { latestSnapshot ->
-                            val mergedSnapshot = latestSnapshot.withAvailableSections()
-                            mutableState.update {
-                                it.copy(
-                                    snapshot = mergedSnapshot,
-                                    savingClass = false,
-                                    errorMessage = "Newer web changes were loaded. Review and add the class again.",
-                                )
-                            }
-                        }
-                        .onFailure { refreshError ->
-                            mutableState.update {
-                                it.copy(
-                                    savingClass = false,
-                                    errorMessage = refreshError.toFriendlyMessage(),
-                                )
-                            }
-                        }
-                } else {
-                    mutableState.update {
-                        it.copy(
-                            savingClass = false,
-                            errorMessage = error.toFriendlyMessage(),
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    fun deleteClass(teacherClass: TeacherClass) {
-        val current = mutableState.value
-        val teacher = current.teacher ?: return
-        val snapshot = current.snapshot ?: return
-        if (current.deletingClassId != null) return
-
-        mutableState.update {
-            it.copy(
-                snapshot = snapshot.copy(
-                    classes = snapshot.classes.filterNot { item -> item.id == teacherClass.id },
-                    entries = snapshot.entries.filterNot { entry -> entry.classId == teacherClass.id },
-                ),
-                deletingClassId = teacherClass.id,
-                errorMessage = null,
-            )
-        }
-        viewModelScope.launch {
-            runCatching {
-                dataRepository.deleteClass(
-                    teacher = teacher,
-                    expectedRevision = snapshot.revision,
-                    teacherClass = teacherClass,
-                )
-            }.onSuccess { updatedSnapshot ->
-                mutableState.update {
-                    it.copy(
-                        snapshot = updatedSnapshot.withAvailableSections(),
-                        deletingClassId = null,
-                        errorMessage = null,
-                    )
-                }
-            }.onFailure { error ->
-                if (error is TeacherRevisionConflictException) {
-                    runCatching { dataRepository.loadTeacherSnapshot(teacher) }
-                        .onSuccess { latestSnapshot ->
-                            mutableState.update {
-                                it.copy(
-                                    snapshot = latestSnapshot.withAvailableSections(),
-                                    deletingClassId = null,
-                                    errorMessage = "Newer web changes were loaded. Review and delete the class again.",
-                                )
-                            }
-                        }
-                        .onFailure { refreshError ->
-                            mutableState.update {
-                                it.copy(
-                                    deletingClassId = null,
-                                    errorMessage = refreshError.toFriendlyMessage(),
-                                )
-                            }
-                        }
-                } else {
-                    mutableState.update {
-                        it.copy(
-                            snapshot = snapshot,
-                            deletingClassId = null,
-                            errorMessage = error.toFriendlyMessage(),
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    fun consumeClassSaved() {
-        mutableState.update { it.copy(classSaved = false) }
     }
 
     fun deleteEntry(

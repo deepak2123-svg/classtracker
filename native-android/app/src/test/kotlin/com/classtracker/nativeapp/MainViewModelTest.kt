@@ -70,7 +70,7 @@ class MainViewModelTest {
         viewModel.refresh()
         advanceUntilIdle()
         assertEquals(2, dataRepository.loadCount)
-        assertFalse(viewModel.state.value.refreshing)
+        assertFalse(viewModel.state.value.loadingData)
     }
 
     @Test
@@ -152,7 +152,7 @@ class MainViewModelTest {
     }
 
     @Test
-    fun deletingClassReplacesSnapshotAndClearsProgress() = runTest(dispatcher) {
+    fun classMutationDeleteClearsProgress() = runTest(dispatcher) {
         val teacher = AuthenticatedTeacher(
             uid = "teacher-1",
             displayName = "Teacher",
@@ -170,24 +170,17 @@ class MainViewModelTest {
         )
         val original = snapshotFor(teacher).copy(classes = listOf(teacherClass))
         val updated = original.copy(classes = emptyList(), revision = 2L)
-        val authRepository = FakeAuthRepository()
         val dataRepository = FakeDataRepository(original, updated)
-        val viewModel = MainViewModel(
-            authRepository,
-            dataRepository,
-        )
+        val viewModel = ClassMutationViewModel(dataRepository)
 
-        authRepository.sessions.value = AuthSession.SignedIn(teacher)
-        advanceUntilIdle()
+        viewModel.prime(teacher, original)
         viewModel.deleteClass(teacherClass)
 
-        assertEquals(emptyList<TeacherClass>(), viewModel.state.value.snapshot?.classes)
         assertEquals("class-1", viewModel.state.value.deletingClassId)
 
         advanceUntilIdle()
 
         assertEquals(1, dataRepository.deleteClassCount)
-        assertEquals(emptyList<TeacherClass>(), viewModel.state.value.snapshot?.classes)
         assertEquals(null, viewModel.state.value.deletingClassId)
     }
 
