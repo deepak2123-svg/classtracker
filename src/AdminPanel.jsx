@@ -14138,7 +14138,7 @@ function AdminPanelInner({user}){
           teacherLastTs = Math.max(teacherLastTs, classLastTs);
           const todayEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, null, today, today)
             .map(entry => withEntryMeta(entry, classKey));
-          const recentEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, 7, null, null)
+          const recentEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, periodDays, periodStartKey, periodEndKey)
             .map(entry => withEntryMeta(entry, classKey));
 
           const bucket = classBuckets.get(classKey) || {
@@ -14265,6 +14265,9 @@ function AdminPanelInner({user}){
     getTeacherDisplayName,
     instSectionsAll,
     institutes,
+    periodDays,
+    periodEndKey,
+    periodStartKey,
     resolveAdminTeacherClassSubject,
     roles,
     teacherBelongsToInstitute,
@@ -17281,6 +17284,8 @@ function AdminPanelInner({user}){
     const timelineEntries = (selectedClass ? selectedClass.recentEntries : selectedInstitute?.recentEntries || [])
       .filter(entry => !adminV5TeacherUid || entry.teacherUid === adminV5TeacherUid)
       .slice(0, 28);
+    const timelineMinutes = timelineEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
+    const timelinePeriodLabel = overviewPeriodText;
     const shellBg = "#F3F6FB";
     const panelBorder = "1px solid rgba(148,163,184,0.32)";
     const softShadow = reduceEffects ? "none" : "0 18px 46px rgba(15,23,42,0.08)";
@@ -17557,7 +17562,7 @@ function AdminPanelInner({user}){
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:18,fontWeight:900,color:tone.ink || G.text,fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</div>
-                    <div style={{fontSize:12,color:G.textM,lineHeight:1.4,marginTop:5}}>{cls.teacherCount} teacher{cls.teacherCount===1?"":"s"} · {cls.todayEntries.length} today · {cls.lastLabel}</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.4,marginTop:5}}>{cls.teacherCount} teacher{cls.teacherCount===1?"":"s"} · {cls.todayEntries.length} today · {cls.recentEntries.length} in {timelinePeriodLabel.toLowerCase()} · {cls.lastLabel}</div>
                   </div>
                   {cls.cold&&<span style={{background:"#FFF7ED",border:"1px solid #FED7AA",color:G.amber,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>Cold</span>}
                 </div>
@@ -17604,7 +17609,7 @@ function AdminPanelInner({user}){
                 {selectedClass ? selectedClass.display : selectedInstituteName || "Admin dashboard"}
               </div>
               <div style={{fontSize:13,color:G.textM,lineHeight:1.45,marginTop:7}}>
-                {selectedTeacher ? `${selectedTeacher.name} · actual subject labels from teacher class records` : selectedInstitute ? `${selectedInstituteName} · ${selectedInstitute.todayEntryCount} entries today` : "Select an institute to begin"}
+                {selectedTeacher ? `${selectedTeacher.name} · actual subject labels from teacher class records` : selectedInstitute ? `${selectedInstituteName} · ${timelinePeriodLabel} timeline` : "Select an institute to begin"}
               </div>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
@@ -17619,10 +17624,22 @@ function AdminPanelInner({user}){
             </div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",gap:9,marginTop:15}}>
-            {metricTile("Today entries", selectedInstitute?.todayEntryCount || 0, "blue")}
-            {metricTile("Study time", formatDurationShort(selectedInstitute?.todayMinutes || 0), "green")}
+            {metricTile("Health today", selectedInstitute ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}` : "0/0", selectedInstitute?.status?.key === "on_track" ? "green" : selectedInstitute?.status?.key === "critical" ? "red" : "amber")}
+            {metricTile("Timeline logs", timelineEntries.length, timelineEntries.length ? "blue" : "amber")}
+            {metricTile("Shown time", formatDurationShort(timelineMinutes), timelineMinutes ? "green" : "amber")}
             {metricTile("Pending", selectedInstitute?.pendingCount || 0, selectedInstitute?.pendingCount ? "amber" : "green")}
-            {metricTile("Loaded", selectedInstitute ? `${selectedInstitute.loadedCount}/${selectedInstitute.activeCount}` : "0/0", "blue")}
+          </div>
+          <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:isMobile ? "9px" : "10px",marginTop:13}}>
+            <PeriodSelector
+              period={period}
+              onChangePeriod={handlePeriodChange}
+              compact
+              accentColor={G.navy}
+              rangeStart={customRange.start}
+              rangeEnd={customRange.end}
+              onChangeRangeStart={handleRangeStartChange}
+              onChangeRangeEnd={handleRangeEndChange}
+            />
           </div>
           {selectedClass&&(
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13}}>
@@ -17645,7 +17662,7 @@ function AdminPanelInner({user}){
             <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"22px",textAlign:"center",boxShadow:softShadow}}>
               <div style={{fontSize:18,fontWeight:900,color:G.text,fontFamily:G.display}}>No recent timeline entries</div>
               <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:8}}>
-                {selectedClass ? "This class has no loaded entries in the last seven days." : "Choose a class to inspect recent entries."}
+                {selectedClass ? `This class has no loaded entries in ${timelinePeriodLabel.toLowerCase()}.` : "Choose a class to inspect period entries."}
               </div>
             </div>
           )}
