@@ -17404,6 +17404,36 @@ function AdminPanelInner({user}){
       { key:"today", label:"Today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
       { key:"period", label:timelinePeriodLabel, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length },
     ];
+    const selectedInstituteToolItems = [
+      {
+        key:"teachers",
+        label:"Teachers",
+        value:selectedInstitute ? `${selectedInstitute.activeCount} active` : "Open",
+        icon:IconUsersGroup,
+        onClick:()=>openManageTab("teachers", selectedInstituteName ? { scopeInstitute:selectedInstituteName } : {}),
+      },
+      {
+        key:"sections",
+        label:"Sections",
+        value:selectedInstituteName ? "This institute" : "Open",
+        icon:IconSchool,
+        onClick:()=>openManageTab("sections", { detailInstitute:selectedInstituteName || null }),
+      },
+      {
+        key:"admins",
+        label:"Admins",
+        value:selectedInstituteName ? "Roles" : "Open",
+        icon:IconSettings,
+        onClick:()=>openManageTab("admins", selectedInstituteName ? { scopeInstitute:selectedInstituteName } : {}),
+      },
+      {
+        key:"institute",
+        label:"Institute",
+        value:selectedInstitute?.status?.label || "Directory",
+        icon:IconBuilding,
+        onClick:()=>openManageTab("institutes"),
+      },
+    ];
     const actionButton = (tone = "light") => ({
       height:38,
       borderRadius:12,
@@ -17675,6 +17705,37 @@ function AdminPanelInner({user}){
             )}
           </div>
           {renderWarmupBanner(false)}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:13}}>
+            {selectedInstituteToolItems.map(item=>(
+              <button
+                key={item.key}
+                type="button"
+                onClick={item.onClick}
+                style={{
+                  minHeight:54,
+                  border:`1px solid ${G.border}`,
+                  borderRadius:8,
+                  background:"#FFFFFF",
+                  padding:"9px 10px",
+                  display:"flex",
+                  alignItems:"center",
+                  gap:9,
+                  textAlign:"left",
+                  cursor:"pointer",
+                  fontFamily:G.sans,
+                  boxShadow:reduceEffects ? "none" : "0 6px 16px rgba(15,23,42,0.045)",
+                  minWidth:0,
+                }}>
+                <span style={{width:30,height:30,borderRadius:8,background:"#EAF2FF",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <AppIcon icon={item.icon} size={16} color={G.blue} />
+                </span>
+                <span style={{minWidth:0}}>
+                  <span style={{display:"block",fontSize:12.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</span>
+                  <span style={{display:"block",fontSize:10.5,fontWeight:800,color:G.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.value}</span>
+                </span>
+              </button>
+            ))}
+          </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13}}>
             <button type="button" onClick={()=>openInstituteGlanceOptions("export", "report")} style={actionButton("blue")}>
               <AppIcon icon={IconCalendar} size={15} color={G.blue} />
@@ -17766,6 +17827,11 @@ function AdminPanelInner({user}){
                 </div>
               ))}
             </div>
+          )}
+          {pendingTeachers.length > 8&&(
+            <button type="button" onClick={()=>openManageTab("teachers", selectedInstituteName ? { scopeInstitute:selectedInstituteName } : {})} style={{...actionButton("light"),width:"100%",marginTop:4,boxShadow:"none"}}>
+              Open all {pendingTeachers.length} pending teachers
+            </button>
           )}
         </div>
       </section>
