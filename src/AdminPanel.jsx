@@ -10932,6 +10932,7 @@ function AdminPanelInner({user}){
   const [adminV5TeacherUid, setAdminV5TeacherUid] = useState("");
   const [adminV5ClassKey, setAdminV5ClassKey] = useState("");
   const [adminV5TimelineScope, setAdminV5TimelineScope] = useState("institute"); // institute | class | teacher
+  const [adminV5TimelineLimit, setAdminV5TimelineLimit] = useState(28);
   const [adminV5InstituteSearch, setAdminV5InstituteSearch] = useState("");
   const [adminV5InstituteFilter, setAdminV5InstituteFilter] = useState("all"); // all | critical | low | on_track | pending | cold
   const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | cold | today | period
@@ -11081,10 +11082,12 @@ function AdminPanelInner({user}){
         };
       });
     }
+    setAdminV5TimelineLimit(28);
     setPeriod(nextPeriod);
   },[]);
   const handleRangeStartChange = React.useCallback((nextStart)=>{
     const start=String(nextStart||"");
+    setAdminV5TimelineLimit(28);
     setCustomRange(current=>{
       const end=String(current.end||"");
       if(start && end && start>end) return { start, end:start };
@@ -11094,6 +11097,7 @@ function AdminPanelInner({user}){
   },[]);
   const handleRangeEndChange = React.useCallback((nextEnd)=>{
     const end=String(nextEnd||"");
+    setAdminV5TimelineLimit(28);
     setCustomRange(current=>{
       const start=String(current.start||"");
       if(start && end && end<start) return { start:end, end };
@@ -14335,6 +14339,10 @@ function AdminPanelInner({user}){
   }, [adminV5ClassKey, adminV5SelectedInstitute, adminV5VisibleClasses]);
 
   React.useEffect(()=>{
+    setAdminV5TimelineLimit(28);
+  }, [adminV5ClassKey, adminV5TeacherUid, adminV5TimelineScope, periodEndKey, periodStartKey, selInst]);
+
+  React.useEffect(()=>{
     if(view !== "main" || selInst || !adminV5Model.institutes.length) return;
     const firstInstitute = adminV5Model.institutes[0]?.institute || "";
     if(!firstInstitute) return;
@@ -17339,7 +17347,9 @@ function AdminPanelInner({user}){
       : activeTimelineScope === "class"
         ? selectedClass?.recentEntries || []
         : selectedInstitute?.recentEntries || [];
-    const timelineEntries = timelineSourceEntries.slice(0, 28);
+    const timelineTotal = timelineSourceEntries.length;
+    const timelineEntries = timelineSourceEntries.slice(0, adminV5TimelineLimit);
+    const canShowMoreTimeline = timelineTotal > timelineEntries.length;
     const timelineMinutes = timelineEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
     const timelinePeriodLabel = overviewPeriodText;
     const timelineTitle = activeTimelineScope === "teacher"
@@ -17903,7 +17913,7 @@ function AdminPanelInner({user}){
           </div>
           <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",gap:9,marginTop:15}}>
             {metricTile("Health today", selectedInstitute ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}` : "0/0", selectedInstitute?.status?.key === "on_track" ? "green" : selectedInstitute?.status?.key === "critical" ? "red" : "amber")}
-            {metricTile("Timeline logs", timelineEntries.length, timelineEntries.length ? "blue" : "amber")}
+            {metricTile("Timeline logs", timelineTotal > timelineEntries.length ? `${timelineEntries.length}/${timelineTotal}` : timelineEntries.length, timelineEntries.length ? "blue" : "amber")}
             {metricTile("Shown time", formatDurationShort(timelineMinutes), timelineMinutes ? "green" : "amber")}
             {metricTile("Pending", selectedInstitute?.pendingCount || 0, selectedInstitute?.pendingCount ? "amber" : "green")}
           </div>
@@ -18022,6 +18032,25 @@ function AdminPanelInner({user}){
               </div>
             );
           })}
+          {!!timelineTotal&&(
+            <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:reduceEffects ? "none" : "0 10px 24px rgba(15,23,42,0.04)"}}>
+              <div style={{fontSize:12.5,color:G.textM,fontWeight:800}}>
+                Showing {timelineEntries.length} of {timelineTotal} timeline entr{timelineTotal === 1 ? "y" : "ies"}
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {canShowMoreTimeline&&(
+                  <button type="button" onClick={()=>setAdminV5TimelineLimit(limit => limit + 28)} style={{...actionButton("blue"),height:34,boxShadow:"none"}}>
+                    Show more
+                  </button>
+                )}
+                {timelineEntries.length > 28&&(
+                  <button type="button" onClick={()=>setAdminV5TimelineLimit(28)} style={{...actionButton("light"),height:34,boxShadow:"none"}}>
+                    Collapse
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </main>
     );
