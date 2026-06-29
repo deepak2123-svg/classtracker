@@ -10931,6 +10931,7 @@ function AdminPanelInner({user}){
   const [adminV5MobilePane, setAdminV5MobilePane] = useState("institutes"); // institutes | classes | timeline
   const [adminV5TeacherUid, setAdminV5TeacherUid] = useState("");
   const [adminV5ClassKey, setAdminV5ClassKey] = useState("");
+  const [adminV5TimelineScope, setAdminV5TimelineScope] = useState("institute"); // institute | class | teacher
   const [adminV5InstituteSearch, setAdminV5InstituteSearch] = useState("");
   const [adminV5InstituteFilter, setAdminV5InstituteFilter] = useState("all"); // all | critical | low | on_track | pending | cold
   const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | cold | today | period
@@ -14318,6 +14319,7 @@ function AdminPanelInner({user}){
     if(adminV5VisibleClasses.some(item => item.key === adminV5ClassKey)) return;
     setAdminV5ClassKey("");
     setAdminV5TeacherUid("");
+    setAdminV5TimelineScope("institute");
   }, [adminV5ClassKey, adminV5SelectedInstitute, adminV5VisibleClasses]);
 
   React.useEffect(()=>{
@@ -15239,6 +15241,7 @@ function AdminPanelInner({user}){
     setSelInst(instituteName);
     setAdminV5ClassKey("");
     setAdminV5TeacherUid("");
+    setAdminV5TimelineScope("institute");
     setAdminV5MobilePane(nextPane);
     warmInstitute(instituteName);
   }, [warmInstitute]);
@@ -15246,11 +15249,13 @@ function AdminPanelInner({user}){
   const selectAdminV5Class = React.useCallback((classKey) => {
     setAdminV5ClassKey(classKey || "");
     setAdminV5TeacherUid("");
+    setAdminV5TimelineScope("class");
     setAdminV5MobilePane("timeline");
   }, []);
 
   const selectAdminV5Teacher = React.useCallback((teacherUid) => {
     setAdminV5TeacherUid(teacherUid || "");
+    setAdminV5TimelineScope(teacherUid ? "teacher" : "class");
     setAdminV5MobilePane("timeline");
     if(teacherUid) ensureFullData(teacherUid);
   }, [ensureFullData]);
@@ -17305,11 +17310,31 @@ function AdminPanelInner({user}){
     const selectedTeacher = adminV5SelectedTeacher;
     const summary = adminV5Model.summary;
     const pendingTeachers = (selectedInstitute?.teachers || []).filter(item => !item.loggedToday);
-    const timelineEntries = (selectedClass ? selectedClass.recentEntries : selectedInstitute?.recentEntries || [])
-      .filter(entry => !adminV5TeacherUid || entry.teacherUid === adminV5TeacherUid)
-      .slice(0, 28);
+    const activeTimelineScope = adminV5TimelineScope === "teacher" && selectedTeacher
+      ? "teacher"
+      : adminV5TimelineScope === "class" && selectedClass
+        ? "class"
+        : "institute";
+    const timelineSourceEntries = activeTimelineScope === "teacher"
+      ? selectedTeacher?.recentEntries || []
+      : activeTimelineScope === "class"
+        ? selectedClass?.recentEntries || []
+        : selectedInstitute?.recentEntries || [];
+    const timelineEntries = timelineSourceEntries.slice(0, 28);
     const timelineMinutes = timelineEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
     const timelinePeriodLabel = overviewPeriodText;
+    const timelineTitle = activeTimelineScope === "teacher"
+      ? selectedTeacher?.name || "Teacher timeline"
+      : activeTimelineScope === "class"
+        ? selectedClass?.display || "Class timeline"
+        : selectedInstituteName || "Admin dashboard";
+    const timelineSubtitle = activeTimelineScope === "teacher"
+      ? `${selectedInstituteName} · all loaded classes for this teacher`
+      : activeTimelineScope === "class"
+        ? `${selectedInstituteName} · all teachers in this class`
+        : selectedInstitute
+          ? `${selectedInstituteName} · all loaded class timelines`
+          : "Select an institute to begin";
     const shellBg = "#F3F6FB";
     const panelBorder = "1px solid rgba(148,163,184,0.32)";
     const softShadow = reduceEffects ? "none" : "0 18px 46px rgba(15,23,42,0.08)";
@@ -17637,7 +17662,7 @@ function AdminPanelInner({user}){
         <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px"}}>
           <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 9px"}}>Classes</div>
           {adminV5VisibleClasses.map(cls=>{
-            const active = cls.key === selectedClassKey;
+            const active = activeTimelineScope === "class" && cls.key === selectedClassKey;
             const tone = getSectionTone(cls.display);
             return (
               <button
@@ -17708,10 +17733,10 @@ function AdminPanelInner({user}){
             <div style={{minWidth:0,flex:1}}>
               <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Teacher / class timeline</div>
               <div style={{fontSize:isMobile ? 24 : 30,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7}}>
-                {selectedClass ? selectedClass.display : selectedInstituteName || "Admin dashboard"}
+                {timelineTitle}
               </div>
               <div style={{fontSize:13,color:G.textM,lineHeight:1.45,marginTop:7}}>
-                {selectedTeacher ? `${selectedTeacher.name} · actual subject labels from teacher class records` : selectedInstitute ? `${selectedInstituteName} · ${timelinePeriodLabel} timeline` : "Select an institute to begin"}
+                {timelineSubtitle} · {timelinePeriodLabel}
               </div>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
@@ -17743,11 +17768,20 @@ function AdminPanelInner({user}){
               onChangeRangeEnd={handleRangeEndChange}
             />
           </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13}}>
+            <button type="button" onClick={()=>{setAdminV5TimelineScope("institute");setAdminV5TeacherUid("");}} style={actionButton(activeTimelineScope === "institute" ? "dark" : "light")}>Institute</button>
+            {selectedClass&&(
+              <button type="button" onClick={()=>{setAdminV5TimelineScope("class");setAdminV5TeacherUid("");}} style={actionButton(activeTimelineScope === "class" ? "dark" : "light")}>Class</button>
+            )}
+            {selectedTeacher&&(
+              <button type="button" onClick={()=>setAdminV5TimelineScope("teacher")} style={actionButton(activeTimelineScope === "teacher" ? "dark" : "light")}>Teacher</button>
+            )}
+          </div>
           {selectedClass&&(
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13}}>
-              <button type="button" onClick={()=>selectAdminV5Teacher("")} style={actionButton(!adminV5TeacherUid ? "dark" : "light")}>All teachers</button>
+              <button type="button" onClick={()=>selectAdminV5Teacher("")} style={actionButton(activeTimelineScope === "class" && !adminV5TeacherUid ? "dark" : "light")}>All teachers</button>
               {selectedClass.teachers.slice(0,8).map(teacher=>(
-                <button key={`${teacher.uid}_${teacher.classId}`} type="button" onClick={()=>selectAdminV5Teacher(teacher.uid)} style={actionButton(adminV5TeacherUid === teacher.uid ? "dark" : "light")}>
+                <button key={`${teacher.uid}_${teacher.classId}`} type="button" onClick={()=>selectAdminV5Teacher(teacher.uid)} style={actionButton(activeTimelineScope === "teacher" && adminV5TeacherUid === teacher.uid ? "dark" : "light")}>
                   {teacher.name}
                 </button>
               ))}
@@ -17764,7 +17798,11 @@ function AdminPanelInner({user}){
             <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"22px",textAlign:"center",boxShadow:softShadow}}>
               <div style={{fontSize:18,fontWeight:900,color:G.text,fontFamily:G.display}}>No recent timeline entries</div>
               <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:8}}>
-                {selectedClass ? `This class has no loaded entries in ${timelinePeriodLabel.toLowerCase()}.` : "Choose a class to inspect period entries."}
+                {activeTimelineScope === "teacher"
+                  ? `This teacher has no loaded entries in ${timelinePeriodLabel.toLowerCase()}.`
+                  : activeTimelineScope === "class"
+                    ? `This class has no loaded entries in ${timelinePeriodLabel.toLowerCase()}.`
+                    : `This institute has no loaded entries in ${timelinePeriodLabel.toLowerCase()}.`}
               </div>
             </div>
           )}
