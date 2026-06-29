@@ -10932,6 +10932,8 @@ function AdminPanelInner({user}){
   const [adminV5TeacherUid, setAdminV5TeacherUid] = useState("");
   const [adminV5ClassKey, setAdminV5ClassKey] = useState("");
   const [adminV5InstituteSearch, setAdminV5InstituteSearch] = useState("");
+  const [adminV5InstituteFilter, setAdminV5InstituteFilter] = useState("all"); // all | critical | low | on_track | pending | cold
+  const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | cold | today | period
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
@@ -14276,9 +14278,16 @@ function AdminPanelInner({user}){
 
   const adminV5VisibleInstitutes = useMemo(()=>{
     const searchKey = adminV5InstituteSearch.trim().toLowerCase();
-    if(!searchKey) return adminV5Model.institutes;
-    return adminV5Model.institutes.filter(item => item.institute.toLowerCase().includes(searchKey));
-  }, [adminV5InstituteSearch, adminV5Model.institutes]);
+    return adminV5Model.institutes.filter(item => {
+      if(searchKey && !item.institute.toLowerCase().includes(searchKey)) return false;
+      if(adminV5InstituteFilter === "critical") return item.status.key === "critical";
+      if(adminV5InstituteFilter === "low") return item.status.key === "low";
+      if(adminV5InstituteFilter === "on_track") return item.status.key === "on_track";
+      if(adminV5InstituteFilter === "pending") return item.pendingCount > 0;
+      if(adminV5InstituteFilter === "cold") return item.coldClassCount > 0;
+      return true;
+    });
+  }, [adminV5InstituteFilter, adminV5InstituteSearch, adminV5Model.institutes]);
 
   const adminV5SelectedInstitute = useMemo(()=>{
     if(!adminV5Model.institutes.length) return null;
@@ -14295,6 +14304,21 @@ function AdminPanelInner({user}){
     if(!adminV5TeacherUid) return null;
     return (adminV5SelectedInstitute?.teachers || []).find(item => item.uid === adminV5TeacherUid) || null;
   }, [adminV5SelectedInstitute, adminV5TeacherUid]);
+
+  const adminV5VisibleClasses = useMemo(()=>{
+    const classes = adminV5SelectedInstitute?.classes || [];
+    if(adminV5ClassFilter === "cold") return classes.filter(item => item.cold);
+    if(adminV5ClassFilter === "today") return classes.filter(item => item.todayEntries.length > 0);
+    if(adminV5ClassFilter === "period") return classes.filter(item => item.recentEntries.length > 0);
+    return classes;
+  }, [adminV5ClassFilter, adminV5SelectedInstitute]);
+
+  React.useEffect(()=>{
+    if(!adminV5ClassKey || !adminV5SelectedInstitute) return;
+    if(adminV5VisibleClasses.some(item => item.key === adminV5ClassKey)) return;
+    setAdminV5ClassKey("");
+    setAdminV5TeacherUid("");
+  }, [adminV5ClassKey, adminV5SelectedInstitute, adminV5VisibleClasses]);
 
   React.useEffect(()=>{
     if(view !== "main" || selInst || !adminV5Model.institutes.length) return;
@@ -17303,6 +17327,20 @@ function AdminPanelInner({user}){
       { key:"classes", label:"Classes", icon:IconSchool },
       { key:"timeline", label:"Timeline", icon:IconClock },
     ];
+    const instituteFilterItems = [
+      { key:"all", label:"All", count:adminV5Model.institutes.length },
+      { key:"critical", label:"Critical", count:summary.critical },
+      { key:"low", label:"Low", count:summary.low },
+      { key:"on_track", label:"On track", count:summary.onTrack },
+      { key:"pending", label:"Pending", count:adminV5Model.institutes.filter(item => item.pendingCount > 0).length },
+      { key:"cold", label:"Cold", count:adminV5Model.institutes.filter(item => item.coldClassCount > 0).length },
+    ];
+    const classFilterItems = [
+      { key:"all", label:"All", count:selectedInstitute?.classes?.length || 0 },
+      { key:"cold", label:"Cold", count:(selectedInstitute?.classes || []).filter(item => item.cold).length },
+      { key:"today", label:"Today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
+      { key:"period", label:timelinePeriodLabel, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length },
+    ];
     const actionButton = (tone = "light") => ({
       height:38,
       borderRadius:12,
@@ -17336,6 +17374,45 @@ function AdminPanelInner({user}){
         </div>
       );
     };
+    const filterChip = ({ chipKey, active, label, count, onClick, compact = false }) => (
+      <button
+        key={chipKey}
+        type="button"
+        onClick={onClick}
+        style={{
+          minHeight:compact ? 30 : 32,
+          borderRadius:999,
+          border:`1px solid ${active ? G.navy : G.border}`,
+          background:active ? G.navy : "#FFFFFF",
+          color:active ? "#FFFFFF" : G.textS,
+          padding:compact ? "0 9px" : "0 10px",
+          display:"inline-flex",
+          alignItems:"center",
+          gap:7,
+          fontSize:compact ? 11.5 : 12,
+          fontWeight:850,
+          fontFamily:G.sans,
+          cursor:"pointer",
+          whiteSpace:"nowrap",
+          boxShadow:active && !reduceEffects ? G.shadowSm : "none",
+        }}>
+        <span>{label}</span>
+        <span style={{
+          minWidth:18,
+          height:18,
+          borderRadius:999,
+          padding:"0 5px",
+          display:"inline-flex",
+          alignItems:"center",
+          justifyContent:"center",
+          background:active ? "rgba(255,255,255,0.16)" : G.bg,
+          color:active ? "#FFFFFF" : G.textL,
+          fontSize:10.5,
+          fontWeight:900,
+          fontFamily:G.mono,
+        }}>{count}</span>
+      </button>
+    );
     const renderOverlays = () => (
       <>
         {feedbackOpen&&(
@@ -17461,6 +17538,16 @@ function AdminPanelInner({user}){
           <div style={{marginTop:13}}>
             {renderSearchInput(adminV5InstituteSearch, setAdminV5InstituteSearch, "Search institutes", true)}
           </div>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
+            {instituteFilterItems.map(item=>filterChip({
+              chipKey:item.key,
+              active:adminV5InstituteFilter === item.key,
+              label:item.label,
+              count:item.count,
+              compact:true,
+              onClick:()=>setAdminV5InstituteFilter(item.key),
+            }))}
+          </div>
         </div>
         <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"10px"}}>
           {adminV5VisibleInstitutes.map(row=>{
@@ -17536,10 +17623,20 @@ function AdminPanelInner({user}){
               Messenger
             </button>
           </div>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:12}}>
+            {classFilterItems.map(item=>filterChip({
+              chipKey:item.key,
+              active:adminV5ClassFilter === item.key,
+              label:item.label,
+              count:item.count,
+              compact:true,
+              onClick:()=>setAdminV5ClassFilter(item.key),
+            }))}
+          </div>
         </div>
         <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px"}}>
           <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 9px"}}>Classes</div>
-          {(selectedInstitute?.classes || []).map(cls=>{
+          {adminV5VisibleClasses.map(cls=>{
             const active = cls.key === selectedClassKey;
             const tone = getSectionTone(cls.display);
             return (
@@ -17578,6 +17675,11 @@ function AdminPanelInner({user}){
           {selectedInstitute && !selectedInstitute.classes.length&&(
             <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
               No loaded classes for this institute yet.
+            </div>
+          )}
+          {selectedInstitute && !!selectedInstitute.classes.length && !adminV5VisibleClasses.length&&(
+            <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
+              No classes match this focus.
             </div>
           )}
           {!!pendingTeachers.length&&(
