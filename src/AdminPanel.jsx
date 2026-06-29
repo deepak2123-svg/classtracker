@@ -10928,6 +10928,10 @@ function AdminPanelInner({user}){
   });
   const [mobileStep,  setMobileStep]  = useState(0);
   const [mobileSurface, setMobileSurface] = useState("workspace"); // workspace | profile | centreSummary
+  const [adminV5MobilePane, setAdminV5MobilePane] = useState("institutes"); // institutes | classes | timeline
+  const [adminV5TeacherUid, setAdminV5TeacherUid] = useState("");
+  const [adminV5ClassKey, setAdminV5ClassKey] = useState("");
+  const [adminV5InstituteSearch, setAdminV5InstituteSearch] = useState("");
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
@@ -14089,6 +14093,214 @@ function AdminPanelInner({user}){
     }));
   };
 
+  const adminV5Model = useMemo(()=>{
+    const today = todayKey();
+    const activeTeachers = teachers.filter(teacher => teacher?.uid && roles[teacher.uid] !== "admin");
+    const daysSinceTs = (ts) => {
+      if(!ts) return null;
+      return Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
+    };
+    const withEntryMeta = (entry, classKey) => ({
+      ...entry,
+      classKey,
+      minutes:entryDurationMinutes(entry),
+    });
+    const statusMetaFor = (activeCount, loggedCount) => {
+      const pct = activeCount ? Math.round((loggedCount / activeCount) * 100) : 0;
+      if(activeCount === 0) return { key:"empty", label:"No active teachers", pct, accent:G.textL, bg:"#F8FAFC", border:G.border };
+      if(pct < 25) return { key:"critical", label:"Critical", pct, accent:G.red, bg:"#FFF1F2", border:"#FECACA" };
+      if(pct < 70) return { key:"low", label:"Low", pct, accent:G.amber, bg:"#FFF7ED", border:"#FED7AA" };
+      return { key:"on_track", label:"On track", pct, accent:"#15803D", bg:"#ECFDF3", border:"#A7F3D0" };
+    };
+
+    const instituteRows = institutes.map((instituteName, index) => {
+      const classBuckets = new Map();
+      const instituteTeachers = activeTeachers.filter(teacher => teacherBelongsToInstitute(teacher, instituteName));
+      const teacherRows = instituteTeachers.map(teacher => {
+        const uid = teacher.uid;
+        const teacherName = getTeacherDisplayName(teacher);
+        const data = fullData[uid];
+        const classesHere = data
+          ? (data.classes || []).filter(cls => cls && !cls.left && sameInstituteName(cls.institute, instituteName))
+          : [];
+        const teacherTodayEntries = [];
+        const teacherRecentEntries = [];
+        let teacherLastTs = Number(teacher?.lastActive || 0) || 0;
+
+        classesHere.forEach(cls => {
+          const resolvedSection = resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section || cls.name || "Untitled section";
+          const className = normaliseName(String(resolvedSection || "").trim() || "Untitled section");
+          const classKey = normaliseSectionKey(resolvedSection || className);
+          if(!classKey) return;
+          const subjectLabel = resolveAdminTeacherClassSubject(uid, cls.id, cls.subject || "");
+          const classNotes = (data.notes || {})[cls.id] || {};
+          const classLastTs = lastEntryTs(classNotes) || 0;
+          teacherLastTs = Math.max(teacherLastTs, classLastTs);
+          const todayEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, null, today, today)
+            .map(entry => withEntryMeta(entry, classKey));
+          const recentEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, 7, null, null)
+            .map(entry => withEntryMeta(entry, classKey));
+
+          const bucket = classBuckets.get(classKey) || {
+            key:classKey,
+            raw:resolvedSection,
+            display:className,
+            teachers:[],
+            subjects:new Set(),
+            todayEntries:[],
+            recentEntries:[],
+            todayMinutes:0,
+            lastTs:0,
+          };
+          if(subjectLabel) bucket.subjects.add(subjectLabel);
+          bucket.teachers.push({
+            uid,
+            name:teacherName,
+            classId:cls.id,
+            subject:subjectLabel,
+            todayEntries:todayEntries.length,
+            lastTs:classLastTs || null,
+          });
+          bucket.todayEntries.push(...todayEntries);
+          bucket.recentEntries.push(...recentEntries);
+          bucket.todayMinutes += todayEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
+          bucket.lastTs = Math.max(bucket.lastTs || 0, classLastTs || 0);
+          classBuckets.set(classKey, bucket);
+
+          teacherTodayEntries.push(...todayEntries);
+          teacherRecentEntries.push(...recentEntries);
+        });
+
+        const lastDays = daysSinceTs(teacherLastTs || null);
+        return {
+          uid,
+          name:teacherName,
+          loaded:!!data,
+          classCount:classesHere.length,
+          todayEntries:teacherTodayEntries,
+          recentEntries:teacherRecentEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
+          loggedToday:teacherTodayEntries.length > 0,
+          todayCount:teacherTodayEntries.length,
+          todayMinutes:teacherTodayEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0),
+          lastTs:teacherLastTs || null,
+          lastDays,
+          lastLabel:lastEntryCaption(teacherLastTs || null),
+        };
+      }).sort((a,b)=>{
+        if(Number(a.loggedToday) !== Number(b.loggedToday)) return Number(b.loggedToday) - Number(a.loggedToday);
+        if((b.todayCount || 0) !== (a.todayCount || 0)) return (b.todayCount || 0) - (a.todayCount || 0);
+        return exportTextSorter.compare(a.name || "", b.name || "");
+      });
+
+      const classRows = Array.from(classBuckets.values()).map(bucket => {
+        const subjects = Array.from(bucket.subjects).sort((a,b)=>exportTextSorter.compare(a || "", b || ""));
+        const teacherCount = new Set(bucket.teachers.map(item => item.uid).filter(Boolean)).size;
+        const lastDays = daysSinceTs(bucket.lastTs || null);
+        return {
+          ...bucket,
+          subjects,
+          teacherCount,
+          todayEntries:bucket.todayEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
+          recentEntries:bucket.recentEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
+          lastDays,
+          lastLabel:lastEntryCaption(bucket.lastTs || null),
+          cold:!bucket.lastTs || (lastDays !== null && lastDays >= 3),
+        };
+      }).sort((a,b)=>{
+        if(Number(a.cold) !== Number(b.cold)) return Number(b.cold) - Number(a.cold);
+        if((b.todayEntries.length || 0) !== (a.todayEntries.length || 0)) return b.todayEntries.length - a.todayEntries.length;
+        if((b.lastTs || 0) !== (a.lastTs || 0)) return (b.lastTs || 0) - (a.lastTs || 0);
+        return exportTextSorter.compare(a.display || "", b.display || "");
+      });
+
+      const activeCount = teacherRows.length;
+      const loggedCount = teacherRows.filter(item => item.loggedToday).length;
+      const pendingCount = Math.max(0, activeCount - loggedCount);
+      const status = statusMetaFor(activeCount, loggedCount);
+      const recentEntries = classRows
+        .flatMap(cls => cls.recentEntries.map(entry => ({ ...entry, classDisplay:cls.display })))
+        .sort((a,b)=>compareAdminPanelEntries(b,a));
+
+      return {
+        institute:instituteName,
+        index,
+        teachers:teacherRows,
+        classes:classRows,
+        recentEntries,
+        activeCount,
+        loggedCount,
+        pendingCount,
+        loadedCount:teacherRows.filter(item => item.loaded).length,
+        status,
+        coldClassCount:classRows.filter(item => item.cold).length,
+        todayEntryCount:teacherRows.reduce((sum, item) => sum + item.todayCount, 0),
+        todayMinutes:teacherRows.reduce((sum, item) => sum + item.todayMinutes, 0),
+      };
+    });
+
+    const severityRank = { critical:0, low:1, empty:2, on_track:3 };
+    const sortedInstitutes = [...instituteRows].sort((a,b)=>{
+      const rankA = severityRank[a.status.key] ?? 4;
+      const rankB = severityRank[b.status.key] ?? 4;
+      if(rankA !== rankB) return rankA - rankB;
+      if((b.pendingCount || 0) !== (a.pendingCount || 0)) return (b.pendingCount || 0) - (a.pendingCount || 0);
+      return a.index - b.index;
+    });
+    const summary = sortedInstitutes.reduce((acc, item) => {
+      acc.activeTeachers += item.activeCount || 0;
+      acc.loggedToday += item.loggedCount || 0;
+      acc.pending += item.pendingCount || 0;
+      acc.coldClasses += item.coldClassCount || 0;
+      acc.todayEntries += item.todayEntryCount || 0;
+      acc.todayMinutes += item.todayMinutes || 0;
+      if(item.status.key === "critical") acc.critical += 1;
+      if(item.status.key === "low") acc.low += 1;
+      if(item.status.key === "on_track") acc.onTrack += 1;
+      return acc;
+    }, { activeTeachers:0, loggedToday:0, pending:0, critical:0, low:0, onTrack:0, coldClasses:0, todayEntries:0, todayMinutes:0 });
+    summary.loggedPct = summary.activeTeachers ? Math.round((summary.loggedToday / summary.activeTeachers) * 100) : 0;
+    return { today, institutes:sortedInstitutes, summary };
+  }, [
+    fullData,
+    getTeacherDisplayName,
+    instSectionsAll,
+    institutes,
+    resolveAdminTeacherClassSubject,
+    roles,
+    teacherBelongsToInstitute,
+    teachers,
+  ]);
+
+  const adminV5VisibleInstitutes = useMemo(()=>{
+    const searchKey = adminV5InstituteSearch.trim().toLowerCase();
+    if(!searchKey) return adminV5Model.institutes;
+    return adminV5Model.institutes.filter(item => item.institute.toLowerCase().includes(searchKey));
+  }, [adminV5InstituteSearch, adminV5Model.institutes]);
+
+  const adminV5SelectedInstitute = useMemo(()=>{
+    if(!adminV5Model.institutes.length) return null;
+    return adminV5Model.institutes.find(item => sameInstituteName(item.institute, selInst)) || adminV5Model.institutes[0];
+  }, [adminV5Model.institutes, selInst]);
+
+  const adminV5SelectedClass = useMemo(()=>{
+    const classes = adminV5SelectedInstitute?.classes || [];
+    if(!classes.length) return null;
+    return classes.find(item => item.key === adminV5ClassKey) || classes[0];
+  }, [adminV5ClassKey, adminV5SelectedInstitute]);
+
+  const adminV5SelectedTeacher = useMemo(()=>{
+    if(!adminV5TeacherUid) return null;
+    return (adminV5SelectedInstitute?.teachers || []).find(item => item.uid === adminV5TeacherUid) || null;
+  }, [adminV5SelectedInstitute, adminV5TeacherUid]);
+
+  React.useEffect(()=>{
+    if(view !== "main" || selInst || !adminV5Model.institutes.length) return;
+    const firstInstitute = adminV5Model.institutes[0]?.institute || "";
+    if(!firstInstitute) return;
+    setSelInst(firstInstitute);
+    warmInstitute(firstInstitute);
+  }, [adminV5Model.institutes, selInst, view, warmInstitute]);
+
   const fullViewEntries = useMemo(()=>{
     if(!fullView || !selInst) return [];
     if(fullView.kind==="teacher"){
@@ -14993,6 +15205,39 @@ function AdminPanelInner({user}){
       loadInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure);
     }
   }, [handleInstituteGlanceLoadFailure, loadInstituteGlanceReport]);
+
+  const selectAdminV5Institute = React.useCallback((instituteName, nextPane = "classes") => {
+    if(!instituteName) return;
+    setProfileOpen(false);
+    setSelInst(instituteName);
+    setAdminV5ClassKey("");
+    setAdminV5TeacherUid("");
+    setAdminV5MobilePane(nextPane);
+    warmInstitute(instituteName);
+  }, [warmInstitute]);
+
+  const selectAdminV5Class = React.useCallback((classKey) => {
+    setAdminV5ClassKey(classKey || "");
+    setAdminV5TeacherUid("");
+    setAdminV5MobilePane("timeline");
+  }, []);
+
+  const selectAdminV5Teacher = React.useCallback((teacherUid) => {
+    setAdminV5TeacherUid(teacherUid || "");
+    setAdminV5MobilePane("timeline");
+    if(teacherUid) ensureFullData(teacherUid);
+  }, [ensureFullData]);
+
+  const handleAdminV5Nudge = React.useCallback((target, meta = {}) => {
+    const label = String(target || "selected teacher").trim() || "selected teacher";
+    console.info("Admin V5 nudge preview only", {
+      target:label,
+      institute:meta.institute || adminV5SelectedInstitute?.institute || "",
+      teacherUid:meta.teacherUid || "",
+      classKey:meta.classKey || "",
+    });
+    showAdminToast(`Nudge noted for ${label}. No message was sent.`);
+  }, [adminV5SelectedInstitute, showAdminToast]);
 
   // Keep touch/scroll institute selection logic below the values it depends on.
   // These callbacks read institutes, saveInstOrder, and onSelectInstitute in
@@ -17025,6 +17270,466 @@ function AdminPanelInner({user}){
     return null;
   };
 
+  const renderAdminV5Dashboard = () => {
+    const selectedInstitute = adminV5SelectedInstitute;
+    const selectedInstituteName = selectedInstitute?.institute || "";
+    const selectedClass = adminV5SelectedClass;
+    const selectedClassKey = selectedClass?.key || "";
+    const selectedTeacher = adminV5SelectedTeacher;
+    const summary = adminV5Model.summary;
+    const pendingTeachers = (selectedInstitute?.teachers || []).filter(item => !item.loggedToday);
+    const timelineEntries = (selectedClass ? selectedClass.recentEntries : selectedInstitute?.recentEntries || [])
+      .filter(entry => !adminV5TeacherUid || entry.teacherUid === adminV5TeacherUid)
+      .slice(0, 28);
+    const shellBg = "#F3F6FB";
+    const panelBorder = "1px solid rgba(148,163,184,0.32)";
+    const softShadow = reduceEffects ? "none" : "0 18px 46px rgba(15,23,42,0.08)";
+    const toolItems = [
+      { key:"teachers", label:"Teachers", icon:IconUsersGroup, onClick:()=>openManageTab("teachers") },
+      { key:"institutes", label:"Institutes", icon:IconBuilding, onClick:()=>openManageTab("institutes") },
+      { key:"subjects", label:"Syllabus", icon:IconBooks, onClick:()=>openManageTab("subjects") },
+      { key:"sections", label:"Sections", icon:IconSchool, onClick:()=>openManageTab("sections", { detailInstitute:selectedInstituteName || null }) },
+      { key:"admins", label:"Admins", icon:IconSettings, onClick:()=>openManageTab("admins") },
+      { key:"report", label:"Report", icon:IconFileText, onClick:()=>openManageTab("report") },
+      { key:"messenger", label:"Messenger", icon:IconSend, onClick:openLedgrTelegramDashboard },
+    ];
+    const mobilePanes = [
+      { key:"institutes", label:"Institutes", icon:IconBuilding },
+      { key:"classes", label:"Classes", icon:IconSchool },
+      { key:"timeline", label:"Timeline", icon:IconClock },
+    ];
+    const actionButton = (tone = "light") => ({
+      height:38,
+      borderRadius:12,
+      border:tone === "dark" ? "1px solid transparent" : "1px solid rgba(148,163,184,0.34)",
+      background:tone === "dark" ? G.navy : tone === "blue" ? "#EAF2FF" : "#FFFFFF",
+      color:tone === "dark" ? "#FFFFFF" : tone === "blue" ? G.blue : G.text,
+      padding:"0 12px",
+      display:"inline-flex",
+      alignItems:"center",
+      justifyContent:"center",
+      gap:7,
+      fontSize:12.5,
+      fontWeight:850,
+      fontFamily:G.sans,
+      cursor:"pointer",
+      whiteSpace:"nowrap",
+      boxShadow:reduceEffects ? "none" : "0 8px 18px rgba(15,23,42,0.06)",
+    });
+    const metricTile = (label, value, tone = "blue") => {
+      const tones = {
+        blue:{ bg:"#EAF2FF", color:G.blue, border:"#C7D7F5" },
+        green:{ bg:"#ECFDF3", color:"#15803D", border:"#A7F3D0" },
+        amber:{ bg:"#FFF7ED", color:G.amber, border:"#FED7AA" },
+        red:{ bg:"#FFF1F2", color:G.red, border:"#FECACA" },
+      };
+      const style = tones[tone] || tones.blue;
+      return (
+        <div style={{background:style.bg,border:`1px solid ${style.border}`,borderRadius:8,padding:"11px 12px",minWidth:0}}>
+          <div style={{fontSize:10.5,color:style.color,fontFamily:G.mono,fontWeight:850,letterSpacing:0.55,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
+          <div style={{fontSize:24,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>{value}</div>
+        </div>
+      );
+    };
+    const renderOverlays = () => (
+      <>
+        {feedbackOpen&&(
+          <FeedbackInboxModal
+            threads={feedbackThreads}
+            selectedUid={feedbackSelectedUid}
+            messages={feedbackMessages}
+            reply={feedbackReply}
+            busy={feedbackBusy}
+            onSelect={uid=>{setFeedbackSelectedUid(uid);markFeedbackThreadRead(uid).catch(()=>{});}}
+            onReplyChange={setFeedbackReply}
+            onSend={sendFeedbackReply}
+            onToggleResolved={toggleFeedbackResolved}
+            onClose={()=>setFeedbackOpen(false)}
+          />
+        )}
+        {binView&&<AdminBinModal/>}
+        {instDeleteModal&&<InstDeleteModal/>}
+        {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
+        {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
+        {instituteGlanceOptionsOpen&&(
+          <LedgrReportOptionsModal
+            institutes={institutes}
+            period={instituteGlancePeriod}
+            month={instituteGlanceMonth}
+            rangeStart={instituteGlanceRangeStart}
+            rangeEnd={instituteGlanceRangeEnd}
+            schedule={ledgrReportSchedule}
+            scheduleLoading={ledgrReportScheduleLoading}
+            scheduleSaving={ledgrReportScheduleSaving}
+            exportDisabled={instituteGlanceExportDisabled}
+            busyFormat={instituteGlanceExportBusy}
+            initialMode={instituteGlanceOptionsMode}
+            context={instituteGlanceOptionsContext}
+            onClose={()=>!instituteGlanceExportBusy&&!ledgrReportScheduleSaving&&setInstituteGlanceOptionsOpen(false)}
+            onApply={applyInstituteGlanceOptions}
+            onSaveSchedule={saveInstituteGlanceSchedule}
+          />
+        )}
+        {telegramDashboardOpen&&(
+          <LedgrTelegramDashboardModal
+            institutes={institutes}
+            schedule={ledgrReportSchedule}
+            config={ledgrTelegramConfig}
+            loading={ledgrTelegramLoading}
+            saving={ledgrTelegramSaving}
+            sendBusy={ledgrTelegramSending}
+            onClose={()=>!ledgrTelegramSaving&&setTelegramDashboardOpen(false)}
+            onSave={saveLedgrTelegramDashboard}
+            onOpenSchedule={openLedgrTelegramSchedule}
+            onSendNow={sendLedgrTelegramNow}
+          />
+        )}
+        <AdminToastBanner message={adminToast} />
+      </>
+    );
+    const renderRail = (compact = false) => (
+      <aside style={{
+        background:"#101B34",
+        color:"#FFFFFF",
+        display:"flex",
+        flexDirection:compact ? "row" : "column",
+        alignItems:"center",
+        gap:compact ? 8 : 10,
+        padding:compact ? "10px 12px" : "14px 10px",
+        overflowX:compact ? "auto" : "hidden",
+        overflowY:compact ? "hidden" : "auto",
+      }}>
+        <div style={{width:compact ? 42 : 46,height:compact ? 42 : 46,borderRadius:8,background:G.blueV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:900,fontFamily:G.display,flexShrink:0}}>L</div>
+        {!compact&&<div style={{width:36,height:1,background:"rgba(255,255,255,0.12)",margin:"2px 0 4px"}}/>}
+        {toolItems.map(item=>(
+          <button
+            key={item.key}
+            type="button"
+            title={item.label}
+            onClick={item.onClick}
+            style={{
+              width:compact ? 72 : "100%",
+              minHeight:compact ? 50 : 58,
+              border:"1px solid rgba(255,255,255,0.08)",
+              borderRadius:8,
+              background:item.key === "report" ? "rgba(59,130,246,0.20)" : "rgba(255,255,255,0.055)",
+              color:"#FFFFFF",
+              display:"flex",
+              flexDirection:"column",
+              alignItems:"center",
+              justifyContent:"center",
+              gap:5,
+              cursor:"pointer",
+              fontFamily:G.sans,
+              flexShrink:0,
+            }}>
+            <AppIcon icon={item.icon} size={19} color={item.key === "messenger" ? "#93C5FD" : "#FFFFFF"} />
+            <span style={{fontSize:9.5,fontWeight:800,lineHeight:1.05,opacity:0.76,textAlign:"center"}}>{item.label}</span>
+          </button>
+        ))}
+        {!compact&&<div style={{flex:1}}/>}
+        {!compact&&(
+          <>
+            <button type="button" title="Teacher Feedback" onClick={openFeedbackInbox} style={{width:"100%",minHeight:48,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(255,255,255,0.055)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
+              <AppIcon icon={IconMessageCircle} size={19} color="#CBD5E1" />
+              {feedbackUnreadCount>0&&<span style={{position:"absolute",top:6,right:8,background:G.red,color:"#FFFFFF",borderRadius:999,padding:"2px 5px",fontSize:9,fontWeight:900}}>{feedbackUnreadCount>9?"9+":feedbackUnreadCount}</span>}
+            </button>
+            <button type="button" title="Sign out" onClick={logout} style={{width:"100%",minHeight:48,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(220,38,38,0.14)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+              <AppIcon icon={IconLogout} size={19} color="#FCA5A5" />
+            </button>
+          </>
+        )}
+      </aside>
+    );
+    const renderInstituteDrawer = () => (
+      <section style={{background:"#FFFFFF",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
+        <div style={{padding:"18px 16px 14px",borderBottom:panelBorder}}>
+          <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Admin V5</div>
+          <div style={{fontSize:26,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.02,marginTop:7}}>Command centre</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:15}}>
+            {metricTile("Logged", `${summary.loggedToday}/${summary.activeTeachers}`, summary.loggedPct >= 70 ? "green" : summary.loggedPct < 25 ? "red" : "amber")}
+            {metricTile("Pending", summary.pending, summary.pending ? "amber" : "green")}
+            {metricTile("Critical", summary.critical, summary.critical ? "red" : "green")}
+            {metricTile("Cold class", summary.coldClasses, summary.coldClasses ? "amber" : "green")}
+          </div>
+          <div style={{marginTop:13}}>
+            {renderSearchInput(adminV5InstituteSearch, setAdminV5InstituteSearch, "Search institutes", true)}
+          </div>
+        </div>
+        <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"10px"}}>
+          {adminV5VisibleInstitutes.map(row=>{
+            const active = selectedInstitute && sameInstituteName(row.institute, selectedInstitute.institute);
+            return (
+              <button
+                key={row.institute}
+                type="button"
+                onClick={()=>selectAdminV5Institute(row.institute, "classes")}
+                style={{
+                  width:"100%",
+                  border:`1px solid ${active ? row.status.border : "transparent"}`,
+                  borderLeft:`4px solid ${row.status.accent}`,
+                  borderRadius:8,
+                  background:active ? row.status.bg : "#FFFFFF",
+                  padding:"11px 10px",
+                  marginBottom:8,
+                  textAlign:"left",
+                  cursor:"pointer",
+                  fontFamily:G.sans,
+                  boxShadow:active ? (reduceEffects ? "none" : "0 10px 26px rgba(15,23,42,0.07)") : "none",
+                }}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                  <span style={{fontSize:15,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.institute}</span>
+                  <span style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,color:row.status.accent,whiteSpace:"nowrap"}}>{row.status.pct}%</span>
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                  <span style={{fontSize:11,color:G.textM,fontWeight:750}}>{row.loggedCount}/{row.activeCount} logged</span>
+                  <span style={{fontSize:11,color:row.pendingCount ? G.amber : "#15803D",fontWeight:800}}>{row.pendingCount} pending</span>
+                  <span style={{fontSize:11,color:row.coldClassCount ? G.red : G.textL,fontWeight:800}}>{row.coldClassCount} cold</span>
+                </div>
+                <div style={{height:5,borderRadius:999,background:"#E5E7EB",overflow:"hidden",marginTop:10}}>
+                  <div style={{height:"100%",width:`${Math.max(row.status.pct, row.loggedCount ? 4 : 0)}%`,background:row.status.accent,borderRadius:999}}/>
+                </div>
+              </button>
+            );
+          })}
+          {!adminV5VisibleInstitutes.length&&(
+            <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
+              No institutes match.
+            </div>
+          )}
+        </div>
+      </section>
+    );
+    const renderClassPanel = () => (
+      <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
+        <div style={{padding:"18px 16px 13px",borderBottom:panelBorder,background:"#FFFFFF"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Institute health</div>
+              <div style={{fontSize:24,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedInstituteName || "No institute"}</div>
+              {selectedInstitute&&<div style={{fontSize:12.5,color:G.textM,marginTop:7,lineHeight:1.4}}>{selectedInstitute.loadedCount}/{selectedInstitute.activeCount} teacher records loaded</div>}
+            </div>
+            {selectedInstitute&&(
+              <span style={{background:selectedInstitute.status.bg,border:`1px solid ${selectedInstitute.status.border}`,color:selectedInstitute.status.accent,borderRadius:999,padding:"7px 10px",fontSize:11,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                {selectedInstitute.status.label}
+              </span>
+            )}
+          </div>
+          {renderWarmupBanner(false)}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13}}>
+            <button type="button" onClick={()=>openInstituteGlanceOptions("export", "report")} style={actionButton("blue")}>
+              <AppIcon icon={IconCalendar} size={15} color={G.blue} />
+              Daily / Export
+            </button>
+            <button type="button" onClick={()=>openInstituteGlanceOptions("schedule", "report")} style={actionButton("light")}>
+              <AppIcon icon={IconClock} size={15} color={G.textS} />
+              Schedule
+            </button>
+            <button type="button" onClick={openLedgrTelegramDashboard} style={actionButton("light")}>
+              <AppIcon icon={IconSend} size={15} color={G.blue} />
+              Messenger
+            </button>
+          </div>
+        </div>
+        <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px"}}>
+          <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 9px"}}>Classes</div>
+          {(selectedInstitute?.classes || []).map(cls=>{
+            const active = cls.key === selectedClassKey;
+            const tone = getSectionTone(cls.display);
+            return (
+              <button
+                key={cls.key}
+                type="button"
+                onClick={()=>selectAdminV5Class(cls.key)}
+                style={{
+                  width:"100%",
+                  border:`1.5px solid ${active ? tone.border || G.blue : cls.cold ? "#FED7AA" : G.border}`,
+                  borderRadius:8,
+                  background:active ? tone.surface || "#FFFFFF" : "#FFFFFF",
+                  padding:"12px",
+                  marginBottom:9,
+                  textAlign:"left",
+                  cursor:"pointer",
+                  fontFamily:G.sans,
+                  boxShadow:active ? softShadow : "none",
+                }}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:18,fontWeight:900,color:tone.ink || G.text,fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.4,marginTop:5}}>{cls.teacherCount} teacher{cls.teacherCount===1?"":"s"} · {cls.todayEntries.length} today · {cls.lastLabel}</div>
+                  </div>
+                  {cls.cold&&<span style={{background:"#FFF7ED",border:"1px solid #FED7AA",color:G.amber,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>Cold</span>}
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+                  {cls.subjects.slice(0,3).map(subject=>(
+                    <span key={subject} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 8px",fontSize:11,color:G.textS,fontWeight:750}}>{subject}</span>
+                  ))}
+                  {cls.subjects.length>3&&<span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 8px",fontSize:11,color:G.textL,fontFamily:G.mono}}>+{cls.subjects.length - 3}</span>}
+                </div>
+              </button>
+            );
+          })}
+          {selectedInstitute && !selectedInstitute.classes.length&&(
+            <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
+              No loaded classes for this institute yet.
+            </div>
+          )}
+          {!!pendingTeachers.length&&(
+            <div style={{marginTop:14}}>
+              <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 9px"}}>Pending teachers</div>
+              {pendingTeachers.slice(0,8).map(teacher=>(
+                <div key={teacher.uid} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 11px",marginBottom:8,display:"flex",alignItems:"center",gap:10}}>
+                  <button type="button" onClick={()=>selectAdminV5Teacher(teacher.uid)} style={{border:"none",background:"transparent",padding:0,textAlign:"left",cursor:"pointer",fontFamily:G.sans,minWidth:0,flex:1}}>
+                    <div style={{fontSize:13.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{teacher.name}</div>
+                    <div style={{fontSize:11.5,color:G.textL,marginTop:3}}>{teacher.lastLabel}</div>
+                  </button>
+                  <button type="button" onClick={()=>handleAdminV5Nudge(teacher.name, { institute:selectedInstituteName, teacherUid:teacher.uid })} style={{...actionButton("light"),height:32,padding:"0 10px",fontSize:11.5}}>
+                    Nudge
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    );
+    const renderTimelinePanel = () => (
+      <main style={{background:shellBg,minWidth:0,height:isMobile?"auto":"100%",display:"flex",flexDirection:"column",overflow:isMobile?"visible":"hidden"}}>
+        <div style={{padding:isMobile ? "14px 14px 12px" : "18px 20px 14px",background:"#FFFFFF",borderBottom:panelBorder}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Teacher / class timeline</div>
+              <div style={{fontSize:isMobile ? 24 : 30,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7}}>
+                {selectedClass ? selectedClass.display : selectedInstituteName || "Admin dashboard"}
+              </div>
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.45,marginTop:7}}>
+                {selectedTeacher ? `${selectedTeacher.name} · actual subject labels from teacher class records` : selectedInstitute ? `${selectedInstituteName} · ${selectedInstitute.todayEntryCount} entries today` : "Select an institute to begin"}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+              <button type="button" onClick={()=>openManageTab("report")} style={actionButton("blue")}>
+                <AppIcon icon={IconFileText} size={15} color={G.blue} />
+                Ledgr Report
+              </button>
+              <button type="button" onClick={openLedgrTelegramSchedule} style={actionButton("light")}>
+                <AppIcon icon={IconClock} size={15} color={G.textS} />
+                Batch
+              </button>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",gap:9,marginTop:15}}>
+            {metricTile("Today entries", selectedInstitute?.todayEntryCount || 0, "blue")}
+            {metricTile("Study time", formatDurationShort(selectedInstitute?.todayMinutes || 0), "green")}
+            {metricTile("Pending", selectedInstitute?.pendingCount || 0, selectedInstitute?.pendingCount ? "amber" : "green")}
+            {metricTile("Loaded", selectedInstitute ? `${selectedInstitute.loadedCount}/${selectedInstitute.activeCount}` : "0/0", "blue")}
+          </div>
+          {selectedClass&&(
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13}}>
+              <button type="button" onClick={()=>selectAdminV5Teacher("")} style={actionButton(!adminV5TeacherUid ? "dark" : "light")}>All teachers</button>
+              {selectedClass.teachers.slice(0,8).map(teacher=>(
+                <button key={`${teacher.uid}_${teacher.classId}`} type="button" onClick={()=>selectAdminV5Teacher(teacher.uid)} style={actionButton(adminV5TeacherUid === teacher.uid ? "dark" : "light")}>
+                  {teacher.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:isMobile ? "12px 14px 22px" : "16px 20px 22px"}}>
+          {loading&&(
+            <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"13px 14px",marginBottom:12,color:G.textM,fontSize:13,fontWeight:750}}>
+              Loading admin data...
+            </div>
+          )}
+          {!timelineEntries.length&&(
+            <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"22px",textAlign:"center",boxShadow:softShadow}}>
+              <div style={{fontSize:18,fontWeight:900,color:G.text,fontFamily:G.display}}>No recent timeline entries</div>
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:8}}>
+                {selectedClass ? "This class has no loaded entries in the last seven days." : "Choose a class to inspect recent entries."}
+              </div>
+            </div>
+          )}
+          {timelineEntries.map((entry,index)=>{
+            const status = entry.status && STATUS_STYLES[entry.status] ? STATUS_STYLES[entry.status] : null;
+            const timeLabel = [fmt12(entry.timeStart), fmt12(entry.timeEnd)].filter(Boolean).join(" - ");
+            return (
+              <div key={`${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${entry.id || index}`} style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"13px 14px",marginBottom:10,boxShadow:reduceEffects ? "none" : "0 10px 24px rgba(15,23,42,0.05)"}}>
+                <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(0,1fr) auto",gap:10,alignItems:"start"}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
+                      <span style={{fontSize:11,fontWeight:900,fontFamily:G.mono,color:G.blue,letterSpacing:0.6,textTransform:"uppercase"}}>{formatAdminDateKey(entry.dateKey)}</span>
+                      {timeLabel&&<span style={{fontSize:11,fontWeight:800,color:G.textL,fontFamily:G.mono}}>{timeLabel}</span>}
+                      {status&&<span style={{background:status.bg || G.bg,color:status.text || G.textS,border:`1px solid ${status.border || G.border}`,borderRadius:999,padding:"3px 7px",fontSize:10.5,fontWeight:850}}>{status.label}</span>}
+                    </div>
+                    <div style={{fontSize:17,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.15,marginTop:7}}>
+                      {entry.title || entry.body || "Class entry"}
+                    </div>
+                    {entry.body&&entry.title&&<div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:6}}>{entry.body}</div>}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:isMobile ? "flex-start" : "flex-end"}}>
+                    <span style={{fontSize:12.5,fontWeight:900,color:G.text}}>{entry.teacherName}</span>
+                    <span style={{fontSize:12,color:G.textM}}>{entry.subject || "No subject"}</span>
+                    <span style={{fontSize:11.5,color:G.textL}}>{entry.classDisplay || entry.className}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </main>
+    );
+    const renderMobileDashboard = () => (
+      <div style={{minHeight:"100svh",background:shellBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
+        {renderOverlays()}
+        <div style={{background:"#101B34",color:"#FFFFFF",padding:"12px 12px 10px",position:"sticky",top:0,zIndex:80}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+              <div style={{width:38,height:38,borderRadius:8,background:G.blueV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,fontWeight:900,fontFamily:G.display}}>L</div>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:19,fontWeight:900,fontFamily:G.display,lineHeight:1}}>Ledgr Admin</div>
+                <div style={{fontSize:10.5,fontWeight:800,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase",color:"rgba(255,255,255,0.55)"}}>V5 dashboard</div>
+              </div>
+            </div>
+            <button type="button" onClick={logout} style={{...actionButton("light"),height:36,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",color:"#FFFFFF",boxShadow:"none"}}>
+              <AppIcon icon={IconLogout} size={15} color="#FFFFFF" />
+            </button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:7,marginTop:12}}>
+            {mobilePanes.map(item=>{
+              const active = adminV5MobilePane === item.key;
+              return (
+                <button key={item.key} type="button" onClick={()=>setAdminV5MobilePane(item.key)} style={{height:44,borderRadius:8,border:"1px solid rgba(255,255,255,0.12)",background:active ? "#FFFFFF" : "rgba(255,255,255,0.06)",color:active ? G.navy : "#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:11.5,fontWeight:900,fontFamily:G.sans,cursor:"pointer"}}>
+                  <AppIcon icon={item.icon} size={15} color={active ? G.navy : "#FFFFFF"} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{margin:"10px -12px -4px"}}>
+            {renderRail(true)}
+          </div>
+        </div>
+        <div style={{padding:"12px",flex:1,minHeight:0}}>
+          {adminV5MobilePane === "institutes"&&renderInstituteDrawer()}
+          {adminV5MobilePane === "classes"&&renderClassPanel()}
+          {adminV5MobilePane === "timeline"&&renderTimelinePanel()}
+        </div>
+      </div>
+    );
+
+    if(isMobile) return renderMobileDashboard();
+
+    return (
+      <div style={{height:"100svh",background:shellBg,fontFamily:G.sans,display:"grid",gridTemplateColumns:"78px minmax(278px,330px) minmax(330px,390px) minmax(0,1fr)",overflow:"hidden"}}>
+        {renderOverlays()}
+        {renderRail(false)}
+        {renderInstituteDrawer()}
+        {renderClassPanel()}
+        {renderTimelinePanel()}
+      </div>
+    );
+  };
+
   // ── MANAGE ACCESS VIEW ────────────────────────────────────────────────────
   if(view==="manage"){
     if(instituteGlanceOpen && !isMobile){
@@ -18421,6 +19126,10 @@ function AdminPanelInner({user}){
       </div>
     </div>
   );
+  }
+
+  if(view==="main"){
+    return renderAdminV5Dashboard();
   }
 
   // ── MAIN PANEL VIEW ───────────────────────────────────────────────────────
