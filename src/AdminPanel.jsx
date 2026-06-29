@@ -17373,6 +17373,36 @@ function AdminPanelInner({user}){
               meta:{ institute:selectedInstituteName },
             }
           : null;
+    const selectedColdClasses = (selectedInstitute?.classes || []).filter(item => item.cold);
+    const nearbyAtRiskInstitutes = adminV5Model.institutes
+      .filter(item => !sameInstituteName(item.institute, selectedInstituteName) && (item.status.key === "critical" || item.status.key === "low"))
+      .slice(0, 2);
+    const attentionItems = [
+      ...(pendingTeachers.length ? [{
+        key:"pending-teachers",
+        tone:"amber",
+        label:"Pending teachers",
+        value:`${pendingTeachers.length} today`,
+        body:selectedInstituteName || "Selected institute",
+        onClick:()=>openManageTab("teachers", selectedInstituteName ? { scopeInstitute:selectedInstituteName } : {}),
+      }] : []),
+      ...selectedColdClasses.slice(0, 2).map(cls => ({
+        key:`cold-${cls.key}`,
+        tone:"red",
+        label:"Cold class",
+        value:cls.lastLabel,
+        body:cls.display,
+        onClick:()=>selectAdminV5Class(cls.key),
+      })),
+      ...nearbyAtRiskInstitutes.map(item => ({
+        key:`risk-${item.institute}`,
+        tone:item.status.key === "critical" ? "red" : "amber",
+        label:item.status.label,
+        value:`${item.loggedCount}/${item.activeCount} logged`,
+        body:item.institute,
+        onClick:()=>selectAdminV5Institute(item.institute, "classes"),
+      })),
+    ].slice(0, 4);
     const shellBg = "#F3F6FB";
     const panelBorder = "1px solid rgba(148,163,184,0.32)";
     const softShadow = reduceEffects ? "none" : "0 18px 46px rgba(15,23,42,0.08)";
@@ -17467,6 +17497,11 @@ function AdminPanelInner({user}){
         </div>
       );
     };
+    const attentionTone = (tone = "blue") => ({
+      red:{ bg:"#FFF1F2", icon:"#FEE2E2", color:G.red, border:"#FECACA" },
+      amber:{ bg:"#FFF7ED", icon:"#FFEDD5", color:G.amber, border:"#FED7AA" },
+      blue:{ bg:"#EAF2FF", icon:"#DBEAFE", color:G.blue, border:"#C7D7F5" },
+    }[tone] || { bg:"#EAF2FF", icon:"#DBEAFE", color:G.blue, border:"#C7D7F5" });
     const filterChip = ({ chipKey, active, label, count, onClick, compact = false }) => (
       <button
         key={chipKey}
@@ -17901,6 +17936,45 @@ function AdminPanelInner({user}){
                   {teacher.name}
                 </button>
               ))}
+            </div>
+          )}
+          {!!attentionItems.length&&(
+            <div style={{marginTop:13}}>
+              <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,marginBottom:8}}>Attention queue</div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(2,minmax(0,1fr))",gap:8}}>
+                {attentionItems.map(item=>{
+                  const tone = attentionTone(item.tone);
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={item.onClick}
+                      style={{
+                        minHeight:58,
+                        border:`1px solid ${tone.border}`,
+                        borderRadius:8,
+                        background:tone.bg,
+                        padding:"10px 11px",
+                        display:"flex",
+                        alignItems:"center",
+                        gap:10,
+                        textAlign:"left",
+                        cursor:"pointer",
+                        fontFamily:G.sans,
+                        minWidth:0,
+                      }}>
+                      <span style={{width:32,height:32,borderRadius:8,background:tone.icon,display:"inline-flex",alignItems:"center",justifyContent:"center",color:tone.color,fontSize:14,fontWeight:950,fontFamily:G.mono,flexShrink:0}}>!</span>
+                      <span style={{minWidth:0,flex:1}}>
+                        <span style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                          <span style={{fontSize:12.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</span>
+                          <span style={{fontSize:10.5,fontWeight:900,color:tone.color,fontFamily:G.mono,whiteSpace:"nowrap"}}>{item.value}</span>
+                        </span>
+                        <span style={{display:"block",fontSize:11.5,fontWeight:750,color:G.textM,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.body}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
