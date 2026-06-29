@@ -14295,6 +14295,18 @@ function AdminPanelInner({user}){
     return adminV5Model.institutes.find(item => sameInstituteName(item.institute, selInst)) || adminV5Model.institutes[0];
   }, [adminV5Model.institutes, selInst]);
 
+  React.useEffect(()=>{
+    if(view !== "main" || !adminV5VisibleInstitutes.length) return;
+    if(selInst && adminV5VisibleInstitutes.some(item => sameInstituteName(item.institute, selInst))) return;
+    const nextInstitute = adminV5VisibleInstitutes[0]?.institute || "";
+    if(!nextInstitute) return;
+    setSelInst(nextInstitute);
+    setAdminV5ClassKey("");
+    setAdminV5TeacherUid("");
+    setAdminV5TimelineScope("institute");
+    warmInstitute(nextInstitute);
+  }, [adminV5VisibleInstitutes, selInst, view, warmInstitute]);
+
   const adminV5SelectedClass = useMemo(()=>{
     const classes = adminV5SelectedInstitute?.classes || [];
     if(!classes.length) return null;
@@ -17310,6 +17322,13 @@ function AdminPanelInner({user}){
     const selectedTeacher = adminV5SelectedTeacher;
     const summary = adminV5Model.summary;
     const pendingTeachers = (selectedInstitute?.teachers || []).filter(item => !item.loggedToday);
+    const selectedClassPendingTeachers = selectedClass
+      ? Array.from(new Map(
+        selectedClass.teachers
+          .filter(item => !item.todayEntries)
+          .map(item => [item.uid, item])
+      ).values())
+      : [];
     const activeTimelineScope = adminV5TimelineScope === "teacher" && selectedTeacher
       ? "teacher"
       : adminV5TimelineScope === "class" && selectedClass
@@ -17330,11 +17349,30 @@ function AdminPanelInner({user}){
         : selectedInstituteName || "Admin dashboard";
     const timelineSubtitle = activeTimelineScope === "teacher"
       ? `${selectedInstituteName} · all loaded classes for this teacher`
-      : activeTimelineScope === "class"
-        ? `${selectedInstituteName} · all teachers in this class`
-        : selectedInstitute
-          ? `${selectedInstituteName} · all loaded class timelines`
-          : "Select an institute to begin";
+        : activeTimelineScope === "class"
+          ? `${selectedInstituteName} · all teachers in this class`
+          : selectedInstitute
+            ? `${selectedInstituteName} · all loaded class timelines`
+            : "Select an institute to begin";
+    const scopeNudge = activeTimelineScope === "teacher" && selectedTeacher
+      ? {
+          label:"Preview nudge",
+          target:selectedTeacher.name,
+          meta:{ institute:selectedInstituteName, teacherUid:selectedTeacher.uid },
+        }
+      : activeTimelineScope === "class" && selectedClass && selectedClassPendingTeachers.length
+        ? {
+            label:`Preview ${selectedClassPendingTeachers.length} nudge${selectedClassPendingTeachers.length === 1 ? "" : "s"}`,
+            target:`${selectedClassPendingTeachers.length} pending teacher${selectedClassPendingTeachers.length === 1 ? "" : "s"} in ${selectedClass.display}`,
+            meta:{ institute:selectedInstituteName, classKey:selectedClass.key },
+          }
+        : selectedInstitute?.pendingCount
+          ? {
+              label:`Preview ${selectedInstitute.pendingCount} nudge${selectedInstitute.pendingCount === 1 ? "" : "s"}`,
+              target:`${selectedInstitute.pendingCount} pending teacher${selectedInstitute.pendingCount === 1 ? "" : "s"} in ${selectedInstituteName}`,
+              meta:{ institute:selectedInstituteName },
+            }
+          : null;
     const shellBg = "#F3F6FB";
     const panelBorder = "1px solid rgba(148,163,184,0.32)";
     const softShadow = reduceEffects ? "none" : "0 18px 46px rgba(15,23,42,0.08)";
@@ -17612,7 +17650,10 @@ function AdminPanelInner({user}){
           })}
           {!adminV5VisibleInstitutes.length&&(
             <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
-              No institutes match.
+              <div>No institutes match.</div>
+              <button type="button" onClick={()=>{setAdminV5InstituteSearch("");setAdminV5InstituteFilter("all");}} style={{...actionButton("light"),height:32,marginTop:10,boxShadow:"none"}}>
+                Clear filters
+              </button>
             </div>
           )}
         </div>
@@ -17704,7 +17745,10 @@ function AdminPanelInner({user}){
           )}
           {selectedInstitute && !!selectedInstitute.classes.length && !adminV5VisibleClasses.length&&(
             <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
-              No classes match this focus.
+              <div>No classes match this focus.</div>
+              <button type="button" onClick={()=>setAdminV5ClassFilter("all")} style={{...actionButton("light"),height:32,marginTop:10,boxShadow:"none"}}>
+                Clear focus
+              </button>
             </div>
           )}
           {!!pendingTeachers.length&&(
@@ -17740,6 +17784,12 @@ function AdminPanelInner({user}){
               </div>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+              {scopeNudge&&(
+                <button type="button" onClick={()=>handleAdminV5Nudge(scopeNudge.target, scopeNudge.meta)} style={actionButton("light")}>
+                  <AppIcon icon={IconSend} size={15} color={G.blue} />
+                  {scopeNudge.label}
+                </button>
+              )}
               <button type="button" onClick={()=>openManageTab("report")} style={actionButton("blue")}>
                 <AppIcon icon={IconFileText} size={15} color={G.blue} />
                 Ledgr Report
