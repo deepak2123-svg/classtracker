@@ -10934,7 +10934,7 @@ function AdminPanelInner({user}){
   const [adminV5TimelineScope, setAdminV5TimelineScope] = useState("institute"); // institute | class | teacher
   const [adminV5TimelineLimit, setAdminV5TimelineLimit] = useState(28);
   const [adminV5InstituteSearch, setAdminV5InstituteSearch] = useState("");
-  const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | today | yesterday | stale | period
+  const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | today | yesterday | last_week | period
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
@@ -11103,6 +11103,27 @@ function AdminPanelInner({user}){
       return { ...current, end };
     });
     setPeriod("range");
+  },[]);
+
+  const handleAdminV5ClassFilterChange = React.useCallback((nextFilter)=>{
+    setAdminV5ClassFilter(nextFilter);
+    setAdminV5TimelineLimit(28);
+    if(nextFilter === "today"){
+      setPeriod("today");
+      return;
+    }
+    if(nextFilter === "yesterday"){
+      setPeriod("yesterday");
+      return;
+    }
+    if(nextFilter === "last_week"){
+      const today = todayKey();
+      setCustomRange({
+        start:addDaysToDateKey(today, -8),
+        end:addDaysToDateKey(today, -2),
+      });
+      setPeriod("range");
+    }
   },[]);
 
   useEffect(()=>{
@@ -14106,6 +14127,8 @@ function AdminPanelInner({user}){
     const today = todayKey();
     const yesterday = addDaysToDateKey(today, -1);
     const staleCutoff = addDaysToDateKey(today, -3);
+    const lastWeekStartKey = addDaysToDateKey(today, -8);
+    const lastWeekEndKey = addDaysToDateKey(today, -2);
     const activeTeachers = teachers.filter(teacher => teacher?.uid && roles[teacher.uid] !== "admin");
     const daysSinceTs = (ts) => {
       if(!ts) return null;
@@ -14135,6 +14158,8 @@ function AdminPanelInner({user}){
           ? (data.classes || []).filter(cls => cls && !cls.left && sameInstituteName(cls.institute, instituteName))
           : [];
         const teacherTodayEntries = [];
+        const teacherYesterdayEntries = [];
+        const teacherLastWeekEntries = [];
         const teacherRecentEntries = [];
         let teacherLastTs = Number(teacher?.lastActive || 0) || 0;
 
@@ -14153,6 +14178,10 @@ function AdminPanelInner({user}){
           teacherLastTs = Math.max(teacherLastTs, classLastTs);
           const todayEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, null, today, today)
             .map(entry => withEntryMeta(entry, classKey));
+          const yesterdayEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, null, yesterday, yesterday)
+            .map(entry => withEntryMeta(entry, classKey));
+          const lastWeekEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, null, lastWeekStartKey, lastWeekEndKey)
+            .map(entry => withEntryMeta(entry, classKey));
           const recentEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, periodDays, periodStartKey, periodEndKey)
             .map(entry => withEntryMeta(entry, classKey));
 
@@ -14163,6 +14192,8 @@ function AdminPanelInner({user}){
             teachers:[],
             subjects:new Set(),
             todayEntries:[],
+            yesterdayEntries:[],
+            lastWeekEntries:[],
             recentEntries:[],
             todayMinutes:0,
             lastTs:0,
@@ -14175,10 +14206,14 @@ function AdminPanelInner({user}){
             classId:cls.id,
             subject:subjectLabel,
             todayEntries:todayEntries.length,
+            yesterdayEntries:yesterdayEntries.length,
+            lastWeekEntries:lastWeekEntries.length,
             recentEntries:recentEntries.length,
             lastTs:classLastTs || null,
           });
           bucket.todayEntries.push(...todayEntries);
+          bucket.yesterdayEntries.push(...yesterdayEntries);
+          bucket.lastWeekEntries.push(...lastWeekEntries);
           bucket.recentEntries.push(...recentEntries);
           bucket.todayMinutes += todayEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
           bucket.lastTs = Math.max(bucket.lastTs || 0, classLastTs || 0);
@@ -14186,6 +14221,8 @@ function AdminPanelInner({user}){
           classBuckets.set(classKey, bucket);
 
           teacherTodayEntries.push(...todayEntries);
+          teacherYesterdayEntries.push(...yesterdayEntries);
+          teacherLastWeekEntries.push(...lastWeekEntries);
           teacherRecentEntries.push(...recentEntries);
         });
 
@@ -14196,6 +14233,8 @@ function AdminPanelInner({user}){
           loaded:!!data,
           classCount:classesHere.length,
           todayEntries:teacherTodayEntries,
+          yesterdayEntries:teacherYesterdayEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
+          lastWeekEntries:teacherLastWeekEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
           recentEntries:teacherRecentEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
           loggedToday:teacherTodayEntries.length > 0,
           todayCount:teacherTodayEntries.length,
@@ -14220,22 +14259,26 @@ function AdminPanelInner({user}){
           ? "today"
           : lastDateKey === yesterday
             ? "yesterday"
-            : isStale
-              ? "stale"
-              : "recent";
+            : bucket.lastWeekEntries.length
+              ? "last_week"
+              : isStale
+                ? "stale"
+                : "recent";
         const activityLabel = activityKey === "today"
           ? "Today"
           : activityKey === "yesterday"
             ? "Yesterday"
-            : activityKey === "stale"
+            : activityKey === "last_week"
               ? "Last week"
               : lastEntryCaption(bucket.lastTs || null);
-        const activityRank = { today:0, yesterday:1, recent:2, stale:3 }[activityKey] ?? 4;
+        const activityRank = { today:0, yesterday:1, last_week:2, recent:3, stale:4 }[activityKey] ?? 5;
         return {
           ...bucket,
           subjects,
           teacherCount,
           todayEntries:bucket.todayEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
+          yesterdayEntries:bucket.yesterdayEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
+          lastWeekEntries:bucket.lastWeekEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
           recentEntries:bucket.recentEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
           lastDays,
           lastLabel:lastEntryCaption(bucket.lastTs || null),
@@ -14365,8 +14408,8 @@ function AdminPanelInner({user}){
   const adminV5VisibleClasses = useMemo(()=>{
     const classes = adminV5SelectedInstitute?.classes || [];
     if(adminV5ClassFilter === "today") return classes.filter(item => item.todayEntries.length > 0);
-    if(adminV5ClassFilter === "yesterday") return classes.filter(item => item.activityKey === "yesterday");
-    if(adminV5ClassFilter === "stale" || adminV5ClassFilter === "cold") return classes.filter(item => item.activityKey === "stale");
+    if(adminV5ClassFilter === "yesterday") return classes.filter(item => item.yesterdayEntries.length > 0);
+    if(adminV5ClassFilter === "last_week" || adminV5ClassFilter === "stale" || adminV5ClassFilter === "cold") return classes.filter(item => item.lastWeekEntries.length > 0);
     if(adminV5ClassFilter === "period") return classes.filter(item => item.recentEntries.length > 0);
     return classes;
   }, [adminV5ClassFilter, adminV5SelectedInstitute]);
@@ -17493,9 +17536,9 @@ function AdminPanelInner({user}){
     const classFilterItems = [
       { key:"all", label:"All", count:selectedInstitute?.classes?.length || 0 },
       { key:"today", label:"Today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
-      { key:"yesterday", label:"Yesterday", count:(selectedInstitute?.classes || []).filter(item => item.activityKey === "yesterday").length },
-      { key:"stale", label:"Last week", count:(selectedInstitute?.classes || []).filter(item => item.activityKey === "stale").length },
-      ...(period === "today" ? [] : [{ key:"period", label:timelinePeriodLabel, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length }]),
+      { key:"yesterday", label:"Yesterday", count:(selectedInstitute?.classes || []).filter(item => item.yesterdayEntries.length > 0).length },
+      { key:"last_week", label:"Last week", count:(selectedInstitute?.classes || []).filter(item => item.lastWeekEntries.length > 0).length },
+      ...(period === "today" || adminV5ClassFilter === "yesterday" || adminV5ClassFilter === "last_week" ? [] : [{ key:"period", label:timelinePeriodLabel, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length }]),
     ];
     const actionButton = (tone = "light") => ({
       height:38,
@@ -17952,7 +17995,7 @@ function AdminPanelInner({user}){
               label:item.label,
               count:item.count,
               compact:true,
-              onClick:()=>setAdminV5ClassFilter(item.key),
+              onClick:()=>handleAdminV5ClassFilterChange(item.key),
             }))}
           </div>
         </div>
@@ -17961,14 +18004,23 @@ function AdminPanelInner({user}){
           {adminV5VisibleClasses.map(cls=>{
             const active = cls.key === selectedClassKey && (activeTimelineScope === "class" || activeTimelineScope === "teacher");
             const tone = getSectionTone(cls.display);
-            const periodEntryText = period === "today"
+            const periodEntryText = adminV5ClassFilter === "today"
               ? `${cls.todayEntries.length} today`
-              : `${cls.recentEntries.length} in ${timelinePeriodLabel.toLowerCase()}`;
+              : adminV5ClassFilter === "yesterday"
+                ? `${cls.yesterdayEntries.length} yesterday`
+                : adminV5ClassFilter === "last_week"
+                  ? `${cls.lastWeekEntries.length} last week`
+                  : period === "today"
+                    ? `${cls.todayEntries.length} today`
+                    : `${cls.recentEntries.length} in ${timelinePeriodLabel.toLowerCase()}`;
             const classActivityText = `${cls.teacherCount} teacher${cls.teacherCount===1?"":"s"} · ${periodEntryText} · Last: ${cls.lastLabel}`;
-            const classFreshLabel = cls.activityLabel || cls.lastLabel;
-            const freshTone = cls.activityKey === "today"
+            const classFreshLabel = adminV5ClassFilter === "last_week"
+              ? "Last week"
+              : cls.activityLabel || cls.lastLabel;
+            const freshToneKey = adminV5ClassFilter === "last_week" ? "last_week" : cls.activityKey;
+            const freshTone = freshToneKey === "today"
               ? { bg:"#ECFDF3", border:"#A7F3D0", color:"#15803D" }
-              : cls.activityKey === "yesterday"
+              : freshToneKey === "yesterday"
                 ? { bg:"#EFF6FF", border:"#BFDBFE", color:G.blue }
                 : { bg:"#FFF7ED", border:"#FED7AA", color:G.amber };
             return (
