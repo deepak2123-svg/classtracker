@@ -17440,9 +17440,6 @@ function AdminPanelInner({user}){
     const selectedClassActiveCount = selectedClass ? selectedClassTeacherRows.length : 0;
     const selectedClassLoggedToday = selectedClassTeacherRows.filter(teacher => teacher.loggedToday).length;
     const selectedClassPendingCount = selectedClass ? Math.max(0, selectedClassActiveCount - selectedClassLoggedToday) : 0;
-    const pendingTeachers = selectedClass
-      ? selectedClassTeacherRows.filter(item => !item.loggedToday)
-      : (selectedInstitute?.teachers || []).filter(item => !item.loggedToday);
     const activeTimelineScope = adminV5TimelineScope === "teacher" && selectedTeacher
       ? "teacher"
       : adminV5TimelineScope === "class" && selectedClass
@@ -17670,22 +17667,87 @@ function AdminPanelInner({user}){
       </>
     );
     const renderTopBar = () => {
+      const crumbButtonStyle = (active = false, maxWidth = 240) => ({
+        border:"none",
+        background:"transparent",
+        color:active ? "#FFFFFF" : "rgba(255,255,255,0.54)",
+        height:28,
+        borderRadius:6,
+        padding:"0 7px",
+        maxWidth,
+        minWidth:0,
+        fontSize:12.5,
+        fontWeight:active ? 850 : 700,
+        fontFamily:G.sans,
+        whiteSpace:"nowrap",
+        overflow:"hidden",
+        textOverflow:"ellipsis",
+        cursor:"pointer",
+      });
       const crumbs = [
-        "Overview",
-        selectedInstituteName,
-        selectedClass?.display || "",
-        selectedTeacher?.name || "",
+        {
+          key:"overview",
+          label:"Overview",
+          maxWidth:96,
+          onClick:()=>{
+            setAdminV5MobilePane("institutes");
+            setAdminV5TeacherUid("");
+            setAdminV5ClassFilter("all");
+            setAdminV5TimelineScope(selectedClass ? "class" : "institute");
+          },
+        },
+        selectedInstituteName && {
+          key:"institute",
+          label:selectedInstituteName,
+          maxWidth:240,
+          onClick:()=>{
+            if(!selectedInstituteName) return;
+            setAdminV5TeacherUid("");
+            setAdminV5ClassFilter("all");
+            setAdminV5TimelineScope(selectedClass ? "class" : "institute");
+            setAdminV5MobilePane("classes");
+          },
+        },
+        selectedClass?.display && {
+          key:"class",
+          label:selectedClass.display,
+          maxWidth:180,
+          onClick:()=>{
+            if(selectedClass?.key) selectAdminV5Class(selectedClass.key);
+          },
+        },
+        selectedTeacher?.name && {
+          key:"teacher",
+          label:selectedTeacher.name,
+          maxWidth:180,
+          onClick:()=>{
+            if(selectedTeacher?.uid) selectAdminV5Teacher(selectedTeacher.uid);
+          },
+        },
       ].filter(Boolean);
       return (
-        <header style={{height:58,background:"#111827",color:"#FFFFFF",display:"flex",alignItems:"center",gap:18,padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-          <div style={{width:34,height:34,borderRadius:8,background:"#13966B",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,fontFamily:G.display,flexShrink:0}}>L</div>
-          <nav style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:1,overflow:"hidden"}}>
+        <header style={{height:46,background:"#111827",color:"#FFFFFF",display:"flex",alignItems:"center",gap:10,padding:"0 12px 0 0",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+          <div style={{width:48,height:46,display:"flex",alignItems:"center",justifyContent:"center",borderRight:"1px solid rgba(255,255,255,0.06)",flexShrink:0}}>
+            <div style={{width:26,height:26,borderRadius:7,background:"#13966B",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,fontFamily:G.display}}>L</div>
+          </div>
+          <nav style={{display:"flex",alignItems:"center",gap:2,minWidth:0,flex:1,overflow:"hidden"}}>
             {crumbs.map((crumb,index)=>(
-              <React.Fragment key={`${crumb}_${index}`}>
-                {index > 0&&<span style={{color:"rgba(255,255,255,0.24)",fontWeight:800}}>/</span>}
-                <span style={{fontSize:13.5,fontWeight:index === crumbs.length - 1 ? 900 : 750,color:index === crumbs.length - 1 ? "#FFFFFF" : "rgba(255,255,255,0.55)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:index === 0 ? 92 : 240}}>
-                  {crumb}
-                </span>
+              <React.Fragment key={crumb.key}>
+                {index > 0&&<span style={{color:"rgba(255,255,255,0.22)",fontWeight:800,padding:"0 3px"}}>/</span>}
+                <button
+                  type="button"
+                  onClick={crumb.onClick}
+                  onMouseEnter={e=>{
+                    e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                    e.currentTarget.style.color = "#FFFFFF";
+                  }}
+                  onMouseLeave={e=>{
+                    e.currentTarget.style.background = "transparent";
+                    e.currentTarget.style.color = index === crumbs.length - 1 ? "#FFFFFF" : "rgba(255,255,255,0.54)";
+                  }}
+                  style={crumbButtonStyle(index === crumbs.length - 1, crumb.maxWidth)}>
+                  {crumb.label}
+                </button>
               </React.Fragment>
             ))}
           </nav>
@@ -17694,26 +17756,26 @@ function AdminPanelInner({user}){
               Loading {hydrationPendingCount} teacher records
             </span>
           )}
-          <button type="button" onClick={()=>openManageTab("report")} style={{...actionButton("blue"),height:36,background:"#EEF4FF",border:"1px solid #C7D7F5"}}>
+          <button type="button" onClick={()=>openManageTab("report")} style={{...actionButton("blue"),height:32,borderRadius:8,background:"#EEF4FF",border:"1px solid #C7D7F5"}}>
             <AppIcon icon={IconFileText} size={15} color={G.blue} />
             Ledgr Report
           </button>
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-            <span style={{width:32,height:32,borderRadius:999,background:"#0F766E",border:"1px solid rgba(255,255,255,0.12)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11.5,fontWeight:900,fontFamily:G.mono}}>{adminInitials}</span>
-            <span style={{fontSize:13,fontWeight:850,color:"rgba(255,255,255,0.72)",maxWidth:120,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{adminName}</span>
+            <span style={{width:28,height:28,borderRadius:999,background:"#0F766E",border:"1px solid rgba(255,255,255,0.12)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:900,fontFamily:G.mono}}>{adminInitials}</span>
+            <span style={{fontSize:12.5,fontWeight:850,color:"rgba(255,255,255,0.72)",maxWidth:120,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{adminName}</span>
           </div>
         </header>
       );
     };
     const renderRail = (compact = false, showLogo = true) => (
       <aside style={{
-        background:"#101B34",
+        background:compact ? "#101B34" : "#0D1117",
         color:"#FFFFFF",
         display:"flex",
         flexDirection:compact ? "row" : "column",
         alignItems:"center",
-        gap:compact ? 8 : 8,
-        padding:compact ? "10px 12px" : "10px 8px",
+        gap:compact ? 8 : 6,
+        padding:compact ? "10px 12px" : "8px 7px",
         overflowX:compact ? "auto" : "hidden",
         overflowY:compact ? "hidden" : "auto",
       }}>
@@ -17726,8 +17788,8 @@ function AdminPanelInner({user}){
             title={item.label}
             onClick={item.onClick}
             style={{
-              width:compact ? 72 : 42,
-              minHeight:compact ? 50 : 42,
+              width:compact ? 72 : 34,
+              minHeight:compact ? 50 : 34,
               border:"1px solid rgba(255,255,255,0.08)",
               borderRadius:8,
               background:item.key === "report" ? "rgba(59,130,246,0.20)" : "rgba(255,255,255,0.055)",
@@ -17748,11 +17810,11 @@ function AdminPanelInner({user}){
         {!compact&&<div style={{flex:1}}/>}
         {!compact&&(
           <>
-            <button type="button" title="Teacher Feedback" onClick={openFeedbackInbox} style={{width:42,minHeight:42,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(255,255,255,0.055)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
+            <button type="button" title="Teacher Feedback" onClick={openFeedbackInbox} style={{width:34,minHeight:34,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(255,255,255,0.055)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
               <AppIcon icon={IconMessageCircle} size={19} color="#CBD5E1" />
               {feedbackUnreadCount>0&&<span style={{position:"absolute",top:6,right:8,background:G.red,color:"#FFFFFF",borderRadius:999,padding:"2px 5px",fontSize:9,fontWeight:900}}>{feedbackUnreadCount>9?"9+":feedbackUnreadCount}</span>}
             </button>
-            <button type="button" title="Sign out" onClick={logout} style={{width:42,minHeight:42,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(220,38,38,0.14)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+            <button type="button" title="Sign out" onClick={logout} style={{width:34,minHeight:34,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(220,38,38,0.14)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
               <AppIcon icon={IconLogout} size={19} color="#FCA5A5" />
             </button>
           </>
@@ -17761,6 +17823,14 @@ function AdminPanelInner({user}){
     );
     const renderInstituteRow = (row) => {
       const active = selectedInstitute && sameInstituteName(row.institute, selectedInstitute.institute);
+      const pct = row.status?.pct || 0;
+      const tone = row.activeCount === 0
+        ? { dot:"#9CA3AF", pillBg:"#E5E7EB", pillText:"#6B7280" }
+        : pct >= 70
+          ? { dot:"#16A34A", pillBg:"#ECFDF3", pillText:"#16A34A" }
+          : pct >= 25
+            ? { dot:"#F59E0B", pillBg:"#FFF7ED", pillText:"#D97706" }
+            : { dot:"#EF4444", pillBg:"#FFF1F2", pillText:"#DC2626" };
       return (
         <button
           key={row.institute}
@@ -17768,34 +17838,62 @@ function AdminPanelInner({user}){
           onClick={()=>selectAdminV5Institute(row.institute, "classes")}
           style={{
             width:"100%",
-            border:`1px solid ${active ? row.status.border : "transparent"}`,
-            borderLeft:`4px solid ${row.status.accent}`,
-            borderRadius:8,
-            background:active ? row.status.bg : "#FFFFFF",
-            padding:"11px 10px",
-            marginBottom:8,
+            border:`1px solid ${active ? "#C7D2FE" : "transparent"}`,
+            borderRadius:9,
+            background:active ? "#EEF2FF" : "#FFFFFF",
+            padding:"8px 9px",
+            marginBottom:2,
             textAlign:"left",
             cursor:"pointer",
             fontFamily:G.sans,
-            boxShadow:active ? (reduceEffects ? "none" : "0 10px 26px rgba(15,23,42,0.07)") : "none",
+            boxShadow:"none",
+            display:"flex",
+            alignItems:"center",
+            gap:9,
           }}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <span style={{fontSize:15,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.institute}</span>
-            <span style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,color:row.status.accent,whiteSpace:"nowrap"}}>{row.status.pct}%</span>
-          </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-            <span style={{fontSize:11,color:G.textM,fontWeight:750}}>{row.loggedCount}/{row.activeCount} updated today</span>
-            <span style={{fontSize:11,color:row.pendingCount ? G.amber : "#15803D",fontWeight:800}}>{row.pendingCount} pending</span>
-          </div>
-          <div style={{height:5,borderRadius:999,background:"#E5E7EB",overflow:"hidden",marginTop:10}}>
-            <div style={{height:"100%",width:`${Math.max(row.status.pct, row.loggedCount ? 4 : 0)}%`,background:row.status.accent,borderRadius:999}}/>
-          </div>
+          <span style={{width:7,height:7,borderRadius:999,background:tone.dot,flex:"0 0 auto"}}/>
+          <span style={{minWidth:0,flex:1}}>
+            <span style={{display:"block",fontSize:12.5,fontWeight:active ? 850 : 650,color:active ? G.blue : G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.institute}</span>
+            <span style={{display:"block",fontSize:10.5,color:G.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+              {row.classCount || row.classes?.length || 0} classes · {row.activeCount} teachers
+            </span>
+          </span>
+          <span style={{
+            minWidth:row.activeCount ? 48 : 34,
+            height:24,
+            borderRadius:999,
+            background:tone.pillBg,
+            color:tone.pillText,
+            display:"inline-flex",
+            alignItems:"center",
+            justifyContent:"center",
+            padding:"0 8px",
+            fontSize:11,
+            fontWeight:900,
+            fontFamily:G.mono,
+            whiteSpace:"nowrap",
+            flex:"0 0 auto",
+          }}>
+            {row.activeCount ? `${row.loggedCount}/${row.activeCount}` : "—"}
+          </span>
+          <span style={{
+            width:34,
+            textAlign:"right",
+            color:tone.pillText,
+            fontSize:10.5,
+            fontWeight:900,
+            fontFamily:G.mono,
+            whiteSpace:"nowrap",
+            flex:"0 0 auto",
+          }}>
+            {row.activeCount ? `${pct}%` : ""}
+          </span>
         </button>
       );
     };
     const renderInstituteDrawer = () => (
       <section style={{background:"#FFFFFF",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
-        <div style={{padding:"16px 14px 13px",borderBottom:panelBorder}}>
+        <div style={{padding:"12px",borderBottom:panelBorder}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
             <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>
               {adminV5Model.institutes.length} institutes · Today
@@ -17804,22 +17902,14 @@ function AdminPanelInner({user}){
               {summary.loggedToday}/{summary.activeTeachers}
             </span>
           </div>
-          <div style={{height:5,borderRadius:999,background:"#E5E7EB",overflow:"hidden",marginTop:10}}>
-            <div style={{height:"100%",width:`${Math.max(summary.loggedPct, summary.loggedToday ? 4 : 0)}%`,background:summary.loggedPct >= 70 ? "#16A34A" : summary.loggedPct < 25 ? G.red : G.amber,borderRadius:999}}/>
-          </div>
-          {hydrationPendingCount > 0&&(
-            <div style={{fontSize:11.5,color:G.textL,fontWeight:750,marginTop:9}}>
-              Loading teacher records before final percentages settle.
-            </div>
-          )}
-          <div style={{marginTop:12}}>
+          <div style={{marginTop:10}}>
             {renderSearchInput(adminV5InstituteSearch, setAdminV5InstituteSearch, "Search institutes", true)}
           </div>
         </div>
-        <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"10px"}}>
+        <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"7px 8px 14px"}}>
           {instituteGroups.map(group=>(
             <div key={group.key} style={{marginBottom:12}}>
-              <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"2px 2px 8px"}}>
+              <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"8px 8px 5px"}}>
                 {group.label}
               </div>
               {group.rows.map(renderInstituteRow)}
@@ -17923,24 +18013,6 @@ function AdminPanelInner({user}){
                 Clear focus
               </button>
             </div>
-          )}
-          {!!pendingTeachers.length&&(
-            <div style={{marginTop:14}}>
-              <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 9px"}}>Pending teachers</div>
-              {pendingTeachers.slice(0,8).map(teacher=>(
-                <div key={teacher.uid} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 11px",marginBottom:8,display:"flex",alignItems:"center",gap:10}}>
-                  <button type="button" onClick={()=>selectAdminV5Teacher(teacher.uid)} style={{border:"none",background:"transparent",padding:0,textAlign:"left",cursor:"pointer",fontFamily:G.sans,minWidth:0,flex:1}}>
-                    <div style={{fontSize:13.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{teacher.name}</div>
-                    <div style={{fontSize:11.5,color:G.textL,marginTop:3}}>{teacher.lastLabel}</div>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          {pendingTeachers.length > 8&&(
-            <button type="button" onClick={()=>openManageTab("teachers", selectedInstituteName ? { scopeInstitute:selectedInstituteName } : {})} style={{...actionButton("light"),width:"100%",marginTop:4,boxShadow:"none"}}>
-              Open all {pendingTeachers.length} pending teachers
-            </button>
           )}
         </div>
       </section>
@@ -18197,10 +18269,10 @@ function AdminPanelInner({user}){
     if(isMobile) return renderMobileDashboard();
 
     return (
-      <div style={{height:"100svh",background:shellBg,fontFamily:G.sans,display:"grid",gridTemplateRows:"58px minmax(0,1fr)",overflow:"hidden"}}>
+      <div style={{height:"100svh",background:shellBg,fontFamily:G.sans,display:"grid",gridTemplateRows:"46px minmax(0,1fr)",overflow:"hidden"}}>
         {renderOverlays()}
         {renderTopBar()}
-        <div style={{minHeight:0,display:"grid",gridTemplateColumns:"58px minmax(260px,304px) minmax(310px,362px) minmax(0,1fr)",overflow:"hidden"}}>
+        <div style={{minHeight:0,display:"grid",gridTemplateColumns:"48px minmax(236px,252px) minmax(260px,292px) minmax(0,1fr)",overflow:"hidden"}}>
           {renderRail(false, false)}
           {renderInstituteDrawer()}
           {renderClassPanel()}
