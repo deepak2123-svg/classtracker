@@ -11115,8 +11115,10 @@ function AdminPanelInner({user}){
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections | report | messenger
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
-  const [manageTeacherSort, setManageTeacherSort] = useState("count");
+  const [manageTeacherSort, setManageTeacherSort] = useState("recent");
+  const [manageTeacherView, setManageTeacherView] = useState("table");
   const [manageTeacherInstituteFilter, setManageTeacherInstituteFilter] = useState("");
+  const [manageTeacherBreakdownUid, setManageTeacherBreakdownUid] = useState(null);
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [manageSectionSearch, setManageSectionSearch] = useState("");
   const [manageInstituteFilter, setManageInstituteFilter] = useState("");
@@ -11624,6 +11626,69 @@ function AdminPanelInner({user}){
     return String(data?.profile?.email || teacher?.email || "").trim();
   }, [fullData]);
 
+  React.useEffect(()=>{
+    if(view!=="manage" || manageTab!=="teachers") return;
+    const searchKey = manageTeacherSearch.trim().toLowerCase();
+    const hasTeachingIndex = teacher => {
+      if(!teacher?.uid) return false;
+      const data = fullDataRef.current[teacher.uid] || fullData[teacher.uid] || {};
+      return Number(teacher.classCount || 0) > 0
+        || (Array.isArray(teacher.subjects) && teacher.subjects.length > 0)
+        || (Array.isArray(teacher.assignedSubjectIds) && teacher.assignedSubjectIds.length > 0)
+        || (Array.isArray(data.classes) && data.classes.length > 0);
+    };
+    const matchesHydrationScope = teacher => {
+      if(roles[teacher?.uid]==="admin" && !hasTeachingIndex(teacher) && fullDataRef.current[teacher.uid]) return false;
+      if(manageScopeInstitute && !teacherBelongsToInstitute(teacher, manageScopeInstitute)) return false;
+      if(manageTeacherInstituteFilter){
+        const instituteList = getTeacherInstituteList(teacher);
+        if(!instituteList.some(inst=>sameInstituteName(inst, manageTeacherInstituteFilter))) return false;
+      }
+      if(!searchKey) return true;
+      const data = fullDataRef.current[teacher.uid] || fullData[teacher.uid] || {};
+      const classText = (data.classes || [])
+        .map(cls=>[cls?.section, cls?.subject, cls?.institute].filter(Boolean).join(" "))
+        .join(" ")
+        .toLowerCase();
+      const haystack = [
+        getTeacherDisplayName(teacher),
+        getTeacherEmail(teacher),
+        getTeacherInstituteList(teacher).join(" "),
+        (teacher.subjects || []).join(" "),
+        classText,
+      ].join(" ").toLowerCase();
+      return haystack.includes(searchKey);
+    };
+    const targetUids = teachers
+      .filter(teacher=>teacher?.uid)
+      .filter(matchesHydrationScope)
+      .map(teacher=>teacher.uid)
+      .filter(uid=>!fullDataRef.current[uid] && !fullDataRequestRef.current[uid]);
+    let cancelled = false;
+    const hydrate = async () => {
+      for(const uid of targetUids){
+        if(cancelled) break;
+        await ensureFullData(uid).catch(()=>null);
+      }
+    };
+    hydrate();
+    return ()=>{ cancelled = true; };
+  },[
+    view,
+    manageTab,
+    manageScopeInstitute,
+    manageTeacherInstituteFilter,
+    manageTeacherSearch,
+    teachers,
+    roles,
+    fullData,
+    ensureFullData,
+    teacherBelongsToInstitute,
+    getTeacherInstituteList,
+    getTeacherDisplayName,
+    getTeacherEmail,
+  ]);
+
   const clearTeacherRename = React.useCallback(() => {
     setRenamingTeacher(null);
     setRenameVal("");
@@ -11722,8 +11787,15 @@ function AdminPanelInner({user}){
   })), [institutes, instSectionsAll]);
 
   const teacherOnlyList = useMemo(
-    () => teachers.filter(t => roles[t.uid] !== "admin"),
-    [teachers, roles]
+    () => teachers.filter(t => {
+      if(roles[t.uid] !== "admin") return true;
+      const data = fullData[t.uid] || {};
+      return Number(t.classCount || 0) > 0
+        || (Array.isArray(t.subjects) && t.subjects.length > 0)
+        || (Array.isArray(t.assignedSubjectIds) && t.assignedSubjectIds.length > 0)
+        || (Array.isArray(data.classes) && data.classes.length > 0);
+    }),
+    [teachers, roles, fullData]
   );
 
   const instituteGlanceTeacherList = useMemo(
@@ -17625,6 +17697,790 @@ function AdminPanelInner({user}){
     );
   };
 
+  const renderManageTeachersPanel = () => {
+    const weekEndKey = todayKey();
+    const weekStartKey = addDaysToDateKey(weekEndKey, -6);
+    const activeSubjects = globalSubjects.filter(subject=>subject.active);
+    const uniqueLabels = values => {
+      const output = [];
+      (values || []).forEach(value=>{
+        const text = String(value || "").trim();
+        if(!text) return;
+        if(output.some(item=>item.toLowerCase()===text.toLowerCase())) return;
+        output.push(text);
+      });
+      return output;
+    };
+    const teacherInitials = name => {
+      const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+      if(!parts.length) return "?";
+      return parts.slice(0,2).map(part=>part[0]).join("").toUpperCase();
+    };
+    const shortInstituteLabel = institute => {
+      const parts = String(institute || "").split(",").map(part=>part.trim()).filter(Boolean);
+      if(!parts.length) return "Institute";
+      return parts.length > 1 ? `${parts[0]}, ${parts[1]}` : parts[0];
+    };
+    const teacherSubjectNames = teacher => {
+      const assignedIds = teacherAssignedSubjectIds(teacher);
+      const assigned = globalSubjects
+        .filter(subject=>assignedIds.includes(subject.id))
+        .map(subject=>subject.name);
+      return uniqueLabels([...assigned, ...(teacher?.subjects || [])]);
+    };
+    const classDisplayName = cls => normaliseName(resolveAdminSectionName(cls?.section, cls?.institute, instSectionsAll) || cls?.section || cls?.name || "Class");
+    const classSubjectName = (teacher, cls) => safeAdminText(resolveAdminTeacherClassSubject(teacher.uid, cls?.id, cls?.subject || ""), "No subject");
+    const dateKeyToTime = dateKey => {
+      const [y,m,d] = String(dateKey || "").split("-").map(Number);
+      if(!y || !m || !d) return 0;
+      return new Date(y, m - 1, d, 12, 0, 0).getTime();
+    };
+    const summarizeClassNotes = classNotes => {
+      let weekMinutes = 0;
+      let weekEntries = 0;
+      let lastTs = lastEntryTs(classNotes) || 0;
+      Object.entries(classNotes || {}).forEach(([dateKey, entries])=>{
+        if(!Array.isArray(entries)) return;
+        if(dateKey >= weekStartKey && dateKey <= weekEndKey){
+          entries.forEach(entry=>{
+            weekEntries += 1;
+            weekMinutes += entryDurationMinutes(entry);
+          });
+        }
+        if(entries.length) lastTs = Math.max(lastTs, dateKeyToTime(dateKey));
+      });
+      return { weekMinutes, weekEntries, lastTs };
+    };
+    const buildTeacherGroups = (teacher, data, scopedClasses, fallbackInstitutes, primaryInstitute) => {
+      const map = new Map();
+      const ensureGroup = instituteName => {
+        const label = String(instituteName || primaryInstitute || "No institute assigned").trim() || "No institute assigned";
+        const key = normaliseName(label).toLowerCase();
+        if(!map.has(key)){
+          map.set(key, {
+            key,
+            institute:label,
+            subjects:[],
+            sections:[],
+            classes:[],
+            classCount:0,
+            weekMinutes:0,
+            weekEntries:0,
+            lastTs:0,
+          });
+        }
+        return map.get(key);
+      };
+      (scopedClasses || []).forEach(cls=>{
+        const group = ensureGroup(cls?.institute || primaryInstitute);
+        const subject = classSubjectName(teacher, cls);
+        const section = classDisplayName(cls);
+        const stats = summarizeClassNotes((data?.notes || {})[cls?.id] || {});
+        group.subjects = uniqueLabels([...group.subjects, subject]);
+        group.sections = uniqueLabels([...group.sections, section]);
+        group.classes.push(cls);
+        group.classCount += 1;
+        group.weekMinutes += stats.weekMinutes;
+        group.weekEntries += stats.weekEntries;
+        group.lastTs = Math.max(group.lastTs, stats.lastTs || 0, Number(cls?.created || 0) || 0);
+      });
+      if(!map.size){
+        (fallbackInstitutes.length ? fallbackInstitutes : [primaryInstitute]).forEach(ensureGroup);
+      }
+      return Array.from(map.values()).sort((a,b)=>{
+        const primaryA = sameInstituteName(a.institute, primaryInstitute) ? -1 : 0;
+        const primaryB = sameInstituteName(b.institute, primaryInstitute) ? -1 : 0;
+        return (primaryA - primaryB) || exportTextSorter.compare(a.institute, b.institute);
+      });
+    };
+    const isTeachingAccount = teacher => {
+      if(!teacher?.uid) return false;
+      if(roles[teacher.uid] !== "admin") return true;
+      const data = fullData[teacher.uid] || {};
+      return Number(teacher.classCount || 0) > 0
+        || teacherSubjectNames(teacher).length > 0
+        || (Array.isArray(data.classes) && data.classes.length > 0);
+    };
+    const selectedInstituteFilter = manageScopeInstitute || manageTeacherInstituteFilter;
+    const teachingAccounts = teachers.filter(isTeachingAccount);
+    const scopedTeachingAccounts = manageScopeInstitute
+      ? teachingAccounts.filter(teacher=>teacherBelongsToInstitute(teacher, manageScopeInstitute))
+      : teachingAccounts;
+    const teacherInstituteOptions = !manageScopeInstitute
+      ? institutes
+          .map(inst=>({
+            inst,
+            count:teachingAccounts.filter(teacher=>teacherBelongsToInstitute(teacher, inst)).length,
+          }))
+          .filter(item=>item.count>0)
+      : [];
+    const teacherRowsBase = scopedTeachingAccounts.map(teacher=>{
+      const data = fullData[teacher.uid] || {};
+      const detailsReady = !!fullData[teacher.uid];
+      const allClasses = Array.isArray(data.classes) ? data.classes : [];
+      const scopedClasses = selectedInstituteFilter
+        ? allClasses.filter(cls=>sameInstituteName(cls?.institute, selectedInstituteFilter))
+        : allClasses;
+      const instituteList = getTeacherInstituteList(teacher);
+      const fallbackInstitutes = selectedInstituteFilter
+        ? [selectedInstituteFilter]
+        : (instituteList.length ? instituteList : ["No institute assigned"]);
+      const primaryInstitute = selectedInstituteFilter || instituteList[0] || "No institute assigned";
+      const groups = buildTeacherGroups(teacher, data, detailsReady ? scopedClasses : [], fallbackInstitutes, primaryInstitute);
+      const allSubjects = detailsReady
+        ? uniqueLabels(groups.flatMap(group=>group.subjects))
+        : teacherSubjectNames(teacher);
+      const allSections = uniqueLabels(groups.flatMap(group=>group.sections));
+      const classCount = detailsReady ? scopedClasses.length : Number(teacher.classCount || 0);
+      const weekMinutes = groups.reduce((sum, group)=>sum + (group.weekMinutes || 0), 0);
+      const weekEntries = groups.reduce((sum, group)=>sum + (group.weekEntries || 0), 0);
+      const lastActivityTs = Math.max(
+        ...groups.map(group=>group.lastTs || 0),
+        Number(teacher.lastActive || teacher.lastActiveAt || teacher.updatedAt || 0) || 0
+      );
+      const hasLeftWorkspace = teacher.accountStatus === "departed" || teacher.active === false;
+      const isAdminTeacher = roles[teacher.uid] === "admin";
+      return {
+        teacher,
+        rawName:getTeacherRawName(teacher),
+        name:getTeacherDisplayName(teacher),
+        email:getTeacherEmail(teacher) || "Email not available",
+        primaryInstitute,
+        extraInstitutes:instituteList.filter(inst=>!sameInstituteName(inst, primaryInstitute)),
+        instituteGroups:groups,
+        instituteCount:uniqueLabels(groups.map(group=>group.institute)).length,
+        subjects:allSubjects,
+        sections:allSections,
+        subjectCount:allSubjects.length,
+        sectionCount:allSections.length,
+        classCount,
+        weekMinutes,
+        weekEntries,
+        lastActivityTs,
+        detailsReady,
+        hasLeftWorkspace,
+        departedLabel:teacher.departedAt
+          ? `Left ${new Date(Number(teacher.departedAt)).toLocaleDateString()}`
+          : "Left workspace",
+        isMe:teacher.uid===user.uid,
+        isAdminTeacher,
+      };
+    });
+    const teacherSearchKey = manageTeacherSearch.trim().toLowerCase();
+    const matchesTeacherRow = row => {
+      if(manageTeacherInstituteFilter && !row.instituteGroups.some(group=>sameInstituteName(group.institute, manageTeacherInstituteFilter))) return false;
+      if(!teacherSearchKey) return true;
+      const haystack = [
+        row.name,
+        row.email,
+        row.primaryInstitute,
+        row.extraInstitutes.join(" "),
+        row.subjects.join(" "),
+        row.sections.join(" "),
+        row.instituteGroups.map(group=>group.institute).join(" "),
+      ].join(" ").toLowerCase();
+      return haystack.includes(teacherSearchKey);
+    };
+    const teacherRows = teacherRowsBase
+      .filter(matchesTeacherRow)
+      .sort((a,b)=>{
+        if(manageTeacherSort==="name"){
+          return exportTextSorter.compare(a.name, b.name) || exportTextSorter.compare(a.primaryInstitute, b.primaryInstitute);
+        }
+        if(manageTeacherSort==="count"){
+          return exportTextSorter.compare(a.primaryInstitute, b.primaryInstitute) || exportTextSorter.compare(a.name, b.name);
+        }
+        return (b.lastActivityTs || 0) - (a.lastActivityTs || 0)
+          || (b.weekMinutes || 0) - (a.weekMinutes || 0)
+          || exportTextSorter.compare(a.name, b.name);
+      });
+    const detailsReadyCount = teacherRows.filter(row=>row.detailsReady).length;
+    const emptyTeacherMessage = scopedTeachingAccounts.length===0
+      ? (manageScopeInstitute ? "No teachers are connected to this institute yet." : "No teachers found yet.")
+      : "No teachers match your search.";
+    const cardShell = {
+      background:"#FFFFFF",
+      border:`1px solid ${G.border}`,
+      borderRadius:14,
+      overflow:"hidden",
+      boxShadow:reduceEffects ? "none" : G.shadowSm,
+    };
+    const teacherAvatar = (row, size = 38) => {
+      const color = subjectColor(row.subjects[0] || row.name);
+      return (
+        <div style={{
+          width:size,
+          height:size,
+          borderRadius:Math.max(9, Math.round(size * 0.28)),
+          background:alphaHex(color, 0.11),
+          color,
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          fontSize:Math.max(11, Math.round(size * 0.34)),
+          fontWeight:900,
+          fontFamily:G.mono,
+          flexShrink:0,
+        }}>
+          {teacherInitials(row.name)}
+        </div>
+      );
+    };
+    const teacherChip = (label, tone = "slate", extraStyle = {}) => renderWorkspacePill(label, tone, {
+      minHeight:24,
+      padding:"0 8px",
+      fontSize:10.5,
+      ...extraStyle,
+    });
+    const subjectChip = subject => {
+      const color = subjectColor(subject);
+      return (
+        <span key={subject} style={{
+          display:"inline-flex",
+          alignItems:"center",
+          minHeight:24,
+          borderRadius:7,
+          padding:"0 8px",
+          background:alphaHex(color, 0.09),
+          border:`1px solid ${alphaHex(color, 0.22)}`,
+          color,
+          fontSize:10.5,
+          fontWeight:850,
+          whiteSpace:"nowrap",
+        }}>
+          {subject}
+        </span>
+      );
+    };
+    const sectionChip = (section, tone = "slate") => (
+      <span key={section} style={{
+        display:"inline-flex",
+        alignItems:"center",
+        minHeight:25,
+        borderRadius:999,
+        padding:"0 9px",
+        background:tone==="blue" ? "#EFF4FE" : "#F8FAFC",
+        border:`1px solid ${tone==="blue" ? "#BFDBFE" : G.border}`,
+        color:tone==="blue" ? G.blue : G.textS,
+        fontSize:11,
+        fontWeight:800,
+        whiteSpace:"nowrap",
+      }}>
+        {section}
+      </span>
+    );
+    const renderLimitedChips = (items, renderer, max = 4) => {
+      const visible = items.slice(0, max);
+      return (
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,minWidth:0}}>
+          {visible.map(renderer)}
+          {items.length > visible.length && teacherChip(`+${items.length - visible.length}`, "slate")}
+        </div>
+      );
+    };
+    const statusPill = row => {
+      if(row.hasLeftWorkspace) return teacherChip("Departed", "red");
+      if(row.detailsReady && row.weekMinutes === 0) return teacherChip("No 7d logs", "amber");
+      return teacherChip("Active", "green");
+    };
+    const renderTeacherName = row => (
+      <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+        {teacherAvatar(row)}
+        <div style={{minWidth:0}}>
+          {renamingTeacher?.uid===row.teacher.uid ? (
+            <input
+              value={renameVal}
+              onChange={e=>setRenameVal(e.target.value)}
+              onKeyDown={e=>{
+                if(e.key==="Enter") handleRenameTeacher(row.teacher.uid,renameVal);
+                if(e.key==="Escape") clearTeacherRename();
+              }}
+              placeholder="Teacher name"
+              autoFocus
+              style={{width:"100%",maxWidth:250,padding:"8px 11px",borderRadius:10,border:`1.5px solid ${G.blue}`,fontSize:14,fontFamily:G.sans,outline:"none"}}
+            />
+          ) : (
+            <>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",minWidth:0}}>
+                <span style={{fontSize:15.5,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:220}}>
+                  {row.name}
+                </span>
+                {row.isAdminTeacher && teacherChip("Admin + teacher", "blue")}
+                {row.instituteCount > 1 && (
+                  <button
+                    type="button"
+                    onClick={()=>{
+                      ensureFullData(row.teacher.uid);
+                      setManageTeacherBreakdownUid(current=>current===row.teacher.uid ? null : row.teacher.uid);
+                    }}
+                    style={{
+                      border:"none",
+                      borderRadius:999,
+                      background:"#F5F3FF",
+                      color:"#6D28D9",
+                      padding:"3px 8px",
+                      fontSize:10.5,
+                      fontWeight:900,
+                      cursor:"pointer",
+                      fontFamily:G.sans,
+                    }}>
+                    {row.instituteCount} institutes
+                  </button>
+                )}
+              </div>
+              <div style={{fontSize:12,color:G.textM,marginTop:3,fontFamily:G.mono,wordBreak:"break-all"}}>{row.email}</div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+    const renderInstituteSummary = row => (
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:13.5,fontWeight:850,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+          {row.primaryInstitute}
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:5}}>
+          {row.instituteGroups.slice(0, row.instituteCount > 1 ? 2 : 1).map(group=>(
+            <span key={group.key} style={{fontSize:11,color:G.textM,whiteSpace:"nowrap"}}>
+              {shortInstituteLabel(group.institute)}
+            </span>
+          ))}
+          {row.instituteCount > 2 && teacherChip(`+${row.instituteCount - 2}`, "slate")}
+          {row.instituteCount <= 1 && <span style={{fontSize:12,color:G.textL}}>Single institute</span>}
+        </div>
+      </div>
+    );
+    const renderSplitMetric = (row, type) => {
+      if(type==="hours" && !row.detailsReady){
+        return (
+          <div>
+            <div style={{fontSize:14,fontWeight:900,color:G.text}}>--</div>
+            <div style={{fontSize:10.5,color:G.textL,marginTop:2}}>index</div>
+          </div>
+        );
+      }
+      const total = type==="classes" ? row.classCount : row.weekMinutes;
+      const label = type==="classes" ? "total" : `${row.weekEntries} session${row.weekEntries===1?"":"s"}`;
+      if(row.instituteGroups.length > 1 && row.detailsReady){
+        return (
+          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+            {row.instituteGroups.slice(0,3).map(group=>(
+              <div key={`${row.teacher.uid}_${type}_${group.key}`} style={{display:"flex",alignItems:"baseline",gap:5}}>
+                <span style={{fontSize:13,fontWeight:900,color:G.text}}>{type==="classes" ? group.classCount : formatDurationShort(group.weekMinutes)}</span>
+                <span style={{fontSize:10,color:G.textL,fontWeight:700,whiteSpace:"nowrap"}}>{shortInstituteLabel(group.institute)}</span>
+              </div>
+            ))}
+            <div style={{height:1,background:G.border,margin:"2px 0"}} />
+            <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+              <span style={{fontSize:14,fontWeight:950,color:"#17926A"}}>{type==="classes" ? total : formatDurationShort(total)}</span>
+              <span style={{fontSize:10,color:"#17926A",fontWeight:800}}>{label}</span>
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div>
+          <div style={{fontSize:15,fontWeight:950,color:type==="hours" && total===0 && row.detailsReady ? G.amber : G.text}}>
+            {type==="classes" ? total : formatDurationShort(total)}
+          </div>
+          <div style={{fontSize:10.5,color:G.textL,marginTop:2}}>{label}</div>
+        </div>
+      );
+    };
+    const renderTeacherBreakdown = row => (
+      <div style={{borderTop:`1px solid ${G.border}`,background:"#F8F7FF",padding:isMobile ? "13px 12px" : "14px 18px"}}>
+        <div style={{fontSize:10.5,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.7,marginBottom:10}}>
+          Institute breakdown - {row.name}
+        </div>
+        <div style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"9px 12px",background:"#F5F3FF",borderBottom:"1px solid #DDD6FE"}}>
+            {["Institute","Subject","Sections","Classes","Hours 7d"].map(label=>(
+              <div key={label} style={{fontSize:10,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.6}}>{label}</div>
+            ))}
+          </div>
+          {row.instituteGroups.map(group=>(
+            <div key={`${row.teacher.uid}_bd_${group.key}`} style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"11px 12px",borderTop:`1px solid ${G.border}`,alignItems:"center"}}>
+              <div style={{fontSize:12.5,fontWeight:850,color:G.text}}>{group.institute}</div>
+              <div>{renderLimitedChips(group.subjects.length ? group.subjects : row.subjects, subjectChip, 2)}</div>
+              <div>{renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 4)}</div>
+              <div style={{fontSize:13.5,fontWeight:900,color:G.text}}>{group.classCount || "--"}</div>
+              <div style={{fontSize:13.5,fontWeight:900,color:G.text}}>{row.detailsReady ? formatDurationShort(group.weekMinutes) : "--"}</div>
+            </div>
+          ))}
+          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"11px 12px",borderTop:"1px solid #DDD6FE",background:"#F5F3FF",alignItems:"center"}}>
+            <div style={{fontSize:12.5,fontWeight:950,color:"#6D28D9"}}>Total - {row.instituteCount} institute{row.instituteCount===1?"":"s"}</div>
+            <div style={{fontSize:12,fontWeight:850,color:G.textM}}>{row.subjectCount} subject{row.subjectCount===1?"":"s"}</div>
+            <div>{teacherChip(`${row.sectionCount} section${row.sectionCount===1?"":"s"}`, "green")}</div>
+            <div style={{fontSize:14,fontWeight:950,color:"#17926A"}}>{row.classCount}</div>
+            <div style={{fontSize:14,fontWeight:950,color:"#17926A"}}>{row.detailsReady ? formatDurationShort(row.weekMinutes) : "--"}</div>
+          </div>
+        </div>
+      </div>
+    );
+    const renderTeacherManagePanel = row => {
+      const t = row.teacher;
+      const data = fullData[t.uid] || {};
+      const classes = Array.isArray(data.classes) ? data.classes : [];
+      const sortedClasses = [...classes].sort((a,b)=>
+        exportTextSorter.compare(a?.institute || "", b?.institute || "")
+        || exportTextSorter.compare(classDisplayName(a), classDisplayName(b))
+        || exportTextSorter.compare(classSubjectName(t, a), classSubjectName(t, b))
+      );
+      return (
+        <div style={{borderTop:`1px solid ${G.border}`,background:"#FBFCFE",padding:isMobile ? "14px 12px" : "16px"}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(0,1.15fr) minmax(0,0.95fr)",gap:16}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Assigned subjects</div>
+              {activeSubjects.length===0 ? (
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.55}}>Create subjects in the syllabus catalog before assigning them here.</div>
+              ) : (
+                <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                  {activeSubjects.map(subject=>{
+                    const selected = teacherAssignedSubjectIds(t).includes(subject.id);
+                    return (
+                      <button
+                        key={`${t.uid}_${subject.id}`}
+                        onClick={()=>handleToggleTeacherSubject(t,subject)}
+                        disabled={subjectAssignmentBusy===t.uid}
+                        style={{
+                          ...pill(selected?G.navy:G.surface,selected?"#fff":G.textS,selected?G.navy:G.borderM),
+                          fontSize:12.5,
+                          opacity:subjectAssignmentBusy===t.uid?0.65:1,
+                        }}>
+                        {selected?"✓ ":""}{subject.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Account summary</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {teacherChip(row.primaryInstitute, "blue", {maxWidth:220,overflow:"hidden",textOverflow:"ellipsis"})}
+                {teacherChip(`${row.classCount} classes`, "slate")}
+                {teacherChip(`${row.subjectCount} subjects`, "slate")}
+                {row.isAdminTeacher && teacherChip("Admin account", "blue")}
+                {row.hasLeftWorkspace ? teacherChip(row.departedLabel, "red") : teacherChip("Ready to teach", "green")}
+              </div>
+              {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={3} />}
+            </div>
+          </div>
+
+          <div style={{marginTop:16}}>
+            <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Classes</div>
+            {sortedClasses.length>0 ? (
+              <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                {sortedClasses.map(cls=>(
+                  <div key={cls.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#FFFFFF",borderRadius:10,padding:"10px 12px",border:`1px solid ${G.border}`,gap:8}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:800,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{classDisplayName(cls)}</div>
+                      <div style={{fontSize:12,color:G.textM,marginTop:3}}>{cls.institute || row.primaryInstitute} - {classSubjectName(t, cls)}</div>
+                    </div>
+                    <button onClick={()=>handleRemoveFromClass(t.uid,cls.id,classDisplayName(cls))} style={workspaceActionButtonStyle("danger")}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.55}}>
+                {row.detailsReady ? "No classes linked yet." : "Details are being prepared."}
+              </div>
+            )}
+          </div>
+
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:16}}>
+            {renamingTeacher?.uid===t.uid ? null : (
+              <button onClick={()=>{
+                const nextName = row.rawName || row.name || "";
+                setRenamingTeacher({uid:t.uid,currentName:nextName});
+                setRenameVal(nextName);
+              }} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+            )}
+            {!row.isMe && !row.isAdminTeacher && (
+              <button onClick={()=>handlePromote(t.uid)} style={workspaceActionButtonStyle("blue")}>Make Admin</button>
+            )}
+            <button onClick={()=>{setView("main");setSelP2(t.uid);setTab("teacher");setMobileStep(2);}} style={workspaceActionButtonStyle("neutral")}>View Entries</button>
+            <button
+              onClick={()=>handleRepairTeacherIndex(t.uid)}
+              disabled={repairingTeacherUid===t.uid}
+              style={{...workspaceActionButtonStyle("blue"),opacity:repairingTeacherUid===t.uid?0.7:1,cursor:repairingTeacherUid===t.uid?"not-allowed":"pointer"}}>
+              {repairingTeacherUid===t.uid ? "Repairing..." : "Repair Index"}
+            </button>
+            {!row.isMe&&(
+              <button onClick={()=>handleRemoveTeacher(t.uid,row.name)} style={workspaceActionButtonStyle("danger")}>Remove Teacher</button>
+            )}
+          </div>
+        </div>
+      );
+    };
+    const renderTeacherActions = row => (
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
+        {renamingTeacher?.uid===row.teacher.uid ? (
+          <>
+            <button
+              onClick={()=>handleRenameTeacher(row.teacher.uid,renameVal)}
+              disabled={!renameVal.trim()}
+              style={{...workspaceActionButtonStyle("primary"),opacity:renameVal.trim()?1:0.55,cursor:renameVal.trim()?"pointer":"not-allowed"}}>
+              Save
+            </button>
+            <button onClick={clearTeacherRename} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
+            {!row.isMe&&(
+              <button onClick={()=>handleRemoveTeacher(row.teacher.uid,row.name || "this teacher")} style={workspaceActionButtonStyle("danger")}>Remove</button>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              onClick={()=>{
+                ensureFullData(row.teacher.uid);
+                setSelTeacher(selTeacher===row.teacher.uid ? null : row.teacher.uid);
+              }}
+              style={workspaceActionButtonStyle(selTeacher===row.teacher.uid ? "blue" : "neutral")}>
+              {selTeacher===row.teacher.uid ? "Done" : "Manage"}
+            </button>
+            <button onClick={()=>{setView("main");setSelP2(row.teacher.uid);setTab("teacher");setMobileStep(2);}} style={workspaceActionButtonStyle("neutral")}>Entries</button>
+            {row.instituteCount > 1 && (
+              <button
+                onClick={()=>{
+                  ensureFullData(row.teacher.uid);
+                  setManageTeacherBreakdownUid(current=>current===row.teacher.uid ? null : row.teacher.uid);
+                }}
+                style={workspaceActionButtonStyle(manageTeacherBreakdownUid===row.teacher.uid ? "blue" : "neutral")}>
+                Breakdown
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    );
+    const renderExpandedTeacherRow = row => (
+      <>
+        {manageTeacherBreakdownUid===row.teacher.uid && renderTeacherBreakdown(row)}
+        {selTeacher===row.teacher.uid && renderTeacherManagePanel(row)}
+      </>
+    );
+    const renderTeacherCard = row => (
+      <div key={`teacher_card_${row.teacher.uid}`} style={{...cardShell,borderColor:row.instituteCount>1 ? "#DDD6FE" : row.detailsReady && row.weekMinutes===0 ? "#FED7AA" : G.border}}>
+        <div style={{padding:"14px",display:"flex",alignItems:"flex-start",gap:10,borderBottom:`1px solid ${G.border}`}}>
+          {teacherAvatar(row, 42)}
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <span style={{fontSize:15,fontWeight:900,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:220}}>{row.name}</span>
+              {row.isAdminTeacher && teacherChip("Admin + teacher", "blue")}
+            </div>
+            <div style={{fontSize:12,color:G.textM,marginTop:3,fontFamily:G.mono,wordBreak:"break-all"}}>{row.email}</div>
+          </div>
+          <div>{statusPill(row)}</div>
+        </div>
+        <div style={{padding:"10px 14px",background:row.instituteCount>1 ? "#FAF8FF" : "#F8FAFC",borderBottom:`1px solid ${G.border}`}}>
+          {row.instituteGroups.slice(0,3).map(group=>(
+            <div key={`${row.teacher.uid}_card_inst_${group.key}`} style={{display:"flex",alignItems:"center",gap:7,minWidth:0,marginBottom:5}}>
+              <span style={{width:6,height:6,borderRadius:999,background:subjectColor(group.subjects[0] || row.name),flexShrink:0}} />
+              <span style={{fontSize:12,fontWeight:800,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{shortInstituteLabel(group.institute)}</span>
+              <span style={{marginLeft:"auto",fontSize:11,color:G.textM,fontWeight:750,whiteSpace:"nowrap"}}>
+                {group.classCount || (row.detailsReady ? 0 : row.classCount)} class{(group.classCount || row.classCount)===1?"":"es"}
+                {row.detailsReady ? ` - ${formatDurationShort(group.weekMinutes)}` : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",borderBottom:`1px solid ${G.border}`}}>
+          {[
+            ["Classes", row.classCount],
+            ["Hours 7d", row.detailsReady ? formatDurationShort(row.weekMinutes) : "--"],
+            ["Sections", row.sectionCount || "--"],
+          ].map(([label,value], index)=>(
+            <div key={label} style={{padding:"11px 12px",textAlign:"center",borderLeft:index ? `1px solid ${G.border}` : "none"}}>
+              <div style={{fontSize:18,fontWeight:950,color:label==="Hours 7d" && row.detailsReady && row.weekMinutes===0 ? G.amber : G.text,lineHeight:1}}>{value}</div>
+              <div style={{fontSize:10,color:G.textL,fontWeight:800,marginTop:3}}>{label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:"11px 14px",borderBottom:`1px solid ${G.border}`}}>
+          <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Subjects</div>
+          {renderLimitedChips(row.subjects.length ? row.subjects : ["No subject"], subjectChip, 4)}
+          <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.6,margin:"10px 0 7px"}}>Sections</div>
+          {row.sections.length ? renderLimitedChips(row.sections, sectionChip, 5) : <span style={{fontSize:12,color:G.textL}}>Details pending</span>}
+        </div>
+        <div style={{padding:"10px 12px",display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          {renderTeacherActions(row)}
+        </div>
+        {renderExpandedTeacherRow(row)}
+      </div>
+    );
+
+    return(
+      <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:isMobile ? "14px" : "18px",boxShadow:reduceEffects ? "none" : G.shadowSm}}>
+        <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:11,fontWeight:850,letterSpacing:0.8,textTransform:"uppercase",color:G.textL,marginBottom:4}}>Control Centre</div>
+            <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
+              <span style={{fontSize:22,fontWeight:900,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>
+                {manageScopeInstitute ? `Teachers at ${manageScopeInstitute}` : "Teachers"}
+              </span>
+              <span style={{fontSize:14,fontWeight:800,color:G.textL}}>{teacherRows.length}</span>
+              {teacherRows.length>0 && detailsReadyCount<teacherRows.length && (
+                <span style={{fontSize:11.5,fontWeight:850,color:G.blue,background:G.blueL,border:"1px solid #BFDBFE",borderRadius:999,padding:"4px 8px"}}>
+                  {detailsReadyCount}/{teacherRows.length} details ready
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:0,background:"#F8FAFC",border:`1.5px solid ${G.borderM}`,borderRadius:10,padding:3}}>
+              {[
+                {key:"table",label:"Table",icon:IconFileText},
+                {key:"cards",label:"Cards",icon:IconUsersGroup},
+              ].map(item=>(
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={()=>setManageTeacherView(item.key)}
+                  style={{
+                    height:34,
+                    borderRadius:8,
+                    border:"none",
+                    background:manageTeacherView===item.key ? G.navy : "transparent",
+                    color:manageTeacherView===item.key ? "#FFFFFF" : G.textM,
+                    padding:"0 12px",
+                    display:"inline-flex",
+                    alignItems:"center",
+                    gap:6,
+                    fontSize:12,
+                    fontWeight:900,
+                    fontFamily:G.sans,
+                    cursor:"pointer",
+                  }}>
+                  <AppIcon icon={item.icon} size={15} color="currentColor" />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search by name, email, institute, subject, or section")}
+        {!manageScopeInstitute&&teacherInstituteOptions.length>0&&(
+          <div style={{display:"flex",gap:8,flexWrap:isMobile?"nowrap":"wrap",overflowX:isMobile?"auto":"visible",paddingBottom:isMobile?4:0,marginBottom:13,WebkitOverflowScrolling:"touch",scrollbarWidth:isMobile?"thin":"auto"}}>
+            <button
+              type="button"
+              onClick={()=>setManageTeacherInstituteFilter("")}
+              style={{
+                border:`1px solid ${!manageTeacherInstituteFilter?G.navy:G.border}`,
+                borderRadius:999,
+                minHeight:34,
+                padding:"0 13px",
+                background:!manageTeacherInstituteFilter?G.navy:"#FFFFFF",
+                color:!manageTeacherInstituteFilter?"#FFFFFF":G.textM,
+                fontFamily:G.sans,
+                fontSize:12,
+                fontWeight:900,
+                cursor:"pointer",
+                whiteSpace:"nowrap",
+                flexShrink:0,
+              }}>
+              All institutes
+            </button>
+            {teacherInstituteOptions.map(item=>(
+              <button
+                key={`teacher_filter_${item.inst}`}
+                type="button"
+                onClick={()=>setManageTeacherInstituteFilter(current=>sameInstituteName(current, item.inst) ? "" : item.inst)}
+                style={{
+                  border:`1px solid ${sameInstituteName(manageTeacherInstituteFilter, item.inst)?G.navy:G.border}`,
+                  borderRadius:999,
+                  minHeight:34,
+                  padding:"0 11px",
+                  background:sameInstituteName(manageTeacherInstituteFilter, item.inst)?G.navy:"#FFFFFF",
+                  color:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"#FFFFFF":G.textM,
+                  fontFamily:G.sans,
+                  fontSize:12,
+                  fontWeight:900,
+                  cursor:"pointer",
+                  whiteSpace:"nowrap",
+                  display:"inline-flex",
+                  alignItems:"center",
+                  gap:6,
+                  flexShrink:0,
+                }}>
+                <span style={{maxWidth:isMobile?150:220,overflow:"hidden",textOverflow:"ellipsis"}}>{item.inst}</span>
+                <span style={{minWidth:22,height:22,borderRadius:999,padding:"0 6px",display:"inline-flex",alignItems:"center",justifyContent:"center",background:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"rgba(255,255,255,0.16)":G.bg,border:`1px solid ${sameInstituteName(manageTeacherInstituteFilter, item.inst)?"rgba(255,255,255,0.18)":G.border}`,color:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"#FFFFFF":G.textL,fontSize:10,fontWeight:900,fontFamily:G.mono}}>
+                  {item.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:14}}>
+          <span style={{fontSize:11,fontWeight:900,color:G.textL,textTransform:"uppercase",letterSpacing:0.7}}>Sort</span>
+          {[
+            {key:"recent",label:"Recent"},
+            {key:"name",label:"Name A-Z"},
+            {key:"count",label:"Institute A-Z"},
+          ].map(item=>(
+            <button
+              key={item.key}
+              type="button"
+              onClick={()=>setManageTeacherSort(item.key)}
+              style={{
+                border:`1px solid ${manageTeacherSort===item.key?G.navy:G.border}`,
+                borderRadius:999,
+                minHeight:32,
+                padding:"0 12px",
+                background:manageTeacherSort===item.key?G.navy:"#FFFFFF",
+                color:manageTeacherSort===item.key?"#FFFFFF":G.textM,
+                fontFamily:G.sans,
+                fontSize:12,
+                fontWeight:900,
+                cursor:"pointer",
+              }}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {manageTeacherView==="cards" ? (
+          teacherRows.length ? (
+            <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(auto-fit, minmax(330px, 1fr))",gap:14}}>
+              {teacherRows.map(renderTeacherCard)}
+            </div>
+          ) : (
+            <div style={{fontSize:15,color:G.textM,padding:"22px 8px 10px",textAlign:"center"}}>{emptyTeacherMessage}</div>
+          )
+        ) : renderWorkspaceTable({
+          columns:[
+            { key:"teacher", label:"Teacher" },
+            { key:"institutes", label:"Institute(s)" },
+            { key:"subjects", label:"Subject" },
+            { key:"sections", label:"Sections" },
+            { key:"classes", label:"Classes" },
+            { key:"hours", label:"Hours 7d" },
+            { key:"status", label:"Status" },
+            { key:"actions", label:"Actions" },
+          ],
+          desktopGrid:"minmax(265px,1.45fr) minmax(220px,1.05fr) minmax(150px,0.82fr) minmax(180px,1fr) minmax(105px,0.55fr) minmax(120px,0.6fr) 128px minmax(250px,1.1fr)",
+          minWidth:1390,
+          rows:teacherRows,
+          rowKey:row=>`teacher_${row.teacher.uid}`,
+          emptyMessage:emptyTeacherMessage,
+          renderDesktopCells:row=>[
+            <div key="teacher">{renderTeacherName(row)}</div>,
+            <div key="institutes">{renderInstituteSummary(row)}</div>,
+            <div key="subjects">{renderLimitedChips(row.subjects.length ? row.subjects : ["No subject"], subjectChip, 3)}</div>,
+            <div key="sections">{row.sections.length ? renderLimitedChips(row.sections, sectionChip, 4) : <span style={{fontSize:12,color:G.textL}}>Details pending</span>}</div>,
+            <div key="classes">{renderSplitMetric(row, "classes")}</div>,
+            <div key="hours">{renderSplitMetric(row, "hours")}</div>,
+            <div key="status">{statusPill(row)}</div>,
+            <div key="actions">{renderTeacherActions(row)}</div>,
+          ],
+          renderExpandedRow:renderExpandedTeacherRow,
+        })}
+      </div>
+    );
+  };
+
   const instituteAccordionHeader = ({ icon, title, count, countLabel, isOpen, onClick }) => (
     <button
       type="button"
@@ -20479,354 +21335,7 @@ function AdminPanelInner({user}){
         })()}
 
         {/* ── TEACHERS TAB ── */}
-        {manageTab==="teachers"&&(()=>{
-          const teacherOnlyList = teachers.filter(t=>roles[t.uid]!=="admin");
-          const scopedTeacherOnlyList = manageScopeInstitute
-            ? teacherOnlyList.filter(t=>teacherBelongsToInstitute(t, manageScopeInstitute))
-            : teacherOnlyList;
-          const teacherSearchKey = manageTeacherSearch.trim().toLowerCase();
-          const teacherInstituteOptions = !manageScopeInstitute
-            ? institutes
-                .map(inst=>{
-                  const count = scopedTeacherOnlyList.filter(t=>teacherBelongsToInstitute(t, inst)).length;
-                  return { inst, count };
-                })
-                .filter(item=>item.count>0)
-            : [];
-          const matchesTeacher = (teacher) => {
-            if(manageTeacherInstituteFilter){
-              const instituteList = getTeacherInstituteList(teacher);
-              const matchesInstitute = instituteList.some(inst=>sameInstituteName(inst, manageTeacherInstituteFilter));
-              if(!matchesInstitute) return false;
-            }
-            if(!teacherSearchKey) return true;
-            const name = getTeacherDisplayName(teacher).toLowerCase();
-            const email = getTeacherEmail(teacher).toLowerCase();
-            const instituteText = getTeacherInstituteList(teacher).join(" ").toLowerCase();
-            return name.includes(teacherSearchKey) || email.includes(teacherSearchKey) || instituteText.includes(teacherSearchKey);
-          };
-          const teacherRows = scopedTeacherOnlyList
-            .filter(matchesTeacher)
-            .map(t=>{
-              const d = fullData[t.uid] || {};
-              const instituteList = getTeacherInstituteList(t);
-              const primaryInstitute = manageScopeInstitute || instituteList[0] || "No institute assigned";
-              const hasLeftWorkspace = t.accountStatus === "departed" || t.active === false;
-              return {
-                teacher:t,
-                rawName:getTeacherRawName(t),
-                name:getTeacherDisplayName(t),
-                email:getTeacherEmail(t) || "Email not available",
-                primaryInstitute,
-                extraInstitutes:manageScopeInstitute
-                  ? instituteList.filter(value=>!sameInstituteName(value, manageScopeInstitute))
-                  : instituteList.slice(1),
-                subjectCount:teacherAssignedSubjectIds(t).length,
-                classCount:fullData[t.uid] ? (d.classes || []).length : (t.classCount || 0),
-                hasLeftWorkspace,
-                departedLabel:t.departedAt
-                  ? `Left ${new Date(Number(t.departedAt)).toLocaleDateString()}`
-                  : "Left workspace",
-                isMe:t.uid===user.uid,
-              };
-            })
-            .sort((a,b)=>{
-              if(manageScopeInstitute){
-                return exportTextSorter.compare(a.name, b.name);
-              }
-              if(manageTeacherSort==="count"){
-                return exportTextSorter.compare(a.primaryInstitute, b.primaryInstitute)
-                  || exportTextSorter.compare(a.name, b.name);
-              }
-              return exportTextSorter.compare(a.name, b.name)
-                || exportTextSorter.compare(a.primaryInstitute, b.primaryInstitute);
-            });
-
-          const emptyTeacherMessage = scopedTeacherOnlyList.length===0
-            ? (manageScopeInstitute ? "No teachers are connected to this institute yet." : "No teachers found yet.")
-            : "No teachers match your search.";
-
-          return(
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
-              <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
-                {manageScopeInstitute ? `Teachers at ${manageScopeInstitute}` : "Teachers"} ({teacherRows.length})
-              </div>
-              <div style={{fontSize:14,color:G.textM,marginBottom:10}}>
-                {manageScopeInstitute
-                  ? "Teacher accounts, assigned subjects, and linked classes for this institute in one compact list."
-                  : "One row per teacher, with institute, subjects, classes, status, and actions visible without opening every card."}
-              </div>
-              {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search teachers by name, email, or institute")}
-              {!manageScopeInstitute&&teacherInstituteOptions.length>0&&(
-                <>
-                  <div style={{fontSize:12.5,color:G.textM,marginBottom:8}}>
-                    {isMobile ? "Swipe institute pills to browse quickly." : "Tap an institute pill to narrow the table instantly."}
-                  </div>
-                  <div
-                    style={{
-                      display:"flex",
-                      gap:8,
-                      flexWrap:isMobile?"nowrap":"wrap",
-                      overflowX:isMobile?"auto":"visible",
-                      paddingBottom:isMobile?4:0,
-                      marginBottom:12,
-                      WebkitOverflowScrolling:"touch",
-                      scrollbarWidth:isMobile?"thin":"auto",
-                    }}>
-                  <button
-                    onClick={()=>setManageTeacherInstituteFilter("")}
-                    style={{
-                      border:`1px solid ${!manageTeacherInstituteFilter?G.navy:G.border}`,
-                      borderRadius:999,
-                      padding:"6px 12px",
-                      background:!manageTeacherInstituteFilter?G.navy:"#FFFFFF",
-                      color:!manageTeacherInstituteFilter?"#FFFFFF":G.textM,
-                      fontFamily:G.sans,
-                      fontSize:11.5,
-                      fontWeight:850,
-                      cursor:"pointer",
-                      whiteSpace:"nowrap",
-                      flexShrink:0,
-                    }}>
-                    All institutes
-                  </button>
-                  {teacherInstituteOptions.map(item=>(
-                    <button
-                      key={`teacher_filter_${item.inst}`}
-                      onClick={()=>setManageTeacherInstituteFilter(current=>sameInstituteName(current, item.inst) ? "" : item.inst)}
-                      style={{
-                        border:`1px solid ${sameInstituteName(manageTeacherInstituteFilter, item.inst)?G.navy:G.border}`,
-                        borderRadius:999,
-                        padding:"6px 12px",
-                        background:sameInstituteName(manageTeacherInstituteFilter, item.inst)?G.navy:"#FFFFFF",
-                        color:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"#FFFFFF":G.textM,
-                        fontFamily:G.sans,
-                        fontSize:11.5,
-                        fontWeight:850,
-                        cursor:"pointer",
-                        whiteSpace:"nowrap",
-                        display:"inline-flex",
-                        alignItems:"center",
-                        gap:6,
-                        flexShrink:0,
-                      }}>
-                      <span style={{maxWidth:isMobile?160:220,overflow:"hidden",textOverflow:"ellipsis"}}>{item.inst}</span>
-                      <span style={{
-                        minWidth:20,
-                        height:20,
-                        borderRadius:999,
-                        padding:"0 6px",
-                        display:"inline-flex",
-                        alignItems:"center",
-                        justifyContent:"center",
-                        background:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"rgba(255,255,255,0.16)":G.bg,
-                        border:`1px solid ${sameInstituteName(manageTeacherInstituteFilter, item.inst)?"rgba(255,255,255,0.18)":G.border}`,
-                        color:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"#FFFFFF":G.textL,
-                        fontSize:9.5,
-                        fontWeight:850,
-                        fontFamily:G.mono,
-                      }}>
-                        {item.count}
-                      </span>
-                    </button>
-                  ))}
-                  </div>
-                </>
-              )}
-              {!manageScopeInstitute&&(
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-                  {[
-                    {key:"count",label:"Institute A-Z"},
-                    {key:"name",label:"Name A-Z"},
-                  ].map(item=>(
-                    <button key={item.key} onClick={()=>setManageTeacherSort(item.key)} style={{border:`1px solid ${manageTeacherSort===item.key?G.navy:G.border}`,borderRadius:999,padding:"6px 12px",background:manageTeacherSort===item.key?G.navy:"#FFFFFF",color:manageTeacherSort===item.key?"#FFFFFF":G.textM,fontFamily:G.sans,fontSize:11.5,fontWeight:850,cursor:"pointer"}}>
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {renderWorkspaceTable({
-                columns:[
-                  { key:"teacher", label:"Teacher" },
-                  { key:"institute", label:"Parent institute" },
-                  { key:"subjects", label:"Subjects" },
-                  { key:"classes", label:"Classes" },
-                  { key:"status", label:"Status" },
-                  { key:"actions", label:"Actions" },
-                ],
-                desktopGrid:"minmax(250px,1.55fr) minmax(230px,1.2fr) 90px 90px 140px minmax(240px,1.1fr)",
-                minWidth:1060,
-                rows:teacherRows,
-                rowKey:row=>`teacher_${row.teacher.uid}`,
-                emptyMessage:emptyTeacherMessage,
-                renderDesktopCells:row=>[
-                  <div key="teacher" style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
-                    <div style={{width:38,height:38,borderRadius:11,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
-                      {(row.name[0]||"?").toUpperCase()}
-                    </div>
-                    <div style={{minWidth:0}}>
-                      {renamingTeacher?.uid===row.teacher.uid ? (
-                        <input
-                          value={renameVal}
-                          onChange={e=>setRenameVal(e.target.value)}
-                          onKeyDown={e=>{
-                            if(e.key==="Enter") handleRenameTeacher(row.teacher.uid,renameVal);
-                            if(e.key==="Escape") clearTeacherRename();
-                          }}
-                          placeholder="Teacher name"
-                          autoFocus
-                          style={{width:"100%",maxWidth:240,padding:"8px 11px",borderRadius:10,border:`1.5px solid ${G.blue}`,fontSize:14,fontFamily:G.sans,outline:"none"}}
-                        />
-                      ) : (
-                        <>
-                          <div style={{fontSize:15.5,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</div>
-                          <div style={{fontSize:12.5,color:G.textM,marginTop:4,fontFamily:G.mono,wordBreak:"break-all"}}>{row.email}</div>
-                        </>
-                      )}
-                    </div>
-                  </div>,
-                  <div key="institute" style={{minWidth:0}}>
-                    <div style={{fontSize:14.5,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.primaryInstitute}</div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:5}}>
-                      {row.extraInstitutes.length>0
-                        ? renderWorkspacePill(`+${row.extraInstitutes.length} more`, "slate")
-                        : <span style={{fontSize:12.5,color:G.textL}}>Single institute</span>}
-                    </div>
-                  </div>,
-                  <div key="subjects" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.subjectCount}</div>,
-                  <div key="classes" style={{fontSize:15,fontWeight:800,color:G.text}}>{row.classCount}</div>,
-                  <div key="status">
-                    {row.hasLeftWorkspace
-                      ? renderWorkspacePill("Departed", "red")
-                      : renderWorkspacePill("Active", "green")}
-                  </div>,
-                  <div key="actions" style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
-                    {renamingTeacher?.uid===row.teacher.uid ? (
-                      <>
-                        <button
-                          onClick={()=>handleRenameTeacher(row.teacher.uid,renameVal)}
-                          disabled={!renameVal.trim()}
-                          style={{
-                            ...workspaceActionButtonStyle("primary"),
-                            opacity:renameVal.trim()?1:0.55,
-                            cursor:renameVal.trim()?"pointer":"not-allowed",
-                          }}>
-                          Save
-                        </button>
-                        <button onClick={clearTeacherRename} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
-                        {!row.isMe&&(
-                          <button onClick={()=>handleRemoveTeacher(row.teacher.uid,row.name || "this teacher")} style={workspaceActionButtonStyle("danger")}>Remove</button>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={()=>{
-                            ensureFullData(row.teacher.uid);
-                            setSelTeacher(selTeacher===row.teacher.uid ? null : row.teacher.uid);
-                          }}
-                          style={workspaceActionButtonStyle(selTeacher===row.teacher.uid ? "blue" : "neutral")}>
-                          {selTeacher===row.teacher.uid ? "Done" : "Manage"}
-                        </button>
-                        <button onClick={()=>{setView("main");setSelP2(row.teacher.uid);setTab("teacher");setMobileStep(2);}} style={workspaceActionButtonStyle("neutral")}>Entries</button>
-                      </>
-                    )}
-                  </div>,
-                ],
-                renderExpandedRow:row=>{
-                  if(selTeacher!==row.teacher.uid) return null;
-                  const t = row.teacher;
-                  const d = fullData[t.uid] || {};
-                  return (
-                    <div style={{borderTop:`1px solid ${G.border}`,background:"#FBFCFE",padding:isMobile ? "14px 12px" : "16px"}}>
-                      <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(0,1.15fr) minmax(0,0.95fr)",gap:16}}>
-                        <div style={{minWidth:0}}>
-                          <div style={{fontSize:12,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Assigned subjects</div>
-                          {globalSubjects.filter(subject=>subject.active).length===0 ? (
-                            <div style={{fontSize:13,color:G.textM,lineHeight:1.55}}>Create subjects in the syllabus catalog before assigning them here.</div>
-                          ) : (
-                            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                              {globalSubjects.filter(subject=>subject.active).map(subject=>{
-                                const selected = teacherAssignedSubjectIds(t).includes(subject.id);
-                                return (
-                                  <button
-                                    key={`${t.uid}_${subject.id}`}
-                                    onClick={()=>handleToggleTeacherSubject(t,subject)}
-                                    disabled={subjectAssignmentBusy===t.uid}
-                                    style={{
-                                      ...pill(selected?G.navy:G.surface,selected?"#fff":G.textS,selected?G.navy:G.borderM),
-                                      fontSize:12.5,
-                                      opacity:subjectAssignmentBusy===t.uid?0.65:1,
-                                    }}>
-                                    {selected?"✓ ":""}{subject.name}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{minWidth:0}}>
-                          <div style={{fontSize:12,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Account summary</div>
-                          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                            {renderWorkspacePill(row.primaryInstitute, "blue")}
-                            {renderWorkspacePill(`${row.classCount} classes`, "slate")}
-                            {renderWorkspacePill(`${row.subjectCount} subjects`, "slate")}
-                            {row.hasLeftWorkspace ? renderWorkspacePill(row.departedLabel, "red") : renderWorkspacePill("Ready to teach", "green")}
-                          </div>
-                          {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={3} />}
-                        </div>
-                      </div>
-
-                      <div style={{marginTop:16}}>
-                        <div style={{fontSize:12,fontWeight:800,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Classes</div>
-                        {(d.classes || []).length>0 ? (
-                          <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                            {(d.classes || []).map(cls=>(
-                              <div key={cls.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#FFFFFF",borderRadius:10,padding:"10px 12px",border:`1px solid ${G.border}`,gap:8}}>
-                                <div style={{minWidth:0}}>
-                                  <div style={{fontSize:14,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{normaliseName(resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section)}</div>
-                                  <div style={{fontSize:12,color:G.textM,marginTop:3}}>{cls.institute} · {cls.subject}</div>
-                                </div>
-                                <button onClick={()=>handleRemoveFromClass(t.uid,cls.id,normaliseName(resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section))} style={workspaceActionButtonStyle("danger")}>
-                                  Remove
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div style={{fontSize:13,color:G.textM,lineHeight:1.55}}>No classes linked yet.</div>
-                        )}
-                      </div>
-
-                      <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:16}}>
-                        {renamingTeacher?.uid===t.uid ? null : (
-                          <button onClick={()=>{
-                            const nextName = row.rawName || row.name || "";
-                            setRenamingTeacher({uid:t.uid,currentName:nextName});
-                            setRenameVal(nextName);
-                          }} style={workspaceActionButtonStyle("neutral")}>Rename</button>
-                        )}
-                        {!row.isMe&&(
-                          <button onClick={()=>handlePromote(t.uid)} style={workspaceActionButtonStyle("blue")}>Make Admin</button>
-                        )}
-                        <button onClick={()=>{setView("main");setSelP2(t.uid);setTab("teacher");setMobileStep(2);}} style={workspaceActionButtonStyle("neutral")}>View Entries</button>
-                        <button
-                          onClick={()=>handleRepairTeacherIndex(t.uid)}
-                          disabled={repairingTeacherUid===t.uid}
-                          style={{...workspaceActionButtonStyle("blue"),opacity:repairingTeacherUid===t.uid?0.7:1,cursor:repairingTeacherUid===t.uid?"not-allowed":"pointer"}}>
-                          {repairingTeacherUid===t.uid ? "Repairing…" : "Repair Index"}
-                        </button>
-                        {!row.isMe&&(
-                          <button onClick={()=>handleRemoveTeacher(t.uid,row.name)} style={workspaceActionButtonStyle("danger")}>Remove Teacher</button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                },
-              })}
-            </div>
-          );
-        })()}
+        {manageTab==="teachers"&&renderManageTeachersPanel()}
       </>)}
       </main>
       </div>
