@@ -14225,7 +14225,7 @@ function AdminPanelInner({user}){
           : activityKey === "yesterday"
             ? "Yesterday"
             : activityKey === "stale"
-              ? "3+ days"
+              ? "Last week"
               : lastEntryCaption(bucket.lastTs || null);
         const activityRank = { today:0, yesterday:1, recent:2, stale:3 }[activityKey] ?? 4;
         return {
@@ -17492,7 +17492,7 @@ function AdminPanelInner({user}){
       { key:"all", label:"All", count:selectedInstitute?.classes?.length || 0 },
       { key:"today", label:"Today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
       { key:"yesterday", label:"Yesterday", count:(selectedInstitute?.classes || []).filter(item => item.activityKey === "yesterday").length },
-      { key:"stale", label:"3+ days", count:(selectedInstitute?.classes || []).filter(item => item.activityKey === "stale").length },
+      { key:"stale", label:"Last week", count:(selectedInstitute?.classes || []).filter(item => item.activityKey === "stale").length },
       ...(period === "today" ? [] : [{ key:"period", label:timelinePeriodLabel, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length }]),
     ];
     const actionButton = (tone = "light") => ({
