@@ -1578,6 +1578,53 @@ function safeAdminText(value, fallback = ""){
   }
   return fallback;
 }
+function adminV5SummaryNumber(...values){
+  for(const value of values){
+    const number = Number(value);
+    if(Number.isFinite(number)) return Math.max(0, Math.round(number));
+  }
+  return null;
+}
+function adminV5InstituteSummaryKey(value){
+  return normaliseSectionKey(safeAdminText(value, ""));
+}
+function normaliseAdminV5DailySummary(raw, fallbackInstitute = ""){
+  if(!raw || typeof raw !== "object") return null;
+  const institute = safeAdminText(raw.institute || raw.instituteName || raw.name || fallbackInstitute, fallbackInstitute);
+  const activeCount = adminV5SummaryNumber(
+    raw.activeTeachers,
+    raw.teachersTotal,
+    raw.totalTeachers,
+    raw.teacherCount,
+    raw.totalTeacherCount,
+    raw.total,
+  );
+  const loggedCount = adminV5SummaryNumber(
+    raw.loggedToday,
+    raw.updatedToday,
+    raw.teachersUpdated,
+    raw.updatedTeachers,
+    raw.loggedTeachers,
+    raw.filledToday,
+  );
+  const pendingCount = adminV5SummaryNumber(
+    raw.pendingTeachers,
+    raw.pending,
+    raw.notUpdatedTeachers,
+    activeCount !== null && loggedCount !== null ? activeCount - loggedCount : null,
+  );
+  return {
+    institute,
+    key:adminV5InstituteSummaryKey(institute),
+    activeCount,
+    loggedCount,
+    pendingCount,
+    classCount:adminV5SummaryNumber(raw.classCount, raw.classesTotal, raw.totalClasses),
+    todayEntryCount:adminV5SummaryNumber(raw.todayEntryCount, raw.entriesToday, raw.entryCount, raw.entriesCount),
+    todayMinutes:adminV5SummaryNumber(raw.todayMinutes, raw.minutesToday, raw.totalMinutes, raw.studyMinutes),
+    updatedAt:raw.updatedAt || raw.generatedAt || raw.createdAt || null,
+  };
+}
 function parseClockMins(t){
   if(!t || !/^\d{1,2}:\d{2}$/.test(t)) return null;
   const [h,m] = t.split(":").map(Number);
@@ -10970,6 +11017,8 @@ function AdminPanelInner({user}){
   const [adminV5BrowseMode, setAdminV5BrowseMode] = useState("class"); // class | teacher | pair
   const [adminV5ClassSearch, setAdminV5ClassSearch] = useState("");
   const [adminV5ExpandedClassKeys, setAdminV5ExpandedClassKeys] = useState({});
+  const [adminV5DailySummaries, setAdminV5DailySummaries] = useState({});
+  const [adminV5DailySummariesLoading, setAdminV5DailySummariesLoading] = useState(false);
   const [adminV5PanelW, setAdminV5PanelW] = useState(()=>({
     institutes:ADMIN_V5_PANEL_LIMITS.institutes.default,
     classes:ADMIN_V5_PANEL_LIMITS.classes.default,
@@ -11388,6 +11437,15 @@ function AdminPanelInner({user}){
       const s = e.state;
       if (!s) return;
       const { navToken, ...restoredNavState } = s;
+      const restoredSelP3 = restoredNavState.selP3 && typeof restoredNavState.selP3 === "object"
+        ? {
+          ...restoredNavState.selP3,
+          teacherName:safeAdminText(restoredNavState.selP3.teacherName, "Teacher"),
+          className:safeAdminText(restoredNavState.selP3.className, "Class"),
+          subject:safeAdminText(restoredNavState.selP3.subject, ""),
+          institute:safeAdminText(restoredNavState.selP3.institute, ""),
+        }
+        : null;
       historyRestoreRef.current = true;
       lastHistoryKeyRef.current = JSON.stringify(restoredNavState);
       setProfileOpen(false);
@@ -11407,7 +11465,7 @@ function AdminPanelInner({user}){
       setSelInst(restoredNavState.selInst ?? null);
       setTab(restoredNavState.tab === "teacher" ? "teacher" : "class");
       setSelP2(restoredNavState.selP2 ?? null);
-      setSelP3(restoredNavState.selP3 ?? null);
+      setSelP3(restoredSelP3);
       setFullView(restoredNavState.fullView ?? null);
     };
     window.addEventListener("popstate", onPop);
@@ -11533,6 +11591,67 @@ function AdminPanelInner({user}){
     const extras   = Array.from(set).filter(i=>!globalInstList.includes(i)).sort();
     return [...ordered, ...extras];
   },[globalInstList,teachers,fullData,deletedInstitutes]);
+
+  React.useEffect(()=>{
+    if(view !== "main" || !institutes.length){
+      setAdminV5DailySummaries({});
+      setAdminV5DailySummariesLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    const today = todayKey();
+    const addSummary = (target, raw, fallbackInstitute = "") => {
+      const summary = normaliseAdminV5DailySummary(raw, fallbackInstitute);
+      if(!summary?.key) return;
+      target[summary.key] = {
+        ...(target[summary.key] || {}),
+        ...summary,
+      };
+    };
+    setAdminV5DailySummariesLoading(true);
+    (async()=>{
+      const next = {};
+      try{
+        const [{collection, doc, getDoc, getDocs, query, where}, {db:fdb}] = await Promise.all([
+          import("firebase/firestore"),
+          import("./firebase"),
+        ]);
+
+        await Promise.allSettled(["adminDailyInstituteStats", "dailyInstituteStats"].map(async collectionName => {
+          const snap = await getDocs(query(collection(fdb, collectionName), where("dateKey", "==", today)));
+          snap.forEach(docSnap => addSummary(next, { id:docSnap.id, ...docSnap.data() }));
+        }));
+
+        const missingInstitutes = institutes.filter(instituteName => !next[adminV5InstituteSummaryKey(instituteName)]);
+        await Promise.allSettled(missingInstitutes.map(async instituteName => {
+          const key = adminV5InstituteSummaryKey(instituteName);
+          if(!key) return;
+          const candidates = [
+            doc(fdb, "adminDailyInstituteStats", today, "institutes", key),
+            doc(fdb, "dailyInstituteStats", `${today}_${key}`),
+            doc(fdb, "instituteDailySummaries", `${today}_${key}`),
+          ];
+          for(const ref of candidates){
+            try{
+              const snap = await getDoc(ref);
+              if(snap.exists()){
+                addSummary(next, { id:snap.id, ...snap.data(), dateKey:today }, instituteName);
+                break;
+              }
+            }catch{}
+          }
+        }));
+      }catch(error){
+        console.warn("Admin V5 daily summaries unavailable", error);
+      }
+      if(cancelled) return;
+      setAdminV5DailySummaries(next);
+      setAdminV5DailySummariesLoading(false);
+    })();
+    return ()=>{
+      cancelled = true;
+    };
+  },[institutes, view]);
 
   const sectionCountsByInstitute = useMemo(()=>Object.fromEntries((institutes||[]).map(instituteName=>{
     const config = getInstituteSectionConfig(instSectionsAll, instituteName) || {};
@@ -14104,7 +14223,7 @@ function AdminPanelInner({user}){
   // ── Entries for P4 ────────────────────────────────────────────────────────
   const selectedTeacherName = (uid) => {
     if(!uid) return "";
-    return fullData[uid]?.profile?.name || teachers.find(t=>t.uid===uid)?.name || uid;
+    return safeAdminText(fullData[uid]?.profile?.name || teachers.find(t=>t.uid===uid)?.name || uid, uid);
   };
   const p2Label = (value = selP2) => {
     if(!value) return "";
@@ -14125,7 +14244,7 @@ function AdminPanelInner({user}){
       : isAggregateSelection
         ? aggregateTitle
         : selP3
-          ? selP3.className
+          ? safeAdminText(selP3.className, "Class")
           : "All entries";
   const periodFilter = useMemo(()=>getPeriodFilter(period, customRange.start, customRange.end),[period,customRange.start,customRange.end]);
   const periodDays = periodFilter.days;
@@ -14149,7 +14268,8 @@ function AdminPanelInner({user}){
   },[selP3,fullData]);
   const selectedSubjectLabel = useMemo(()=>{
     const text = selectedClassMeta?.subject || selP3?.subject || "";
-    return text && text !== "undefined" ? text : "";
+    const safeText = safeAdminText(text, "");
+    return safeText && safeText !== "undefined" ? safeText : "";
   },[selectedClassMeta,selP3]);
   const selectedTimelineSummary = useMemo(()=>{
     if(!selP3) return null;
@@ -14401,9 +14521,12 @@ function AdminPanelInner({user}){
         return exportTextSorter.compare(a.display || "", b.display || "");
       });
 
-      const activeCount = teacherRows.length;
-      const loggedCount = teacherRows.filter(item => item.loggedToday).length;
-      const pendingCount = Math.max(0, activeCount - loggedCount);
+      const dailySummary = adminV5DailySummaries[adminV5InstituteSummaryKey(instituteName)] || null;
+      const derivedActiveCount = teacherRows.length;
+      const derivedLoggedCount = teacherRows.filter(item => item.loggedToday).length;
+      const activeCount = dailySummary?.activeCount ?? derivedActiveCount;
+      const loggedCount = Math.min(activeCount, dailySummary?.loggedCount ?? derivedLoggedCount);
+      const pendingCount = dailySummary?.pendingCount ?? Math.max(0, activeCount - loggedCount);
       const status = statusMetaFor(activeCount, loggedCount);
       const recentEntries = classRows
         .flatMap(cls => cls.recentEntries.map(entry => ({ ...entry, classDisplay:cls.display })))
@@ -14418,11 +14541,13 @@ function AdminPanelInner({user}){
         activeCount,
         loggedCount,
         pendingCount,
+        summaryReady:!!dailySummary && dailySummary.activeCount !== null && dailySummary.loggedCount !== null,
+        classCount:dailySummary?.classCount ?? classRows.length,
         loadedCount:teacherRows.filter(item => item.loaded).length,
         status,
         coldClassCount:classRows.filter(item => item.cold).length,
-        todayEntryCount:teacherRows.reduce((sum, item) => sum + item.todayCount, 0),
-        todayMinutes:teacherRows.reduce((sum, item) => sum + item.todayMinutes, 0),
+        todayEntryCount:dailySummary?.todayEntryCount ?? teacherRows.reduce((sum, item) => sum + item.todayCount, 0),
+        todayMinutes:dailySummary?.todayMinutes ?? teacherRows.reduce((sum, item) => sum + item.todayMinutes, 0),
       };
     });
 
@@ -14458,6 +14583,7 @@ function AdminPanelInner({user}){
     periodStartKey,
     resolveAdminTeacherClassSubject,
     roles,
+    adminV5DailySummaries,
     teacherBelongsToInstitute,
     teachers,
   ]);
@@ -14598,10 +14724,10 @@ function AdminPanelInner({user}){
 
   const fullViewTitle = useMemo(()=>{
     if(!fullView) return "";
-    if(fullView.kind==="teacher") return `${fullView.teacherName || selectedTeacherName(fullView.teacherUid)} — All Classes`;
+    if(fullView.kind==="teacher") return `${safeAdminText(fullView.teacherName || selectedTeacherName(fullView.teacherUid), "Teacher")} — All Classes`;
     if(fullView.kind==="class"){
       const cls = instClasses.find(c=>c.raw===fullView.classRaw);
-      return `${cls?.display || normaliseName(fullView.classRaw)} — All Teachers`;
+      return `${safeAdminText(cls?.display || normaliseName(fullView.classRaw), "Class")} — All Teachers`;
     }
     return "";
   },[fullView,instClasses,fullData,teachers]);
@@ -15313,10 +15439,11 @@ function AdminPanelInner({user}){
   }, [confirmDelete, selInst, setFullView, setSelP2, setSelP3, showAdminToast, user.uid]);
 
   const handleDeleteEntry = (teacherUid, classId, dateKey, entryId, entryTitle) => {
+    const safeEntryTitle = safeAdminText(entryTitle, "(no title)") || "(no title)";
     confirmDelete({
       title: "Delete this entry?",
       lines: [
-        `"${entryTitle||"(no title)"}" will be permanently deleted from ${dateKey}.`,
+        `"${safeEntryTitle}" will be permanently deleted from ${safeAdminText(dateKey, "this date")}.`,
         "This cannot be undone.",
       ],
       confirmLabel: "Delete Entry",
@@ -15863,13 +15990,16 @@ function AdminPanelInner({user}){
 
     // Current view (teacher + class)
     if (selP3) {
+      const exportTeacherName = safeAdminText(selP3.teacherName, "Teacher");
+      const exportClassName = safeAdminText(selP3.className, "Class");
+      const exportSubjectName = safeAdminText(selP3.subject, "");
       actions.push({
         label: "This view",
-        sub: `${selP3.teacherName} · ${selP3.className}`,
+        sub: `${exportTeacherName} · ${exportClassName}`,
         icon: "📋",
-        filename: `${selP3.teacherName}_${selP3.className}`,
-        title: `${selP3.teacherName} — ${selP3.className}`,
-        meta: `${selInst} · ${selP3.subject||""}`,
+        filename: `${exportTeacherName}_${exportClassName}`,
+        title: `${exportTeacherName} — ${exportClassName}`,
+        meta: `${selInst} · ${exportSubjectName}`,
         getRows: (sk, ek) => rowsForTeacherClass(selP3.teacherUid, selP3.teacherName, selP3.classId, selP3.className, selP3.subject, sk, ek, selP3.institute || selInst),
         triggerCSV: _csv, triggerPDF: _pdf, triggerJSON: _json,
       });
@@ -17668,8 +17798,9 @@ function AdminPanelInner({user}){
       { key:"classes", label:"Classes", icon:IconSchool },
       { key:"timeline", label:"Timeline", icon:IconClock },
     ];
-    const instituteReadyRows = adminV5VisibleInstitutes.filter(item => item.activeCount === 0 || (item.loadedCount || 0) >= (item.activeCount || 0));
-    const instituteUnloadedRows = adminV5VisibleInstitutes.filter(item => item.activeCount > 0 && (item.loadedCount || 0) < (item.activeCount || 0));
+    const hasInstituteCounts = (item) => item.summaryReady || item.activeCount === 0 || (item.loadedCount || 0) >= (item.activeCount || 0);
+    const instituteReadyRows = adminV5VisibleInstitutes.filter(hasInstituteCounts);
+    const instituteUnloadedRows = adminV5VisibleInstitutes.filter(item => !hasInstituteCounts(item));
     const instituteGroups = selectedInstitute
       ? [
         { key:"under_25", label:"0-24% updated", rows:instituteReadyRows.filter(item => item.activeCount > 0 && item.status.pct < 25) },
@@ -18027,7 +18158,7 @@ function AdminPanelInner({user}){
     const renderInstituteRow = (row) => {
       const active = selectedInstitute && sameInstituteName(row.institute, selectedInstitute.institute);
       const pct = row.status?.pct || 0;
-      const rowReady = row.activeCount === 0 || (row.loadedCount || 0) >= (row.activeCount || 0);
+      const rowReady = row.summaryReady || row.activeCount === 0 || (row.loadedCount || 0) >= (row.activeCount || 0);
       const tone = !rowReady
         ? { dot:"#9CA3AF", pillBg:"#EEF2FF", pillText:G.blue }
         : row.activeCount === 0
@@ -18063,7 +18194,7 @@ function AdminPanelInner({user}){
             <span style={{display:"block",fontSize:10.5,color:G.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
               {rowReady
                 ? `${row.classCount || row.classes?.length || 0} classes · ${row.activeCount} teachers`
-                : `${row.activeCount} teachers · click to load`}
+                : `${row.activeCount} teachers · open details`}
             </span>
           </span>
           <span style={{
@@ -18109,7 +18240,7 @@ function AdminPanelInner({user}){
               {adminV5Model.institutes.length} institutes · Today
             </div>
             <span style={{fontSize:11,fontFamily:G.mono,fontWeight:900,color:selectedInstitute ? selectedInstitute.status.accent : G.textL,whiteSpace:"nowrap"}}>
-              {selectedInstitute ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}` : "Overview"}
+              {selectedInstitute ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}` : adminV5DailySummariesLoading ? "Syncing" : "Overview"}
             </span>
           </div>
           <div style={{marginTop:10}}>
@@ -18156,9 +18287,9 @@ function AdminPanelInner({user}){
             </div>
             <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px",display:"flex",flexDirection:"column",gap:10}}>
               {overviewTile("Institutes", adminV5Model.institutes.length, "Available in this admin panel")}
-              {overviewTile("Teacher records", summary.activeTeachers, "Not loaded until an institute is opened")}
-              {overviewTile("Loaded now", overviewLoadedTeacherCount, "From already cached admin data")}
-              {overviewTile("Not loaded", overviewUnloadedTeacherCount, "Click an institute to load live numbers")}
+              {overviewTile("Teacher records", summary.activeTeachers, "From index and daily summaries")}
+              {overviewTile("Loaded now", overviewLoadedTeacherCount, "Timeline records already cached")}
+              {overviewTile("Detail records", overviewUnloadedTeacherCount, "Opened only when needed")}
               <button type="button" onClick={()=>openManageTab("report")} style={{...actionButton("blue"),height:36,marginTop:2}}>
                 <AppIcon icon={IconFileText} size={15} color={G.blue} />
                 Open Ledgr Report
@@ -21191,11 +21322,24 @@ function AdminPanelInner({user}){
                       <div
                         onClick={()=>{
                           setFullView(null);
-                          if(tab==="teacher") setSelP3({teacherUid:selP2,classId:item.classId,teacherName:fullData[selP2]?.profile?.name||"",className:item.display,subject:item.subject,institute:item.institute||selInst});
+                          if(tab==="teacher") setSelP3({
+                            teacherUid:selP2,
+                            classId:item.classId,
+                            teacherName:safeAdminText(fullData[selP2]?.profile?.name, "Teacher"),
+                            className:safeAdminText(item.display, "Class"),
+                            subject:safeAdminText(item.subject, ""),
+                            institute:safeAdminText(item.institute || selInst, ""),
+                          });
                           else {
                             const clsObj=instClasses.find(c=>c.raw===selP2);
                             const subjectText = resolveAdminTeacherClassSubject(item.uid, item.classId, item.subject || clsObj?.subjects?.join(", ") || "");
-                            setSelP3({teacherUid:item.uid,classId:item.classId,teacherName:item.name,className:normaliseName(selP2),subject:subjectText});
+                            setSelP3({
+                              teacherUid:item.uid,
+                              classId:item.classId,
+                              teacherName:safeAdminText(item.name, "Teacher"),
+                              className:safeAdminText(normaliseName(selP2), "Class"),
+                              subject:safeAdminText(subjectText, ""),
+                            });
                             ensureFullData(item.uid);
                           }
                           setMobileStep(3);
@@ -21276,14 +21420,14 @@ function AdminPanelInner({user}){
                   ? fullViewTitle
                   : isAggregateSelection
                     ? aggregateTitle
-                    : `${selP3.teacherName} — ${selP3.className}`;
+                    : `${safeAdminText(selP3.teacherName, "Teacher")} — ${safeAdminText(selP3.className, "Class")}`;
               const stepSubtitle = isInstituteOverviewStep
                 ? `${selInst} · charts, teaching time, and recent institute activity`
                 : isScopedFullView
                   ? fullViewSubtitle
                   : isAggregateSelection
                     ? `${selInst} · grouped by class, chronological inside each class`
-                    : [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ");
+                    : [safeAdminText(selectedClassMeta?.institute || selP3.institute || selInst, ""), selectedSubjectLabel].filter(Boolean).join(" · ");
               const timelineSummary = selectedTimelineSummary || null;
               return (
                 <>
@@ -21330,7 +21474,7 @@ function AdminPanelInner({user}){
                         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
                           {isScopedFullView&&mobilePill("Grouped by class", "soft", "step3_grouped")}
                           {isAggregateSelection&&mobilePill("Chronological by class", "soft", "step3_aggregate")}
-                          {selP3&&selectedSubjectLabel&&mobilePill(selectedSubjectLabel, "soft", "step3_subject")}
+                          {selP3&&selectedSubjectLabel&&mobilePill(safeAdminText(selectedSubjectLabel, ""), "soft", "step3_subject")}
                         </div>
                       </div>
                     </div>
@@ -21359,7 +21503,7 @@ function AdminPanelInner({user}){
     : isAggregateSelection
       ? aggregateTitle
       : selP3
-        ? `${selP3.teacherName} — ${selP3.className}`
+        ? `${safeAdminText(selP3.teacherName, "Teacher")} — ${safeAdminText(selP3.className, "Class")}`
         : selP2
           ? `${p2Label(selP2)} Overview`
           : selInst
@@ -21371,7 +21515,7 @@ function AdminPanelInner({user}){
     : isAggregateSelection
       ? `${selInst} · grouped by class, chronological inside each class`
       : selP3
-        ? [selectedClassMeta?.institute || selP3.institute || selInst, selectedSubjectLabel].filter(Boolean).join(" · ")
+        ? [safeAdminText(selectedClassMeta?.institute || selP3.institute || selInst, ""), safeAdminText(selectedSubjectLabel, "")].filter(Boolean).join(" · ")
         : selP2
           ? `Use panel 3 to open the full grouped view or choose one specific ${tab==="teacher"?"class":"teacher"}`
           : selInst
@@ -21814,7 +21958,7 @@ function AdminPanelInner({user}){
           {mobileStep>=3&&(selP3||isAggregateSelection||isScopedFullView)&&<>
             <span style={{color:"rgba(255,255,255,0.3)",fontSize:12}}>›</span>
             <span style={{fontSize:13,color:"#fff",fontFamily:G.sans,fontWeight:700,padding:"3px 0"}}>
-              {isScopedFullView?"View Full":selP3?selP3.className:"All entries"}
+              {isScopedFullView?"View Full":selP3?safeAdminText(selP3.className, "Class"):"All entries"}
             </span>
           </>}
           {/* Back button */}
@@ -22162,7 +22306,7 @@ function AdminPanelInner({user}){
                   style={{...siBase,background:isSel?G.blueL:"transparent",borderLeftColor:isSel?G.blue:"transparent",paddingRight:8}}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=G.bg;}}
                   onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                  <div onClick={()=>{setFullView(null);setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:fullData[selP2]?.profile?.name||"",className:cls.display,subject:cls.subject,institute:cls.institute});setMobileStep(3);}}
+                  <div onClick={()=>{setFullView(null);setSelP3({teacherUid:selP2,classId:cls.classId,teacherName:safeAdminText(fullData[selP2]?.profile?.name, "Teacher"),className:safeAdminText(cls.display, "Class"),subject:safeAdminText(cls.subject, ""),institute:safeAdminText(cls.institute, "")});setMobileStep(3);}}
                     style={{cursor:"pointer"}}>
                     <div style={{fontSize:15,fontWeight:600,color:isSel?G.blue:G.textS}}>{cls.display}</div>
                     <div style={{fontSize:14,color:G.textM,marginTop:3}}>{cls.subject}</div>
@@ -22226,9 +22370,9 @@ function AdminPanelInner({user}){
                         setSelP3({
                           teacherUid:t.uid,
                           classId:clsObj?.classId,
-                          teacherName:t.name,
-                          className:normaliseName(selP2),
-                          subject:resolveAdminTeacherClassSubject(t.uid, clsObj?.classId, clsObj?.subject || cls?.subjects?.join(", ") || ""),
+                          teacherName:safeAdminText(t.name, "Teacher"),
+                          className:safeAdminText(normaliseName(selP2), "Class"),
+                          subject:safeAdminText(resolveAdminTeacherClassSubject(t.uid, clsObj?.classId, clsObj?.subject || cls?.subjects?.join(", ") || ""), ""),
                         });
                         setMobileStep(3);
                       }}
