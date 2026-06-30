@@ -11513,16 +11513,18 @@ function AdminPanelInner({user}){
       return;
     }
 
-    for(let i=0;i<missing.length;i+=1){
+    const batchSize = (isWeakDevice || mobileLiteMode) ? 2 : 4;
+    for(let i=0;i<missing.length;i+=batchSize){
       if(tracksInstituteProgress && requestId!==warmupJobRef.current) return;
-      await ensureFullData(missing[i]);
+      const batch = missing.slice(i, i + batchSize);
+      await Promise.all(batch.map(uid => ensureFullData(uid)));
       if(tracksInstituteProgress && requestId!==warmupJobRef.current) return;
       if(instLabel){
-        const loaded = i + 1;
+        const loaded = Math.min(i + batch.length, missing.length);
         setInstWarmup(prev=>prev.inst===instLabel?{...prev,loaded}:prev);
       }
-      if((isWeakDevice || mobileLiteMode) && i < missing.length - 1){
-        await new Promise(resolve=>window.setTimeout(resolve, 40));
+      if((isWeakDevice || mobileLiteMode) && i + batchSize < missing.length){
+        await new Promise(resolve=>window.setTimeout(resolve, 16));
       }
     }
   }, [ensureFullData, isWeakDevice, mobileLiteMode]);
@@ -13915,8 +13917,9 @@ function AdminPanelInner({user}){
   };
 
   const instWarmupActive = !!(selInst && instWarmup.inst===selInst && instWarmup.total>0 && instWarmup.loaded<instWarmup.total);
+  const instWarmupPct = instWarmup.total ? Math.round((Math.min(instWarmup.loaded, instWarmup.total) / instWarmup.total) * 100) : 0;
   const instWarmupLabel = instWarmupActive
-    ? `${Math.min(instWarmup.loaded, instWarmup.total)}/${instWarmup.total} teacher${instWarmup.total===1?"":"s"} loaded`
+    ? `${Math.min(instWarmup.loaded, instWarmup.total)}/${instWarmup.total}`
     : "";
 
   // ── P3 content based on tab + P2 selection ────────────────────────────────
@@ -15846,21 +15849,20 @@ function AdminPanelInner({user}){
     if(!instWarmupActive) return null;
     return (
       <div style={{
-        background:mobile ? "#EEF2FF" : G.bg,
+        background:"#FFFFFF",
         border:`1px solid ${mobile ? "#C7D2FE" : G.border}`,
-        borderRadius:10,
-        padding:mobile ? "10px 12px" : "9px 11px",
+        borderRadius:999,
+        padding:mobile ? "7px 9px" : "6px 8px",
         display:"flex",
         alignItems:"center",
-        justifyContent:"space-between",
-        gap:10,
-        flexWrap:"wrap",
-        marginTop:mobile ? 0 : 10,
+        gap:8,
+        marginTop:mobile ? 0 : 9,
+        boxShadow:reduceEffects ? "none" : "0 4px 12px rgba(15,23,42,0.05)",
       }}>
-        <div style={{fontSize:13,color:G.textS,fontFamily:G.sans,fontWeight:600}}>
-          Loading institute data progressively for a smoother phone experience.
+        <div style={{height:7,flex:1,minWidth:72,borderRadius:999,background:"#E5EAF3",overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${Math.max(8, instWarmupPct)}%`,background:G.blue,borderRadius:999,transition:"width 180ms ease"}}/>
         </div>
-        <span style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:12,color:G.blue,fontFamily:G.mono,fontWeight:700}}>
+        <span style={{minWidth:42,textAlign:"right",fontSize:11.5,color:G.blue,fontFamily:G.mono,fontWeight:900,whiteSpace:"nowrap"}}>
           {instWarmupLabel}
         </span>
       </div>
@@ -17716,7 +17718,7 @@ function AdminPanelInner({user}){
           </nav>
           {hydrationPendingCount > 0&&(
             <span style={{border:"1px solid rgba(255,255,255,0.10)",background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.72)",borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:850,whiteSpace:"nowrap"}}>
-              Loading {hydrationPendingCount} teacher records
+              {hydrationPendingCount} remaining
             </span>
           )}
           <button type="button" onClick={()=>openManageTab("report")} style={{...actionButton("blue"),height:32,borderRadius:8,background:"#EEF4FF",border:"1px solid #C7D7F5"}}>
@@ -18184,10 +18186,14 @@ function AdminPanelInner({user}){
                 <div>
                   {group.entries.map((entry,index)=>{
                     const status = entry.status && STATUS_STYLES[entry.status] ? STATUS_STYLES[entry.status] : null;
-                    const timeStart = fmt12(entry.timeStart);
-                    const timeEnd = fmt12(entry.timeEnd);
+                    const compactTime = (value) => fmt12(value).replace(/\s?(AM|PM)$/i, "");
+                    const timeStart = compactTime(entry.timeStart);
+                    const timeEnd = compactTime(entry.timeEnd);
                     const durationLabel = entry.minutes ? formatDurationShort(entry.minutes) : "Untimed";
-                    const entryKind = String(entry.tag || "Note").trim() || "Note";
+                    const entryTagKey = String(entry.tag || "note").trim().toLowerCase() || "note";
+                    const tagStyle = TAG_STYLES[entryTagKey] || TAG_STYLES.note || { text:G.amber, label:"Note" };
+                    const entryKind = String(tagStyle.label || entry.tag || "Note").replace(/^[^\w]+/, "").trim() || "Note";
+                    const statusLabel = status ? String(status.label || entry.status || "").replace(/^[^\w]+/, "").trim() : "";
                     const entryTitle = entry.title || entry.body || "Class entry";
                     const entryBody = entry.body && entry.body !== entryTitle ? entry.body : "";
                     const subjectLabel = entry.subject || "No subject";
@@ -18198,8 +18204,8 @@ function AdminPanelInner({user}){
                         key={`${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${entry.id || index}`}
                         style={{
                           display:"grid",
-                          gridTemplateColumns:isMobile ? "1fr" : "108px minmax(0,1fr)",
-                          gap:isMobile ? 8 : 24,
+                          gridTemplateColumns:isMobile ? "1fr" : "142px minmax(0,1fr)",
+                          gap:isMobile ? 8 : 16,
                           padding:index === 0 ? "8px 0 14px" : "16px 0 14px",
                           borderTop:index === 0 ? "none" : "1px solid rgba(148,163,184,0.20)",
                           minWidth:0,
@@ -18221,10 +18227,16 @@ function AdminPanelInner({user}){
                         <div style={{minWidth:0}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,minWidth:0}}>
                             <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flexWrap:"wrap"}}>
-                              <span style={{background:"#FFF7ED",color:G.amber,border:"1px solid #FED7AA",borderRadius:6,padding:"3px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,textTransform:"uppercase",lineHeight:1}}>
+                              <span style={{display:"inline-flex",alignItems:"center",gap:6,color:tagStyle.text || G.amber,fontSize:10.5,fontWeight:950,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.45,lineHeight:1}}>
+                                <span style={{width:3,height:15,borderRadius:999,background:tagStyle.text || G.amber,display:"inline-block"}}/>
                                 {entryKind}
                               </span>
-                              {status&&<span style={{background:status.bg || G.bg,color:status.text || G.textS,border:`1px solid ${status.border || G.border}`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:900,lineHeight:1}}>{status.label}</span>}
+                              {status&&(
+                                <span style={{display:"inline-flex",alignItems:"center",gap:5,color:status.text || G.textS,fontSize:10.5,fontWeight:900,lineHeight:1,whiteSpace:"nowrap"}}>
+                                  <span style={{width:7,height:7,borderRadius:999,background:status.dot || status.text || G.textS,display:"inline-block"}}/>
+                                  {statusLabel || status.label}
+                                </span>
+                              )}
                               <span style={{fontSize:15.5,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0,maxWidth:isMobile ? "100%" : 520}}>
                                 {entryTitle}
                               </span>
