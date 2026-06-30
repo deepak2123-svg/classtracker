@@ -15280,17 +15280,6 @@ function AdminPanelInner({user}){
     if(teacherUid) ensureFullData(teacherUid);
   }, [ensureFullData]);
 
-  const handleAdminV5Nudge = React.useCallback((target, meta = {}) => {
-    const label = String(target || "selected teacher").trim() || "selected teacher";
-    console.info("Admin V5 nudge preview only", {
-      target:label,
-      institute:meta.institute || adminV5SelectedInstitute?.institute || "",
-      teacherUid:meta.teacherUid || "",
-      classKey:meta.classKey || "",
-    });
-    showAdminToast(`Nudge noted for ${label}. No message was sent.`);
-  }, [adminV5SelectedInstitute, showAdminToast]);
-
   // Keep touch/scroll institute selection logic below the values it depends on.
   // These callbacks read institutes, saveInstOrder, and onSelectInstitute in
   // their dependency arrays, so declaring them earlier can trip a TDZ error in
@@ -17330,13 +17319,6 @@ function AdminPanelInner({user}){
     const selectedTeacher = adminV5SelectedTeacher;
     const summary = adminV5Model.summary;
     const pendingTeachers = (selectedInstitute?.teachers || []).filter(item => !item.loggedToday);
-    const selectedClassPendingTeachers = selectedClass
-      ? Array.from(new Map(
-        selectedClass.teachers
-          .filter(item => !item.todayEntries)
-          .map(item => [item.uid, item])
-      ).values())
-      : [];
     const activeTimelineScope = adminV5TimelineScope === "teacher" && selectedTeacher
       ? "teacher"
       : adminV5TimelineScope === "class" && selectedClass
@@ -17364,25 +17346,6 @@ function AdminPanelInner({user}){
           : selectedInstitute
             ? `${selectedInstituteName} · all loaded class timelines`
             : "Select an institute to begin";
-    const scopeNudge = activeTimelineScope === "teacher" && selectedTeacher
-      ? {
-          label:"Preview nudge",
-          target:selectedTeacher.name,
-          meta:{ institute:selectedInstituteName, teacherUid:selectedTeacher.uid },
-        }
-      : activeTimelineScope === "class" && selectedClass && selectedClassPendingTeachers.length
-        ? {
-            label:`Preview ${selectedClassPendingTeachers.length} nudge${selectedClassPendingTeachers.length === 1 ? "" : "s"}`,
-            target:`${selectedClassPendingTeachers.length} pending teacher${selectedClassPendingTeachers.length === 1 ? "" : "s"} in ${selectedClass.display}`,
-            meta:{ institute:selectedInstituteName, classKey:selectedClass.key },
-          }
-        : selectedInstitute?.pendingCount
-          ? {
-              label:`Preview ${selectedInstitute.pendingCount} nudge${selectedInstitute.pendingCount === 1 ? "" : "s"}`,
-              target:`${selectedInstitute.pendingCount} pending teacher${selectedInstitute.pendingCount === 1 ? "" : "s"} in ${selectedInstituteName}`,
-              meta:{ institute:selectedInstituteName },
-            }
-          : null;
     const selectedColdClasses = (selectedInstitute?.classes || []).filter(item => item.cold);
     const nearbyAtRiskInstitutes = adminV5Model.institutes
       .filter(item => !sameInstituteName(item.institute, selectedInstituteName) && (item.status.key === "critical" || item.status.key === "low"))
@@ -17866,9 +17829,6 @@ function AdminPanelInner({user}){
                     <div style={{fontSize:13.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{teacher.name}</div>
                     <div style={{fontSize:11.5,color:G.textL,marginTop:3}}>{teacher.lastLabel}</div>
                   </button>
-                  <button type="button" onClick={()=>handleAdminV5Nudge(teacher.name, { institute:selectedInstituteName, teacherUid:teacher.uid })} style={{...actionButton("light"),height:32,padding:"0 10px",fontSize:11.5}}>
-                    Nudge
-                  </button>
                 </div>
               ))}
             </div>
@@ -17895,12 +17855,6 @@ function AdminPanelInner({user}){
               </div>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
-              {scopeNudge&&(
-                <button type="button" onClick={()=>handleAdminV5Nudge(scopeNudge.target, scopeNudge.meta)} style={actionButton("light")}>
-                  <AppIcon icon={IconSend} size={15} color={G.blue} />
-                  {scopeNudge.label}
-                </button>
-              )}
               <button type="button" onClick={()=>openManageTab("report")} style={actionButton("blue")}>
                 <AppIcon icon={IconFileText} size={15} color={G.blue} />
                 Ledgr Report
