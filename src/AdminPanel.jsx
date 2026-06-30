@@ -10934,7 +10934,6 @@ function AdminPanelInner({user}){
   const [adminV5TimelineScope, setAdminV5TimelineScope] = useState("institute"); // institute | class | teacher
   const [adminV5TimelineLimit, setAdminV5TimelineLimit] = useState(28);
   const [adminV5InstituteSearch, setAdminV5InstituteSearch] = useState("");
-  const [adminV5InstituteFilter, setAdminV5InstituteFilter] = useState("all"); // all | critical | low | on_track | pending | cold
   const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | cold | today | period
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
@@ -11041,6 +11040,7 @@ function AdminPanelInner({user}){
   const instituteGlanceReportRef = React.useRef(instituteGlanceReport);
   const instituteGlanceAutoLoadKeyRef = React.useRef("");
   const instituteGlanceOptionsFrameRef = React.useRef(null);
+  const adminV5AllHydrationKeyRef = React.useRef("");
   const historyReadyRef = React.useRef(false);
   const historyRestoreRef = React.useRef(false);
   const lastHistoryKeyRef = React.useRef("");
@@ -11531,6 +11531,21 @@ function AdminPanelInner({user}){
   const warmInstitute = React.useCallback((inst) => {
     warmTeacherUids(getInstituteTeacherUids(inst), inst);
   }, [getInstituteTeacherUids, warmTeacherUids]);
+
+  React.useEffect(()=>{
+    if(view !== "main" || loading || !teachers.length) return;
+    const uids = teachers
+      .filter(teacher => teacher?.uid && roles[teacher.uid] !== "admin")
+      .map(teacher => teacher.uid)
+      .sort();
+    const hydrationKey = uids.join("|");
+    if(!hydrationKey || adminV5AllHydrationKeyRef.current === hydrationKey) return;
+    adminV5AllHydrationKeyRef.current = hydrationKey;
+    warmTeacherUids(uids).catch(error => {
+      console.error("Admin V5 hydration failed", error);
+      adminV5AllHydrationKeyRef.current = "";
+    });
+  }, [loading, roles, teachers, view, warmTeacherUids]);
 
   React.useEffect(()=>{
     if(instDetailView){
@@ -14283,16 +14298,8 @@ function AdminPanelInner({user}){
 
   const adminV5VisibleInstitutes = useMemo(()=>{
     const searchKey = adminV5InstituteSearch.trim().toLowerCase();
-    return adminV5Model.institutes.filter(item => {
-      if(searchKey && !item.institute.toLowerCase().includes(searchKey)) return false;
-      if(adminV5InstituteFilter === "critical") return item.status.key === "critical";
-      if(adminV5InstituteFilter === "low") return item.status.key === "low";
-      if(adminV5InstituteFilter === "on_track") return item.status.key === "on_track";
-      if(adminV5InstituteFilter === "pending") return item.pendingCount > 0;
-      if(adminV5InstituteFilter === "cold") return item.coldClassCount > 0;
-      return true;
-    });
-  }, [adminV5InstituteFilter, adminV5InstituteSearch, adminV5Model.institutes]);
+    return adminV5Model.institutes.filter(item => !searchKey || item.institute.toLowerCase().includes(searchKey));
+  }, [adminV5InstituteSearch, adminV5Model.institutes]);
 
   const adminV5SelectedInstitute = useMemo(()=>{
     if(!adminV5Model.institutes.length) return null;
@@ -17362,7 +17369,7 @@ function AdminPanelInner({user}){
       ...selectedColdClasses.slice(0, 2).map(cls => ({
         key:`cold-${cls.key}`,
         tone:"red",
-        label:"Cold class",
+        label:"No update 3+ days",
         value:cls.lastLabel,
         body:cls.display,
         onClick:()=>selectAdminV5Class(cls.key),
@@ -17370,8 +17377,8 @@ function AdminPanelInner({user}){
       ...nearbyAtRiskInstitutes.map(item => ({
         key:`risk-${item.institute}`,
         tone:item.status.key === "critical" ? "red" : "amber",
-        label:item.status.label,
-        value:`${item.loggedCount}/${item.activeCount} logged`,
+        label:`${item.status.pct}% updated`,
+        value:`${item.loggedCount}/${item.activeCount} updated`,
         body:item.institute,
         onClick:()=>selectAdminV5Institute(item.institute, "classes"),
       })),
@@ -17393,19 +17400,17 @@ function AdminPanelInner({user}){
       { key:"classes", label:"Classes", icon:IconSchool },
       { key:"timeline", label:"Timeline", icon:IconClock },
     ];
-    const instituteFilterItems = [
-      { key:"all", label:"All", count:adminV5Model.institutes.length },
-      { key:"critical", label:"Critical", count:summary.critical },
-      { key:"low", label:"Low", count:summary.low },
-      { key:"on_track", label:"On track", count:summary.onTrack },
-      { key:"pending", label:"Pending", count:adminV5Model.institutes.filter(item => item.pendingCount > 0).length },
-      { key:"cold", label:"Cold", count:adminV5Model.institutes.filter(item => item.coldClassCount > 0).length },
-    ];
+    const instituteGroups = [
+      { key:"under_25", label:"0-24% updated", rows:adminV5VisibleInstitutes.filter(item => item.activeCount > 0 && item.status.pct < 25) },
+      { key:"under_70", label:"25-69% updated", rows:adminV5VisibleInstitutes.filter(item => item.activeCount > 0 && item.status.pct >= 25 && item.status.pct < 70) },
+      { key:"over_70", label:"70%+ updated", rows:adminV5VisibleInstitutes.filter(item => item.activeCount > 0 && item.status.pct >= 70) },
+      { key:"empty", label:"No active teachers", rows:adminV5VisibleInstitutes.filter(item => item.activeCount === 0) },
+    ].filter(group => group.rows.length);
     const classFilterItems = [
       { key:"all", label:"All", count:selectedInstitute?.classes?.length || 0 },
-      { key:"cold", label:"Cold", count:(selectedInstitute?.classes || []).filter(item => item.cold).length },
-      { key:"today", label:"Today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
-      { key:"period", label:timelinePeriodLabel, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length },
+      { key:"today", label:"Updated today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
+      { key:"cold", label:"No update 3+ days", count:(selectedInstitute?.classes || []).filter(item => item.cold).length },
+      ...(period === "today" ? [] : [{ key:"period", label:`Updated in ${timelinePeriodLabel}`, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length }]),
     ];
     const selectedInstituteToolItems = [
       {
@@ -17432,7 +17437,7 @@ function AdminPanelInner({user}){
       {
         key:"institute",
         label:"Institute",
-        value:selectedInstitute?.status?.label || "Directory",
+        value:selectedInstitute ? `${selectedInstitute.status.pct}% updated` : "Directory",
         icon:IconBuilding,
         onClick:()=>openManageTab("institutes"),
       },
@@ -17625,72 +17630,69 @@ function AdminPanelInner({user}){
         )}
       </aside>
     );
+    const renderInstituteRow = (row) => {
+      const active = selectedInstitute && sameInstituteName(row.institute, selectedInstitute.institute);
+      return (
+        <button
+          key={row.institute}
+          type="button"
+          onClick={()=>selectAdminV5Institute(row.institute, "classes")}
+          style={{
+            width:"100%",
+            border:`1px solid ${active ? row.status.border : "transparent"}`,
+            borderLeft:`4px solid ${row.status.accent}`,
+            borderRadius:8,
+            background:active ? row.status.bg : "#FFFFFF",
+            padding:"11px 10px",
+            marginBottom:8,
+            textAlign:"left",
+            cursor:"pointer",
+            fontFamily:G.sans,
+            boxShadow:active ? (reduceEffects ? "none" : "0 10px 26px rgba(15,23,42,0.07)") : "none",
+          }}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <span style={{fontSize:15,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.institute}</span>
+            <span style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,color:row.status.accent,whiteSpace:"nowrap"}}>{row.status.pct}%</span>
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+            <span style={{fontSize:11,color:G.textM,fontWeight:750}}>{row.loggedCount}/{row.activeCount} updated today</span>
+            <span style={{fontSize:11,color:row.pendingCount ? G.amber : "#15803D",fontWeight:800}}>{row.pendingCount} pending</span>
+          </div>
+          <div style={{height:5,borderRadius:999,background:"#E5E7EB",overflow:"hidden",marginTop:10}}>
+            <div style={{height:"100%",width:`${Math.max(row.status.pct, row.loggedCount ? 4 : 0)}%`,background:row.status.accent,borderRadius:999}}/>
+          </div>
+        </button>
+      );
+    };
     const renderInstituteDrawer = () => (
       <section style={{background:"#FFFFFF",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
         <div style={{padding:"18px 16px 14px",borderBottom:panelBorder}}>
           <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Admin V5</div>
           <div style={{fontSize:26,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.02,marginTop:7}}>Command centre</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:15}}>
-            {metricTile("Logged", `${summary.loggedToday}/${summary.activeTeachers}`, summary.loggedPct >= 70 ? "green" : summary.loggedPct < 25 ? "red" : "amber")}
+            {metricTile("Updated today", `${summary.loggedToday}/${summary.activeTeachers}`, summary.loggedPct >= 70 ? "green" : summary.loggedPct < 25 ? "red" : "amber")}
+            {metricTile("Updated %", `${summary.loggedPct}%`, summary.loggedPct >= 70 ? "green" : summary.loggedPct < 25 ? "red" : "amber")}
             {metricTile("Pending", summary.pending, summary.pending ? "amber" : "green")}
-            {metricTile("Critical", summary.critical, summary.critical ? "red" : "green")}
-            {metricTile("Cold class", summary.coldClasses, summary.coldClasses ? "amber" : "green")}
+            {metricTile("No update 3+ days", summary.coldClasses, summary.coldClasses ? "amber" : "green")}
           </div>
           <div style={{marginTop:13}}>
             {renderSearchInput(adminV5InstituteSearch, setAdminV5InstituteSearch, "Search institutes", true)}
           </div>
-          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
-            {instituteFilterItems.map(item=>filterChip({
-              chipKey:item.key,
-              active:adminV5InstituteFilter === item.key,
-              label:item.label,
-              count:item.count,
-              compact:true,
-              onClick:()=>setAdminV5InstituteFilter(item.key),
-            }))}
-          </div>
         </div>
         <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"10px"}}>
-          {adminV5VisibleInstitutes.map(row=>{
-            const active = selectedInstitute && sameInstituteName(row.institute, selectedInstitute.institute);
-            return (
-              <button
-                key={row.institute}
-                type="button"
-                onClick={()=>selectAdminV5Institute(row.institute, "classes")}
-                style={{
-                  width:"100%",
-                  border:`1px solid ${active ? row.status.border : "transparent"}`,
-                  borderLeft:`4px solid ${row.status.accent}`,
-                  borderRadius:8,
-                  background:active ? row.status.bg : "#FFFFFF",
-                  padding:"11px 10px",
-                  marginBottom:8,
-                  textAlign:"left",
-                  cursor:"pointer",
-                  fontFamily:G.sans,
-                  boxShadow:active ? (reduceEffects ? "none" : "0 10px 26px rgba(15,23,42,0.07)") : "none",
-                }}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-                  <span style={{fontSize:15,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.institute}</span>
-                  <span style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,color:row.status.accent,whiteSpace:"nowrap"}}>{row.status.pct}%</span>
-                </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-                  <span style={{fontSize:11,color:G.textM,fontWeight:750}}>{row.loggedCount}/{row.activeCount} logged</span>
-                  <span style={{fontSize:11,color:row.pendingCount ? G.amber : "#15803D",fontWeight:800}}>{row.pendingCount} pending</span>
-                  <span style={{fontSize:11,color:row.coldClassCount ? G.red : G.textL,fontWeight:800}}>{row.coldClassCount} cold</span>
-                </div>
-                <div style={{height:5,borderRadius:999,background:"#E5E7EB",overflow:"hidden",marginTop:10}}>
-                  <div style={{height:"100%",width:`${Math.max(row.status.pct, row.loggedCount ? 4 : 0)}%`,background:row.status.accent,borderRadius:999}}/>
-                </div>
-              </button>
-            );
-          })}
+          {instituteGroups.map(group=>(
+            <div key={group.key} style={{marginBottom:12}}>
+              <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"2px 2px 8px"}}>
+                {group.label}
+              </div>
+              {group.rows.map(renderInstituteRow)}
+            </div>
+          ))}
           {!adminV5VisibleInstitutes.length&&(
             <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
               <div>No institutes match.</div>
-              <button type="button" onClick={()=>{setAdminV5InstituteSearch("");setAdminV5InstituteFilter("all");}} style={{...actionButton("light"),height:32,marginTop:10,boxShadow:"none"}}>
-                Clear filters
+              <button type="button" onClick={()=>setAdminV5InstituteSearch("")} style={{...actionButton("light"),height:32,marginTop:10,boxShadow:"none"}}>
+                Clear search
               </button>
             </div>
           )}
@@ -17704,11 +17706,11 @@ function AdminPanelInner({user}){
             <div style={{minWidth:0}}>
               <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Institute health</div>
               <div style={{fontSize:24,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedInstituteName || "No institute"}</div>
-              {selectedInstitute&&<div style={{fontSize:12.5,color:G.textM,marginTop:7,lineHeight:1.4}}>{selectedInstitute.loadedCount}/{selectedInstitute.activeCount} teacher records loaded</div>}
+              {selectedInstitute&&<div style={{fontSize:12.5,color:G.textM,marginTop:7,lineHeight:1.4}}>{selectedInstitute.loggedCount}/{selectedInstitute.activeCount} updated today · {selectedInstitute.status.pct}% · {selectedInstitute.pendingCount} pending</div>}
             </div>
             {selectedInstitute&&(
               <span style={{background:selectedInstitute.status.bg,border:`1px solid ${selectedInstitute.status.border}`,color:selectedInstitute.status.accent,borderRadius:999,padding:"7px 10px",fontSize:11,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
-                {selectedInstitute.status.label}
+                {selectedInstitute.status.pct}% updated
               </span>
             )}
           </div>
@@ -17744,20 +17746,6 @@ function AdminPanelInner({user}){
               </button>
             ))}
           </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13}}>
-            <button type="button" onClick={()=>openInstituteGlanceOptions("export", "report")} style={actionButton("blue")}>
-              <AppIcon icon={IconCalendar} size={15} color={G.blue} />
-              Daily / Export
-            </button>
-            <button type="button" onClick={()=>openInstituteGlanceOptions("schedule", "report")} style={actionButton("light")}>
-              <AppIcon icon={IconClock} size={15} color={G.textS} />
-              Schedule
-            </button>
-            <button type="button" onClick={openLedgrTelegramDashboard} style={actionButton("light")}>
-              <AppIcon icon={IconSend} size={15} color={G.blue} />
-              Messenger
-            </button>
-          </div>
           <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:12}}>
             {classFilterItems.map(item=>filterChip({
               chipKey:item.key,
@@ -17774,6 +17762,9 @@ function AdminPanelInner({user}){
           {adminV5VisibleClasses.map(cls=>{
             const active = activeTimelineScope === "class" && cls.key === selectedClassKey;
             const tone = getSectionTone(cls.display);
+            const classActivityText = period === "today"
+              ? `${cls.todayEntries.length} entr${cls.todayEntries.length === 1 ? "y" : "ies"} today`
+              : `${cls.todayEntries.length} today · ${cls.recentEntries.length} in ${timelinePeriodLabel.toLowerCase()}`;
             return (
               <button
                 key={cls.key}
@@ -17794,9 +17785,9 @@ function AdminPanelInner({user}){
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:18,fontWeight:900,color:tone.ink || G.text,fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</div>
-                    <div style={{fontSize:12,color:G.textM,lineHeight:1.4,marginTop:5}}>{cls.teacherCount} teacher{cls.teacherCount===1?"":"s"} · {cls.todayEntries.length} today · {cls.recentEntries.length} in {timelinePeriodLabel.toLowerCase()} · {cls.lastLabel}</div>
+                    <div style={{fontSize:12,color:G.textM,lineHeight:1.4,marginTop:5}}>{cls.teacherCount} teacher{cls.teacherCount===1?"":"s"} · {classActivityText} · {cls.lastLabel}</div>
                   </div>
-                  {cls.cold&&<span style={{background:"#FFF7ED",border:"1px solid #FED7AA",color:G.amber,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>Cold</span>}
+                  {cls.cold&&<span style={{background:"#FFF7ED",border:"1px solid #FED7AA",color:G.amber,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>3+ days</span>}
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
                   {cls.subjects.slice(0,3).map(subject=>(
@@ -17858,10 +17849,6 @@ function AdminPanelInner({user}){
               <button type="button" onClick={()=>openManageTab("report")} style={actionButton("blue")}>
                 <AppIcon icon={IconFileText} size={15} color={G.blue} />
                 Ledgr Report
-              </button>
-              <button type="button" onClick={openLedgrTelegramSchedule} style={actionButton("light")}>
-                <AppIcon icon={IconClock} size={15} color={G.textS} />
-                Batch
               </button>
             </div>
           </div>
