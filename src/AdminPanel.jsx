@@ -19593,6 +19593,77 @@ function AdminPanelInner({user}){
           </div>
         </div>
       );
+      const openSectionGroupClass = (group, cls) => {
+        const storedKey = `${adminV5BrowseMode}:${group.key}`;
+        setAdminV5ExpandedGroupKeys(prev => ({ ...prev, [storedKey]:true }));
+        if(adminV5BrowseMode === "pair"){
+          setAdminV5ExpandedClassKeys(prev => ({ ...prev, [cls.key]:true }));
+          setAdminV5ClassKey(cls.key || "");
+          setAdminV5TeacherUid("");
+          setAdminV5TimelineScope("class");
+          setAdminV5MobilePane("classes");
+          return;
+        }
+        selectAdminV5Class(cls.key);
+      };
+      const renderSectionPills = (group) => {
+        const rows = group.rows || [];
+        if(!rows.length) return null;
+        return (
+          <div style={{display:"flex",flexWrap:"wrap",gap:7,padding:"0 2px 9px 22px"}}>
+            {rows.map(cls=>{
+              const active = cls.key === selectedClassKey;
+              const tone = getSectionTone(cls.display);
+              const count = adminV5BrowseMode === "pair"
+                ? (cls.visibleTeachers || cls.teachers || []).length
+                : rowPeriodCount(cls);
+              return (
+                <button
+                  key={`${group.key}_pill_${cls.key}`}
+                  type="button"
+                  onClick={()=>openSectionGroupClass(group, cls)}
+                  style={{
+                    minHeight:34,
+                    maxWidth:"100%",
+                    borderRadius:999,
+                    border:`1px solid ${active ? G.blue : G.border}`,
+                    background:active ? "#EAF2FF" : "#FFFFFF",
+                    color:active ? G.blue : (tone.ink || G.textS),
+                    padding:"0 8px 0 12px",
+                    display:"inline-flex",
+                    alignItems:"center",
+                    gap:8,
+                    fontSize:13,
+                    fontWeight:950,
+                    fontFamily:G.display,
+                    cursor:"pointer",
+                    boxShadow:active ? "0 0 0 2px rgba(29,78,216,0.10)" : "none",
+                    whiteSpace:"nowrap",
+                  }}>
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",maxWidth:160}}>{cls.display}</span>
+                  <span style={{
+                    minWidth:24,
+                    height:24,
+                    borderRadius:999,
+                    padding:"0 7px",
+                    display:"inline-flex",
+                    alignItems:"center",
+                    justifyContent:"center",
+                    background:active ? "#FFFFFF" : "#F1F5F9",
+                    border:`1px solid ${active ? "#BFDBFE" : G.border}`,
+                    color:active ? G.blue : G.textM,
+                    fontSize:10.5,
+                    fontWeight:950,
+                    fontFamily:G.mono,
+                  }}>
+                    {count || 0}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      };
       const renderSectionGroup = (group, index, renderRows, countLabel = "classes") => {
         const selectedInside = (group.rows || []).some(row => row.key === selectedClassKey);
         const defaultExpanded = !!classSearchKey || selectedInside || index === 0;
@@ -19631,6 +19702,7 @@ function AdminPanelInner({user}){
                 {group.rows.length} {countLabel}
               </span>
             </button>
+            {renderSectionPills(group)}
             {expanded&&(
               <div>
                 {renderRows(group.rows)}
