@@ -17977,15 +17977,6 @@ function AdminPanelInner({user}){
               onChangeRangeEnd={handleRangeEndChange}
             />
           </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13}}>
-            <button type="button" onClick={()=>{setAdminV5TimelineScope("institute");setAdminV5TeacherUid("");}} style={actionButton(activeTimelineScope === "institute" ? "dark" : "light")}>Institute</button>
-            {selectedClass&&(
-              <button type="button" onClick={()=>{setAdminV5TimelineScope("class");setAdminV5TeacherUid("");}} style={actionButton(activeTimelineScope === "class" ? "dark" : "light")}>Class</button>
-            )}
-            {selectedTeacher&&(
-              <button type="button" onClick={()=>setAdminV5TimelineScope("teacher")} style={actionButton(activeTimelineScope === "teacher" ? "dark" : "light")}>Teacher</button>
-            )}
-          </div>
           {selectedClass&&(
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13,alignItems:"center"}}>
               <button type="button" onClick={()=>selectAdminV5Teacher("")} style={{...actionButton(activeTimelineScope === "class" && !adminV5TeacherUid ? "dark" : "light"),height:42,padding:"0 13px"}}>
