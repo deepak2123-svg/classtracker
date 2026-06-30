@@ -14409,7 +14409,7 @@ function AdminPanelInner({user}){
     const staleCutoff = addDaysToDateKey(today, -3);
     const lastWeekStartKey = addDaysToDateKey(today, -8);
     const lastWeekEndKey = addDaysToDateKey(today, -2);
-    const activeTeachers = teachers.filter(teacher => teacher?.uid && roles[teacher.uid] !== "admin");
+    const activeTeachers = teachers.filter(teacher => teacher?.uid);
     const daysSinceTs = (ts) => {
       if(!ts) return null;
       return Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
@@ -14432,6 +14432,7 @@ function AdminPanelInner({user}){
       const instituteTeachers = activeTeachers.filter(teacher => teacherBelongsToInstitute(teacher, instituteName));
       const teacherRows = instituteTeachers.map(teacher => {
         const uid = teacher.uid;
+        const isAdminAccount = roles[uid] === "admin";
         const teacherName = getTeacherDisplayName(teacher);
         const data = fullData[uid];
         const classesHere = data
@@ -14442,6 +14443,7 @@ function AdminPanelInner({user}){
         const teacherLastWeekEntries = [];
         const teacherRecentEntries = [];
         let teacherLastTs = Number(teacher?.lastActive || 0) || 0;
+        let adminTeachingEntrySeen = false;
 
         classesHere.forEach(cls => {
           const resolvedSection = resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section || cls.name || "Untitled section";
@@ -14464,6 +14466,13 @@ function AdminPanelInner({user}){
             .map(entry => withEntryMeta(entry, classKey));
           const recentEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, periodDays, periodStartKey, periodEndKey)
             .map(entry => withEntryMeta(entry, classKey));
+          const classHasLoadedEntry = !!classLastTs
+            || todayEntries.length > 0
+            || yesterdayEntries.length > 0
+            || lastWeekEntries.length > 0
+            || recentEntries.length > 0;
+          if(isAdminAccount && !classHasLoadedEntry) return;
+          if(isAdminAccount) adminTeachingEntrySeen = true;
 
           const bucket = classBuckets.get(classKey) || {
             key:classKey,
@@ -14520,6 +14529,7 @@ function AdminPanelInner({user}){
           teacherRecentEntries.push(...recentEntries);
         });
 
+        if(isAdminAccount && !adminTeachingEntrySeen) return null;
         const lastDays = daysSinceTs(teacherLastTs || null);
         return {
           uid,
@@ -14537,7 +14547,7 @@ function AdminPanelInner({user}){
           lastDays,
           lastLabel:lastEntryCaption(teacherLastTs || null),
         };
-      }).sort((a,b)=>{
+      }).filter(Boolean).sort((a,b)=>{
         if(Number(a.loggedToday) !== Number(b.loggedToday)) return Number(b.loggedToday) - Number(a.loggedToday);
         if((b.todayCount || 0) !== (a.todayCount || 0)) return (b.todayCount || 0) - (a.todayCount || 0);
         return exportTextSorter.compare(a.name || "", b.name || "");
