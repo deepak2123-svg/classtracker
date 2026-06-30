@@ -17425,11 +17425,15 @@ function AdminPanelInner({user}){
         name:teacher.name,
         subjects:new Set(),
         todayEntries:0,
+        yesterdayEntries:0,
+        lastWeekEntries:0,
         recentEntries:0,
         lastTs:null,
       };
       if(teacher.subject) existing.subjects.add(teacher.subject);
       existing.todayEntries += teacher.todayEntries || 0;
+      existing.yesterdayEntries += teacher.yesterdayEntries || 0;
+      existing.lastWeekEntries += teacher.lastWeekEntries || 0;
       existing.recentEntries += teacher.recentEntries || 0;
       existing.lastTs = Math.max(existing.lastTs || 0, teacher.lastTs || 0) || null;
       map.set(teacher.uid, existing);
@@ -18140,20 +18144,29 @@ function AdminPanelInner({user}){
               <button type="button" onClick={()=>selectAdminV5Teacher("")} style={{...actionButton(activeTimelineScope === "class" && !adminV5TeacherUid ? "dark" : "light"),height:42,padding:"0 13px"}}>
                 All teachers
                 <span style={{minWidth:20,height:20,borderRadius:999,display:"inline-flex",alignItems:"center",justifyContent:"center",background:activeTimelineScope === "class" && !adminV5TeacherUid ? "rgba(255,255,255,0.18)" : G.bg,color:activeTimelineScope === "class" && !adminV5TeacherUid ? "#FFFFFF" : G.textL,fontSize:11,fontWeight:900,fontFamily:G.mono}}>
-                  {selectedClass.teacherCount}
+                  {selectedClassTeacherRows.length}
                 </span>
               </button>
-              {selectedClass.teachers.slice(0,10).map(teacher=>{
+              {selectedClassTeacherRows.slice(0,10).map(teacher=>{
                 const active = activeTimelineScope === "teacher" && adminV5TeacherUid === teacher.uid;
-                const periodCount = period === "today" ? teacher.todayEntries || 0 : teacher.recentEntries || 0;
+                const periodCount = period === "today"
+                  ? teacher.todayEntries || 0
+                  : period === "yesterday"
+                    ? teacher.yesterdayEntries || 0
+                    : adminV5ClassFilter === "last_week"
+                      ? teacher.lastWeekEntries || 0
+                      : teacher.recentEntries || 0;
                 const chipSub = periodCount
                   ? `${periodCount} ${period === "today" ? "today" : timelinePeriodLabel.toLowerCase()}`
                   : teacher.lastTs
                     ? lastEntryCaption(teacher.lastTs)
                     : "No entries";
+                const subjectCaption = teacher.subjectList?.length
+                  ? `${teacher.subjectList.slice(0,2).join(", ")}${teacher.subjectList.length > 2 ? ` +${teacher.subjectList.length - 2}` : ""}`
+                  : "";
                 return (
                   <button
-                    key={`${teacher.uid}_${teacher.classId}`}
+                    key={teacher.uid}
                     type="button"
                     onClick={()=>selectAdminV5Teacher(teacher.uid)}
                     style={{
@@ -18178,15 +18191,15 @@ function AdminPanelInner({user}){
                     <span style={{minWidth:0,textAlign:"left"}}>
                       <span style={{display:"block",fontSize:12.5,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{teacher.name}</span>
                       <span style={{display:"block",fontSize:10.5,fontWeight:750,color:active ? "rgba(255,255,255,0.64)" : G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                        {[teacher.subject, chipSub].filter(Boolean).join(" · ")}
+                        {[subjectCaption, chipSub].filter(Boolean).join(" · ")}
                       </span>
                     </span>
                   </button>
                 );
               })}
-              {selectedClass.teachers.length > 10&&(
+              {selectedClassTeacherRows.length > 10&&(
                 <span style={{height:34,borderRadius:999,border:`1px solid ${G.border}`,background:"#FFFFFF",display:"inline-flex",alignItems:"center",padding:"0 10px",fontSize:11.5,fontWeight:900,color:G.textL,fontFamily:G.mono}}>
-                  +{selectedClass.teachers.length - 10}
+                  +{selectedClassTeacherRows.length - 10}
                 </span>
               )}
             </div>
