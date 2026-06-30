@@ -2334,6 +2334,44 @@ function slugifyDownloadPart(value){
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "") || "report";
 }
+function readableDownloadPart(value, fallback = "Report"){
+  return String(value || fallback)
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim() || fallback;
+}
+function readableDownloadTimestamp(date = new Date()){
+  const datePart = date.toLocaleDateString("en-IN", {
+    day:"2-digit",
+    month:"short",
+    year:"numeric",
+  }).replace(/,/g, "");
+  const timePart = date.toLocaleTimeString("en-IN", {
+    hour:"numeric",
+    minute:"2-digit",
+    hour12:true,
+  }).replace(/\s+/g, " ").replace(/:/g, "-").toUpperCase();
+  return readableDownloadPart(`${datePart} ${timePart}`, "Generated");
+}
+function readableInstituteGlancePeriodPart(period = "daily", rangeStartKey = "", rangeEndKey = ""){
+  const meta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
+  if(meta.key === "range") return `Range ${meta.periodValue.replace(/\s+to\s+/i, " to ")}`;
+  if(meta.key === "monthly") return meta.periodValue || "Monthly";
+  return meta.label || meta.periodValue || "Daily";
+}
+function ledgrReportDownloadFilename(scopeLabel, period = "daily", rangeStartKey = "", rangeEndKey = "", extension = "pdf", options = {}){
+  const prefix = options.prefix || "Ledgr Report";
+  const ext = String(extension || "pdf").replace(/^\./, "").toLowerCase();
+  const timestamp = options.timestamp || readableDownloadTimestamp();
+  const parts = [
+    prefix,
+    readableDownloadPart(scopeLabel, "All Institutes"),
+    readableDownloadPart(readableInstituteGlancePeriodPart(period, rangeStartKey, rangeEndKey), "Daily"),
+    timestamp,
+  ].filter(Boolean);
+  return `${parts.join(" - ")}.${ext}`;
+}
 async function waitForCanvasFonts(){
   try {
     if(document?.fonts?.ready) await document.fonts.ready;
@@ -3320,28 +3358,28 @@ async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, pe
 }
 async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "", scopeLabel = "All institutes", scopeFilePart = "all_institutes" }){
   const canvas = await renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period, rangeStartKey, rangeEndKey, scopeLabel });
-  const filePart = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart;
+  const filename = ledgrReportDownloadFilename(scopeLabel || scopeFilePart, period, rangeStartKey, rangeEndKey, "png");
   const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
   if(blob){
-    triggerBlobDownload(blob, `${scopeFilePart}_${filePart}_ledgr_report_${todayKey()}.png`);
+    triggerBlobDownload(blob, filename);
     return;
   }
   const anchor = Object.assign(document.createElement("a"), {
     href:canvas.toDataURL("image/png"),
-    download:`${scopeFilePart}_${filePart}_ledgr_report_${todayKey()}.png`,
+    download:filename,
   });
   anchor.click();
 }
 function instituteGlancePdfFilename(instituteName, period = "daily", rangeStartKey = "", rangeEndKey = ""){
-  return `${slugifyDownloadPart(instituteName)}_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_${todayKey()}.pdf`;
+  return ledgrReportDownloadFilename(instituteName || "Institute", period, rangeStartKey, rangeEndKey, "pdf");
 }
 
-function allInstitutesGlancePdfFilename(period = "daily", rangeStartKey = "", rangeEndKey = ""){
-  return `all_institutes_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_${todayKey()}.pdf`;
+function allInstitutesGlancePdfFilename(period = "daily", rangeStartKey = "", rangeEndKey = "", scopeLabel = "All Institutes"){
+  return ledgrReportDownloadFilename(scopeLabel || "All Institutes", period, rangeStartKey, rangeEndKey, "pdf");
 }
 function instituteGlanceZipFilename(period = "daily", rangeStartKey = "", rangeEndKey = "", count = 0){
-  const countPart = Number(count) > 0 ? `${count}_centres` : "centres";
-  return `${countPart}_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_pdfs_${todayKey()}.zip`;
+  const countPart = Number(count) > 0 ? `${count} Institutes` : "Institutes";
+  return ledgrReportDownloadFilename(countPart, period, rangeStartKey, rangeEndKey, "zip", { prefix:"Ledgr Report PDFs" });
 }
 
 // ── HTML-based centre summary export ─────────────────────────────────────────
@@ -4284,7 +4322,7 @@ function _printHtml(html, filename){
 
 async function downloadInstituteGlanceSummaryPdf({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "", scopeLabel = "All institutes", scopeFilePart = "all_institutes" }){
   const html = buildInstituteGlanceSummaryHtml({ rows, summary, generatedOnLabel, period, rangeStartKey, rangeEndKey, scopeLabel });
-  _printHtml(html, `${scopeFilePart}_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey).filePart}_ledgr_report_${todayKey()}.pdf`);
+  _printHtml(html, ledgrReportDownloadFilename(scopeLabel || scopeFilePart, period, rangeStartKey, rangeEndKey, "pdf"));
 }
 async function downloadInstituteGlanceInstitutePdf({ row, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const rows = row ? [row] : [];
@@ -10983,8 +11021,8 @@ function AdminPanelInner({user}){
     p3:{ min:112, max:360, collapsed:76, default:200 },
   }),[]);
   const ADMIN_V5_PANEL_LIMITS = React.useMemo(()=>({
-    institutes:{ min:170, max:430, default:300 },
-    classes:{ min:220, max:560, default:360 },
+    institutes:{ min:170, max:430, collapsed:44, layer:112, default:300 },
+    classes:{ min:220, max:560, collapsed:46, layer:124, default:360 },
   }),[]);
   const [teachers,    setTeachers]    = useState([]);
   const [fullData,    setFullData]    = useState({});
@@ -12409,7 +12447,14 @@ function AdminPanelInner({user}){
           jobs.push({
             recipientId: recipient.id,
             html,
-            filename: allInstitutesGlancePdfFilename(config.period, rangeStartKey, rangeEndKey),
+            filename: allInstitutesGlancePdfFilename(
+              config.period,
+              rangeStartKey,
+              rangeEndKey,
+              selectedInstitutes.length
+                ? `${selectedInstitutes.length} Selected Institutes`
+                : "All Institutes",
+            ),
             caption: `Ledgr Report | ${selectedInstitutes.length ? "Selected institutes" : "All institutes"}`,
           });
         });
@@ -13020,7 +13065,7 @@ function AdminPanelInner({user}){
   const clampAdminV5PanelWidth = React.useCallback((key, nextWidth) => {
     const limits = ADMIN_V5_PANEL_LIMITS[key];
     if(!limits) return nextWidth;
-    return Math.max(limits.min, Math.min(limits.max, nextWidth));
+    return Math.max(limits.collapsed || limits.min, Math.min(limits.max, nextWidth));
   }, [ADMIN_V5_PANEL_LIMITS]);
 
   const resetAdminV5PanelWidth = React.useCallback((key) => {
@@ -13029,6 +13074,15 @@ function AdminPanelInner({user}){
     setAdminV5PanelW(widths => ({
       ...widths,
       [key]:limits.default,
+    }));
+  }, [ADMIN_V5_PANEL_LIMITS]);
+
+  const expandAdminV5Panel = React.useCallback((key) => {
+    const limits = ADMIN_V5_PANEL_LIMITS[key];
+    if(!limits) return;
+    setAdminV5PanelW(widths => ({
+      ...widths,
+      [key]:Math.max(limits.min, limits.default || limits.min),
     }));
   }, [ADMIN_V5_PANEL_LIMITS]);
 
@@ -13041,6 +13095,7 @@ function AdminPanelInner({user}){
     const pointerId = event.pointerId;
     const startX = event.clientX;
     const startWidth = adminV5PanelW[key] || limits.default;
+    const nextWidthRef = { current:startWidth };
     const previousCursor = document.body.style.cursor;
     const previousUserSelect = document.body.style.userSelect;
     setAdminV5PanelDragging(true);
@@ -13049,6 +13104,7 @@ function AdminPanelInner({user}){
     target?.setPointerCapture?.(pointerId);
     const move = moveEvent => {
       const nextWidth = clampAdminV5PanelWidth(key, startWidth + moveEvent.clientX - startX);
+      nextWidthRef.current = nextWidth;
       setAdminV5PanelW(widths => widths[key] === nextWidth ? widths : {
         ...widths,
         [key]:nextWidth,
@@ -13061,6 +13117,11 @@ function AdminPanelInner({user}){
       window.removeEventListener("pointercancel", end);
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousUserSelect;
+      const settledWidth = nextWidthRef.current < limits.min ? limits.collapsed : nextWidthRef.current;
+      setAdminV5PanelW(widths => widths[key] === settledWidth ? widths : {
+        ...widths,
+        [key]:settledWidth,
+      });
       setAdminV5PanelDragging(false);
     };
     window.addEventListener("pointermove", move);
@@ -18840,6 +18901,105 @@ function AdminPanelInner({user}){
         </main>
       );
     };
+    const isAdminV5PanelLayered = (key) => {
+      const limits = ADMIN_V5_PANEL_LIMITS[key] || {};
+      const width = adminV5PanelW[key] || limits.default || 0;
+      return width <= (limits.layer || limits.collapsed || limits.min || 0);
+    };
+    const renderAdminV5PanelLayer = (key) => {
+      const isInstituteLayer = key === "institutes";
+      const label = isInstituteLayer
+        ? selectedInstituteName || "Institutes"
+        : selectedClass?.display || (selectedInstituteName ? "Classes" : "Select institute");
+      const eyebrow = isInstituteLayer ? "Institute" : activeBrowseMode.shortLabel || "Classes";
+      const metric = isInstituteLayer
+        ? selectedInstitute
+          ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}`
+          : `${adminV5Model.institutes.length}`
+        : selectedClass
+          ? `${selectedClassTeacherRows.length}`
+          : selectedInstitute
+            ? `${selectedInstitute.classes?.length || 0}`
+            : "";
+      const icon = isInstituteLayer ? IconBuilding : IconSchool;
+      const accent = isInstituteLayer ? G.blue : "#6D28D9";
+      return (
+        <button
+          type="button"
+          aria-label={`Expand ${isInstituteLayer ? "institutes" : "classes"} panel`}
+          title={`Expand ${isInstituteLayer ? "institutes" : "classes"} panel`}
+          onClick={()=>expandAdminV5Panel(key)}
+          onDoubleClick={()=>resetAdminV5PanelWidth(key)}
+          style={{
+            height:"100%",
+            width:"100%",
+            minWidth:0,
+            border:"none",
+            borderRight:panelBorder,
+            background:"#FFFFFF",
+            color:G.text,
+            display:"flex",
+            flexDirection:"column",
+            alignItems:"center",
+            justifyContent:"space-between",
+            gap:9,
+            padding:"11px 6px",
+            cursor:"pointer",
+            fontFamily:G.sans,
+            boxShadow:"inset -1px 0 0 rgba(148,163,184,0.08)",
+            transition:reduceEffects ? "none" : "background 0.18s ease, box-shadow 0.18s ease",
+          }}
+          onMouseEnter={event=>{
+            event.currentTarget.style.background = "#F8FAFC";
+            event.currentTarget.style.boxShadow = "inset -1px 0 0 rgba(148,163,184,0.10), 6px 0 18px rgba(15,23,42,0.06)";
+          }}
+          onMouseLeave={event=>{
+            event.currentTarget.style.background = "#FFFFFF";
+            event.currentTarget.style.boxShadow = "inset -1px 0 0 rgba(148,163,184,0.08)";
+          }}>
+          <span style={{width:27,height:27,borderRadius:8,background:"#EEF4FF",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <AppIcon icon={icon} size={15} color={accent} />
+          </span>
+          <span style={{
+            flex:1,
+            minHeight:0,
+            display:"flex",
+            alignItems:"center",
+            justifyContent:"center",
+            writingMode:"vertical-rl",
+            transform:"rotate(180deg)",
+            whiteSpace:"nowrap",
+            overflow:"hidden",
+            textOverflow:"ellipsis",
+            fontSize:12.5,
+            fontWeight:950,
+            color:G.text,
+            letterSpacing:0,
+            lineHeight:1,
+            maxHeight:"calc(100% - 84px)",
+          }}>
+            {label}
+          </span>
+          <span style={{
+            display:"flex",
+            flexDirection:"column",
+            alignItems:"center",
+            gap:5,
+            flexShrink:0,
+            minWidth:0,
+          }}>
+            <span style={{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:9.5,fontFamily:G.mono,fontWeight:900,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,whiteSpace:"nowrap"}}>
+              {eyebrow}
+            </span>
+            {metric&&(
+              <span style={{borderRadius:999,background:"#EEF2FF",color:accent,padding:"4px 6px",fontSize:10.5,fontWeight:950,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                {metric}
+              </span>
+            )}
+          </span>
+        </button>
+      );
+    };
     const renderAdminV5PanelResizeHandle = (key) => (
       <div
         role="separator"
@@ -18915,11 +19075,11 @@ function AdminPanelInner({user}){
       <div style={{height:"100svh",background:shellBg,fontFamily:G.sans,display:"grid",gridTemplateRows:"46px minmax(0,1fr)",overflow:"hidden"}}>
         {renderOverlays()}
         {renderTopBar()}
-        <div style={{minHeight:0,display:"grid",gridTemplateColumns:`48px ${adminV5PanelW.institutes}px 10px ${adminV5PanelW.classes}px 10px minmax(0,1fr)`,overflow:"hidden",transition:adminV5PanelDragging || reduceEffects ? "none" : "grid-template-columns 0.18s ease"}}>
+        <div style={{minHeight:0,display:"grid",gridTemplateColumns:`48px ${adminV5PanelW.institutes}px 10px ${adminV5PanelW.classes}px 10px minmax(0,1fr)`,overflow:"hidden",transition:adminV5PanelDragging || reduceEffects ? "none" : "grid-template-columns 0.28s cubic-bezier(.2,.8,.2,1)",willChange:adminV5PanelDragging ? "grid-template-columns" : "auto"}}>
           {renderRail(false, false)}
-          {renderInstituteDrawer()}
+          {isAdminV5PanelLayered("institutes") ? renderAdminV5PanelLayer("institutes") : renderInstituteDrawer()}
           {renderAdminV5PanelResizeHandle("institutes")}
-          {renderClassPanel()}
+          {isAdminV5PanelLayered("classes") ? renderAdminV5PanelLayer("classes") : renderClassPanel()}
           {renderAdminV5PanelResizeHandle("classes")}
           {renderTimelinePanel()}
         </div>
