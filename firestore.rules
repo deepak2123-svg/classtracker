@@ -27,6 +27,26 @@ service cloud.firestore {
       allow write: if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
+    match /adminDailyInstituteStats/{summaryId} {
+      allow read: if isAdmin();
+      allow write: if false;
+
+      match /institutes/{instituteKey} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
+    match /dailyInstituteStats/{summaryId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /instituteDailySummaries/{summaryId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /feedbackThreads/{uid} {
       allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
       allow create: if isSignedIn() && (
