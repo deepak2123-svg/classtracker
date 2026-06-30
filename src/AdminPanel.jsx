@@ -18372,13 +18372,16 @@ function AdminPanelInner({user}){
                 : period === "range"
                   ? "range"
                   : timelinePeriodLabel.toLowerCase();
+      const rowEntryCount = (value) => Array.isArray(value)
+        ? value.length
+        : Math.max(0, Math.round(Number(value || 0) || 0));
       const rowPeriodCount = (row) => period === "today"
-        ? row.todayEntries || 0
+        ? rowEntryCount(row.todayEntries)
         : period === "yesterday"
-          ? row.yesterdayEntries || 0
+          ? rowEntryCount(row.yesterdayEntries)
           : adminV5ClassFilter === "last_week"
-            ? row.lastWeekEntries || 0
-            : row.recentEntries || 0;
+            ? rowEntryCount(row.lastWeekEntries)
+            : rowEntryCount(row.recentEntries);
       const entryCountText = (count) => count
         ? `${count} ${count === 1 ? "entry" : "entries"} ${periodNameShort}`
         : "no entries";
