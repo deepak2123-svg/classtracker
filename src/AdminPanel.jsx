@@ -14181,6 +14181,7 @@ function AdminPanelInner({user}){
             classId:cls.id,
             subject:subjectLabel,
             todayEntries:todayEntries.length,
+            recentEntries:recentEntries.length,
             lastTs:classLastTs || null,
           });
           bucket.todayEntries.push(...todayEntries);
@@ -17390,6 +17391,17 @@ function AdminPanelInner({user}){
     const timelineEntries = timelineSourceEntries.slice(0, adminV5TimelineLimit);
     const canShowMoreTimeline = timelineTotal > timelineEntries.length;
     const timelineMinutes = timelineEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
+    const timelineGroups = timelineEntries.reduce((groups, entry) => {
+      const dateKey = entry.dateKey || "undated";
+      let group = groups.find(item => item.dateKey === dateKey);
+      if(!group){
+        group = { dateKey, entries:[], minutes:0 };
+        groups.push(group);
+      }
+      group.entries.push(entry);
+      group.minutes += entry.minutes || 0;
+      return groups;
+    }, []);
     const timelinePeriodLabel = overviewPeriodText;
     const timelineTitle = activeTimelineScope === "teacher"
       ? selectedTeacher?.name || "Teacher timeline"
@@ -17480,6 +17492,11 @@ function AdminPanelInner({user}){
       whiteSpace:"nowrap",
       boxShadow:"none",
     });
+    const adminV5Initials = (name = "") => {
+      const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+      const initials = parts.slice(0, 2).map(part => part[0] || "").join("").toUpperCase();
+      return initials || "T";
+    };
     const metricTile = (label, value, tone = "blue") => {
       const tones = {
         blue:{ bg:"#EAF2FF", color:G.blue, border:"#C7D7F5" },
@@ -17914,13 +17931,59 @@ function AdminPanelInner({user}){
             )}
           </div>
           {selectedClass&&(
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13}}>
-              <button type="button" onClick={()=>selectAdminV5Teacher("")} style={actionButton(activeTimelineScope === "class" && !adminV5TeacherUid ? "dark" : "light")}>All teachers</button>
-              {selectedClass.teachers.slice(0,8).map(teacher=>(
-                <button key={`${teacher.uid}_${teacher.classId}`} type="button" onClick={()=>selectAdminV5Teacher(teacher.uid)} style={actionButton(activeTimelineScope === "teacher" && adminV5TeacherUid === teacher.uid ? "dark" : "light")}>
-                  {teacher.name}
-                </button>
-              ))}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13,alignItems:"center"}}>
+              <button type="button" onClick={()=>selectAdminV5Teacher("")} style={{...actionButton(activeTimelineScope === "class" && !adminV5TeacherUid ? "dark" : "light"),height:42,padding:"0 13px"}}>
+                All teachers
+                <span style={{minWidth:20,height:20,borderRadius:999,display:"inline-flex",alignItems:"center",justifyContent:"center",background:activeTimelineScope === "class" && !adminV5TeacherUid ? "rgba(255,255,255,0.18)" : G.bg,color:activeTimelineScope === "class" && !adminV5TeacherUid ? "#FFFFFF" : G.textL,fontSize:11,fontWeight:900,fontFamily:G.mono}}>
+                  {selectedClass.teacherCount}
+                </span>
+              </button>
+              {selectedClass.teachers.slice(0,10).map(teacher=>{
+                const active = activeTimelineScope === "teacher" && adminV5TeacherUid === teacher.uid;
+                const periodCount = period === "today" ? teacher.todayEntries || 0 : teacher.recentEntries || 0;
+                const chipSub = periodCount
+                  ? `${periodCount} ${period === "today" ? "today" : timelinePeriodLabel.toLowerCase()}`
+                  : teacher.lastTs
+                    ? lastEntryCaption(teacher.lastTs)
+                    : "No entries";
+                return (
+                  <button
+                    key={`${teacher.uid}_${teacher.classId}`}
+                    type="button"
+                    onClick={()=>selectAdminV5Teacher(teacher.uid)}
+                    style={{
+                      minHeight:44,
+                      maxWidth:190,
+                      border:`1px solid ${active ? "#172554" : G.border}`,
+                      borderRadius:999,
+                      background:active ? "#111827" : "#FFFFFF",
+                      color:active ? "#FFFFFF" : G.text,
+                      padding:"5px 11px 5px 6px",
+                      display:"inline-flex",
+                      alignItems:"center",
+                      gap:8,
+                      cursor:"pointer",
+                      fontFamily:G.sans,
+                      boxShadow:"none",
+                      minWidth:0,
+                    }}>
+                    <span style={{width:32,height:32,borderRadius:999,background:active ? "rgba(255,255,255,0.14)" : "#EEF4FF",color:active ? "#FFFFFF" : G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,fontFamily:G.mono,flexShrink:0}}>
+                      {adminV5Initials(teacher.name)}
+                    </span>
+                    <span style={{minWidth:0,textAlign:"left"}}>
+                      <span style={{display:"block",fontSize:12.5,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{teacher.name}</span>
+                      <span style={{display:"block",fontSize:10.5,fontWeight:750,color:active ? "rgba(255,255,255,0.64)" : G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                        {[teacher.subject, chipSub].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              {selectedClass.teachers.length > 10&&(
+                <span style={{height:34,borderRadius:999,border:`1px solid ${G.border}`,background:"#FFFFFF",display:"inline-flex",alignItems:"center",padding:"0 10px",fontSize:11.5,fontWeight:900,color:G.textL,fontFamily:G.mono}}>
+                  +{selectedClass.teachers.length - 10}
+                </span>
+              )}
             </div>
           )}
           {!!attentionItems.length&&(
@@ -17986,30 +18049,75 @@ function AdminPanelInner({user}){
               )}
             </div>
           )}
-          {timelineEntries.map((entry,index)=>{
-            const status = entry.status && STATUS_STYLES[entry.status] ? STATUS_STYLES[entry.status] : null;
-            const timeLabel = [fmt12(entry.timeStart), fmt12(entry.timeEnd)].filter(Boolean).join(" - ");
+          {timelineGroups.map(group=>{
+            const groupLabel = group.dateKey === "undated"
+              ? "Undated"
+              : formatAdminDateKey(group.dateKey, { weekday:"long", month:"long", day:"numeric" });
             return (
-              <div key={`${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${entry.id || index}`} style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"13px 14px",marginBottom:10,boxShadow:reduceEffects ? "none" : "0 10px 24px rgba(15,23,42,0.05)"}}>
-                <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(0,1fr) auto",gap:10,alignItems:"start"}}>
-                  <div style={{minWidth:0}}>
-                    <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
-                      <span style={{fontSize:11,fontWeight:900,fontFamily:G.mono,color:G.blue,letterSpacing:0.6,textTransform:"uppercase"}}>{formatAdminDateKey(entry.dateKey)}</span>
-                      {timeLabel&&<span style={{fontSize:11,fontWeight:800,color:G.textL,fontFamily:G.mono}}>{timeLabel}</span>}
-                      {status&&<span style={{background:status.bg || G.bg,color:status.text || G.textS,border:`1px solid ${status.border || G.border}`,borderRadius:999,padding:"3px 7px",fontSize:10.5,fontWeight:850}}>{status.label}</span>}
-                    </div>
-                    <div style={{fontSize:17,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.15,marginTop:7}}>
-                      {entry.title || entry.body || "Class entry"}
-                    </div>
-                    {entry.body&&entry.title&&<div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:6}}>{entry.body}</div>}
+              <section key={group.dateKey} style={{marginBottom:18}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,margin:"0 0 10px"}}>
+                  <div style={{fontSize:11.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,whiteSpace:"nowrap"}}>
+                    {groupLabel}
                   </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:isMobile ? "flex-start" : "flex-end"}}>
-                    <span style={{fontSize:12.5,fontWeight:900,color:G.text}}>{entry.teacherName}</span>
-                    <span style={{fontSize:12,color:G.textM}}>{entry.subject || "No subject"}</span>
-                    <span style={{fontSize:11.5,color:G.textL}}>{entry.classDisplay || entry.className}</span>
+                  <div style={{height:1,background:"rgba(148,163,184,0.30)",flex:1}}/>
+                  <div style={{fontSize:11.5,fontWeight:850,color:G.textM,whiteSpace:"nowrap"}}>
+                    {group.entries.length} entr{group.entries.length === 1 ? "y" : "ies"} · {formatDurationShort(group.minutes)}
                   </div>
                 </div>
-              </div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {group.entries.map((entry,index)=>{
+                    const status = entry.status && STATUS_STYLES[entry.status] ? STATUS_STYLES[entry.status] : null;
+                    const timeStart = fmt12(entry.timeStart);
+                    const timeEnd = fmt12(entry.timeEnd);
+                    const timeLabel = [timeStart, timeEnd].filter(Boolean).join(" - ");
+                    const durationLabel = entry.minutes ? formatDurationShort(entry.minutes) : "Untimed";
+                    const entryKind = String(entry.tag || "Note").trim() || "Note";
+                    const entryTitle = entry.title || entry.body || "Class entry";
+                    const entryBody = entry.body && entry.body !== entryTitle ? entry.body : "";
+                    return (
+                      <div key={`${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${entry.id || index}`} style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "92px minmax(0,1fr)",gap:isMobile ? 0 : 14,alignItems:"stretch"}}>
+                        {!isMobile&&(
+                          <div style={{position:"relative",minHeight:96,paddingTop:10,textAlign:"right"}}>
+                            <div style={{position:"absolute",top:0,bottom:-10,right:8,width:1,background:"#D9E2F0"}}/>
+                            <span style={{position:"absolute",top:33,right:3,width:11,height:11,borderRadius:999,background:"#FFFFFF",border:"2px solid #FACC15",zIndex:1}}/>
+                            <div style={{position:"relative",zIndex:2,paddingRight:22}}>
+                              <div style={{fontSize:13.5,fontWeight:900,color:G.text,fontFamily:G.mono,lineHeight:1.1}}>{timeStart || "Time"}</div>
+                              {timeEnd&&<div style={{fontSize:11.5,fontWeight:800,color:G.textL,marginTop:3,fontFamily:G.mono}}>{timeEnd}</div>}
+                              <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",marginTop:8,borderRadius:999,background:"#DCFCE7",color:"#15803D",padding:"4px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono}}>
+                                {durationLabel}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <article style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"14px 15px",boxShadow:reduceEffects ? "none" : "0 8px 20px rgba(15,23,42,0.045)",minWidth:0}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                            <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap",minWidth:0}}>
+                              <span style={{background:"#FFF7ED",color:G.amber,border:"1px solid #FED7AA",borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,textTransform:"capitalize"}}>
+                                {entryKind}
+                              </span>
+                              {isMobile&&timeLabel&&<span style={{fontSize:11,fontWeight:850,color:G.textL,fontFamily:G.mono}}>{timeLabel}</span>}
+                              {status&&<span style={{background:status.bg || G.bg,color:status.text || G.textS,border:`1px solid ${status.border || G.border}`,borderRadius:999,padding:"3px 7px",fontSize:10.5,fontWeight:850}}>{status.label}</span>}
+                            </div>
+                            <div style={{fontSize:12,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:220}}>
+                              {entry.teacherName || "Teacher"}
+                            </div>
+                          </div>
+                          <div style={{fontSize:17,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.18,marginTop:9}}>
+                            {entryTitle}
+                          </div>
+                          {entryBody&&<div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:6}}>{entryBody}</div>}
+                          <div style={{height:1,background:"rgba(148,163,184,0.18)",margin:"13px 0 9px"}}/>
+                          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",fontSize:11.5,color:G.textL,fontWeight:800}}>
+                            <span>Subject: <strong style={{color:G.textM}}>{entry.subject || "No subject"}</strong></span>
+                            <span>Class: <strong style={{color:G.textM}}>{entry.classDisplay || entry.className || "Class"}</strong></span>
+                            {isMobile&&<span>{durationLabel}</span>}
+                          </div>
+                        </article>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
             );
           })}
           {!!timelineTotal&&(
