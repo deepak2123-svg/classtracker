@@ -1492,14 +1492,16 @@ function groupAdminPdfRows(rows){
 function groupAdminPanelEntries(entries){
   const classMap = new Map();
   entries.forEach(entry=>{
-    const className = (entry.className || "Untitled Class").trim() || "Untitled Class";
+    const className = safeAdminText(entry.className, "Untitled Class").trim() || "Untitled Class";
     if(!classMap.has(className)){
       classMap.set(className, { className, entries:[], teachers:new Set(), subjects:new Set() });
     }
     const group = classMap.get(className);
     group.entries.push(entry);
-    if(entry.teacherName) group.teachers.add(entry.teacherName);
-    if(entry.subject) group.subjects.add(entry.subject);
+    const teacherName = safeAdminText(entry.teacherName, "");
+    const subject = safeAdminText(entry.subject, "");
+    if(teacherName) group.teachers.add(teacherName);
+    if(subject) group.subjects.add(subject);
   });
 
   return Array.from(classMap.values())
@@ -14797,15 +14799,15 @@ function AdminPanelInner({user}){
             arr.forEach(entry=>{
               if(!entry) return;
               items.push({
-                id: entry.id || `${t.uid}_${c.id}_${dk}`,
-                dateKey: dk,
-                timeStart: entry.timeStart || "",
-                title: entry.title || "Untitled entry",
-                teacherName,
-                className,
-                subject: subjectLabel,
-                institute: c.institute || "",
-                status: entry.status || "",
+                id: safeAdminText(entry.id, `${t.uid}_${c.id}_${dk}`),
+                dateKey: safeAdminText(dk, ""),
+                timeStart: safeAdminText(entry.timeStart, ""),
+                title: safeAdminText(entry.title, "") || "Untitled entry",
+                teacherName:safeAdminText(teacherName, "Teacher"),
+                className:safeAdminText(className, "Class"),
+                subject: safeAdminText(subjectLabel, "No subject"),
+                institute: safeAdminText(c.institute, ""),
+                status: safeAdminText(entry.status, ""),
               });
             });
           });
@@ -16062,16 +16064,16 @@ function AdminPanelInner({user}){
           </div>
         )}
         {aggregateGroups.map(group=>(
-          <div key={group.className} style={{background:G.surface,borderRadius:mobile?14:12,border:`1px solid ${G.border}`,marginBottom:mobile?12:16,overflow:"hidden",boxShadow:G.shadowSm}}>
+          <div key={safeAdminText(group.className, "Class")} style={{background:G.surface,borderRadius:mobile?14:12,border:`1px solid ${G.border}`,marginBottom:mobile?12:16,overflow:"hidden",boxShadow:G.shadowSm}}>
             <div style={{padding:mobile?"11px 12px":"14px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:mobile?16:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{group.className}</div>
+                  <div style={{fontSize:mobile?16:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{safeAdminText(group.className, "Class")}</div>
                   <div style={{fontSize:mobile?12.5:13,color:G.textM,marginTop:3,lineHeight:1.45}}>
-                    {group.subjectList.length>0 ? `Subjects: ${group.subjectList.join(", ")}` : "Subjects: —"}
+                    {group.subjectList.length>0 ? `Subjects: ${group.subjectList.map(item=>safeAdminText(item, "")).filter(Boolean).join(", ")}` : "Subjects: —"}
                   </div>
                   <div style={{fontSize:mobile?12.5:13,color:G.textL,marginTop:2,lineHeight:1.45}}>
-                    Teachers: {group.teacherList.join(", ") || "—"}
+                    Teachers: {group.teacherList.map(item=>safeAdminText(item, "")).filter(Boolean).join(", ") || "—"}
                   </div>
                 </div>
                 <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
@@ -16081,11 +16083,16 @@ function AdminPanelInner({user}){
             </div>
             <div style={{padding:mobile?"8px 8px 1px":"10px 12px 4px"}}>
               {group.entries.map((entry, idx)=>{
-                const tag = TAG_STYLES[entry.tag] || TAG_STYLES.note;
-                const status = STATUS_STYLES[entry.status] || null;
-                const title = entry.title || "Untitled entry";
+                const entryTagKey = safeAdminText(entry.tag, "note").trim().toLowerCase() || "note";
+                const entryStatusKey = safeAdminText(entry.status, "").trim().toLowerCase();
+                const tag = TAG_STYLES[entryTagKey] || TAG_STYLES.note;
+                const status = entryStatusKey ? STATUS_STYLES[entryStatusKey] || null : null;
+                const title = safeAdminText(entry.title, "") || "Untitled entry";
+                const body = safeAdminText(entry.body, "");
+                const teacherName = safeAdminText(entry.teacherName, "Teacher");
+                const subject = safeAdminText(entry.subject, "No subject");
                 return(
-                  <div key={entry.id || `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`} style={{border:`1px solid ${G.border}`,borderRadius:mobile?11:10,marginBottom:mobile?8:10,overflow:"hidden"}}>
+                  <div key={safeAdminText(entry.id, `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`)} style={{border:`1px solid ${G.border}`,borderRadius:mobile?11:10,marginBottom:mobile?8:10,overflow:"hidden"}}>
                     <div style={{height:3,background:tag.bg}}/>
                     <div style={{padding:mobile?"10px 11px":"11px 13px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
@@ -16104,9 +16111,9 @@ function AdminPanelInner({user}){
                           </div>
                           <div style={{fontSize:mobile?14:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{title}</div>
                           <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:3}}>
-                            {entry.teacherName} · {entry.subject || "No subject"}
+                            {teacherName} · {subject}
                           </div>
-                          {entry.body&&<div style={{fontSize:mobile?13:14,color:G.textM,lineHeight:1.55,marginTop:6,whiteSpace:"pre-wrap"}}>{entry.body}</div>}
+                          {body&&<div style={{fontSize:mobile?13:14,color:G.textM,lineHeight:1.55,marginTop:6,whiteSpace:"pre-wrap"}}>{body}</div>}
                         </div>
                         <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.classId, entry.dateKey, entry.id, entry.title)}
                           style={{width:28,height:28,borderRadius:8,background:G.redL,border:"none",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
@@ -16152,16 +16159,16 @@ function AdminPanelInner({user}){
     return (
       <>
         {fullViewGroups.map(group=>(
-          <div key={group.className} style={{background:G.surface,borderRadius:mobile?14:12,border:`1px solid ${G.border}`,marginBottom:mobile?12:16,overflow:"hidden",boxShadow:G.shadowSm}}>
+          <div key={safeAdminText(group.className, "Class")} style={{background:G.surface,borderRadius:mobile?14:12,border:`1px solid ${G.border}`,marginBottom:mobile?12:16,overflow:"hidden",boxShadow:G.shadowSm}}>
             <div style={{padding:mobile?"11px 12px":"14px 16px",borderBottom:`1px solid ${G.border}`,background:G.bg}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:mobile?16:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{group.className}</div>
+                  <div style={{fontSize:mobile?16:18,fontWeight:700,color:G.text,fontFamily:G.display}}>{safeAdminText(group.className, "Class")}</div>
                   <div style={{fontSize:mobile?12.5:13,color:G.textM,marginTop:3,lineHeight:1.45}}>
-                    {group.subjectList.length?`Subjects: ${group.subjectList.join(", ")}`:"Subjects: —"}
+                    {group.subjectList.length?`Subjects: ${group.subjectList.map(item=>safeAdminText(item, "")).filter(Boolean).join(", ")}`:"Subjects: —"}
                   </div>
                   <div style={{fontSize:mobile?12.5:13,color:G.textL,marginTop:2,lineHeight:1.45}}>
-                    Teachers: {group.teacherList.join(", ") || "—"}
+                    Teachers: {group.teacherList.map(item=>safeAdminText(item, "")).filter(Boolean).join(", ") || "—"}
                   </div>
                 </div>
                 <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"4px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>
@@ -16171,10 +16178,16 @@ function AdminPanelInner({user}){
             </div>
             <div style={{padding:mobile?"8px 8px 1px":"10px 12px 4px"}}>
               {group.entries.map((entry, idx)=>{
-                const tag = TAG_STYLES[entry.tag] || TAG_STYLES.note;
-                const status = STATUS_STYLES[entry.status] || null;
+                const entryTagKey = safeAdminText(entry.tag, "note").trim().toLowerCase() || "note";
+                const entryStatusKey = safeAdminText(entry.status, "").trim().toLowerCase();
+                const tag = TAG_STYLES[entryTagKey] || TAG_STYLES.note;
+                const status = entryStatusKey ? STATUS_STYLES[entryStatusKey] || null : null;
+                const title = safeAdminText(entry.title, "") || "Untitled entry";
+                const body = safeAdminText(entry.body, "");
+                const teacherName = safeAdminText(entry.teacherName, "Teacher");
+                const subject = safeAdminText(entry.subject, "No subject");
                 return(
-                  <div key={entry.id || `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`} style={{border:`1px solid ${G.border}`,borderRadius:mobile?11:10,marginBottom:mobile?8:10,overflow:"hidden"}}>
+                  <div key={safeAdminText(entry.id, `${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${idx}`)} style={{border:`1px solid ${G.border}`,borderRadius:mobile?11:10,marginBottom:mobile?8:10,overflow:"hidden"}}>
                     <div style={{height:3,background:tag.bg}}/>
                     <div style={{padding:mobile?"10px 11px":"11px 13px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
@@ -16191,11 +16204,11 @@ function AdminPanelInner({user}){
                             {status&&<span style={{background:status.bg,color:status.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontWeight:700}}>{status.label}</span>}
                             <span style={{background:tag.bg,color:tag.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
                           </div>
-                          <div style={{fontSize:mobile?14:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{entry.title || "Untitled entry"}</div>
+                          <div style={{fontSize:mobile?14:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{title}</div>
                           <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,marginTop:3}}>
-                            {entry.teacherName} · {entry.subject || "No subject"}
+                            {teacherName} · {subject}
                           </div>
-                          {entry.body&&<div style={{fontSize:mobile?13:14,color:G.textM,lineHeight:1.55,marginTop:6,whiteSpace:"pre-wrap"}}>{entry.body}</div>}
+                          {body&&<div style={{fontSize:mobile?13:14,color:G.textM,lineHeight:1.55,marginTop:6,whiteSpace:"pre-wrap"}}>{body}</div>}
                         </div>
                         <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.classId, entry.dateKey, entry.id, entry.title)}
                           style={{width:28,height:28,borderRadius:8,background:G.redL,border:"none",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
@@ -16226,7 +16239,10 @@ function AdminPanelInner({user}){
       lastAgo: null,
       statusBreakdown: [],
     };
-    const instituteText = selectedClassMeta?.institute || selP3.institute || selInst || "";
+    const selectedTeacherNameText = safeAdminText(selP3.teacherName, "Teacher");
+    const selectedClassNameText = safeAdminText(selP3.className, "Class");
+    const selectedSubjectText = safeAdminText(selectedSubjectLabel, "");
+    const instituteText = safeAdminText(selectedClassMeta?.institute || selP3.institute || selInst, "");
     const statCard = (label, value, accent = G.blue) => (
       <div style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:mobile?"10px 12px":"11px 13px"}}>
         <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8}}>{label}</div>
@@ -16242,14 +16258,14 @@ function AdminPanelInner({user}){
             <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:1}}>Selection summary</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:7}}>
                 <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 10px",fontSize:12,fontFamily:G.mono,fontWeight:700}}>
-                  {selP3.teacherName}
+                  {selectedTeacherNameText}
                 </span>
                 <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,color:G.textS,fontFamily:G.mono,fontWeight:700}}>
-                  {selP3.className}
+                  {selectedClassNameText}
                 </span>
-                {selectedSubjectLabel&&(
+                {selectedSubjectText&&(
                   <span style={{background:"#EEF2FF",border:"1px solid #C7D2FE",borderRadius:999,padding:"5px 10px",fontSize:12,color:G.blue,fontFamily:G.mono,fontWeight:700}}>
-                    {selectedSubjectLabel}
+                    {selectedSubjectText}
                   </span>
                 )}
                 {instituteText&&(
@@ -16291,7 +16307,7 @@ function AdminPanelInner({user}){
           <div style={{background:G.surface,borderRadius:12,border:`1px solid ${G.border}`,padding:mobile?"18px 16px":"20px 18px",textAlign:"center"}}>
             <div style={{fontSize:15,fontWeight:700,color:G.textM,fontFamily:G.display}}>No entries for this period</div>
             <div style={{fontSize:13,color:G.textL,fontFamily:G.sans,marginTop:5}}>
-              {selP3.teacherName} has not uploaded anything for {selP3.className} in {overviewPeriodText.toLowerCase()}.
+              {selectedTeacherNameText} has not uploaded anything for {selectedClassNameText} in {overviewPeriodText.toLowerCase()}.
             </div>
           </div>
         )}
@@ -16315,10 +16331,15 @@ function AdminPanelInner({user}){
               </div>
               <div style={{padding:mobile?"4px 7px":"6px 12px"}}>
                 {entries.map((note,i)=>{
-                  const tag=TAG_STYLES[note.tag]||TAG_STYLES.note;
-                  const status=note.status&&STATUS_STYLES[note.status]?STATUS_STYLES[note.status]:null;
+                  const noteTagKey = safeAdminText(note.tag, "note").trim().toLowerCase() || "note";
+                  const noteStatusKey = safeAdminText(note.status, "").trim().toLowerCase();
+                  const tag=TAG_STYLES[noteTagKey]||TAG_STYLES.note;
+                  const status=noteStatusKey&&STATUS_STYLES[noteStatusKey]?STATUS_STYLES[noteStatusKey]:null;
+                  const noteTitle = safeAdminText(note.title, "") || "Untitled entry";
+                  const noteBody = safeAdminText(note.body, "");
+                  const noteId = safeAdminText(note.id, String(i));
                   return(
-                    <div key={note.id||i} style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:mobile?11:12,margin:mobile?"5px 0":"8px 0",overflow:"hidden"}}>
+                    <div key={noteId} style={{background:"#fff",border:`1px solid ${G.border}`,borderRadius:mobile?11:12,margin:mobile?"5px 0":"8px 0",overflow:"hidden"}}>
                       <div style={{height:3,background:status?.dot || tag.bg}}/>
                       <div style={{padding:mobile?"9px 10px":"12px 14px",display:"grid",gridTemplateColumns:mobile?"1fr":"120px minmax(0,1fr) auto",gap:mobile?8:12,alignItems:"center"}}>
                         <div style={{minWidth:0}}>
@@ -16335,11 +16356,11 @@ function AdminPanelInner({user}){
                             <span style={{background:tag.bg,color:tag.text,fontSize:11,borderRadius:999,padding:"3px 8px",fontFamily:G.mono,fontWeight:700}}>{tag.label}</span>
                           </div>
                           <div style={{fontSize:mobile?14:15,fontWeight:700,color:G.text,fontFamily:G.display}}>
-                            {note.title || "Untitled entry"}
+                            {noteTitle}
                           </div>
-                          {note.body&&(
+                          {noteBody&&(
                             <div style={{fontSize:13,color:G.textM,marginTop:4,lineHeight:1.55,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
-                              {note.body}
+                              {noteBody}
                             </div>
                           )}
                         </div>
