@@ -10934,7 +10934,7 @@ function AdminPanelInner({user}){
   const [adminV5TimelineScope, setAdminV5TimelineScope] = useState("institute"); // institute | class | teacher
   const [adminV5TimelineLimit, setAdminV5TimelineLimit] = useState(28);
   const [adminV5InstituteSearch, setAdminV5InstituteSearch] = useState("");
-  const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | cold | today | period
+  const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | today | yesterday | stale | period
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
@@ -14117,6 +14117,8 @@ function AdminPanelInner({user}){
 
   const adminV5Model = useMemo(()=>{
     const today = todayKey();
+    const yesterday = addDaysToDateKey(today, -1);
+    const staleCutoff = addDaysToDateKey(today, -3);
     const activeTeachers = teachers.filter(teacher => teacher?.uid && roles[teacher.uid] !== "admin");
     const daysSinceTs = (ts) => {
       if(!ts) return null;
@@ -14157,6 +14159,10 @@ function AdminPanelInner({user}){
           const subjectLabel = resolveAdminTeacherClassSubject(uid, cls.id, cls.subject || "");
           const classNotes = (data.notes || {})[cls.id] || {};
           const classLastTs = lastEntryTs(classNotes) || 0;
+          const classLastDateKey = Object.keys(classNotes || {})
+            .filter(dateKey => /^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || "")) && Array.isArray(classNotes[dateKey]) && classNotes[dateKey].length)
+            .sort()
+            .pop() || "";
           teacherLastTs = Math.max(teacherLastTs, classLastTs);
           const todayEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, null, today, today)
             .map(entry => withEntryMeta(entry, classKey));
@@ -14173,6 +14179,7 @@ function AdminPanelInner({user}){
             recentEntries:[],
             todayMinutes:0,
             lastTs:0,
+            lastDateKey:"",
           };
           if(subjectLabel) bucket.subjects.add(subjectLabel);
           bucket.teachers.push({
@@ -14188,6 +14195,7 @@ function AdminPanelInner({user}){
           bucket.recentEntries.push(...recentEntries);
           bucket.todayMinutes += todayEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
           bucket.lastTs = Math.max(bucket.lastTs || 0, classLastTs || 0);
+          if(classLastDateKey && (!bucket.lastDateKey || classLastDateKey > bucket.lastDateKey)) bucket.lastDateKey = classLastDateKey;
           classBuckets.set(classKey, bucket);
 
           teacherTodayEntries.push(...todayEntries);
@@ -14219,6 +14227,23 @@ function AdminPanelInner({user}){
         const subjects = Array.from(bucket.subjects).sort((a,b)=>exportTextSorter.compare(a || "", b || ""));
         const teacherCount = new Set(bucket.teachers.map(item => item.uid).filter(Boolean)).size;
         const lastDays = daysSinceTs(bucket.lastTs || null);
+        const lastDateKey = bucket.lastDateKey || "";
+        const isStale = !lastDateKey || lastDateKey <= staleCutoff;
+        const activityKey = bucket.todayEntries.length || lastDateKey === today
+          ? "today"
+          : lastDateKey === yesterday
+            ? "yesterday"
+            : isStale
+              ? "stale"
+              : "recent";
+        const activityLabel = activityKey === "today"
+          ? "Today"
+          : activityKey === "yesterday"
+            ? "Yesterday"
+            : activityKey === "stale"
+              ? "3+ days"
+              : lastEntryCaption(bucket.lastTs || null);
+        const activityRank = { today:0, yesterday:1, recent:2, stale:3 }[activityKey] ?? 4;
         return {
           ...bucket,
           subjects,
@@ -14227,12 +14252,17 @@ function AdminPanelInner({user}){
           recentEntries:bucket.recentEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
           lastDays,
           lastLabel:lastEntryCaption(bucket.lastTs || null),
-          cold:!bucket.lastTs || (lastDays !== null && lastDays >= 3),
+          activityKey,
+          activityLabel,
+          activityRank,
+          cold:isStale,
         };
       }).sort((a,b)=>{
-        if(Number(a.cold) !== Number(b.cold)) return Number(b.cold) - Number(a.cold);
+        if((a.activityRank ?? 9) !== (b.activityRank ?? 9)) return (a.activityRank ?? 9) - (b.activityRank ?? 9);
         if((b.todayEntries.length || 0) !== (a.todayEntries.length || 0)) return b.todayEntries.length - a.todayEntries.length;
+        if((b.recentEntries.length || 0) !== (a.recentEntries.length || 0)) return b.recentEntries.length - a.recentEntries.length;
         if((b.lastTs || 0) !== (a.lastTs || 0)) return (b.lastTs || 0) - (a.lastTs || 0);
+        if((b.teacherCount || 0) !== (a.teacherCount || 0)) return (b.teacherCount || 0) - (a.teacherCount || 0);
         return exportTextSorter.compare(a.display || "", b.display || "");
       });
 
@@ -14307,6 +14337,7 @@ function AdminPanelInner({user}){
     const classes = institute?.classes || [];
     if(!classes.length) return { classKey:"", teacherUid:"", scope:"institute" };
     const rankedClasses = [...classes].sort((a,b)=>{
+      if((a.activityRank ?? 9) !== (b.activityRank ?? 9)) return (a.activityRank ?? 9) - (b.activityRank ?? 9);
       if((b.todayEntries.length || 0) !== (a.todayEntries.length || 0)) return (b.todayEntries.length || 0) - (a.todayEntries.length || 0);
       if((b.recentEntries.length || 0) !== (a.recentEntries.length || 0)) return (b.recentEntries.length || 0) - (a.recentEntries.length || 0);
       if((b.lastTs || 0) !== (a.lastTs || 0)) return (b.lastTs || 0) - (a.lastTs || 0);
@@ -14361,8 +14392,9 @@ function AdminPanelInner({user}){
 
   const adminV5VisibleClasses = useMemo(()=>{
     const classes = adminV5SelectedInstitute?.classes || [];
-    if(adminV5ClassFilter === "cold") return classes.filter(item => item.cold);
     if(adminV5ClassFilter === "today") return classes.filter(item => item.todayEntries.length > 0);
+    if(adminV5ClassFilter === "yesterday") return classes.filter(item => item.activityKey === "yesterday");
+    if(adminV5ClassFilter === "stale" || adminV5ClassFilter === "cold") return classes.filter(item => item.activityKey === "stale");
     if(adminV5ClassFilter === "period") return classes.filter(item => item.recentEntries.length > 0);
     return classes;
   }, [adminV5ClassFilter, adminV5SelectedInstitute]);
@@ -14370,6 +14402,13 @@ function AdminPanelInner({user}){
   React.useEffect(()=>{
     if(!adminV5ClassKey || !adminV5SelectedInstitute) return;
     if(adminV5VisibleClasses.some(item => item.key === adminV5ClassKey)) return;
+    const nextClass = adminV5VisibleClasses[0] || null;
+    if(nextClass){
+      setAdminV5ClassKey(nextClass.key);
+      setAdminV5TeacherUid("");
+      setAdminV5TimelineScope("class");
+      return;
+    }
     setAdminV5ClassKey("");
     setAdminV5TeacherUid("");
     setAdminV5TimelineScope("institute");
@@ -17471,7 +17510,8 @@ function AdminPanelInner({user}){
     const classFilterItems = [
       { key:"all", label:"All", count:selectedInstitute?.classes?.length || 0 },
       { key:"today", label:"Today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
-      { key:"cold", label:"3+ days", count:(selectedInstitute?.classes || []).filter(item => item.cold).length },
+      { key:"yesterday", label:"Yesterday", count:(selectedInstitute?.classes || []).filter(item => item.activityKey === "yesterday").length },
+      { key:"stale", label:"3+ days", count:(selectedInstitute?.classes || []).filter(item => item.activityKey === "stale").length },
       ...(period === "today" ? [] : [{ key:"period", label:timelinePeriodLabel, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length }]),
     ];
     const actionButton = (tone = "light") => ({
@@ -17812,16 +17852,16 @@ function AdminPanelInner({user}){
           {adminV5VisibleClasses.map(cls=>{
             const active = cls.key === selectedClassKey && (activeTimelineScope === "class" || activeTimelineScope === "teacher");
             const tone = getSectionTone(cls.display);
-            const classActivityText = period === "today"
-              ? `${cls.todayEntries.length} entr${cls.todayEntries.length === 1 ? "y" : "ies"} today`
-              : `${cls.todayEntries.length} today · ${cls.recentEntries.length} in ${timelinePeriodLabel.toLowerCase()}`;
-            const classFreshLabel = cls.todayEntries.length
-              ? "Today"
-              : cls.lastDays === 1
-                ? "Yesterday"
-                : cls.cold
-                  ? "3+ days"
-                  : cls.lastLabel;
+            const periodEntryText = period === "today"
+              ? `${cls.todayEntries.length} today`
+              : `${cls.recentEntries.length} in ${timelinePeriodLabel.toLowerCase()}`;
+            const classActivityText = `${cls.teacherCount} teacher${cls.teacherCount===1?"":"s"} · ${periodEntryText} · Last: ${cls.lastLabel}`;
+            const classFreshLabel = cls.activityLabel || cls.lastLabel;
+            const freshTone = cls.activityKey === "today"
+              ? { bg:"#ECFDF3", border:"#A7F3D0", color:"#15803D" }
+              : cls.activityKey === "yesterday"
+                ? { bg:"#EFF6FF", border:"#BFDBFE", color:G.blue }
+                : { bg:"#FFF7ED", border:"#FED7AA", color:G.amber };
             return (
               <button
                 key={cls.key}
@@ -17842,9 +17882,9 @@ function AdminPanelInner({user}){
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:17,fontWeight:900,color:tone.ink || G.text,fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</div>
-                    <div style={{fontSize:11.5,color:G.textM,lineHeight:1.4,marginTop:5}}>{cls.teacherCount} teacher{cls.teacherCount===1?"":"s"} · {classActivityText}</div>
+                    <div style={{fontSize:11.5,color:G.textM,lineHeight:1.4,marginTop:5}}>{classActivityText}</div>
                   </div>
-                  <span style={{background:cls.todayEntries.length ? "#ECFDF3" : "#FFF7ED",border:`1px solid ${cls.todayEntries.length ? "#A7F3D0" : "#FED7AA"}`,color:cls.todayEntries.length ? "#15803D" : G.amber,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>{classFreshLabel}</span>
+                  <span style={{background:freshTone.bg,border:`1px solid ${freshTone.border}`,color:freshTone.color,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>{classFreshLabel}</span>
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
                   {cls.subjects.slice(0,3).map(subject=>(
