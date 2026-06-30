@@ -11156,6 +11156,7 @@ function AdminPanelInner({user}){
   const [syllabusTemplates, setSyllabusTemplates] = useState([]);
   const [syllabusBusy, setSyllabusBusy] = useState(false);
   const [instSectionsAll, setInstSectionsAll] = useState({}); // from config/sections
+  const [instSectionsLoading, setInstSectionsLoading] = useState(true);
   const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
   const [copyGroupModal, setCopyGroupModal] = useState(null); // null | {sourceInst, group}
@@ -11286,10 +11287,19 @@ function AdminPanelInner({user}){
   },[]);
 
   React.useEffect(()=>{
-    if(view==="manage"){
-      getAllInstituteSections().then(s=>setInstSectionsAll(s||{})).catch(()=>{});
-    }
-  },[view]);
+    let cancelled = false;
+    setInstSectionsLoading(true);
+    getAllInstituteSections()
+      .then(s=>{
+        if(cancelled) return;
+        setInstSectionsAll(s||{});
+      })
+      .catch(()=>{})
+      .finally(()=>{
+        if(!cancelled) setInstSectionsLoading(false);
+      });
+    return ()=>{ cancelled = true; };
+  },[]);
 
   React.useEffect(()=>{
     return subscribeFeedbackThreads(
@@ -18175,6 +18185,9 @@ function AdminPanelInner({user}){
       .sort(compareClassRowsForSort);
     const groupClassesByTimetable = (classes = []) => {
       if(!classes.length) return [];
+      if(instSectionsLoading && !Object.keys(instSectionsAll || {}).length){
+        return [{ key:"loading_sections", label:"Sections", rows:classes }];
+      }
       const config = getInstituteSectionConfig(instSectionsAll, selectedInstituteName) || {};
       const namedGroups = (config.gradeGroups || [])
         .map((group, index) => {
