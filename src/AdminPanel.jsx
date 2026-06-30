@@ -1556,8 +1556,25 @@ function resolveAdminTeacherClassSubjectLabel(teacher, teacherData, cls, subject
 }
 function fmt12(t){
   if(!t) return "";
+  if(typeof t !== "string") return "";
   const[h,m]=t.split(":").map(Number);
+  if(Number.isNaN(h) || Number.isNaN(m)) return "";
   return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`;
+}
+function safeAdminText(value, fallback = ""){
+  if(value===null || value===undefined) return fallback;
+  if(typeof value==="string") return value;
+  if(typeof value==="number" || typeof value==="boolean") return String(value);
+  if(Array.isArray(value)){
+    const text = value.map(item=>safeAdminText(item, "")).filter(Boolean).join(", ");
+    return text || fallback;
+  }
+  if(typeof value==="object"){
+    const candidate = value.label ?? value.name ?? value.title ?? value.text ?? value.value;
+    if(candidate!==undefined && candidate!==value) return safeAdminText(candidate, fallback);
+    return fallback;
+  }
+  return fallback;
 }
 function parseClockMins(t){
   if(!t || !/^\d{1,2}:\d{2}$/.test(t)) return null;
@@ -14176,22 +14193,22 @@ function AdminPanelInner({user}){
   const collectEntriesForTeacherClass = (teacherUid, teacherName, classId, className, subject, instituteName = selInst, days = periodDays, sk = periodStartKey, ek = periodEndKey) => {
     const d = fullData[teacherUid];
     if(!d) return [];
-    const subjectLabel = resolveAdminTeacherClassSubject(teacherUid, classId, subject);
+    const subjectLabel = safeAdminText(resolveAdminTeacherClassSubject(teacherUid, classId, subject), "No subject");
     return getEntriesInRange((d.notes||{})[classId]||{}, days, sk, ek).map(({dateKey, entry})=>({
-      id: entry.id,
-      dateKey,
-      timeStart: entry.timeStart || "",
-      timeEnd: entry.timeEnd || "",
-      status: entry.status || "",
-      tag: entry.tag || "note",
-      title: entry.title || "",
-      body: entry.body || "",
+      id: safeAdminText(entry.id, `${teacherUid}_${classId}_${dateKey}`),
+      dateKey:safeAdminText(dateKey, ""),
+      timeStart: safeAdminText(entry.timeStart, ""),
+      timeEnd: safeAdminText(entry.timeEnd, ""),
+      status: safeAdminText(entry.status, ""),
+      tag: safeAdminText(entry.tag, "note"),
+      title: safeAdminText(entry.title, ""),
+      body: safeAdminText(entry.body, ""),
       teacherUid,
-      teacherName,
+      teacherName:safeAdminText(teacherName, "Teacher"),
       classId,
-      className,
+      className:safeAdminText(className, "Class"),
       subject: subjectLabel,
-      institute: instituteName || selInst,
+      institute: safeAdminText(instituteName || selInst, ""),
     }));
   };
 
@@ -18564,19 +18581,22 @@ function AdminPanelInner({user}){
                 </div>
                 <div>
                   {group.entries.map((entry,index)=>{
-                    const status = entry.status && STATUS_STYLES[entry.status] ? STATUS_STYLES[entry.status] : null;
+                    const entryStatusKey = safeAdminText(entry.status, "").trim().toLowerCase();
+                    const status = entryStatusKey && STATUS_STYLES[entryStatusKey] ? STATUS_STYLES[entryStatusKey] : null;
                     const compactTime = (value) => fmt12(value).replace(/\s?(AM|PM)$/i, "");
                     const timeStart = compactTime(entry.timeStart);
                     const timeEnd = compactTime(entry.timeEnd);
                     const durationLabel = entry.minutes ? formatDurationShort(entry.minutes) : "Untimed";
-                    const entryTagKey = String(entry.tag || "note").trim().toLowerCase() || "note";
+                    const entryTagKey = safeAdminText(entry.tag, "note").trim().toLowerCase() || "note";
                     const tagStyle = TAG_STYLES[entryTagKey] || TAG_STYLES.note || { text:G.amber, label:"Note" };
-                    const entryKind = String(tagStyle.label || entry.tag || "Note").replace(/^[^\w]+/, "").trim() || "Note";
-                    const statusLabel = status ? String(status.label || entry.status || "").replace(/^[^\w]+/, "").trim() : "";
-                    const entryTitle = entry.title || entry.body || "Class entry";
-                    const entryBody = entry.body && entry.body !== entryTitle ? entry.body : "";
-                    const subjectLabel = entry.subject || "No subject";
-                    const classLabel = entry.classDisplay || entry.className || "Class";
+                    const entryKind = safeAdminText(tagStyle.label || entry.tag, "Note").replace(/^[^\w]+/, "").trim() || "Note";
+                    const statusLabel = status ? safeAdminText(status.label || entry.status, "").replace(/^[^\w]+/, "").trim() : "";
+                    const entryTitle = safeAdminText(entry.title, "") || safeAdminText(entry.body, "") || "Class entry";
+                    const entryBody = safeAdminText(entry.body, "");
+                    const visibleEntryBody = entryBody && entryBody !== entryTitle ? entryBody : "";
+                    const subjectLabel = safeAdminText(entry.subject, "No subject");
+                    const classLabel = safeAdminText(entry.classDisplay || entry.className, "Class");
+                    const teacherLabel = safeAdminText(entry.teacherName, "Teacher");
                     const showTeacherName = activeTimelineScope !== "teacher";
                     return (
                       <article
@@ -18622,7 +18642,7 @@ function AdminPanelInner({user}){
                             </div>
                             {showTeacherName&&(
                               <span style={{fontSize:11.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:180,flexShrink:0}}>
-                                {entry.teacherName || "Teacher"}
+                                {teacherLabel}
                               </span>
                             )}
                           </div>
@@ -18632,9 +18652,9 @@ function AdminPanelInner({user}){
                               {classLabel}
                             </span>
                           </div>
-                          {entryBody&&(
+                          {visibleEntryBody&&(
                             <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:7}}>
-                              {entryBody}
+                              {visibleEntryBody}
                             </div>
                           )}
                         </div>
