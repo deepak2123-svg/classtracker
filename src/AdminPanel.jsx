@@ -11040,7 +11040,6 @@ function AdminPanelInner({user}){
   const instituteGlanceReportRef = React.useRef(instituteGlanceReport);
   const instituteGlanceAutoLoadKeyRef = React.useRef("");
   const instituteGlanceOptionsFrameRef = React.useRef(null);
-  const adminV5AllHydrationKeyRef = React.useRef("");
   const historyReadyRef = React.useRef(false);
   const historyRestoreRef = React.useRef(false);
   const lastHistoryKeyRef = React.useRef("");
@@ -11531,21 +11530,6 @@ function AdminPanelInner({user}){
   const warmInstitute = React.useCallback((inst) => {
     warmTeacherUids(getInstituteTeacherUids(inst), inst);
   }, [getInstituteTeacherUids, warmTeacherUids]);
-
-  React.useEffect(()=>{
-    if(view !== "main" || loading || !teachers.length) return;
-    const uids = teachers
-      .filter(teacher => teacher?.uid && roles[teacher.uid] !== "admin")
-      .map(teacher => teacher.uid)
-      .sort();
-    const hydrationKey = uids.join("|");
-    if(!hydrationKey || adminV5AllHydrationKeyRef.current === hydrationKey) return;
-    adminV5AllHydrationKeyRef.current = hydrationKey;
-    warmTeacherUids(uids).catch(error => {
-      console.error("Admin V5 hydration failed", error);
-      adminV5AllHydrationKeyRef.current = "";
-    });
-  }, [loading, roles, teachers, view, warmTeacherUids]);
 
   React.useEffect(()=>{
     if(instDetailView){
@@ -14360,29 +14344,14 @@ function AdminPanelInner({user}){
   }, [adminV5Model.institutes]);
 
   const adminV5SelectedInstitute = useMemo(()=>{
-    if(!adminV5Model.institutes.length) return null;
-    return adminV5Model.institutes.find(item => sameInstituteName(item.institute, selInst)) || adminV5Model.institutes[0];
+    if(!selInst || !adminV5Model.institutes.length) return null;
+    return adminV5Model.institutes.find(item => sameInstituteName(item.institute, selInst)) || null;
   }, [adminV5Model.institutes, selInst]);
-
-  React.useEffect(()=>{
-    if(view !== "main" || !adminV5VisibleInstitutes.length) return;
-    if(selInst && adminV5VisibleInstitutes.some(item => sameInstituteName(item.institute, selInst))) return;
-    const nextInstitute = adminV5VisibleInstitutes[0]?.institute || "";
-    if(!nextInstitute) return;
-    const focus = getAdminV5DefaultFocus(nextInstitute);
-    setSelInst(nextInstitute);
-    setAdminV5ClassKey(focus.classKey);
-    setAdminV5TeacherUid(focus.teacherUid);
-    setAdminV5TimelineScope(focus.scope);
-    setAdminV5ClassFilter("all");
-    warmInstitute(nextInstitute);
-    if(focus.teacherUid) ensureFullData(focus.teacherUid);
-  }, [adminV5VisibleInstitutes, ensureFullData, getAdminV5DefaultFocus, selInst, view, warmInstitute]);
 
   const adminV5SelectedClass = useMemo(()=>{
     const classes = adminV5SelectedInstitute?.classes || [];
-    if(!classes.length) return null;
-    return classes.find(item => item.key === adminV5ClassKey) || classes[0];
+    if(!classes.length || !adminV5ClassKey) return null;
+    return classes.find(item => item.key === adminV5ClassKey) || null;
   }, [adminV5ClassKey, adminV5SelectedInstitute]);
 
   const adminV5SelectedTeacher = useMemo(()=>{
@@ -14427,19 +14396,6 @@ function AdminPanelInner({user}){
     setAdminV5TimelineScope(focus.scope);
     if(focus.teacherUid) ensureFullData(focus.teacherUid);
   }, [adminV5ClassKey, adminV5SelectedInstitute, ensureFullData, getAdminV5DefaultFocus, view]);
-
-  React.useEffect(()=>{
-    if(view !== "main" || selInst || !adminV5Model.institutes.length) return;
-    const firstInstitute = adminV5Model.institutes[0]?.institute || "";
-    if(!firstInstitute) return;
-    const focus = getAdminV5DefaultFocus(firstInstitute);
-    setSelInst(firstInstitute);
-    setAdminV5ClassKey(focus.classKey);
-    setAdminV5TeacherUid(focus.teacherUid);
-    setAdminV5TimelineScope(focus.scope);
-    warmInstitute(firstInstitute);
-    if(focus.teacherUid) ensureFullData(focus.teacherUid);
-  }, [adminV5Model.institutes, ensureFullData, getAdminV5DefaultFocus, selInst, view, warmInstitute]);
 
   const fullViewEntries = useMemo(()=>{
     if(!fullView || !selInst) return [];
@@ -17414,7 +17370,9 @@ function AdminPanelInner({user}){
     const summary = adminV5Model.summary;
     const adminName = user?.displayName || user?.email || "Admin";
     const adminInitials = String(adminName || "Admin").trim().split(/\s+/).slice(0, 2).map(part => part[0] || "").join("").toUpperCase() || "A";
-    const hydrationPendingCount = adminV5Model.institutes.reduce((sum, item) => sum + Math.max(0, (item.activeCount || 0) - (item.loadedCount || 0)), 0);
+    const overviewLoadedTeacherCount = adminV5Model.institutes.reduce((sum, item) => sum + (item.loadedCount || 0), 0);
+    const overviewUnloadedTeacherCount = adminV5Model.institutes.reduce((sum, item) => sum + Math.max(0, (item.activeCount || 0) - (item.loadedCount || 0)), 0);
+    const hydrationPendingCount = selectedInstitute ? Math.max(0, (selectedInstitute.activeCount || 0) - (selectedInstitute.loadedCount || 0)) : 0;
     const selectedClassTeacherRows = Array.from((selectedClass?.teachers || []).reduce((map, teacher) => {
       if(!teacher?.uid) return map;
       const existing = map.get(teacher.uid) || {
@@ -17519,12 +17477,17 @@ function AdminPanelInner({user}){
       { key:"classes", label:"Classes", icon:IconSchool },
       { key:"timeline", label:"Timeline", icon:IconClock },
     ];
-    const instituteGroups = [
-      { key:"under_25", label:"0-24% updated", rows:adminV5VisibleInstitutes.filter(item => item.activeCount > 0 && item.status.pct < 25) },
-      { key:"under_70", label:"25-69% updated", rows:adminV5VisibleInstitutes.filter(item => item.activeCount > 0 && item.status.pct >= 25 && item.status.pct < 70) },
-      { key:"over_70", label:"70%+ updated", rows:adminV5VisibleInstitutes.filter(item => item.activeCount > 0 && item.status.pct >= 70) },
-      { key:"empty", label:"No active teachers", rows:adminV5VisibleInstitutes.filter(item => item.activeCount === 0) },
-    ].filter(group => group.rows.length);
+    const instituteReadyRows = adminV5VisibleInstitutes.filter(item => item.activeCount === 0 || (item.loadedCount || 0) >= (item.activeCount || 0));
+    const instituteUnloadedRows = adminV5VisibleInstitutes.filter(item => item.activeCount > 0 && (item.loadedCount || 0) < (item.activeCount || 0));
+    const instituteGroups = selectedInstitute
+      ? [
+        { key:"under_25", label:"0-24% updated", rows:instituteReadyRows.filter(item => item.activeCount > 0 && item.status.pct < 25) },
+        { key:"under_70", label:"25-69% updated", rows:instituteReadyRows.filter(item => item.activeCount > 0 && item.status.pct >= 25 && item.status.pct < 70) },
+        { key:"over_70", label:"70%+ updated", rows:instituteReadyRows.filter(item => item.activeCount > 0 && item.status.pct >= 70) },
+        { key:"empty", label:"No active teachers", rows:instituteReadyRows.filter(item => item.activeCount === 0) },
+        { key:"unloaded", label:"Not opened yet", rows:instituteUnloadedRows },
+      ].filter(group => group.rows.length)
+      : [{ key:"overview", label:"Choose an institute to load", rows:adminV5VisibleInstitutes }];
     const classFilterItems = [
       { key:"all", label:"All", count:selectedInstitute?.classes?.length || 0 },
       { key:"today", label:"Today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
@@ -17824,7 +17787,10 @@ function AdminPanelInner({user}){
     const renderInstituteRow = (row) => {
       const active = selectedInstitute && sameInstituteName(row.institute, selectedInstitute.institute);
       const pct = row.status?.pct || 0;
-      const tone = row.activeCount === 0
+      const rowReady = row.activeCount === 0 || (row.loadedCount || 0) >= (row.activeCount || 0);
+      const tone = !rowReady
+        ? { dot:"#9CA3AF", pillBg:"#EEF2FF", pillText:G.blue }
+        : row.activeCount === 0
         ? { dot:"#9CA3AF", pillBg:"#E5E7EB", pillText:"#6B7280" }
         : pct >= 70
           ? { dot:"#16A34A", pillBg:"#ECFDF3", pillText:"#16A34A" }
@@ -17855,11 +17821,13 @@ function AdminPanelInner({user}){
           <span style={{minWidth:0,flex:1}}>
             <span style={{display:"block",fontSize:12.5,fontWeight:active ? 850 : 650,color:active ? G.blue : G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.institute}</span>
             <span style={{display:"block",fontSize:10.5,color:G.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-              {row.classCount || row.classes?.length || 0} classes · {row.activeCount} teachers
+              {rowReady
+                ? `${row.classCount || row.classes?.length || 0} classes · ${row.activeCount} teachers`
+                : `${row.activeCount} teachers · click to load`}
             </span>
           </span>
           <span style={{
-            minWidth:row.activeCount ? 48 : 34,
+            minWidth:rowReady && row.activeCount ? 48 : 46,
             height:24,
             borderRadius:999,
             background:tone.pillBg,
@@ -17874,7 +17842,9 @@ function AdminPanelInner({user}){
             whiteSpace:"nowrap",
             flex:"0 0 auto",
           }}>
-            {row.activeCount ? `${row.loggedCount}/${row.activeCount}` : "—"}
+            {rowReady
+              ? row.activeCount ? `${row.loggedCount}/${row.activeCount}` : "—"
+              : (row.loadedCount || 0) ? `${row.loadedCount}/${row.activeCount}` : "Open"}
           </span>
           <span style={{
             width:34,
@@ -17886,7 +17856,7 @@ function AdminPanelInner({user}){
             whiteSpace:"nowrap",
             flex:"0 0 auto",
           }}>
-            {row.activeCount ? `${pct}%` : ""}
+            {rowReady && row.activeCount ? `${pct}%` : ""}
           </span>
         </button>
       );
@@ -17898,8 +17868,8 @@ function AdminPanelInner({user}){
             <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>
               {adminV5Model.institutes.length} institutes · Today
             </div>
-            <span style={{fontSize:11,fontFamily:G.mono,fontWeight:900,color:summary.loggedPct >= 70 ? "#15803D" : summary.loggedPct < 25 ? G.red : G.amber,whiteSpace:"nowrap"}}>
-              {summary.loggedToday}/{summary.activeTeachers}
+            <span style={{fontSize:11,fontFamily:G.mono,fontWeight:900,color:selectedInstitute ? selectedInstitute.status.accent : G.textL,whiteSpace:"nowrap"}}>
+              {selectedInstitute ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}` : "Overview"}
             </span>
           </div>
           <div style={{marginTop:10}}>
@@ -17926,9 +17896,40 @@ function AdminPanelInner({user}){
         </div>
       </section>
     );
-    const renderClassPanel = () => (
-      <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
-        <div style={{padding:"16px 14px 12px",borderBottom:panelBorder,background:"#FFFFFF"}}>
+    const renderClassPanel = () => {
+      if(!selectedInstitute){
+        const overviewTile = (label, value, hint = "") => (
+          <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"12px",minWidth:0}}>
+            <div style={{fontSize:10.5,fontFamily:G.mono,fontWeight:900,letterSpacing:0.65,textTransform:"uppercase",color:G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
+            <div style={{fontSize:22,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1,marginTop:8}}>{value}</div>
+            {hint&&<div style={{fontSize:11.5,color:G.textM,lineHeight:1.35,marginTop:6}}>{hint}</div>}
+          </div>
+        );
+        return (
+          <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
+            <div style={{padding:"16px 14px 12px",borderBottom:panelBorder,background:"#FFFFFF"}}>
+              <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Overview</div>
+              <div style={{fontSize:21,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.05,marginTop:7}}>No institute selected</div>
+              <div style={{fontSize:12,color:G.textM,marginTop:7,lineHeight:1.45}}>
+                Choose an institute from the left to load its classes, teachers, and timeline.
+              </div>
+            </div>
+            <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px",display:"flex",flexDirection:"column",gap:10}}>
+              {overviewTile("Institutes", adminV5Model.institutes.length, "Available in this admin panel")}
+              {overviewTile("Teacher records", summary.activeTeachers, "Not loaded until an institute is opened")}
+              {overviewTile("Loaded now", overviewLoadedTeacherCount, "From already cached admin data")}
+              {overviewTile("Not loaded", overviewUnloadedTeacherCount, "Click an institute to load live numbers")}
+              <button type="button" onClick={()=>openManageTab("report")} style={{...actionButton("blue"),height:36,marginTop:2}}>
+                <AppIcon icon={IconFileText} size={15} color={G.blue} />
+                Open Ledgr Report
+              </button>
+            </div>
+          </section>
+        );
+      }
+      return (
+        <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
+          <div style={{padding:"16px 14px 12px",borderBottom:panelBorder,background:"#FFFFFF"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
             <div style={{minWidth:0}}>
               <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Institute</div>
@@ -18015,10 +18016,41 @@ function AdminPanelInner({user}){
             </div>
           )}
         </div>
-      </section>
-    );
-    const renderTimelinePanel = () => (
-      <main style={{background:shellBg,minWidth:0,height:isMobile?"auto":"100%",display:"flex",flexDirection:"column",overflow:isMobile?"visible":"hidden"}}>
+        </section>
+      );
+    };
+    const renderTimelinePanel = () => {
+      if(!selectedInstitute){
+        return (
+          <main style={{background:shellBg,minWidth:0,height:isMobile?"auto":"100%",display:"flex",flexDirection:"column",overflow:isMobile?"visible":"hidden"}}>
+            <div style={{padding:isMobile ? "14px 14px 12px" : "16px 20px 13px",background:"#FFFFFF",borderBottom:panelBorder}}>
+              <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Overview</div>
+              <div style={{fontSize:isMobile ? 24 : 28,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7}}>
+                Admin dashboard
+              </div>
+              <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:6}}>
+                No institute is open. Select an institute from the left to load live class and teacher timelines.
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",gap:9,marginTop:15}}>
+                {metricTile("Institutes", adminV5Model.institutes.length, "blue")}
+                {metricTile("Teacher records", summary.activeTeachers, "blue")}
+                {metricTile("Loaded now", overviewLoadedTeacherCount, overviewLoadedTeacherCount ? "green" : "amber")}
+                {metricTile("Not loaded", overviewUnloadedTeacherCount, overviewUnloadedTeacherCount ? "amber" : "green")}
+              </div>
+            </div>
+            <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:isMobile ? "12px 14px 22px" : "16px 20px 22px"}}>
+              <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"22px",boxShadow:softShadow}}>
+                <div style={{fontSize:18,fontWeight:900,color:G.text,fontFamily:G.display}}>Choose an institute to begin</div>
+                <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:8,maxWidth:560}}>
+                  The overview stays lightweight on first load. Once you click an institute, Ledgr loads that institute's teacher records and opens its class/timeline view.
+                </div>
+              </div>
+            </div>
+          </main>
+        );
+      }
+      return (
+        <main style={{background:shellBg,minWidth:0,height:isMobile?"auto":"100%",display:"flex",flexDirection:"column",overflow:isMobile?"visible":"hidden"}}>
         <div style={{padding:isMobile ? "14px 14px 12px" : "16px 20px 13px",background:"#FFFFFF",borderBottom:panelBorder}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
             <div style={{minWidth:0,flex:1}}>
@@ -18225,8 +18257,9 @@ function AdminPanelInner({user}){
             </div>
           )}
         </div>
-      </main>
-    );
+        </main>
+      );
+    };
     const renderMobileDashboard = () => (
       <div style={{minHeight:"100svh",background:shellBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {renderOverlays()}
