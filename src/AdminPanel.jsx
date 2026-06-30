@@ -17415,17 +17415,57 @@ function AdminPanelInner({user}){
     const adminName = user?.displayName || user?.email || "Admin";
     const adminInitials = String(adminName || "Admin").trim().split(/\s+/).slice(0, 2).map(part => part[0] || "").join("").toUpperCase() || "A";
     const hydrationPendingCount = adminV5Model.institutes.reduce((sum, item) => sum + Math.max(0, (item.activeCount || 0) - (item.loadedCount || 0)), 0);
-    const pendingTeachers = (selectedInstitute?.teachers || []).filter(item => !item.loggedToday);
+    const selectedClassTeacherRows = Array.from((selectedClass?.teachers || []).reduce((map, teacher) => {
+      if(!teacher?.uid) return map;
+      const existing = map.get(teacher.uid) || {
+        uid:teacher.uid,
+        name:teacher.name,
+        subjects:new Set(),
+        todayEntries:0,
+        recentEntries:0,
+        lastTs:null,
+      };
+      if(teacher.subject) existing.subjects.add(teacher.subject);
+      existing.todayEntries += teacher.todayEntries || 0;
+      existing.recentEntries += teacher.recentEntries || 0;
+      existing.lastTs = Math.max(existing.lastTs || 0, teacher.lastTs || 0) || null;
+      map.set(teacher.uid, existing);
+      return map;
+    }, new Map()).values()).map(teacher => ({
+      ...teacher,
+      subjectList:Array.from(teacher.subjects || []).sort((a,b)=>exportTextSorter.compare(a || "", b || "")),
+      loggedToday:(teacher.todayEntries || 0) > 0,
+      lastLabel:lastEntryCaption(teacher.lastTs || null),
+    }));
+    const selectedClassActiveCount = selectedClass ? selectedClassTeacherRows.length : 0;
+    const selectedClassLoggedToday = selectedClassTeacherRows.filter(teacher => teacher.loggedToday).length;
+    const selectedClassPendingCount = selectedClass ? Math.max(0, selectedClassActiveCount - selectedClassLoggedToday) : 0;
+    const pendingTeachers = selectedClass
+      ? selectedClassTeacherRows.filter(item => !item.loggedToday)
+      : (selectedInstitute?.teachers || []).filter(item => !item.loggedToday);
     const activeTimelineScope = adminV5TimelineScope === "teacher" && selectedTeacher
       ? "teacher"
       : adminV5TimelineScope === "class" && selectedClass
         ? "class"
         : "institute";
-    const timelineSourceEntries = activeTimelineScope === "teacher"
+    const rawTimelineSourceEntries = activeTimelineScope === "teacher"
       ? selectedTeacher?.recentEntries || []
       : activeTimelineScope === "class"
         ? selectedClass?.recentEntries || []
         : selectedInstitute?.recentEntries || [];
+    const entryMatchesSelectedClass = (entry) => selectedClassKey && (
+      entry?.classKey === selectedClassKey
+      || normaliseSectionKey(entry?.classDisplay || entry?.className || "") === selectedClassKey
+    );
+    const selectedTeacherClassEntries = activeTimelineScope === "teacher" && selectedClass
+      ? rawTimelineSourceEntries.filter(entryMatchesSelectedClass)
+      : [];
+    const selectedTeacherOtherEntries = activeTimelineScope === "teacher" && selectedClass
+      ? rawTimelineSourceEntries.filter(entry => !entryMatchesSelectedClass(entry))
+      : [];
+    const timelineSourceEntries = activeTimelineScope === "teacher" && selectedClass
+      ? [...selectedTeacherClassEntries, ...selectedTeacherOtherEntries]
+      : rawTimelineSourceEntries;
     const timelineTotal = timelineSourceEntries.length;
     const timelineEntries = timelineSourceEntries.slice(0, adminV5TimelineLimit);
     const canShowMoreTimeline = timelineTotal > timelineEntries.length;
@@ -17448,42 +17488,23 @@ function AdminPanelInner({user}){
         ? selectedClass?.display || "Class timeline"
         : selectedInstituteName || "Admin dashboard";
     const timelineSubtitle = activeTimelineScope === "teacher"
-      ? `${selectedInstituteName} · all loaded classes for this teacher`
+      ? selectedClass
+        ? `${selectedInstituteName} · ${selectedClass.display} first, then other loaded classes`
+        : `${selectedInstituteName} · all loaded classes for this teacher`
         : activeTimelineScope === "class"
           ? `${selectedInstituteName} · all teachers in this class`
           : selectedInstitute
             ? `${selectedInstituteName} · all loaded class timelines`
             : "Select an institute to begin";
-    const selectedColdClasses = (selectedInstitute?.classes || []).filter(item => item.cold);
-    const nearbyAtRiskInstitutes = adminV5Model.institutes
-      .filter(item => !sameInstituteName(item.institute, selectedInstituteName) && (item.status.key === "critical" || item.status.key === "low"))
-      .slice(0, 2);
-    const attentionItems = [
-      ...(pendingTeachers.length ? [{
-        key:"pending-teachers",
-        tone:"amber",
-        label:"Pending teachers",
-        value:`${pendingTeachers.length} today`,
-        body:selectedInstituteName || "Selected institute",
-        onClick:()=>openManageTab("teachers", selectedInstituteName ? { scopeInstitute:selectedInstituteName } : {}),
-      }] : []),
-      ...selectedColdClasses.slice(0, 2).map(cls => ({
-        key:`cold-${cls.key}`,
-        tone:"red",
-        label:"No update 3+ days",
-        value:cls.lastLabel,
-        body:cls.display,
-        onClick:()=>selectAdminV5Class(cls.key),
-      })),
-      ...nearbyAtRiskInstitutes.map(item => ({
-        key:`risk-${item.institute}`,
-        tone:item.status.key === "critical" ? "red" : "amber",
-        label:`${item.status.pct}% updated`,
-        value:`${item.loggedCount}/${item.activeCount} updated`,
-        body:item.institute,
-        onClick:()=>selectAdminV5Institute(item.institute, "classes"),
-      })),
-    ].slice(0, 4);
+    const metricActiveCount = selectedClass ? selectedClassActiveCount : selectedInstitute?.activeCount || 0;
+    const metricLoggedToday = selectedClass ? selectedClassLoggedToday : selectedInstitute?.loggedCount || 0;
+    const metricPending = selectedClass ? selectedClassPendingCount : selectedInstitute?.pendingCount || 0;
+    const metricUpdatedPct = metricActiveCount ? Math.round((metricLoggedToday / metricActiveCount) * 100) : 0;
+    const teacherClassNotice = activeTimelineScope === "teacher"
+      && selectedClass
+      && selectedTeacher
+      && !selectedTeacherClassEntries.length
+      && !!selectedTeacherOtherEntries.length;
     const shellBg = "#F4F7FB";
     const panelBorder = "1px solid rgba(148,163,184,0.26)";
     const softShadow = reduceEffects ? "none" : "0 10px 26px rgba(15,23,42,0.06)";
@@ -17552,11 +17573,6 @@ function AdminPanelInner({user}){
         </div>
       );
     };
-    const attentionTone = (tone = "blue") => ({
-      red:{ bg:"#FFF1F2", icon:"#FEE2E2", color:G.red, border:"#FECACA" },
-      amber:{ bg:"#FFF7ED", icon:"#FFEDD5", color:G.amber, border:"#FED7AA" },
-      blue:{ bg:"#EAF2FF", icon:"#DBEAFE", color:G.blue, border:"#C7D7F5" },
-    }[tone] || { bg:"#EAF2FF", icon:"#DBEAFE", color:G.blue, border:"#C7D7F5" });
     const filterChip = ({ chipKey, active, label, count, onClick, compact = false }) => (
       <button
         key={chipKey}
@@ -17944,10 +17960,10 @@ function AdminPanelInner({user}){
             </div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",gap:9,marginTop:15}}>
-            {metricTile("Updated today", selectedInstitute ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}` : "0/0", selectedInstitute?.status?.key === "on_track" ? "green" : selectedInstitute?.status?.key === "critical" ? "red" : "amber")}
+            {metricTile(selectedClass ? "Class updated" : "Updated today", `${metricLoggedToday}/${metricActiveCount}`, metricUpdatedPct >= 70 ? "green" : metricUpdatedPct < 25 ? "red" : "amber")}
             {metricTile("Timeline logs", timelineTotal > timelineEntries.length ? `${timelineEntries.length}/${timelineTotal}` : timelineEntries.length, timelineEntries.length ? "blue" : "amber")}
             {metricTile("Shown time", formatDurationShort(timelineMinutes), timelineMinutes ? "green" : "amber")}
-            {metricTile("Pending", selectedInstitute?.pendingCount || 0, selectedInstitute?.pendingCount ? "amber" : "green")}
+            {metricTile("Pending", metricPending, metricPending ? "amber" : "green")}
           </div>
           <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:isMobile ? "9px" : "10px",marginTop:13}}>
             <PeriodSelector
@@ -18026,50 +18042,16 @@ function AdminPanelInner({user}){
               )}
             </div>
           )}
-          {!!attentionItems.length&&(
-            <div style={{marginTop:13}}>
-              <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,marginBottom:8}}>Attention queue</div>
-              <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(2,minmax(0,1fr))",gap:8}}>
-                {attentionItems.map(item=>{
-                  const tone = attentionTone(item.tone);
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={item.onClick}
-                      style={{
-                        minHeight:58,
-                        border:`1px solid ${tone.border}`,
-                        borderRadius:8,
-                        background:tone.bg,
-                        padding:"10px 11px",
-                        display:"flex",
-                        alignItems:"center",
-                        gap:10,
-                        textAlign:"left",
-                        cursor:"pointer",
-                        fontFamily:G.sans,
-                        minWidth:0,
-                      }}>
-                      <span style={{width:32,height:32,borderRadius:8,background:tone.icon,display:"inline-flex",alignItems:"center",justifyContent:"center",color:tone.color,fontSize:14,fontWeight:950,fontFamily:G.mono,flexShrink:0}}>!</span>
-                      <span style={{minWidth:0,flex:1}}>
-                        <span style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                          <span style={{fontSize:12.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</span>
-                          <span style={{fontSize:10.5,fontWeight:900,color:tone.color,fontFamily:G.mono,whiteSpace:"nowrap"}}>{item.value}</span>
-                        </span>
-                        <span style={{display:"block",fontSize:11.5,fontWeight:750,color:G.textM,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.body}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
         <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:isMobile ? "12px 14px 22px" : "16px 20px 22px"}}>
           {loading&&(
             <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"13px 14px",marginBottom:12,color:G.textM,fontSize:13,fontWeight:750}}>
               Loading admin data...
+            </div>
+          )}
+          {teacherClassNotice&&(
+            <div style={{background:"#FFFFFF",border:"1px solid #BFDBFE",borderRadius:8,padding:"12px 14px",marginBottom:12,color:G.textM,fontSize:13,fontWeight:750}}>
+              No {selectedClass.display} entries for {selectedTeacher.name} in {timelinePeriodLabel.toLowerCase()}. Showing this teacher's other loaded classes below.
             </div>
           )}
           {!timelineEntries.length&&(
