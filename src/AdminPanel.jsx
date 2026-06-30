@@ -12,6 +12,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconClock,
+  IconCopy,
   IconDeviceFloppy,
   IconDownload,
   IconFileText,
@@ -11062,7 +11063,9 @@ function AdminPanelInner({user}){
   const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | today | yesterday | last_week | period
   const [adminV5BrowseMode, setAdminV5BrowseMode] = useState("class"); // class | teacher | pair
   const [adminV5ClassSearch, setAdminV5ClassSearch] = useState("");
+  const [adminV5ClassSort, setAdminV5ClassSort] = useState("recent"); // recent | alpha
   const [adminV5ExpandedClassKeys, setAdminV5ExpandedClassKeys] = useState({});
+  const [adminV5ExpandedGroupKeys, setAdminV5ExpandedGroupKeys] = useState({});
   const [adminV5DailySummaries, setAdminV5DailySummaries] = useState({});
   const [adminV5DailySummariesLoading, setAdminV5DailySummariesLoading] = useState(false);
   const [adminV5PanelW, setAdminV5PanelW] = useState(()=>({
@@ -11717,6 +11720,10 @@ function AdminPanelInner({user}){
     () => teachers.filter(teacher => !!teacher?.uid),
     [teachers]
   );
+  const activeTeacherUidSet = useMemo(
+    () => new Set(instituteGlanceTeacherList.map(teacher => teacher.uid).filter(Boolean)),
+    [instituteGlanceTeacherList]
+  );
 
   const getInstituteTeacherUids = React.useCallback((inst) => {
     const snapshot = fullDataRef.current || {};
@@ -11918,6 +11925,36 @@ function AdminPanelInner({user}){
     }
     setInstituteGlanceReport(nextReport);
   }, []);
+
+  React.useEffect(() => {
+    const cache = instituteGlanceDataRef.current || {};
+    const staleUids = Object.keys(cache).filter(uid => !activeTeacherUidSet.has(uid));
+    if(staleUids.length){
+      const nextCache = { ...cache };
+      staleUids.forEach(uid => { delete nextCache[uid]; });
+      instituteGlanceDataRef.current = nextCache;
+    }
+
+    const currentReport = instituteGlanceReportRef.current;
+    const hasStaleReportRows = (currentReport?.rows || []).some(row =>
+      (row.teacherUids || []).some(uid => !activeTeacherUidSet.has(uid))
+    );
+    if(!hasStaleReportRows) return;
+
+    scheduleInstituteGlanceReport({
+      ...currentReport,
+      configKey:"",
+      rows:[],
+      summary:EMPTY_INSTITUTE_GLANCE_SUMMARY,
+      loading:false,
+      loaded:0,
+      total:instituteGlanceTeacherList.length,
+      loadedInstitutes:0,
+      totalInstitutes:institutes.length,
+      ready:false,
+      error:"",
+    });
+  }, [activeTeacherUidSet, instituteGlanceTeacherList.length, institutes.length, scheduleInstituteGlanceReport]);
 
   const handleInstituteGlanceLoadFailure = React.useCallback((error) => {
     console.error("institute glance load failed", error);
@@ -13551,6 +13588,99 @@ function AdminPanelInner({user}){
     );
   };
 
+  const getInstituteGlanceNameLists = (row) => ({
+    updated:(row?.filledTeacherRows || []).map(teacher => safeAdminText(teacher?.name, "")).filter(Boolean),
+    pending:(row?.pendingTeacherRows || []).map(teacher => safeAdminText(teacher?.name, "")).filter(Boolean),
+  });
+
+  const buildInstituteGlanceNamesText = (row) => {
+    const { updated, pending } = getInstituteGlanceNameLists(row);
+    const instituteName = safeAdminText(row?.institute, "Institute");
+    return [
+      instituteName,
+      `${updated.length}/${row?.totalTeachers || 0} updated`,
+      "",
+      `Updated (${updated.length})`,
+      updated.length ? updated.join(", ") : "None",
+      "",
+      `Not updated (${pending.length})`,
+      pending.length ? pending.join(", ") : "None",
+    ].join("\n");
+  };
+
+  const copyInstituteGlanceNames = async (row) => {
+    if(!row?.ready) return;
+    const text = buildInstituteGlanceNamesText(row);
+    try {
+      if(navigator?.clipboard?.writeText){
+        await navigator.clipboard.writeText(text);
+      }else{
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      showAdminToast(`Teacher names copied for ${safeAdminText(row.institute, "this institute")}.`);
+    }catch(error){
+      showAdminToast("Could not copy teacher names.");
+    }
+  };
+
+  const renderInstituteGlanceNamesBlock = (row, compact = false) => {
+    if(!row?.ready || row.noTeachersSignedUp) return null;
+    const { updated, pending } = getInstituteGlanceNameLists(row);
+    const maxPreview = compact ? 3 : 5;
+    const previewText = (names) => names.length
+      ? `${names.slice(0, maxPreview).join(", ")}${names.length > maxPreview ? ` +${names.length - maxPreview} more` : ""}`
+      : "None";
+    return (
+      <div style={{marginTop:10,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px",display:"grid",gap:8}}>
+        {[
+          { label:"Updated", names:updated, color:"#15803D" },
+          { label:"Not updated", names:pending, color:"#B45309" },
+        ].map(item=>(
+          <div key={`${row.institute}_${item.label}`} style={{display:"grid",gridTemplateColumns:compact ? "1fr" : "92px minmax(0,1fr)",gap:compact ? 3 : 9,alignItems:"baseline"}}>
+            <div style={{fontSize:10.5,color:item.color,fontFamily:G.mono,fontWeight:900,letterSpacing:0.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>
+              {item.label} {item.names.length}
+            </div>
+            <div style={{fontSize:12,color:G.textM,lineHeight:1.45,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {previewText(item.names)}
+            </div>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="admin-mobile-touch"
+          onClick={()=>copyInstituteGlanceNames(row)}
+          style={{
+            minHeight:34,
+            padding:"0 11px",
+            borderRadius:11,
+            border:`1px solid #C7D7F5`,
+            background:G.blueL,
+            color:G.blue,
+            fontSize:12,
+            fontWeight:850,
+            fontFamily:G.sans,
+            cursor:"pointer",
+            display:"inline-flex",
+            alignItems:"center",
+            justifyContent:"center",
+            gap:6,
+            justifySelf:compact ? "stretch" : "start",
+          }}>
+          <AppIcon icon={IconCopy} size={14} color={G.blue} />
+          Copy names
+        </button>
+      </div>
+    );
+  };
+
   const renderInstituteGlanceMobileLoadingNotice = () => renderInstituteGlanceLoadingDeck(true);
 
   const renderSharedInstituteGlanceTable = ({ maxRows = null, interactive = false } = {}) => {
@@ -13660,6 +13790,30 @@ function AdminPanelInner({user}){
                   <td style={{padding:"15px 16px",borderBottom:`1px solid ${G.border}`,verticalAlign:"top"}}>
                     {interactive ? (
                       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        <button
+                          type="button"
+                          className="admin-mobile-touch"
+                          onClick={()=>copyInstituteGlanceNames(row)}
+                          disabled={actionDisabled}
+                          style={{
+                            minHeight:34,
+                            padding:"0 11px",
+                            borderRadius:11,
+                            border:`1px solid #C7D7F5`,
+                            background:G.blueL,
+                            color:G.blue,
+                            fontSize:12,
+                            fontWeight:800,
+                            fontFamily:G.sans,
+                            cursor:actionDisabled ? "not-allowed" : "pointer",
+                            opacity:actionDisabled ? 0.65 : 1,
+                            display:"inline-flex",
+                            alignItems:"center",
+                            gap:6,
+                          }}>
+                          <AppIcon icon={IconCopy} size={14} color={G.blue} />
+                          <span>Copy names</span>
+                        </button>
                         <button
                           type="button"
                           className="admin-mobile-touch"
@@ -13829,6 +13983,7 @@ function AdminPanelInner({user}){
                         ? `${row.missingToday} teacher${row.missingToday===1?"":"s"} need follow-up. Use Centre PDF for details.`
                         : "All linked teachers are updated. Use Centre PDF for details."}
                   </div>
+                  {renderInstituteGlanceNamesBlock(row, isMobile)}
                 </>
               )}
 
@@ -15340,6 +15495,24 @@ function AdminPanelInner({user}){
           setTeachers(ts => ts.filter(t => t.uid !== uid));
           setRoles(r => { const n={...r}; delete n[uid]; return n; });
           setFullData(fd => { const n={...fd}; delete n[uid]; return n; });
+          if(instituteGlanceDataRef.current?.[uid]){
+            const nextCache = { ...instituteGlanceDataRef.current };
+            delete nextCache[uid];
+            instituteGlanceDataRef.current = nextCache;
+          }
+          scheduleInstituteGlanceReport({
+            ...instituteGlanceReportRef.current,
+            configKey:"",
+            rows:[],
+            summary:EMPTY_INSTITUTE_GLANCE_SUMMARY,
+            loading:false,
+            loaded:0,
+            total:0,
+            loadedInstitutes:0,
+            totalInstitutes:0,
+            ready:false,
+            error:"",
+          });
           setSelTeacher(null);
         } catch(e) { showAdminToast("Failed: " + e.message); }
         setDeleteBusy(false); setDeleteModal(null);
@@ -15664,6 +15837,7 @@ function AdminPanelInner({user}){
     setAdminV5BrowseMode("class");
     setAdminV5ClassSearch("");
     setAdminV5ExpandedClassKeys({});
+    setAdminV5ExpandedGroupKeys({});
     setAdminV5MobilePane(nextPane);
     warmInstitute(instituteName);
     if(focus.teacherUid) ensureFullData(focus.teacherUid);
@@ -17896,7 +18070,8 @@ function AdminPanelInner({user}){
     ];
     const activeBrowseMode = browseModes.find(item => item.key === adminV5BrowseMode) || browseModes[0];
     const classSearchKey = adminV5ClassSearch.trim().toLowerCase();
-    const allModeClasses = selectedInstitute?.classes || [];
+    const allInstituteClasses = selectedInstitute?.classes || [];
+    const allModeClasses = adminV5VisibleClasses || allInstituteClasses;
     const selectedInstituteTeacherRows = (() => {
       const map = new Map();
       (selectedInstitute?.teachers || []).forEach(teacher => {
@@ -17913,7 +18088,7 @@ function AdminPanelInner({user}){
           lastTs:teacher.lastTs || null,
         });
       });
-      allModeClasses.forEach(cls => {
+      allInstituteClasses.forEach(cls => {
         (cls.teachers || []).forEach(teacher => {
           if(!teacher?.uid) return;
           const row = map.get(teacher.uid) || {
@@ -17968,8 +18143,24 @@ function AdminPanelInner({user}){
       ].filter(Boolean).join(" ").toLowerCase();
       return haystack.includes(classSearchKey);
     };
-    const visibleModeClasses = allModeClasses.filter(matchesClassSearch);
-    const visibleModeTeachers = selectedInstituteTeacherRows.filter(matchesTeacherSearch);
+    const compareClassRowsForSort = (a, b) => {
+      if(adminV5ClassSort === "alpha") return exportTextSorter.compare(a.display || "", b.display || "");
+      if((a.activityRank ?? 9) !== (b.activityRank ?? 9)) return (a.activityRank ?? 9) - (b.activityRank ?? 9);
+      if((b.todayEntries?.length || 0) !== (a.todayEntries?.length || 0)) return (b.todayEntries?.length || 0) - (a.todayEntries?.length || 0);
+      if((b.recentEntries?.length || 0) !== (a.recentEntries?.length || 0)) return (b.recentEntries?.length || 0) - (a.recentEntries?.length || 0);
+      if((b.lastTs || 0) !== (a.lastTs || 0)) return (b.lastTs || 0) - (a.lastTs || 0);
+      if((b.teacherCount || 0) !== (a.teacherCount || 0)) return (b.teacherCount || 0) - (a.teacherCount || 0);
+      return exportTextSorter.compare(a.display || "", b.display || "");
+    };
+    const compareTeacherRowsForSort = (a, b) => {
+      if(adminV5ClassSort === "alpha") return exportTextSorter.compare(a.name || "", b.name || "");
+      if((b.todayEntries || 0) !== (a.todayEntries || 0)) return (b.todayEntries || 0) - (a.todayEntries || 0);
+      if((b.recentEntries || 0) !== (a.recentEntries || 0)) return (b.recentEntries || 0) - (a.recentEntries || 0);
+      if((b.lastTs || 0) !== (a.lastTs || 0)) return (b.lastTs || 0) - (a.lastTs || 0);
+      return exportTextSorter.compare(a.name || "", b.name || "");
+    };
+    const visibleModeClasses = allModeClasses.filter(matchesClassSearch).sort(compareClassRowsForSort);
+    const visibleModeTeachers = selectedInstituteTeacherRows.filter(matchesTeacherSearch).sort(compareTeacherRowsForSort);
     const visiblePairGroups = allModeClasses
       .map(cls => ({
         ...cls,
@@ -17980,7 +18171,45 @@ function AdminPanelInner({user}){
           lastLabel:lastEntryCaption(teacher.lastTs || null),
         }) || matchesClassSearch(cls)),
       }))
-      .filter(cls => !classSearchKey || matchesClassSearch(cls) || cls.visibleTeachers.length);
+      .filter(cls => !classSearchKey || matchesClassSearch(cls) || cls.visibleTeachers.length)
+      .sort(compareClassRowsForSort);
+    const groupClassesByTimetable = (classes = []) => {
+      if(!classes.length) return [];
+      const config = getInstituteSectionConfig(instSectionsAll, selectedInstituteName) || {};
+      const namedGroups = (config.gradeGroups || [])
+        .map((group, index) => {
+          const sections = uniqueSectionNames(group?.sections || []);
+          return {
+            key:`group_${group?.id || normaliseSectionKey(group?.label || `group_${index}`)}`,
+            label:safeAdminText(group?.label, `Group ${index + 1}`),
+            sectionKeys:new Set(sections.map(normaliseSectionKey).filter(Boolean)),
+            rows:[],
+          };
+        })
+        .filter(group => group.sectionKeys.size);
+      if(!namedGroups.length){
+        return [{ key:"all_sections", label:"All sections", rows:classes }];
+      }
+      const matchedClassKeys = new Set();
+      namedGroups.forEach(group => {
+        group.rows = classes.filter(cls => {
+          const classKey = normaliseSectionKey(cls.raw || cls.display || cls.key);
+          const matched = group.sectionKeys.has(classKey);
+          if(matched) matchedClassKeys.add(cls.key);
+          return matched;
+        });
+      });
+      const groups = namedGroups
+        .filter(group => group.rows.length)
+        .map(group => ({ key:group.key, label:group.label, rows:group.rows }));
+      const ungrouped = classes.filter(cls => !matchedClassKeys.has(cls.key));
+      if(ungrouped.length){
+        groups.push({ key:"other_sections", label:"Other sections", rows:ungrouped });
+      }
+      return groups;
+    };
+    const visibleClassSectionGroups = groupClassesByTimetable(visibleModeClasses);
+    const visiblePairSectionGroups = groupClassesByTimetable(visiblePairGroups);
     const adminV5SubjectText = (subjects = []) => subjects.length
       ? `${subjects.slice(0, 2).join(", ")}${subjects.length > 2 ? ` +${subjects.length - 2}` : ""}`
       : "No subject";
@@ -18411,6 +18640,7 @@ function AdminPanelInner({user}){
         setAdminV5ClassFilter("all");
         setAdminV5ClassSearch("");
         setAdminV5TimelineLimit(28);
+        setAdminV5ExpandedGroupKeys({});
         if(mode === "class"){
           setAdminV5TeacherUid("");
           setAdminV5TimelineScope(adminV5ClassKey ? "class" : "institute");
@@ -18460,6 +18690,86 @@ function AdminPanelInner({user}){
           })}
         </div>
       );
+      const renderSortControls = () => (
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12}}>
+          <div style={{fontSize:10.5,fontFamily:G.mono,fontWeight:900,letterSpacing:0.7,textTransform:"uppercase",color:G.textL}}>Sort</div>
+          <div style={{display:"inline-flex",background:"#F8FAFC",border:panelBorder,borderRadius:999,padding:3,gap:3}}>
+            {[
+              { key:"recent", label:"Recent" },
+              { key:"alpha", label:"A-Z" },
+            ].map(option=>{
+              const active = adminV5ClassSort === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={()=>setAdminV5ClassSort(option.key)}
+                  style={{
+                    height:28,
+                    minWidth:64,
+                    padding:"0 10px",
+                    borderRadius:999,
+                    border:"none",
+                    background:active ? "#111827" : "transparent",
+                    color:active ? "#FFFFFF" : G.textM,
+                    fontSize:11.5,
+                    fontWeight:900,
+                    fontFamily:G.sans,
+                    cursor:"pointer",
+                  }}>
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+      const renderSectionGroup = (group, index, renderRows, countLabel = "classes") => {
+        const selectedInside = (group.rows || []).some(row => row.key === selectedClassKey);
+        const defaultExpanded = !!classSearchKey || selectedInside || index === 0;
+        const storedKey = `${adminV5BrowseMode}:${group.key}`;
+        const hasStored = Object.prototype.hasOwnProperty.call(adminV5ExpandedGroupKeys, storedKey);
+        const expanded = hasStored ? !!adminV5ExpandedGroupKeys[storedKey] : defaultExpanded;
+        return (
+          <div key={group.key} style={{marginBottom:13}}>
+            <button
+              type="button"
+              onClick={()=>{
+                setAdminV5ExpandedGroupKeys(prev => ({
+                  ...prev,
+                  [storedKey]:!(Object.prototype.hasOwnProperty.call(prev, storedKey) ? prev[storedKey] : defaultExpanded),
+                }));
+              }}
+              style={{
+                width:"100%",
+                border:"none",
+                background:"transparent",
+                padding:"5px 2px 8px",
+                display:"flex",
+                alignItems:"center",
+                justifyContent:"space-between",
+                gap:10,
+                cursor:"pointer",
+                fontFamily:G.sans,
+              }}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:8,minWidth:0}}>
+                <span style={{fontSize:12,color:"#94A3B8",fontWeight:900,width:14}}>{expanded ? "▾" : "▸"}</span>
+                <span style={{fontSize:12.5,fontWeight:950,color:G.textS,fontFamily:G.mono,letterSpacing:0.45,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                  {group.label}
+                </span>
+              </span>
+              <span style={{fontSize:11.5,fontWeight:850,color:G.textL,whiteSpace:"nowrap"}}>
+                {group.rows.length} {countLabel}
+              </span>
+            </button>
+            {expanded&&(
+              <div>
+                {renderRows(group.rows)}
+              </div>
+            )}
+          </div>
+        );
+      };
       const renderClassCard = (cls) => {
         const active = adminV5BrowseMode === "class" && cls.key === selectedClassKey && activeTimelineScope === "class";
         const tone = getSectionTone(cls.display);
@@ -18627,14 +18937,19 @@ function AdminPanelInner({user}){
           <div style={{marginTop:13}}>
             {renderSearchInput(adminV5ClassSearch, setAdminV5ClassSearch, "Search class or teacher", true)}
           </div>
+          {renderSortControls()}
         </div>
         <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px"}}>
           <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 11px"}}>
             {adminV5BrowseMode === "class" ? "Classes" : adminV5BrowseMode === "teacher" ? "Teachers" : "Class + Teacher"}
           </div>
-          {adminV5BrowseMode === "class"&&visibleModeClasses.map(renderClassCard)}
+          {adminV5BrowseMode === "class"&&visibleClassSectionGroups.map((group,index)=>
+            renderSectionGroup(group, index, rows => rows.map(renderClassCard))
+          )}
           {adminV5BrowseMode === "teacher"&&visibleModeTeachers.map(renderTeacherCard)}
-          {adminV5BrowseMode === "pair"&&visiblePairGroups.map(renderPairGroup)}
+          {adminV5BrowseMode === "pair"&&visiblePairSectionGroups.map((group,index)=>
+            renderSectionGroup(group, index, rows => rows.map((cls, classIndex)=>renderPairGroup(cls, classIndex)))
+          )}
           {selectedInstitute && !selectedInstitute.classes.length&&(
             <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
               No loaded classes for this institute yet.
