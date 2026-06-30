@@ -18182,27 +18182,46 @@ function AdminPanelInner({user}){
                     : adminV5ClassFilter === "last_week"
                       ? teacher.lastWeekEntries || 0
                       : teacher.recentEntries || 0;
-                const chipSub = periodCount
-                  ? `${periodCount} ${period === "today" ? "today" : timelinePeriodLabel.toLowerCase()}`
-                  : teacher.lastTs
-                    ? lastEntryCaption(teacher.lastTs)
-                    : "No entries";
                 const subjectCaption = teacher.subjectList?.length
                   ? `${teacher.subjectList.slice(0,2).join(", ")}${teacher.subjectList.length > 2 ? ` +${teacher.subjectList.length - 2}` : ""}`
-                  : "";
+                  : "No subject";
+                const chipPeriodShort = period === "today"
+                  ? "today"
+                  : period === "yesterday"
+                    ? "yesterday"
+                    : adminV5ClassFilter === "last_week"
+                      ? "last week"
+                      : period === "week"
+                        ? "this week"
+                        : period === "month"
+                          ? "this month"
+                          : period === "range"
+                            ? "range"
+                            : timelinePeriodLabel.toLowerCase();
+                const activityLabel = periodCount
+                  ? `${periodCount} ${chipPeriodShort}`
+                  : teacher.lastTs
+                    ? daysAgo(teacher.lastTs) || shortDateLabel(teacher.lastTs)
+                    : "No logs";
+                const activityTitle = periodCount
+                  ? `${periodCount} entr${periodCount === 1 ? "y" : "ies"} in ${chipPeriodShort}`
+                  : teacher.lastTs
+                    ? `Last entry ${activityLabel}`
+                    : "No loaded entries";
                 return (
                   <button
                     key={teacher.uid}
                     type="button"
                     onClick={()=>selectAdminV5Teacher(teacher.uid)}
+                    title={`${teacher.name} · ${subjectCaption} · ${activityTitle}`}
                     style={{
-                      minHeight:44,
-                      maxWidth:190,
+                      minHeight:48,
+                      maxWidth:250,
                       border:`1px solid ${active ? "#172554" : G.border}`,
-                      borderRadius:999,
+                      borderRadius:22,
                       background:active ? "#111827" : "#FFFFFF",
                       color:active ? "#FFFFFF" : G.text,
-                      padding:"5px 11px 5px 6px",
+                      padding:"6px 8px 6px 7px",
                       display:"inline-flex",
                       alignItems:"center",
                       gap:8,
@@ -18211,14 +18230,31 @@ function AdminPanelInner({user}){
                       boxShadow:"none",
                       minWidth:0,
                     }}>
-                    <span style={{width:32,height:32,borderRadius:999,background:active ? "rgba(255,255,255,0.14)" : "#EEF4FF",color:active ? "#FFFFFF" : G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,fontFamily:G.mono,flexShrink:0}}>
+                    <span style={{width:34,height:34,borderRadius:999,background:active ? "rgba(255,255,255,0.14)" : "#EEF4FF",color:active ? "#FFFFFF" : G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,fontFamily:G.mono,flexShrink:0}}>
                       {adminV5Initials(teacher.name)}
                     </span>
-                    <span style={{minWidth:0,textAlign:"left"}}>
+                    <span style={{minWidth:0,textAlign:"left",flex:"1 1 auto"}}>
                       <span style={{display:"block",fontSize:12.5,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{teacher.name}</span>
                       <span style={{display:"block",fontSize:10.5,fontWeight:750,color:active ? "rgba(255,255,255,0.64)" : G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                        {[subjectCaption, chipSub].filter(Boolean).join(" · ")}
+                        {subjectCaption}
                       </span>
+                    </span>
+                    <span style={{
+                      flexShrink:0,
+                      borderRadius:999,
+                      border:`1px solid ${active ? "rgba(255,255,255,0.12)" : periodCount ? "#C7D7F5" : "#E2E8F0"}`,
+                      background:active ? "rgba(255,255,255,0.10)" : periodCount ? "#EAF2FF" : "#F8FAFC",
+                      color:active ? "rgba(255,255,255,0.82)" : periodCount ? G.blue : G.textM,
+                      padding:"4px 7px",
+                      fontSize:10,
+                      fontWeight:900,
+                      fontFamily:G.mono,
+                      whiteSpace:"nowrap",
+                      maxWidth:86,
+                      overflow:"hidden",
+                      textOverflow:"ellipsis",
+                    }}>
+                      {activityLabel}
                     </span>
                   </button>
                 );
