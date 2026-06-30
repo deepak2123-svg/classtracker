@@ -11628,7 +11628,6 @@ function AdminPanelInner({user}){
 
   React.useEffect(()=>{
     if(view!=="manage" || manageTab!=="teachers") return;
-    const searchKey = manageTeacherSearch.trim().toLowerCase();
     const hasTeachingIndex = teacher => {
       if(!teacher?.uid) return false;
       const data = fullDataRef.current[teacher.uid] || fullData[teacher.uid] || {};
@@ -11637,31 +11636,14 @@ function AdminPanelInner({user}){
         || (Array.isArray(teacher.assignedSubjectIds) && teacher.assignedSubjectIds.length > 0)
         || (Array.isArray(data.classes) && data.classes.length > 0);
     };
-    const matchesHydrationScope = teacher => {
-      if(roles[teacher?.uid]==="admin" && !hasTeachingIndex(teacher) && fullDataRef.current[teacher.uid]) return false;
-      if(manageScopeInstitute && !teacherBelongsToInstitute(teacher, manageScopeInstitute)) return false;
-      if(manageTeacherInstituteFilter){
-        const instituteList = getTeacherInstituteList(teacher);
-        if(!instituteList.some(inst=>sameInstituteName(inst, manageTeacherInstituteFilter))) return false;
-      }
-      if(!searchKey) return true;
-      const data = fullDataRef.current[teacher.uid] || fullData[teacher.uid] || {};
-      const classText = (data.classes || [])
-        .map(cls=>[cls?.section, cls?.subject, cls?.institute].filter(Boolean).join(" "))
-        .join(" ")
-        .toLowerCase();
-      const haystack = [
-        getTeacherDisplayName(teacher),
-        getTeacherEmail(teacher),
-        getTeacherInstituteList(teacher).join(" "),
-        (teacher.subjects || []).join(" "),
-        classText,
-      ].join(" ").toLowerCase();
-      return haystack.includes(searchKey);
+    const shouldHydrateTeacher = teacher => {
+      if(!teacher?.uid) return false;
+      if(roles[teacher.uid] !== "admin") return true;
+      return hasTeachingIndex(teacher) || !fullDataRef.current[teacher.uid];
     };
     const targetUids = teachers
       .filter(teacher=>teacher?.uid)
-      .filter(matchesHydrationScope)
+      .filter(shouldHydrateTeacher)
       .map(teacher=>teacher.uid)
       .filter(uid=>!fullDataRef.current[uid] && !fullDataRequestRef.current[uid]);
     let cancelled = false;
@@ -11678,15 +11660,10 @@ function AdminPanelInner({user}){
     manageTab,
     manageScopeInstitute,
     manageTeacherInstituteFilter,
-    manageTeacherSearch,
     teachers,
     roles,
     fullData,
     ensureFullData,
-    teacherBelongsToInstitute,
-    getTeacherInstituteList,
-    getTeacherDisplayName,
-    getTeacherEmail,
   ]);
 
   const clearTeacherRename = React.useCallback(() => {
@@ -17793,43 +17770,72 @@ function AdminPanelInner({user}){
         return (primaryA - primaryB) || exportTextSorter.compare(a.institute, b.institute);
       });
     };
+    const hasLoadedTeacherData = teacher => !!teacher?.uid && Object.prototype.hasOwnProperty.call(fullData, teacher.uid);
+    const loadedTeacherClasses = data => Array.isArray(data?.classes) ? data.classes : [];
+    const loadedClassInstitutes = data => uniqueLabels(loadedTeacherClasses(data).map(cls=>cls?.institute));
+    const effectiveTeacherInstitutes = (teacher, data, detailsReady) => {
+      const classInstitutes = loadedClassInstitutes(data);
+      if(classInstitutes.length) return classInstitutes;
+      return detailsReady ? [] : getTeacherInstituteList(teacher);
+    };
+    const teacherHasLoadedClassInInstitute = (data, instituteName) => {
+      if(!instituteName) return true;
+      return loadedTeacherClasses(data).some(cls=>sameInstituteName(cls?.institute, instituteName));
+    };
+    const teacherMayBelongToInstitute = (teacher, data, detailsReady, instituteName) => {
+      if(!instituteName) return true;
+      if(detailsReady) return teacherHasLoadedClassInInstitute(data, instituteName);
+      return teacherBelongsToInstitute(teacher, instituteName);
+    };
     const isTeachingAccount = teacher => {
       if(!teacher?.uid) return false;
       if(roles[teacher.uid] !== "admin") return true;
       const data = fullData[teacher.uid] || {};
+      const detailsReady = hasLoadedTeacherData(teacher);
+      const classes = loadedTeacherClasses(data);
+      if(detailsReady) return classes.length > 0;
       return Number(teacher.classCount || 0) > 0
         || teacherSubjectNames(teacher).length > 0
-        || (Array.isArray(data.classes) && data.classes.length > 0);
+        || classes.length > 0;
     };
     const selectedInstituteFilter = manageScopeInstitute || manageTeacherInstituteFilter;
     const teachingAccounts = teachers.filter(isTeachingAccount);
-    const scopedTeachingAccounts = manageScopeInstitute
-      ? teachingAccounts.filter(teacher=>teacherBelongsToInstitute(teacher, manageScopeInstitute))
+    const scopedTeachingAccounts = selectedInstituteFilter
+      ? teachingAccounts.filter(teacher=>{
+          const data = fullData[teacher.uid] || {};
+          const detailsReady = hasLoadedTeacherData(teacher);
+          return detailsReady && teacherHasLoadedClassInInstitute(data, selectedInstituteFilter);
+        })
       : teachingAccounts;
     const teacherInstituteOptions = !manageScopeInstitute
       ? institutes
           .map(inst=>({
             inst,
-            count:teachingAccounts.filter(teacher=>teacherBelongsToInstitute(teacher, inst)).length,
+            count:teachingAccounts.filter(teacher=>{
+              const data = fullData[teacher.uid] || {};
+              return teacherMayBelongToInstitute(teacher, data, hasLoadedTeacherData(teacher), inst);
+            }).length,
           }))
           .filter(item=>item.count>0)
       : [];
     const teacherRowsBase = scopedTeachingAccounts.map(teacher=>{
       const data = fullData[teacher.uid] || {};
-      const detailsReady = !!fullData[teacher.uid];
-      const allClasses = Array.isArray(data.classes) ? data.classes : [];
+      const detailsReady = hasLoadedTeacherData(teacher);
+      const allClasses = loadedTeacherClasses(data);
       const scopedClasses = selectedInstituteFilter
         ? allClasses.filter(cls=>sameInstituteName(cls?.institute, selectedInstituteFilter))
         : allClasses;
-      const instituteList = getTeacherInstituteList(teacher);
+      if(selectedInstituteFilter && detailsReady && scopedClasses.length === 0) return null;
+      const instituteList = effectiveTeacherInstitutes(teacher, data, detailsReady);
       const fallbackInstitutes = selectedInstituteFilter
         ? [selectedInstituteFilter]
-        : (instituteList.length ? instituteList : ["No institute assigned"]);
-      const primaryInstitute = selectedInstituteFilter || instituteList[0] || "No institute assigned";
+        : (instituteList.length ? instituteList : [detailsReady ? "No class institute" : "Checking institute"]);
+      const primaryInstitute = selectedInstituteFilter || instituteList[0] || (detailsReady ? "No class institute" : "Checking institute");
       const groups = buildTeacherGroups(teacher, data, detailsReady ? scopedClasses : [], fallbackInstitutes, primaryInstitute);
+      const assignedSubjects = teacherSubjectNames(teacher);
       const allSubjects = detailsReady
-        ? uniqueLabels(groups.flatMap(group=>group.subjects))
-        : teacherSubjectNames(teacher);
+        ? uniqueLabels([...groups.flatMap(group=>group.subjects), ...assignedSubjects])
+        : assignedSubjects;
       const allSections = uniqueLabels(groups.flatMap(group=>group.sections));
       const classCount = detailsReady ? scopedClasses.length : Number(teacher.classCount || 0);
       const weekMinutes = groups.reduce((sum, group)=>sum + (group.weekMinutes || 0), 0);
@@ -17865,7 +17871,7 @@ function AdminPanelInner({user}){
         isMe:teacher.uid===user.uid,
         isAdminTeacher,
       };
-    });
+    }).filter(Boolean);
     const teacherSearchKey = manageTeacherSearch.trim().toLowerCase();
     const matchesTeacherRow = row => {
       if(manageTeacherInstituteFilter && !row.instituteGroups.some(group=>sameInstituteName(group.institute, manageTeacherInstituteFilter))) return false;
@@ -17895,8 +17901,16 @@ function AdminPanelInner({user}){
           || exportTextSorter.compare(a.name, b.name);
       });
     const detailsReadyCount = teacherRows.filter(row=>row.detailsReady).length;
-    const emptyTeacherMessage = scopedTeachingAccounts.length===0
-      ? (manageScopeInstitute ? "No teachers are connected to this institute yet." : "No teachers found yet.")
+    const scopedTeacherLoadingCount = selectedInstituteFilter
+      ? teachingAccounts.filter(teacher=>{
+          const data = fullData[teacher.uid] || {};
+          return !hasLoadedTeacherData(teacher) && teacherMayBelongToInstitute(teacher, data, false, selectedInstituteFilter);
+        }).length
+      : 0;
+    const emptyTeacherMessage = teacherRowsBase.length===0
+      ? (scopedTeacherLoadingCount > 0
+        ? "Checking teacher assignments for this institute..."
+        : (manageScopeInstitute ? "No teachers are connected to this institute yet." : "No teachers found yet."))
       : "No teachers match your search.";
     const cardShell = {
       background:"#FFFFFF",
@@ -18300,9 +18314,9 @@ function AdminPanelInner({user}){
         </div>
         <div style={{padding:"11px 14px",borderBottom:`1px solid ${G.border}`}}>
           <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.6,marginBottom:7}}>Subjects</div>
-          {renderLimitedChips(row.subjects.length ? row.subjects : ["No subject"], subjectChip, 4)}
+          {renderLimitedChips(row.subjects.length ? row.subjects : [row.detailsReady ? "No subject" : "Checking"], subjectChip, 4)}
           <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.6,margin:"10px 0 7px"}}>Sections</div>
-          {row.sections.length ? renderLimitedChips(row.sections, sectionChip, 5) : <span style={{fontSize:12,color:G.textL}}>Details pending</span>}
+          {row.sections.length ? renderLimitedChips(row.sections, sectionChip, 5) : <span style={{fontSize:12,color:G.textL}}>{row.detailsReady ? "No sections" : "Checking classes"}</span>}
         </div>
         <div style={{padding:"10px 12px",display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
           {renderTeacherActions(row)}
@@ -18468,8 +18482,8 @@ function AdminPanelInner({user}){
           renderDesktopCells:row=>[
             <div key="teacher">{renderTeacherName(row)}</div>,
             <div key="institutes">{renderInstituteSummary(row)}</div>,
-            <div key="subjects">{renderLimitedChips(row.subjects.length ? row.subjects : ["No subject"], subjectChip, 3)}</div>,
-            <div key="sections">{row.sections.length ? renderLimitedChips(row.sections, sectionChip, 4) : <span style={{fontSize:12,color:G.textL}}>Details pending</span>}</div>,
+            <div key="subjects">{renderLimitedChips(row.subjects.length ? row.subjects : [row.detailsReady ? "No subject" : "Checking"], subjectChip, 3)}</div>,
+            <div key="sections">{row.sections.length ? renderLimitedChips(row.sections, sectionChip, 4) : <span style={{fontSize:12,color:G.textL}}>{row.detailsReady ? "No sections" : "Checking classes"}</span>}</div>,
             <div key="classes">{renderSplitMetric(row, "classes")}</div>,
             <div key="hours">{renderSplitMetric(row, "hours")}</div>,
             <div key="status">{statusPill(row)}</div>,
