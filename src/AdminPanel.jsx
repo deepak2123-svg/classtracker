@@ -10944,6 +10944,9 @@ function AdminPanelInner({user}){
   const [adminV5TimelineLimit, setAdminV5TimelineLimit] = useState(28);
   const [adminV5InstituteSearch, setAdminV5InstituteSearch] = useState("");
   const [adminV5ClassFilter, setAdminV5ClassFilter] = useState("all"); // all | today | yesterday | last_week | period
+  const [adminV5BrowseMode, setAdminV5BrowseMode] = useState("class"); // class | teacher | pair
+  const [adminV5ClassSearch, setAdminV5ClassSearch] = useState("");
+  const [adminV5ExpandedClassKeys, setAdminV5ExpandedClassKeys] = useState({});
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
@@ -14398,17 +14401,10 @@ function AdminPanelInner({user}){
       return exportTextSorter.compare(a.display || "", b.display || "");
     });
     const focusClass = rankedClasses[0] || null;
-    const focusTeacher = focusClass
-      ? [...(focusClass.teachers || [])].sort((a,b)=>{
-        if((b.todayEntries || 0) !== (a.todayEntries || 0)) return (b.todayEntries || 0) - (a.todayEntries || 0);
-        if((b.lastTs || 0) !== (a.lastTs || 0)) return (b.lastTs || 0) - (a.lastTs || 0);
-        return exportTextSorter.compare(a.name || "", b.name || "");
-      })[0]
-      : null;
     return {
       classKey:focusClass?.key || "",
-      teacherUid:focusTeacher?.uid || "",
-      scope:focusTeacher?.uid ? "teacher" : focusClass?.key ? "class" : "institute",
+      teacherUid:"",
+      scope:focusClass?.key ? "class" : "institute",
     };
   }, [adminV5Model.institutes]);
 
@@ -15380,6 +15376,9 @@ function AdminPanelInner({user}){
     setAdminV5TeacherUid(focus.teacherUid);
     setAdminV5TimelineScope(focus.scope);
     setAdminV5ClassFilter("all");
+    setAdminV5BrowseMode("class");
+    setAdminV5ClassSearch("");
+    setAdminV5ExpandedClassKeys({});
     setAdminV5MobilePane(nextPane);
     warmInstitute(instituteName);
     if(focus.teacherUid) ensureFullData(focus.teacherUid);
@@ -15389,12 +15388,31 @@ function AdminPanelInner({user}){
     setAdminV5ClassKey(classKey || "");
     setAdminV5TeacherUid("");
     setAdminV5TimelineScope("class");
+    setAdminV5BrowseMode("class");
     setAdminV5MobilePane("timeline");
   }, []);
 
   const selectAdminV5Teacher = React.useCallback((teacherUid) => {
     setAdminV5TeacherUid(teacherUid || "");
     setAdminV5TimelineScope(teacherUid ? "teacher" : "class");
+    setAdminV5MobilePane("timeline");
+    if(teacherUid) ensureFullData(teacherUid);
+  }, [ensureFullData]);
+
+  const selectAdminV5TeacherOnly = React.useCallback((teacherUid) => {
+    setAdminV5ClassKey("");
+    setAdminV5TeacherUid(teacherUid || "");
+    setAdminV5TimelineScope(teacherUid ? "teacher" : "institute");
+    setAdminV5BrowseMode("teacher");
+    setAdminV5MobilePane("timeline");
+    if(teacherUid) ensureFullData(teacherUid);
+  }, [ensureFullData]);
+
+  const selectAdminV5ClassTeacherPair = React.useCallback((classKey, teacherUid) => {
+    setAdminV5ClassKey(classKey || "");
+    setAdminV5TeacherUid(teacherUid || "");
+    setAdminV5TimelineScope(teacherUid ? "teacher" : "class");
+    setAdminV5BrowseMode("pair");
     setAdminV5MobilePane("timeline");
     if(teacherUid) ensureFullData(teacherUid);
   }, [ensureFullData]);
@@ -17493,8 +17511,9 @@ function AdminPanelInner({user}){
     const selectedTeacherOtherEntries = activeTimelineScope === "teacher" && selectedClass
       ? rawTimelineSourceEntries.filter(entry => !entryMatchesSelectedClass(entry))
       : [];
-    const timelineSourceEntries = activeTimelineScope === "teacher" && selectedClass
-      ? [...selectedTeacherClassEntries, ...selectedTeacherOtherEntries]
+    const pairTimelineActive = activeTimelineScope === "teacher" && !!selectedClass && adminV5BrowseMode === "pair";
+    const timelineSourceEntries = pairTimelineActive
+      ? selectedTeacherClassEntries
       : rawTimelineSourceEntries;
     const timelineTotal = timelineSourceEntries.length;
     const timelineEntries = timelineSourceEntries.slice(0, adminV5TimelineLimit);
@@ -17513,26 +17532,25 @@ function AdminPanelInner({user}){
     }, []);
     const timelinePeriodLabel = overviewPeriodText;
     const timelineTitle = activeTimelineScope === "teacher"
-      ? selectedTeacher?.name || "Teacher timeline"
+      ? pairTimelineActive
+        ? `${selectedClass?.display || "Class"} · ${selectedTeacher?.name || "Teacher"}`
+        : selectedTeacher?.name || "Teacher timeline"
       : activeTimelineScope === "class"
         ? selectedClass?.display || "Class timeline"
         : selectedInstituteName || "Admin dashboard";
     const timelineSubtitle = activeTimelineScope === "teacher"
-      ? selectedClass
-        ? `${selectedInstituteName} · ${selectedClass.display} first, then other loaded classes`
-        : `${selectedInstituteName} · all loaded classes for this teacher`
+      ? pairTimelineActive
+        ? `${selectedInstituteName} · only this teacher in this class`
+        : `${selectedInstituteName} · all sections for this teacher`
         : activeTimelineScope === "class"
           ? `${selectedInstituteName} · all teachers in this class`
           : selectedInstitute
             ? `${selectedInstituteName} · all loaded class timelines`
             : "Select an institute to begin";
-    const metricActiveCount = selectedClass ? selectedClassActiveCount : selectedInstitute?.activeCount || 0;
-    const metricLoggedToday = selectedClass ? selectedClassLoggedToday : selectedInstitute?.loggedCount || 0;
-    const metricPending = selectedClass ? selectedClassPendingCount : selectedInstitute?.pendingCount || 0;
-    const metricUpdatedPct = metricActiveCount ? Math.round((metricLoggedToday / metricActiveCount) * 100) : 0;
     const teacherClassNotice = activeTimelineScope === "teacher"
       && selectedClass
       && selectedTeacher
+      && !pairTimelineActive
       && !selectedTeacherClassEntries.length
       && !!selectedTeacherOtherEntries.length;
     const shellBg = "#F4F7FB";
@@ -17563,13 +17581,101 @@ function AdminPanelInner({user}){
         { key:"unloaded", label:"Not opened yet", rows:instituteUnloadedRows },
       ].filter(group => group.rows.length)
       : [{ key:"overview", label:"Choose an institute to load", rows:adminV5VisibleInstitutes }];
-    const classFilterItems = [
-      { key:"all", label:"All", count:selectedInstitute?.classes?.length || 0 },
-      { key:"today", label:"Today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
-      { key:"yesterday", label:"Yesterday", count:(selectedInstitute?.classes || []).filter(item => item.yesterdayEntries.length > 0).length },
-      { key:"last_week", label:"Last week", count:(selectedInstitute?.classes || []).filter(item => item.lastWeekEntries.length > 0).length },
-      ...(period === "today" || adminV5ClassFilter === "yesterday" || adminV5ClassFilter === "last_week" ? [] : [{ key:"period", label:timelinePeriodLabel, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length }]),
+    const browseModes = [
+      { key:"class", label:"By Class", icon:IconSchool, hint:"Pick a class to see every teacher entry in that class, latest first." },
+      { key:"teacher", label:"By Teacher", icon:IconUser, hint:"Pick a teacher to see their entries across every section they teach, latest first." },
+      { key:"pair", label:"Class + Teacher", icon:IconUsersGroup, hint:"Pick a class + teacher pair to see only that teacher's entries in that one class, latest first." },
     ];
+    const activeBrowseMode = browseModes.find(item => item.key === adminV5BrowseMode) || browseModes[0];
+    const classSearchKey = adminV5ClassSearch.trim().toLowerCase();
+    const allModeClasses = selectedInstitute?.classes || [];
+    const selectedInstituteTeacherRows = (() => {
+      const map = new Map();
+      (selectedInstitute?.teachers || []).forEach(teacher => {
+        if(!teacher?.uid) return;
+        map.set(teacher.uid, {
+          uid:teacher.uid,
+          name:teacher.name,
+          subjects:new Set(),
+          classes:new Map(),
+          todayEntries:teacher.todayEntries?.length || teacher.todayCount || 0,
+          yesterdayEntries:teacher.yesterdayEntries?.length || 0,
+          lastWeekEntries:teacher.lastWeekEntries?.length || 0,
+          recentEntries:teacher.recentEntries?.length || 0,
+          lastTs:teacher.lastTs || null,
+        });
+      });
+      allModeClasses.forEach(cls => {
+        (cls.teachers || []).forEach(teacher => {
+          if(!teacher?.uid) return;
+          const row = map.get(teacher.uid) || {
+            uid:teacher.uid,
+            name:teacher.name,
+            subjects:new Set(),
+            classes:new Map(),
+            todayEntries:0,
+            yesterdayEntries:0,
+            lastWeekEntries:0,
+            recentEntries:0,
+            lastTs:null,
+          };
+          (Array.isArray(teacher.subjects) && teacher.subjects.length ? teacher.subjects : [teacher.subject].filter(Boolean))
+            .forEach(subject => row.subjects.add(subject));
+          row.classes.set(cls.key, cls.display);
+          row.lastTs = Math.max(row.lastTs || 0, teacher.lastTs || 0) || row.lastTs || null;
+          map.set(teacher.uid, row);
+        });
+      });
+      return Array.from(map.values()).map(teacher => ({
+        ...teacher,
+        subjectList:Array.from(teacher.subjects || []).sort((a,b)=>exportTextSorter.compare(a || "", b || "")),
+        classList:Array.from(teacher.classes?.values?.() || []).sort((a,b)=>exportTextSorter.compare(a || "", b || "")),
+        lastLabel:lastEntryCaption(teacher.lastTs || null),
+      })).sort((a,b)=>{
+        if((b.todayEntries || 0) !== (a.todayEntries || 0)) return (b.todayEntries || 0) - (a.todayEntries || 0);
+        if((b.recentEntries || 0) !== (a.recentEntries || 0)) return (b.recentEntries || 0) - (a.recentEntries || 0);
+        if((b.lastTs || 0) !== (a.lastTs || 0)) return (b.lastTs || 0) - (a.lastTs || 0);
+        return exportTextSorter.compare(a.name || "", b.name || "");
+      });
+    })();
+    const selectedTeacherSummary = selectedInstituteTeacherRows.find(item => item.uid === adminV5TeacherUid) || null;
+    const pairTeacherSummary = selectedClassTeacherRows.find(item => item.uid === adminV5TeacherUid) || null;
+    const matchesClassSearch = (cls) => {
+      if(!classSearchKey) return true;
+      const haystack = [
+        cls.display,
+        cls.lastLabel,
+        ...(cls.subjects || []),
+        ...(cls.teachers || []).map(teacher => teacher.name),
+      ].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(classSearchKey);
+    };
+    const matchesTeacherSearch = (teacher) => {
+      if(!classSearchKey) return true;
+      const haystack = [
+        teacher.name,
+        teacher.lastLabel,
+        ...(teacher.subjectList || []),
+        ...(teacher.classList || []),
+      ].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(classSearchKey);
+    };
+    const visibleModeClasses = allModeClasses.filter(matchesClassSearch);
+    const visibleModeTeachers = selectedInstituteTeacherRows.filter(matchesTeacherSearch);
+    const visiblePairGroups = allModeClasses
+      .map(cls => ({
+        ...cls,
+        visibleTeachers:(cls.teachers || []).filter(teacher => matchesTeacherSearch({
+          ...teacher,
+          subjectList:Array.isArray(teacher.subjects) ? teacher.subjects : [teacher.subject].filter(Boolean),
+          classList:[cls.display],
+          lastLabel:lastEntryCaption(teacher.lastTs || null),
+        }) || matchesClassSearch(cls)),
+      }))
+      .filter(cls => !classSearchKey || matchesClassSearch(cls) || cls.visibleTeachers.length);
+    const adminV5SubjectText = (subjects = []) => subjects.length
+      ? `${subjects.slice(0, 2).join(", ")}${subjects.length > 2 ? ` +${subjects.length - 2}` : ""}`
+      : "No subject";
     const actionButton = (tone = "light") => ({
       height:38,
       borderRadius:8,
@@ -17608,45 +17714,6 @@ function AdminPanelInner({user}){
         </div>
       );
     };
-    const filterChip = ({ chipKey, active, label, count, onClick, compact = false }) => (
-      <button
-        key={chipKey}
-        type="button"
-        onClick={onClick}
-        style={{
-          minHeight:compact ? 30 : 32,
-          borderRadius:999,
-          border:`1px solid ${active ? G.navy : G.border}`,
-          background:active ? G.navy : "#FFFFFF",
-          color:active ? "#FFFFFF" : G.textS,
-          padding:compact ? "0 9px" : "0 10px",
-          display:"inline-flex",
-          alignItems:"center",
-          gap:7,
-          fontSize:compact ? 11.5 : 12,
-          fontWeight:850,
-          fontFamily:G.sans,
-          cursor:"pointer",
-          whiteSpace:"nowrap",
-          boxShadow:active && !reduceEffects ? G.shadowSm : "none",
-        }}>
-        <span>{label}</span>
-        <span style={{
-          minWidth:18,
-          height:18,
-          borderRadius:999,
-          padding:"0 5px",
-          display:"inline-flex",
-          alignItems:"center",
-          justifyContent:"center",
-          background:active ? "rgba(255,255,255,0.16)" : G.bg,
-          color:active ? "#FFFFFF" : G.textL,
-          fontSize:10.5,
-          fontWeight:900,
-          fontFamily:G.mono,
-        }}>{count}</span>
-      </button>
-    );
     const renderOverlays = () => (
       <>
         {feedbackOpen&&(
@@ -18002,100 +18069,270 @@ function AdminPanelInner({user}){
           </section>
         );
       }
+      const periodNameShort = period === "today"
+        ? "today"
+        : period === "yesterday"
+          ? "yesterday"
+          : adminV5ClassFilter === "last_week"
+            ? "last week"
+            : period === "week"
+              ? "this week"
+              : period === "month"
+                ? "this month"
+                : period === "range"
+                  ? "range"
+                  : timelinePeriodLabel.toLowerCase();
+      const rowPeriodCount = (row) => period === "today"
+        ? row.todayEntries || 0
+        : period === "yesterday"
+          ? row.yesterdayEntries || 0
+          : adminV5ClassFilter === "last_week"
+            ? row.lastWeekEntries || 0
+            : row.recentEntries || 0;
+      const entryCountText = (count) => count
+        ? `${count} ${count === 1 ? "entry" : "entries"} ${periodNameShort}`
+        : "no entries";
+      const subjectTextFor = (subjects = []) => subjects.length
+        ? `${subjects.slice(0, 2).join(", ")}${subjects.length > 2 ? ` +${subjects.length - 2}` : ""}`
+        : "No subject";
+      const handleBrowseModeChange = (mode) => {
+        setAdminV5BrowseMode(mode);
+        setAdminV5ClassFilter("all");
+        setAdminV5ClassSearch("");
+        setAdminV5TimelineLimit(28);
+        if(mode === "class"){
+          setAdminV5TeacherUid("");
+          setAdminV5TimelineScope(adminV5ClassKey ? "class" : "institute");
+          return;
+        }
+        if(mode === "teacher"){
+          setAdminV5ClassKey("");
+          setAdminV5TimelineScope(adminV5TeacherUid ? "teacher" : "institute");
+          return;
+        }
+        setAdminV5TimelineScope(adminV5TeacherUid ? "teacher" : adminV5ClassKey ? "class" : "institute");
+      };
+      const renderModeTabs = () => (
+        <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:4,display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:4,marginTop:15}}>
+          {browseModes.map(mode=>{
+            const active = adminV5BrowseMode === mode.key;
+            return (
+              <button
+                key={mode.key}
+                type="button"
+                onClick={()=>handleBrowseModeChange(mode.key)}
+                style={{
+                  minHeight:44,
+                  borderRadius:9,
+                  border:"none",
+                  background:active ? "#111827" : "transparent",
+                  color:active ? "#FFFFFF" : G.textM,
+                  display:"inline-flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  gap:7,
+                  fontSize:12.5,
+                  fontWeight:900,
+                  fontFamily:G.sans,
+                  cursor:"pointer",
+                  whiteSpace:"nowrap",
+                }}>
+                <AppIcon icon={mode.icon} size={15} color={active ? "#FFFFFF" : G.textL} />
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+      const renderClassCard = (cls) => {
+        const active = adminV5BrowseMode === "class" && cls.key === selectedClassKey && activeTimelineScope === "class";
+        const tone = getSectionTone(cls.display);
+        const count = rowPeriodCount(cls);
+        const classActivityText = `${cls.teacherCount} teacher${cls.teacherCount===1?"":"s"} · ${entryCountText(count)} · ${cls.lastLabel}`;
+        return (
+          <button
+            key={cls.key}
+            type="button"
+            onClick={()=>selectAdminV5Class(cls.key)}
+            style={{
+              width:"100%",
+              border:`1px solid ${active ? G.blue : G.border}`,
+              borderRadius:10,
+              background:active ? "#EFF6FF" : "#FFFFFF",
+              padding:"12px 13px",
+              marginBottom:9,
+              textAlign:"left",
+              cursor:"pointer",
+              fontFamily:G.sans,
+              boxShadow:"none",
+            }}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:18,fontWeight:950,color:tone.ink || G.text,fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</div>
+                <div style={{fontSize:12,color:G.textM,lineHeight:1.4,marginTop:5}}>{classActivityText}</div>
+              </div>
+              <span style={{background:count ? "#EAF2FF" : "#F8FAFC",border:`1px solid ${count ? "#C7D7F5" : G.border}`,color:count ? G.blue : G.textL,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                {count || 0}
+              </span>
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
+              {cls.subjects.slice(0,3).map(subject=>(
+                <span key={subject} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 8px",fontSize:11,color:G.textS,fontWeight:750}}>{subject}</span>
+              ))}
+              {cls.subjects.length>3&&<span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 8px",fontSize:11,color:G.textL,fontFamily:G.mono}}>+{cls.subjects.length - 3}</span>}
+            </div>
+          </button>
+        );
+      };
+      const renderTeacherCard = (teacher) => {
+        const active = adminV5BrowseMode === "teacher" && activeTimelineScope === "teacher" && adminV5TeacherUid === teacher.uid && !selectedClass;
+        const count = rowPeriodCount(teacher);
+        const subjectCaption = subjectTextFor(teacher.subjectList || []);
+        return (
+          <button
+            key={teacher.uid}
+            type="button"
+            onClick={()=>selectAdminV5TeacherOnly(teacher.uid)}
+            style={{
+              width:"100%",
+              border:`1px solid ${active ? G.blue : G.border}`,
+              borderRadius:10,
+              background:active ? "#EFF6FF" : "#FFFFFF",
+              padding:"12px 13px",
+              marginBottom:9,
+              textAlign:"left",
+              cursor:"pointer",
+              fontFamily:G.sans,
+              boxShadow:"none",
+              display:"flex",
+              alignItems:"center",
+              gap:11,
+            }}>
+            <span style={{width:40,height:40,borderRadius:999,background:"#EEF4FF",color:G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:950,fontFamily:G.mono,flexShrink:0}}>
+              {adminV5Initials(teacher.name)}
+            </span>
+            <span style={{minWidth:0,flex:1}}>
+              <span style={{display:"block",fontSize:16,fontWeight:950,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{teacher.name}</span>
+              <span style={{display:"block",fontSize:12,color:G.textM,lineHeight:1.35,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                {subjectCaption} · {entryCountText(count)} · {teacher.classList.length} section{teacher.classList.length===1?"":"s"}
+              </span>
+            </span>
+          </button>
+        );
+      };
+      const renderPairGroup = (cls, index) => {
+        const defaultExpanded = cls.key === selectedClassKey || index === 0;
+        const hasStored = Object.prototype.hasOwnProperty.call(adminV5ExpandedClassKeys, cls.key);
+        const expanded = hasStored ? !!adminV5ExpandedClassKeys[cls.key] : defaultExpanded;
+        const visibleTeachers = cls.visibleTeachers || [];
+        return (
+          <div key={cls.key} style={{marginBottom:14}}>
+            <button
+              type="button"
+              onClick={()=>{
+                setAdminV5ExpandedClassKeys(prev=>({
+                  ...prev,
+                  [cls.key]:!(Object.prototype.hasOwnProperty.call(prev, cls.key) ? prev[cls.key] : defaultExpanded),
+                }));
+              }}
+              style={{width:"100%",border:"none",background:"transparent",padding:"6px 2px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,cursor:"pointer",fontFamily:G.sans}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:8,minWidth:0}}>
+                <span style={{fontSize:12,color:"#94A3B8",fontWeight:900,width:14}}>{expanded ? "▾" : "▸"}</span>
+                <span style={{fontSize:17,fontWeight:950,color:"#6D28D9",fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</span>
+              </span>
+              <span style={{fontSize:12.5,fontWeight:850,color:G.textL,whiteSpace:"nowrap"}}>
+                {visibleTeachers.length} teacher{visibleTeachers.length===1?"":"s"}
+              </span>
+            </button>
+            {expanded&&(
+              <div style={{display:"flex",flexDirection:"column",gap:9}}>
+                {visibleTeachers.map(teacher=>{
+                  const active = adminV5BrowseMode === "pair" && cls.key === selectedClassKey && adminV5TeacherUid === teacher.uid;
+                  const subjectList = Array.isArray(teacher.subjects) && teacher.subjects.length ? teacher.subjects : [teacher.subject].filter(Boolean);
+                  const count = rowPeriodCount(teacher);
+                  return (
+                    <button
+                      key={`${cls.key}_${teacher.uid}`}
+                      type="button"
+                      onClick={()=>selectAdminV5ClassTeacherPair(cls.key, teacher.uid)}
+                      style={{
+                        width:"100%",
+                        border:`1px solid ${active ? G.blue : G.border}`,
+                        borderRadius:10,
+                        background:active ? "#EFF6FF" : "#FFFFFF",
+                        padding:"12px 13px",
+                        textAlign:"left",
+                        cursor:"pointer",
+                        fontFamily:G.sans,
+                        boxShadow:"none",
+                        display:"flex",
+                        alignItems:"center",
+                        gap:11,
+                      }}>
+                      <span style={{width:40,height:40,borderRadius:999,background:"#EEF4FF",color:G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:950,fontFamily:G.mono,flexShrink:0}}>
+                        {adminV5Initials(teacher.name)}
+                      </span>
+                      <span style={{minWidth:0,flex:1}}>
+                        <span style={{display:"block",fontSize:15.5,fontWeight:950,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                          {teacher.name} <span style={{fontSize:12,color:G.textL,fontFamily:G.sans,fontWeight:850}}>in</span> <span style={{background:"#F3E8FF",color:"#6D28D9",borderRadius:5,padding:"2px 7px",fontSize:12,fontWeight:950,fontFamily:G.sans}}>{cls.display}</span>
+                        </span>
+                        <span style={{display:"block",fontSize:12,color:G.textM,lineHeight:1.35,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                          {subjectTextFor(subjectList)} · {entryCountText(count)} · {teacher.lastTs ? `last logged ${daysAgo(teacher.lastTs) || shortDateLabel(teacher.lastTs)}` : "never logged"}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      };
       return (
         <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
-          <div style={{padding:"16px 14px 12px",borderBottom:panelBorder,background:"#FFFFFF"}}>
+          <div style={{padding:"18px 16px 14px",borderBottom:panelBorder,background:"#FFFFFF"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
             <div style={{minWidth:0}}>
               <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Institute</div>
-              <div style={{fontSize:21,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.05,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedInstituteName || "No institute"}</div>
-              {selectedInstitute&&<div style={{fontSize:12,color:G.textM,marginTop:6,lineHeight:1.4}}>{selectedInstitute.loggedCount}/{selectedInstitute.activeCount} updated today · {selectedInstitute.status.pct}% · {selectedInstitute.pendingCount} pending</div>}
+              <div style={{fontSize:22,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.05,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedInstituteName || "No institute"}</div>
+              {selectedInstitute&&<div style={{fontSize:13,color:G.textM,marginTop:6,lineHeight:1.4}}>{selectedInstitute.loggedCount}/{selectedInstitute.activeCount} updated today · {selectedInstitute.status.pct}% · {selectedInstitute.pendingCount} pending</div>}
             </div>
             {selectedInstitute&&(
-              <span style={{background:selectedInstitute.status.bg,border:`1px solid ${selectedInstitute.status.border}`,color:selectedInstitute.status.accent,borderRadius:999,padding:"6px 9px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+              <span style={{background:selectedInstitute.status.bg,border:`1px solid ${selectedInstitute.status.border}`,color:selectedInstitute.status.accent,borderRadius:999,padding:"7px 12px",fontSize:12,fontWeight:950,fontFamily:G.mono,whiteSpace:"nowrap",textTransform:"uppercase"}}>
                 {selectedInstitute.status.pct}% updated
               </span>
             )}
           </div>
           {renderWarmupBanner(false)}
-          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:12}}>
-            {classFilterItems.map(item=>filterChip({
-              chipKey:item.key,
-              active:adminV5ClassFilter === item.key,
-              label:item.label,
-              count:item.count,
-              compact:true,
-              onClick:()=>handleAdminV5ClassFilterChange(item.key),
-            }))}
+          {renderModeTabs()}
+          <div style={{fontSize:13,color:"#8EA0BC",lineHeight:1.5,marginTop:13}}>
+            {activeBrowseMode.hint}
+          </div>
+          <div style={{marginTop:13}}>
+            {renderSearchInput(adminV5ClassSearch, setAdminV5ClassSearch, "Search class or teacher", true)}
           </div>
         </div>
         <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px"}}>
-          <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 9px"}}>Classes</div>
-          {adminV5VisibleClasses.map(cls=>{
-            const active = cls.key === selectedClassKey && (activeTimelineScope === "class" || activeTimelineScope === "teacher");
-            const tone = getSectionTone(cls.display);
-            const periodEntryText = adminV5ClassFilter === "today"
-              ? `${cls.todayEntries.length} today`
-              : adminV5ClassFilter === "yesterday"
-                ? `${cls.yesterdayEntries.length} yesterday`
-                : adminV5ClassFilter === "last_week"
-                  ? `${cls.lastWeekEntries.length} last week`
-                  : period === "today"
-                    ? `${cls.todayEntries.length} today`
-                    : `${cls.recentEntries.length} in ${timelinePeriodLabel.toLowerCase()}`;
-            const classActivityText = `${cls.teacherCount} teacher${cls.teacherCount===1?"":"s"} · ${periodEntryText} · Last: ${cls.lastLabel}`;
-            const classFreshLabel = adminV5ClassFilter === "last_week"
-              ? "Last week"
-              : cls.activityLabel || cls.lastLabel;
-            const freshToneKey = adminV5ClassFilter === "last_week" ? "last_week" : cls.activityKey;
-            const freshTone = freshToneKey === "today"
-              ? { bg:"#ECFDF3", border:"#A7F3D0", color:"#15803D" }
-              : freshToneKey === "yesterday"
-                ? { bg:"#EFF6FF", border:"#BFDBFE", color:G.blue }
-                : { bg:"#FFF7ED", border:"#FED7AA", color:G.amber };
-            return (
-              <button
-                key={cls.key}
-                type="button"
-                onClick={()=>selectAdminV5Class(cls.key)}
-                style={{
-                  width:"100%",
-                  border:`1px solid ${active ? "#BFDBFE" : cls.cold ? "#FED7AA" : G.border}`,
-                  borderRadius:8,
-                  background:active ? "#EFF6FF" : "#FFFFFF",
-                  padding:"11px 12px",
-                  marginBottom:8,
-                  textAlign:"left",
-                  cursor:"pointer",
-                  fontFamily:G.sans,
-                  boxShadow:"none",
-                }}>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:17,fontWeight:900,color:tone.ink || G.text,fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</div>
-                    <div style={{fontSize:11.5,color:G.textM,lineHeight:1.4,marginTop:5}}>{classActivityText}</div>
-                  </div>
-                  <span style={{background:freshTone.bg,border:`1px solid ${freshTone.border}`,color:freshTone.color,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>{classFreshLabel}</span>
-                </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
-                  {cls.subjects.slice(0,3).map(subject=>(
-                    <span key={subject} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 8px",fontSize:11,color:G.textS,fontWeight:750}}>{subject}</span>
-                  ))}
-                  {cls.subjects.length>3&&<span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 8px",fontSize:11,color:G.textL,fontFamily:G.mono}}>+{cls.subjects.length - 3}</span>}
-                </div>
-              </button>
-            );
-          })}
+          <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 11px"}}>
+            {adminV5BrowseMode === "class" ? "Classes" : adminV5BrowseMode === "teacher" ? "Teachers" : "Class + Teacher"}
+          </div>
+          {adminV5BrowseMode === "class"&&visibleModeClasses.map(renderClassCard)}
+          {adminV5BrowseMode === "teacher"&&visibleModeTeachers.map(renderTeacherCard)}
+          {adminV5BrowseMode === "pair"&&visiblePairGroups.map(renderPairGroup)}
           {selectedInstitute && !selectedInstitute.classes.length&&(
             <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
               No loaded classes for this institute yet.
             </div>
           )}
-          {selectedInstitute && !!selectedInstitute.classes.length && !adminV5VisibleClasses.length&&(
+          {selectedInstitute && !!selectedInstitute.classes.length && (
+            (adminV5BrowseMode === "class" && !visibleModeClasses.length)
+            || (adminV5BrowseMode === "teacher" && !visibleModeTeachers.length)
+            || (adminV5BrowseMode === "pair" && !visiblePairGroups.length)
+          )&&(
             <div style={{border:`1px solid ${G.border}`,borderRadius:8,padding:"18px 14px",textAlign:"center",color:G.textM,fontSize:13}}>
-              <div>No classes match this focus.</div>
-              <button type="button" onClick={()=>setAdminV5ClassFilter("all")} style={{...actionButton("light"),height:32,marginTop:10,boxShadow:"none"}}>
-                Clear focus
+              <div>No results match this search.</div>
+              <button type="button" onClick={()=>setAdminV5ClassSearch("")} style={{...actionButton("light"),height:32,marginTop:10,boxShadow:"none"}}>
+                Clear search
               </button>
             </div>
           )}
@@ -18133,25 +18370,76 @@ function AdminPanelInner({user}){
           </main>
         );
       }
+      const latestEntry = timelineSourceEntries[0] || null;
+      const latestDateLabel = latestEntry?.dateKey === todayKey()
+        ? "Today"
+        : latestEntry?.dateKey === addDaysToDateKey(todayKey(), -1)
+          ? "Yesterday"
+          : latestEntry?.dateKey
+            ? formatAdminDateKey(latestEntry.dateKey, { month:"short", day:"numeric" })
+            : "";
+      const latestTimeLabel = latestEntry?.timeStart ? fmt12(latestEntry.timeStart).replace(/\s?(AM|PM)$/i, "") : "";
+      const lastLoggedLabel = latestEntry
+        ? `${latestDateLabel}${latestTimeLabel ? `, ${latestTimeLabel}` : ""}`
+        : "No logs";
+      const gapLabel = latestEntry?.dateKey === todayKey()
+        ? "Same day"
+        : latestEntry?.dateKey
+          ? daysAgo(new Date(`${latestEntry.dateKey}T00:00:00`).getTime()) || latestDateLabel
+          : "No gap";
+      const timelineHeaderSubject = pairTimelineActive
+        ? adminV5SubjectText(pairTeacherSummary?.subjectList || [])
+        : activeTimelineScope === "teacher"
+          ? adminV5SubjectText(selectedTeacherSummary?.subjectList || [])
+          : activeTimelineScope === "class"
+            ? `${selectedClassTeacherRows.length} teacher${selectedClassTeacherRows.length === 1 ? "" : "s"}`
+            : `${selectedInstitute?.classes?.length || 0} classes`;
+      const timelineHeaderInitials = activeTimelineScope === "teacher"
+        ? adminV5Initials(selectedTeacher?.name)
+        : activeTimelineScope === "class"
+          ? String(selectedClass?.display || "CL").slice(0, 2).toUpperCase()
+          : "IN";
+      const timelineCrumb = pairTimelineActive
+        ? [selectedClass?.display, selectedTeacher?.name].filter(Boolean)
+        : activeTimelineScope === "teacher"
+          ? ["By Teacher", selectedTeacher?.name].filter(Boolean)
+          : activeTimelineScope === "class"
+            ? ["By Class", selectedClass?.display].filter(Boolean)
+            : ["Institute", selectedInstituteName].filter(Boolean);
       return (
         <main style={{background:shellBg,minWidth:0,height:isMobile?"auto":"100%",display:"flex",flexDirection:"column",overflow:isMobile?"visible":"hidden"}}>
-        <div style={{padding:isMobile ? "14px 14px 12px" : "16px 20px 13px",background:"#FFFFFF",borderBottom:panelBorder}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
-            <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Timeline</div>
-              <div style={{fontSize:isMobile ? 24 : 28,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7}}>
-                {timelineTitle}
-              </div>
-              <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:6}}>
-                {timelineSubtitle} · {timelinePeriodLabel}
-              </div>
-            </div>
+        <div style={{padding:isMobile ? "16px 16px 13px" : "20px 24px 16px",background:"#F8FAFC",borderBottom:panelBorder}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,marginBottom:8}}>
+            {timelineCrumb.map((item,index)=>(
+              <React.Fragment key={`${item}_${index}`}>
+                {index > 0&&<span style={{fontSize:12,color:G.textL,fontWeight:900}}>›</span>}
+                <span style={{fontSize:13,color:index === 0 ? G.blue : G.text,fontWeight:950,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:index === 0 ? 160 : 260}}>
+                  {item}
+                </span>
+              </React.Fragment>
+            ))}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",gap:9,marginTop:15}}>
-            {metricTile(selectedClass ? "Class updated" : "Updated today", `${metricLoggedToday}/${metricActiveCount}`, metricUpdatedPct >= 70 ? "green" : metricUpdatedPct < 25 ? "red" : "amber")}
-            {metricTile("Timeline logs", timelineTotal > timelineEntries.length ? `${timelineEntries.length}/${timelineTotal}` : timelineEntries.length, timelineEntries.length ? "blue" : "amber")}
-            {metricTile("Shown time", formatDurationShort(timelineMinutes), timelineMinutes ? "green" : "amber")}
-            {metricTile("Pending", metricPending, metricPending ? "amber" : "green")}
+          <div style={{fontSize:11,fontFamily:G.mono,fontWeight:950,letterSpacing:1.2,textTransform:"uppercase",color:G.textL}}>Timeline</div>
+          <div style={{fontSize:isMobile ? 28 : 34,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.02,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {timelineTitle}
+          </div>
+          <div style={{fontSize:14,color:G.textS,lineHeight:1.4,marginTop:8,fontWeight:850}}>
+            {selectedInstituteName}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "68px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",gap:isMobile ? 10 : 0,alignItems:"center",background:"#EAF2FF",border:"1px solid #DFEAFF",borderRadius:12,padding:isMobile ? "12px" : "14px 18px",marginTop:18}}>
+            <span style={{width:44,height:44,borderRadius:999,background:"#FFFFFF",color:G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:950,fontFamily:G.mono}}>
+              {timelineHeaderInitials}
+            </span>
+            {[
+              ["Last logged", lastLoggedLabel],
+              ["Gap", gapLabel],
+              [activeTimelineScope === "class" ? "Scope" : "Subject", timelineHeaderSubject],
+            ].map(([label,value],index)=>(
+              <div key={label} style={{borderLeft:!isMobile && index > 0 ? "1px solid #C7D7F5" : "none",paddingLeft:!isMobile && index > 0 ? 18 : 0,minWidth:0}}>
+                <div style={{fontSize:11,color:G.blue,fontFamily:G.mono,fontWeight:950,letterSpacing:0.5,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
+                <div style={{fontSize:16,color:G.text,fontWeight:950,fontFamily:G.display,lineHeight:1.1,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{value}</div>
+              </div>
+            ))}
           </div>
           <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:isMobile ? "9px" : "10px",marginTop:13}}>
             <PeriodSelector
@@ -18165,107 +18453,6 @@ function AdminPanelInner({user}){
               onChangeRangeEnd={handleRangeEndChange}
             />
           </div>
-          {selectedClass&&(
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:13,alignItems:"center"}}>
-              <button type="button" onClick={()=>selectAdminV5Teacher("")} style={{...actionButton(activeTimelineScope === "class" && !adminV5TeacherUid ? "dark" : "light"),height:42,padding:"0 13px"}}>
-                All teachers
-                <span style={{minWidth:20,height:20,borderRadius:999,display:"inline-flex",alignItems:"center",justifyContent:"center",background:activeTimelineScope === "class" && !adminV5TeacherUid ? "rgba(255,255,255,0.18)" : G.bg,color:activeTimelineScope === "class" && !adminV5TeacherUid ? "#FFFFFF" : G.textL,fontSize:11,fontWeight:900,fontFamily:G.mono}}>
-                  {selectedClassTeacherRows.length}
-                </span>
-              </button>
-              {selectedClassTeacherRows.slice(0,10).map(teacher=>{
-                const active = activeTimelineScope === "teacher" && adminV5TeacherUid === teacher.uid;
-                const periodCount = period === "today"
-                  ? teacher.todayEntries || 0
-                  : period === "yesterday"
-                    ? teacher.yesterdayEntries || 0
-                    : adminV5ClassFilter === "last_week"
-                      ? teacher.lastWeekEntries || 0
-                      : teacher.recentEntries || 0;
-                const subjectCaption = teacher.subjectList?.length
-                  ? `${teacher.subjectList.slice(0,2).join(", ")}${teacher.subjectList.length > 2 ? ` +${teacher.subjectList.length - 2}` : ""}`
-                  : "No subject";
-                const chipPeriodShort = period === "today"
-                  ? "today"
-                  : period === "yesterday"
-                    ? "yesterday"
-                    : adminV5ClassFilter === "last_week"
-                      ? "last week"
-                      : period === "week"
-                        ? "this week"
-                        : period === "month"
-                          ? "this month"
-                          : period === "range"
-                            ? "range"
-                            : timelinePeriodLabel.toLowerCase();
-                const activityLabel = periodCount
-                  ? `${periodCount} ${chipPeriodShort}`
-                  : teacher.lastTs
-                    ? daysAgo(teacher.lastTs) || shortDateLabel(teacher.lastTs)
-                    : "No logs";
-                const activityTitle = periodCount
-                  ? `${periodCount} entr${periodCount === 1 ? "y" : "ies"} in ${chipPeriodShort}`
-                  : teacher.lastTs
-                    ? `Last entry ${activityLabel}`
-                    : "No loaded entries";
-                return (
-                  <button
-                    key={teacher.uid}
-                    type="button"
-                    onClick={()=>selectAdminV5Teacher(teacher.uid)}
-                    title={`${teacher.name} · ${subjectCaption} · ${activityTitle}`}
-                    style={{
-                      minHeight:48,
-                      maxWidth:250,
-                      border:`1px solid ${active ? "#172554" : G.border}`,
-                      borderRadius:22,
-                      background:active ? "#111827" : "#FFFFFF",
-                      color:active ? "#FFFFFF" : G.text,
-                      padding:"6px 8px 6px 7px",
-                      display:"inline-flex",
-                      alignItems:"center",
-                      gap:8,
-                      cursor:"pointer",
-                      fontFamily:G.sans,
-                      boxShadow:"none",
-                      minWidth:0,
-                    }}>
-                    <span style={{width:34,height:34,borderRadius:999,background:active ? "rgba(255,255,255,0.14)" : "#EEF4FF",color:active ? "#FFFFFF" : G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,fontFamily:G.mono,flexShrink:0}}>
-                      {adminV5Initials(teacher.name)}
-                    </span>
-                    <span style={{minWidth:0,textAlign:"left",flex:"1 1 auto"}}>
-                      <span style={{display:"block",fontSize:12.5,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{teacher.name}</span>
-                      <span style={{display:"block",fontSize:10.5,fontWeight:750,color:active ? "rgba(255,255,255,0.64)" : G.textL,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                        {subjectCaption}
-                      </span>
-                    </span>
-                    <span style={{
-                      flexShrink:0,
-                      borderRadius:999,
-                      border:`1px solid ${active ? "rgba(255,255,255,0.12)" : periodCount ? "#C7D7F5" : "#E2E8F0"}`,
-                      background:active ? "rgba(255,255,255,0.10)" : periodCount ? "#EAF2FF" : "#F8FAFC",
-                      color:active ? "rgba(255,255,255,0.82)" : periodCount ? G.blue : G.textM,
-                      padding:"4px 7px",
-                      fontSize:10,
-                      fontWeight:900,
-                      fontFamily:G.mono,
-                      whiteSpace:"nowrap",
-                      maxWidth:86,
-                      overflow:"hidden",
-                      textOverflow:"ellipsis",
-                    }}>
-                      {activityLabel}
-                    </span>
-                  </button>
-                );
-              })}
-              {selectedClassTeacherRows.length > 10&&(
-                <span style={{height:34,borderRadius:999,border:`1px solid ${G.border}`,background:"#FFFFFF",display:"inline-flex",alignItems:"center",padding:"0 10px",fontSize:11.5,fontWeight:900,color:G.textL,fontFamily:G.mono}}>
-                  +{selectedClassTeacherRows.length - 10}
-                </span>
-              )}
-            </div>
-          )}
         </div>
         <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:isMobile ? "12px 14px 22px" : "16px 20px 22px"}}>
           {loading&&(
