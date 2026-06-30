@@ -10916,6 +10916,10 @@ function AdminPanelInner({user}){
     p2:{ min:160, max:380, collapsed:82, default:205 },
     p3:{ min:112, max:360, collapsed:76, default:200 },
   }),[]);
+  const ADMIN_V5_PANEL_LIMITS = React.useMemo(()=>({
+    institutes:{ min:170, max:430, default:300 },
+    classes:{ min:220, max:560, default:360 },
+  }),[]);
   const [teachers,    setTeachers]    = useState([]);
   const [fullData,    setFullData]    = useState({});
   const [roles,       setRoles]       = useState({});
@@ -10947,6 +10951,11 @@ function AdminPanelInner({user}){
   const [adminV5BrowseMode, setAdminV5BrowseMode] = useState("class"); // class | teacher | pair
   const [adminV5ClassSearch, setAdminV5ClassSearch] = useState("");
   const [adminV5ExpandedClassKeys, setAdminV5ExpandedClassKeys] = useState({});
+  const [adminV5PanelW, setAdminV5PanelW] = useState(()=>({
+    institutes:ADMIN_V5_PANEL_LIMITS.institutes.default,
+    classes:ADMIN_V5_PANEL_LIMITS.classes.default,
+  }));
+  const [adminV5PanelDragging, setAdminV5PanelDragging] = useState(false);
   const [exportOpen,   setExportOpen]   = useState(false);
   const [statusImageBusy, setStatusImageBusy] = useState(false);
   const [instituteGlanceOpen, setInstituteGlanceOpen] = useState(false);
@@ -12869,6 +12878,57 @@ function AdminPanelInner({user}){
     }
     setPanelCollapsed(prev=>({...prev,[key]:willCollapse}));
   }, [PANEL_LIMITS, panelCollapsed, panelW, clampPanelWidth]);
+
+  const clampAdminV5PanelWidth = React.useCallback((key, nextWidth) => {
+    const limits = ADMIN_V5_PANEL_LIMITS[key];
+    if(!limits) return nextWidth;
+    return Math.max(limits.min, Math.min(limits.max, nextWidth));
+  }, [ADMIN_V5_PANEL_LIMITS]);
+
+  const resetAdminV5PanelWidth = React.useCallback((key) => {
+    const limits = ADMIN_V5_PANEL_LIMITS[key];
+    if(!limits) return;
+    setAdminV5PanelW(widths => ({
+      ...widths,
+      [key]:limits.default,
+    }));
+  }, [ADMIN_V5_PANEL_LIMITS]);
+
+  const beginAdminV5PanelResize = React.useCallback((key, event) => {
+    if(isMobile) return;
+    const limits = ADMIN_V5_PANEL_LIMITS[key];
+    if(!limits) return;
+    event.preventDefault();
+    const target = event.currentTarget;
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startWidth = adminV5PanelW[key] || limits.default;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    setAdminV5PanelDragging(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    target?.setPointerCapture?.(pointerId);
+    const move = moveEvent => {
+      const nextWidth = clampAdminV5PanelWidth(key, startWidth + moveEvent.clientX - startX);
+      setAdminV5PanelW(widths => widths[key] === nextWidth ? widths : {
+        ...widths,
+        [key]:nextWidth,
+      });
+    };
+    const end = () => {
+      target?.releasePointerCapture?.(pointerId);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      setAdminV5PanelDragging(false);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  }, [ADMIN_V5_PANEL_LIMITS, adminV5PanelW, clampAdminV5PanelWidth, isMobile]);
 
   const instituteGlanceReadyCount = Math.max(0, instituteGlanceReport.loadedInstitutes || 0);
   const instituteGlanceEffectiveRange = getInstituteGlancePeriodRange();
@@ -17582,9 +17642,9 @@ function AdminPanelInner({user}){
       ].filter(group => group.rows.length)
       : [{ key:"overview", label:"Choose an institute to load", rows:adminV5VisibleInstitutes }];
     const browseModes = [
-      { key:"class", label:"By Class", icon:IconSchool, hint:"Pick a class to see every teacher entry in that class, latest first." },
-      { key:"teacher", label:"By Teacher", icon:IconUser, hint:"Pick a teacher to see their entries across every section they teach, latest first." },
-      { key:"pair", label:"Class + Teacher", icon:IconUsersGroup, hint:"Pick a class + teacher pair to see only that teacher's entries in that one class, latest first." },
+      { key:"class", label:"By Class", shortLabel:"Class", icon:IconSchool, hint:"Pick a class to see every teacher entry in that class, latest first." },
+      { key:"teacher", label:"By Teacher", shortLabel:"Teacher", icon:IconUser, hint:"Pick a teacher to see their entries across every section they teach, latest first." },
+      { key:"pair", label:"Class + Teacher", shortLabel:"Pair", icon:IconUsersGroup, hint:"Pick a class + teacher pair to see only that teacher's entries in that one class, latest first." },
     ];
     const activeBrowseMode = browseModes.find(item => item.key === adminV5BrowseMode) || browseModes[0];
     const classSearchKey = adminV5ClassSearch.trim().toLowerCase();
@@ -18113,16 +18173,20 @@ function AdminPanelInner({user}){
         setAdminV5TimelineScope(adminV5TeacherUid ? "teacher" : adminV5ClassKey ? "class" : "institute");
       };
       const renderModeTabs = () => (
-        <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:4,display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:4,marginTop:15}}>
+        <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:4,display:"flex",flexWrap:"wrap",gap:4,marginTop:15}}>
           {browseModes.map(mode=>{
             const active = adminV5BrowseMode === mode.key;
             return (
               <button
                 key={mode.key}
                 type="button"
+                title={mode.label}
                 onClick={()=>handleBrowseModeChange(mode.key)}
                 style={{
+                  flex:"1 1 92px",
+                  minWidth:0,
                   minHeight:44,
+                  padding:"0 10px",
                   borderRadius:9,
                   border:"none",
                   background:active ? "#111827" : "transparent",
@@ -18136,9 +18200,10 @@ function AdminPanelInner({user}){
                   fontFamily:G.sans,
                   cursor:"pointer",
                   whiteSpace:"nowrap",
+                  overflow:"hidden",
                 }}>
                 <AppIcon icon={mode.icon} size={15} color={active ? "#FFFFFF" : G.textL} />
-                {mode.label}
+                <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{mode.shortLabel || mode.label}</span>
               </button>
             );
           })}
@@ -18603,6 +18668,36 @@ function AdminPanelInner({user}){
         </main>
       );
     };
+    const renderAdminV5PanelResizeHandle = (key) => (
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        title="Drag to resize this panel. Double-click to reset."
+        onPointerDown={event=>beginAdminV5PanelResize(key, event)}
+        onDoubleClick={()=>resetAdminV5PanelWidth(key)}
+        style={{
+          width:10,
+          minWidth:10,
+          cursor:"col-resize",
+          background:adminV5PanelDragging ? "#EAF2FF" : "#F8FAFC",
+          borderRight:panelBorder,
+          borderLeft:"1px solid rgba(148,163,184,0.16)",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          touchAction:"none",
+          zIndex:5,
+          transition:reduceEffects ? "none" : "background 0.15s ease",
+        }}>
+        <span style={{
+          width:2,
+          height:46,
+          borderRadius:999,
+          background:adminV5PanelDragging ? G.blue : "rgba(148,163,184,0.56)",
+          boxShadow:adminV5PanelDragging ? "0 0 0 3px rgba(29,78,216,0.10)" : "none",
+        }} />
+      </div>
+    );
     const renderMobileDashboard = () => (
       <div style={{minHeight:"100svh",background:shellBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {renderOverlays()}
@@ -18648,10 +18743,12 @@ function AdminPanelInner({user}){
       <div style={{height:"100svh",background:shellBg,fontFamily:G.sans,display:"grid",gridTemplateRows:"46px minmax(0,1fr)",overflow:"hidden"}}>
         {renderOverlays()}
         {renderTopBar()}
-        <div style={{minHeight:0,display:"grid",gridTemplateColumns:"48px minmax(236px,252px) minmax(260px,292px) minmax(0,1fr)",overflow:"hidden"}}>
+        <div style={{minHeight:0,display:"grid",gridTemplateColumns:`48px ${adminV5PanelW.institutes}px 10px ${adminV5PanelW.classes}px 10px minmax(0,1fr)`,overflow:"hidden",transition:adminV5PanelDragging || reduceEffects ? "none" : "grid-template-columns 0.18s ease"}}>
           {renderRail(false, false)}
           {renderInstituteDrawer()}
+          {renderAdminV5PanelResizeHandle("institutes")}
           {renderClassPanel()}
+          {renderAdminV5PanelResizeHandle("classes")}
           {renderTimelinePanel()}
         </div>
       </div>
