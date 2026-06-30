@@ -840,7 +840,16 @@ function formatExportPdfTime(start,end){
   return fmt12(start || end || "");
 }
 function normaliseSectionKey(value){
-  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+  const text = String(value || "");
+  const normalised = typeof text.normalize === "function" ? text.normalize("NFKC") : text;
+  return normalised
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\s*-\s*/g, "-")
+    .toLowerCase();
 }
 function getInstituteSectionNames(instData){
   return [...new Set(
@@ -14200,17 +14209,31 @@ function AdminPanelInner({user}){
             lastDateKey:"",
           };
           if(subjectLabel) bucket.subjects.add(subjectLabel);
-          bucket.teachers.push({
-            uid,
-            name:teacherName,
-            classId:cls.id,
-            subject:subjectLabel,
-            todayEntries:todayEntries.length,
-            yesterdayEntries:yesterdayEntries.length,
-            lastWeekEntries:lastWeekEntries.length,
-            recentEntries:recentEntries.length,
-            lastTs:classLastTs || null,
-          });
+          const existingBucketTeacher = bucket.teachers.find(item => item.uid === uid);
+          if(existingBucketTeacher){
+            const subjectSet = new Set(existingBucketTeacher.subjects || []);
+            if(subjectLabel) subjectSet.add(subjectLabel);
+            existingBucketTeacher.subjects = Array.from(subjectSet).sort((a,b)=>exportTextSorter.compare(a || "", b || ""));
+            existingBucketTeacher.subject = existingBucketTeacher.subjects.slice(0, 2).join(", ");
+            existingBucketTeacher.todayEntries += todayEntries.length;
+            existingBucketTeacher.yesterdayEntries += yesterdayEntries.length;
+            existingBucketTeacher.lastWeekEntries += lastWeekEntries.length;
+            existingBucketTeacher.recentEntries += recentEntries.length;
+            existingBucketTeacher.lastTs = Math.max(existingBucketTeacher.lastTs || 0, classLastTs || 0) || null;
+          }else{
+            bucket.teachers.push({
+              uid,
+              name:teacherName,
+              classId:cls.id,
+              subject:subjectLabel,
+              subjects:subjectLabel ? [subjectLabel] : [],
+              todayEntries:todayEntries.length,
+              yesterdayEntries:yesterdayEntries.length,
+              lastWeekEntries:lastWeekEntries.length,
+              recentEntries:recentEntries.length,
+              lastTs:classLastTs || null,
+            });
+          }
           bucket.todayEntries.push(...todayEntries);
           bucket.yesterdayEntries.push(...yesterdayEntries);
           bucket.lastWeekEntries.push(...lastWeekEntries);
@@ -17430,7 +17453,10 @@ function AdminPanelInner({user}){
         recentEntries:0,
         lastTs:null,
       };
-      if(teacher.subject) existing.subjects.add(teacher.subject);
+      const teacherSubjects = Array.isArray(teacher.subjects) && teacher.subjects.length
+        ? teacher.subjects
+        : [teacher.subject].filter(Boolean);
+      teacherSubjects.forEach(subject => existing.subjects.add(subject));
       existing.todayEntries += teacher.todayEntries || 0;
       existing.yesterdayEntries += teacher.yesterdayEntries || 0;
       existing.lastWeekEntries += teacher.lastWeekEntries || 0;
