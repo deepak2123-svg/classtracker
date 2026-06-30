@@ -379,25 +379,27 @@ async function rebuildInstituteDateStats(instituteName, dateKey, context = null)
 
   let activeTeachers = 0;
   const loggedTeachers = new Set();
+  const teachingAdminTeachers = new Set();
   const classKeys = new Set();
   const noteRefs = [];
   const noteMeta = [];
 
   statsContext.teachers.forEach(teacher => {
-    if (!isActiveTeacher(statsContext, teacher)) return;
     const uid = normaliseText(teacher.uid);
+    if (!uid || statsContext.removedTeacherIds.has(uid)) return;
+    const isAdminAccount = (statsContext.roles.get(uid) || "teacher") === "admin";
     const main = statsContext.mains.get(uid) || {};
     if (!teacherBelongsToInstitute(teacher, main, institute)) return;
 
-    activeTeachers += 1;
+    if (!isAdminAccount) activeTeachers += 1;
     classesForInstitute(main, institute).forEach(cls => {
       const classId = classIdOf(cls);
       const className = classDisplayName(cls);
       const classKey = classId || `${summaryKey(className)}::${summaryKey(classSubject(cls))}`;
-      if (classKey) classKeys.add(classKey);
+      if (classKey && !isAdminAccount) classKeys.add(classKey);
       if (!classId) return;
       noteRefs.push(db.doc(`users/${uid}/appdata/notes_${classId}`));
-      noteMeta.push({ uid, classId, className });
+      noteMeta.push({ uid, classId, className, classKey, isAdminAccount });
     });
   });
 
@@ -412,10 +414,15 @@ async function rebuildInstituteDateStats(instituteName, dateKey, context = null)
     const validEntries = entries.filter(entry => entry && typeof entry === "object");
     if (!validEntries.length) return;
     loggedTeachers.add(meta.uid);
+    if (meta.isAdminAccount) {
+      teachingAdminTeachers.add(meta.uid);
+      if (meta.classKey) classKeys.add(meta.classKey);
+    }
     entriesToday += validEntries.length;
     todayMinutes += validEntries.reduce((sum, entry) => sum + entryDurationMinutes(entry), 0);
   });
 
+  activeTeachers += teachingAdminTeachers.size;
   const loggedToday = loggedTeachers.size;
   const pendingTeachers = Math.max(0, activeTeachers - loggedToday);
   const updatedPct = activeTeachers ? Math.round((loggedToday / activeTeachers) * 100) : 0;
