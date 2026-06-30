@@ -14301,6 +14301,32 @@ function AdminPanelInner({user}){
     return adminV5Model.institutes.filter(item => !searchKey || item.institute.toLowerCase().includes(searchKey));
   }, [adminV5InstituteSearch, adminV5Model.institutes]);
 
+  const getAdminV5DefaultFocus = React.useCallback((instituteName) => {
+    const institute = adminV5Model.institutes.find(item => sameInstituteName(item.institute, instituteName));
+    const classes = institute?.classes || [];
+    if(!classes.length) return { classKey:"", teacherUid:"", scope:"institute" };
+    const rankedClasses = [...classes].sort((a,b)=>{
+      if((b.todayEntries.length || 0) !== (a.todayEntries.length || 0)) return (b.todayEntries.length || 0) - (a.todayEntries.length || 0);
+      if((b.recentEntries.length || 0) !== (a.recentEntries.length || 0)) return (b.recentEntries.length || 0) - (a.recentEntries.length || 0);
+      if((b.lastTs || 0) !== (a.lastTs || 0)) return (b.lastTs || 0) - (a.lastTs || 0);
+      if((b.teacherCount || 0) !== (a.teacherCount || 0)) return (b.teacherCount || 0) - (a.teacherCount || 0);
+      return exportTextSorter.compare(a.display || "", b.display || "");
+    });
+    const focusClass = rankedClasses[0] || null;
+    const focusTeacher = focusClass
+      ? [...(focusClass.teachers || [])].sort((a,b)=>{
+        if((b.todayEntries || 0) !== (a.todayEntries || 0)) return (b.todayEntries || 0) - (a.todayEntries || 0);
+        if((b.lastTs || 0) !== (a.lastTs || 0)) return (b.lastTs || 0) - (a.lastTs || 0);
+        return exportTextSorter.compare(a.name || "", b.name || "");
+      })[0]
+      : null;
+    return {
+      classKey:focusClass?.key || "",
+      teacherUid:focusTeacher?.uid || "",
+      scope:focusTeacher?.uid ? "teacher" : focusClass?.key ? "class" : "institute",
+    };
+  }, [adminV5Model.institutes]);
+
   const adminV5SelectedInstitute = useMemo(()=>{
     if(!adminV5Model.institutes.length) return null;
     return adminV5Model.institutes.find(item => sameInstituteName(item.institute, selInst)) || adminV5Model.institutes[0];
@@ -14311,12 +14337,15 @@ function AdminPanelInner({user}){
     if(selInst && adminV5VisibleInstitutes.some(item => sameInstituteName(item.institute, selInst))) return;
     const nextInstitute = adminV5VisibleInstitutes[0]?.institute || "";
     if(!nextInstitute) return;
+    const focus = getAdminV5DefaultFocus(nextInstitute);
     setSelInst(nextInstitute);
-    setAdminV5ClassKey("");
-    setAdminV5TeacherUid("");
-    setAdminV5TimelineScope("institute");
+    setAdminV5ClassKey(focus.classKey);
+    setAdminV5TeacherUid(focus.teacherUid);
+    setAdminV5TimelineScope(focus.scope);
+    setAdminV5ClassFilter("all");
     warmInstitute(nextInstitute);
-  }, [adminV5VisibleInstitutes, selInst, view, warmInstitute]);
+    if(focus.teacherUid) ensureFullData(focus.teacherUid);
+  }, [adminV5VisibleInstitutes, ensureFullData, getAdminV5DefaultFocus, selInst, view, warmInstitute]);
 
   const adminV5SelectedClass = useMemo(()=>{
     const classes = adminV5SelectedInstitute?.classes || [];
@@ -14350,12 +14379,27 @@ function AdminPanelInner({user}){
   }, [adminV5ClassKey, adminV5TeacherUid, adminV5TimelineScope, periodEndKey, periodStartKey, selInst]);
 
   React.useEffect(()=>{
+    if(view !== "main" || !adminV5SelectedInstitute || adminV5ClassKey) return;
+    const focus = getAdminV5DefaultFocus(adminV5SelectedInstitute.institute);
+    if(!focus.classKey) return;
+    setAdminV5ClassKey(focus.classKey);
+    setAdminV5TeacherUid(focus.teacherUid);
+    setAdminV5TimelineScope(focus.scope);
+    if(focus.teacherUid) ensureFullData(focus.teacherUid);
+  }, [adminV5ClassKey, adminV5SelectedInstitute, ensureFullData, getAdminV5DefaultFocus, view]);
+
+  React.useEffect(()=>{
     if(view !== "main" || selInst || !adminV5Model.institutes.length) return;
     const firstInstitute = adminV5Model.institutes[0]?.institute || "";
     if(!firstInstitute) return;
+    const focus = getAdminV5DefaultFocus(firstInstitute);
     setSelInst(firstInstitute);
+    setAdminV5ClassKey(focus.classKey);
+    setAdminV5TeacherUid(focus.teacherUid);
+    setAdminV5TimelineScope(focus.scope);
     warmInstitute(firstInstitute);
-  }, [adminV5Model.institutes, selInst, view, warmInstitute]);
+    if(focus.teacherUid) ensureFullData(focus.teacherUid);
+  }, [adminV5Model.institutes, ensureFullData, getAdminV5DefaultFocus, selInst, view, warmInstitute]);
 
   const fullViewEntries = useMemo(()=>{
     if(!fullView || !selInst) return [];
@@ -15264,14 +15308,17 @@ function AdminPanelInner({user}){
 
   const selectAdminV5Institute = React.useCallback((instituteName, nextPane = "classes") => {
     if(!instituteName) return;
+    const focus = getAdminV5DefaultFocus(instituteName);
     setProfileOpen(false);
     setSelInst(instituteName);
-    setAdminV5ClassKey("");
-    setAdminV5TeacherUid("");
-    setAdminV5TimelineScope("institute");
+    setAdminV5ClassKey(focus.classKey);
+    setAdminV5TeacherUid(focus.teacherUid);
+    setAdminV5TimelineScope(focus.scope);
+    setAdminV5ClassFilter("all");
     setAdminV5MobilePane(nextPane);
     warmInstitute(instituteName);
-  }, [warmInstitute]);
+    if(focus.teacherUid) ensureFullData(focus.teacherUid);
+  }, [ensureFullData, getAdminV5DefaultFocus, warmInstitute]);
 
   const selectAdminV5Class = React.useCallback((classKey) => {
     setAdminV5ClassKey(classKey || "");
@@ -17325,6 +17372,9 @@ function AdminPanelInner({user}){
     const selectedClassKey = selectedClass?.key || "";
     const selectedTeacher = adminV5SelectedTeacher;
     const summary = adminV5Model.summary;
+    const adminName = user?.displayName || user?.email || "Admin";
+    const adminInitials = String(adminName || "Admin").trim().split(/\s+/).slice(0, 2).map(part => part[0] || "").join("").toUpperCase() || "A";
+    const hydrationPendingCount = adminV5Model.institutes.reduce((sum, item) => sum + Math.max(0, (item.activeCount || 0) - (item.loadedCount || 0)), 0);
     const pendingTeachers = (selectedInstitute?.teachers || []).filter(item => !item.loggedToday);
     const activeTimelineScope = adminV5TimelineScope === "teacher" && selectedTeacher
       ? "teacher"
@@ -17383,9 +17433,9 @@ function AdminPanelInner({user}){
         onClick:()=>selectAdminV5Institute(item.institute, "classes"),
       })),
     ].slice(0, 4);
-    const shellBg = "#F3F6FB";
-    const panelBorder = "1px solid rgba(148,163,184,0.32)";
-    const softShadow = reduceEffects ? "none" : "0 18px 46px rgba(15,23,42,0.08)";
+    const shellBg = "#F4F7FB";
+    const panelBorder = "1px solid rgba(148,163,184,0.26)";
+    const softShadow = reduceEffects ? "none" : "0 10px 26px rgba(15,23,42,0.06)";
     const toolItems = [
       { key:"teachers", label:"Teachers", icon:IconUsersGroup, onClick:()=>openManageTab("teachers") },
       { key:"institutes", label:"Institutes", icon:IconBuilding, onClick:()=>openManageTab("institutes") },
@@ -17408,43 +17458,13 @@ function AdminPanelInner({user}){
     ].filter(group => group.rows.length);
     const classFilterItems = [
       { key:"all", label:"All", count:selectedInstitute?.classes?.length || 0 },
-      { key:"today", label:"Updated today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
-      { key:"cold", label:"No update 3+ days", count:(selectedInstitute?.classes || []).filter(item => item.cold).length },
-      ...(period === "today" ? [] : [{ key:"period", label:`Updated in ${timelinePeriodLabel}`, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length }]),
-    ];
-    const selectedInstituteToolItems = [
-      {
-        key:"teachers",
-        label:"Teachers",
-        value:selectedInstitute ? `${selectedInstitute.activeCount} active` : "Open",
-        icon:IconUsersGroup,
-        onClick:()=>openManageTab("teachers", selectedInstituteName ? { scopeInstitute:selectedInstituteName } : {}),
-      },
-      {
-        key:"sections",
-        label:"Sections",
-        value:selectedInstituteName ? "This institute" : "Open",
-        icon:IconSchool,
-        onClick:()=>openManageTab("sections", { detailInstitute:selectedInstituteName || null }),
-      },
-      {
-        key:"admins",
-        label:"Admins",
-        value:selectedInstituteName ? "Roles" : "Open",
-        icon:IconSettings,
-        onClick:()=>openManageTab("admins", selectedInstituteName ? { scopeInstitute:selectedInstituteName } : {}),
-      },
-      {
-        key:"institute",
-        label:"Institute",
-        value:selectedInstitute ? `${selectedInstitute.status.pct}% updated` : "Directory",
-        icon:IconBuilding,
-        onClick:()=>openManageTab("institutes"),
-      },
+      { key:"today", label:"Today", count:(selectedInstitute?.classes || []).filter(item => item.todayEntries.length > 0).length },
+      { key:"cold", label:"3+ days", count:(selectedInstitute?.classes || []).filter(item => item.cold).length },
+      ...(period === "today" ? [] : [{ key:"period", label:timelinePeriodLabel, count:(selectedInstitute?.classes || []).filter(item => item.recentEntries.length > 0).length }]),
     ];
     const actionButton = (tone = "light") => ({
       height:38,
-      borderRadius:12,
+      borderRadius:8,
       border:tone === "dark" ? "1px solid transparent" : "1px solid rgba(148,163,184,0.34)",
       background:tone === "dark" ? G.navy : tone === "blue" ? "#EAF2FF" : "#FFFFFF",
       color:tone === "dark" ? "#FFFFFF" : tone === "blue" ? G.blue : G.text,
@@ -17458,7 +17478,7 @@ function AdminPanelInner({user}){
       fontFamily:G.sans,
       cursor:"pointer",
       whiteSpace:"nowrap",
-      boxShadow:reduceEffects ? "none" : "0 8px 18px rgba(15,23,42,0.06)",
+      boxShadow:"none",
     });
     const metricTile = (label, value, tone = "blue") => {
       const tones = {
@@ -17469,9 +17489,9 @@ function AdminPanelInner({user}){
       };
       const style = tones[tone] || tones.blue;
       return (
-        <div style={{background:style.bg,border:`1px solid ${style.border}`,borderRadius:8,padding:"11px 12px",minWidth:0}}>
+        <div style={{background:style.bg,border:`1px solid ${style.border}`,borderRadius:8,padding:"10px 12px",minWidth:0}}>
           <div style={{fontSize:10.5,color:style.color,fontFamily:G.mono,fontWeight:850,letterSpacing:0.55,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
-          <div style={{fontSize:24,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>{value}</div>
+          <div style={{fontSize:22,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:7}}>{value}</div>
         </div>
       );
     };
@@ -17576,20 +17596,56 @@ function AdminPanelInner({user}){
         <AdminToastBanner message={adminToast} />
       </>
     );
-    const renderRail = (compact = false) => (
+    const renderTopBar = () => {
+      const crumbs = [
+        "Overview",
+        selectedInstituteName,
+        selectedClass?.display || "",
+        selectedTeacher?.name || "",
+      ].filter(Boolean);
+      return (
+        <header style={{height:58,background:"#111827",color:"#FFFFFF",display:"flex",alignItems:"center",gap:18,padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+          <div style={{width:34,height:34,borderRadius:8,background:"#13966B",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,fontFamily:G.display,flexShrink:0}}>L</div>
+          <nav style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:1,overflow:"hidden"}}>
+            {crumbs.map((crumb,index)=>(
+              <React.Fragment key={`${crumb}_${index}`}>
+                {index > 0&&<span style={{color:"rgba(255,255,255,0.24)",fontWeight:800}}>/</span>}
+                <span style={{fontSize:13.5,fontWeight:index === crumbs.length - 1 ? 900 : 750,color:index === crumbs.length - 1 ? "#FFFFFF" : "rgba(255,255,255,0.55)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:index === 0 ? 92 : 240}}>
+                  {crumb}
+                </span>
+              </React.Fragment>
+            ))}
+          </nav>
+          {hydrationPendingCount > 0&&(
+            <span style={{border:"1px solid rgba(255,255,255,0.10)",background:"rgba(255,255,255,0.06)",color:"rgba(255,255,255,0.72)",borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:850,whiteSpace:"nowrap"}}>
+              Loading {hydrationPendingCount} teacher records
+            </span>
+          )}
+          <button type="button" onClick={()=>openManageTab("report")} style={{...actionButton("blue"),height:36,background:"#EEF4FF",border:"1px solid #C7D7F5"}}>
+            <AppIcon icon={IconFileText} size={15} color={G.blue} />
+            Ledgr Report
+          </button>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+            <span style={{width:32,height:32,borderRadius:999,background:"#0F766E",border:"1px solid rgba(255,255,255,0.12)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11.5,fontWeight:900,fontFamily:G.mono}}>{adminInitials}</span>
+            <span style={{fontSize:13,fontWeight:850,color:"rgba(255,255,255,0.72)",maxWidth:120,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{adminName}</span>
+          </div>
+        </header>
+      );
+    };
+    const renderRail = (compact = false, showLogo = true) => (
       <aside style={{
         background:"#101B34",
         color:"#FFFFFF",
         display:"flex",
         flexDirection:compact ? "row" : "column",
         alignItems:"center",
-        gap:compact ? 8 : 10,
-        padding:compact ? "10px 12px" : "14px 10px",
+        gap:compact ? 8 : 8,
+        padding:compact ? "10px 12px" : "10px 8px",
         overflowX:compact ? "auto" : "hidden",
         overflowY:compact ? "hidden" : "auto",
       }}>
-        <div style={{width:compact ? 42 : 46,height:compact ? 42 : 46,borderRadius:8,background:G.blueV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:900,fontFamily:G.display,flexShrink:0}}>L</div>
-        {!compact&&<div style={{width:36,height:1,background:"rgba(255,255,255,0.12)",margin:"2px 0 4px"}}/>}
+        {showLogo&&<div style={{width:compact ? 42 : 40,height:compact ? 42 : 40,borderRadius:8,background:G.blueV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:compact ? 22 : 19,fontWeight:900,fontFamily:G.display,flexShrink:0}}>L</div>}
+        {!compact&&showLogo&&<div style={{width:36,height:1,background:"rgba(255,255,255,0.12)",margin:"2px 0 4px"}}/>}
         {toolItems.map(item=>(
           <button
             key={item.key}
@@ -17597,8 +17653,8 @@ function AdminPanelInner({user}){
             title={item.label}
             onClick={item.onClick}
             style={{
-              width:compact ? 72 : "100%",
-              minHeight:compact ? 50 : 58,
+              width:compact ? 72 : 42,
+              minHeight:compact ? 50 : 42,
               border:"1px solid rgba(255,255,255,0.08)",
               borderRadius:8,
               background:item.key === "report" ? "rgba(59,130,246,0.20)" : "rgba(255,255,255,0.055)",
@@ -17613,17 +17669,17 @@ function AdminPanelInner({user}){
               flexShrink:0,
             }}>
             <AppIcon icon={item.icon} size={19} color={item.key === "messenger" ? "#93C5FD" : "#FFFFFF"} />
-            <span style={{fontSize:9.5,fontWeight:800,lineHeight:1.05,opacity:0.76,textAlign:"center"}}>{item.label}</span>
+            {compact&&<span style={{fontSize:9.5,fontWeight:800,lineHeight:1.05,opacity:0.76,textAlign:"center"}}>{item.label}</span>}
           </button>
         ))}
         {!compact&&<div style={{flex:1}}/>}
         {!compact&&(
           <>
-            <button type="button" title="Teacher Feedback" onClick={openFeedbackInbox} style={{width:"100%",minHeight:48,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(255,255,255,0.055)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
+            <button type="button" title="Teacher Feedback" onClick={openFeedbackInbox} style={{width:42,minHeight:42,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(255,255,255,0.055)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
               <AppIcon icon={IconMessageCircle} size={19} color="#CBD5E1" />
               {feedbackUnreadCount>0&&<span style={{position:"absolute",top:6,right:8,background:G.red,color:"#FFFFFF",borderRadius:999,padding:"2px 5px",fontSize:9,fontWeight:900}}>{feedbackUnreadCount>9?"9+":feedbackUnreadCount}</span>}
             </button>
-            <button type="button" title="Sign out" onClick={logout} style={{width:"100%",minHeight:48,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(220,38,38,0.14)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+            <button type="button" title="Sign out" onClick={logout} style={{width:42,minHeight:42,border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,background:"rgba(220,38,38,0.14)",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
               <AppIcon icon={IconLogout} size={19} color="#FCA5A5" />
             </button>
           </>
@@ -17666,16 +17722,24 @@ function AdminPanelInner({user}){
     };
     const renderInstituteDrawer = () => (
       <section style={{background:"#FFFFFF",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
-        <div style={{padding:"18px 16px 14px",borderBottom:panelBorder}}>
-          <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Admin V5</div>
-          <div style={{fontSize:26,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.02,marginTop:7}}>Command centre</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:15}}>
-            {metricTile("Updated today", `${summary.loggedToday}/${summary.activeTeachers}`, summary.loggedPct >= 70 ? "green" : summary.loggedPct < 25 ? "red" : "amber")}
-            {metricTile("Updated %", `${summary.loggedPct}%`, summary.loggedPct >= 70 ? "green" : summary.loggedPct < 25 ? "red" : "amber")}
-            {metricTile("Pending", summary.pending, summary.pending ? "amber" : "green")}
-            {metricTile("No update 3+ days", summary.coldClasses, summary.coldClasses ? "amber" : "green")}
+        <div style={{padding:"16px 14px 13px",borderBottom:panelBorder}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+            <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>
+              {adminV5Model.institutes.length} institutes · Today
+            </div>
+            <span style={{fontSize:11,fontFamily:G.mono,fontWeight:900,color:summary.loggedPct >= 70 ? "#15803D" : summary.loggedPct < 25 ? G.red : G.amber,whiteSpace:"nowrap"}}>
+              {summary.loggedToday}/{summary.activeTeachers}
+            </span>
           </div>
-          <div style={{marginTop:13}}>
+          <div style={{height:5,borderRadius:999,background:"#E5E7EB",overflow:"hidden",marginTop:10}}>
+            <div style={{height:"100%",width:`${Math.max(summary.loggedPct, summary.loggedToday ? 4 : 0)}%`,background:summary.loggedPct >= 70 ? "#16A34A" : summary.loggedPct < 25 ? G.red : G.amber,borderRadius:999}}/>
+          </div>
+          {hydrationPendingCount > 0&&(
+            <div style={{fontSize:11.5,color:G.textL,fontWeight:750,marginTop:9}}>
+              Loading teacher records before final percentages settle.
+            </div>
+          )}
+          <div style={{marginTop:12}}>
             {renderSearchInput(adminV5InstituteSearch, setAdminV5InstituteSearch, "Search institutes", true)}
           </div>
         </div>
@@ -17701,51 +17765,20 @@ function AdminPanelInner({user}){
     );
     const renderClassPanel = () => (
       <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
-        <div style={{padding:"18px 16px 13px",borderBottom:panelBorder,background:"#FFFFFF"}}>
+        <div style={{padding:"16px 14px 12px",borderBottom:panelBorder,background:"#FFFFFF"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Institute health</div>
-              <div style={{fontSize:24,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedInstituteName || "No institute"}</div>
-              {selectedInstitute&&<div style={{fontSize:12.5,color:G.textM,marginTop:7,lineHeight:1.4}}>{selectedInstitute.loggedCount}/{selectedInstitute.activeCount} updated today · {selectedInstitute.status.pct}% · {selectedInstitute.pendingCount} pending</div>}
+              <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Institute</div>
+              <div style={{fontSize:21,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.05,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedInstituteName || "No institute"}</div>
+              {selectedInstitute&&<div style={{fontSize:12,color:G.textM,marginTop:6,lineHeight:1.4}}>{selectedInstitute.loggedCount}/{selectedInstitute.activeCount} updated today · {selectedInstitute.status.pct}% · {selectedInstitute.pendingCount} pending</div>}
             </div>
             {selectedInstitute&&(
-              <span style={{background:selectedInstitute.status.bg,border:`1px solid ${selectedInstitute.status.border}`,color:selectedInstitute.status.accent,borderRadius:999,padding:"7px 10px",fontSize:11,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+              <span style={{background:selectedInstitute.status.bg,border:`1px solid ${selectedInstitute.status.border}`,color:selectedInstitute.status.accent,borderRadius:999,padding:"6px 9px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
                 {selectedInstitute.status.pct}% updated
               </span>
             )}
           </div>
           {renderWarmupBanner(false)}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:13}}>
-            {selectedInstituteToolItems.map(item=>(
-              <button
-                key={item.key}
-                type="button"
-                onClick={item.onClick}
-                style={{
-                  minHeight:54,
-                  border:`1px solid ${G.border}`,
-                  borderRadius:8,
-                  background:"#FFFFFF",
-                  padding:"9px 10px",
-                  display:"flex",
-                  alignItems:"center",
-                  gap:9,
-                  textAlign:"left",
-                  cursor:"pointer",
-                  fontFamily:G.sans,
-                  boxShadow:reduceEffects ? "none" : "0 6px 16px rgba(15,23,42,0.045)",
-                  minWidth:0,
-                }}>
-                <span style={{width:30,height:30,borderRadius:8,background:"#EAF2FF",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <AppIcon icon={item.icon} size={16} color={G.blue} />
-                </span>
-                <span style={{minWidth:0}}>
-                  <span style={{display:"block",fontSize:12.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</span>
-                  <span style={{display:"block",fontSize:10.5,fontWeight:800,color:G.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.value}</span>
-                </span>
-              </button>
-            ))}
-          </div>
           <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:12}}>
             {classFilterItems.map(item=>filterChip({
               chipKey:item.key,
@@ -17760,11 +17793,18 @@ function AdminPanelInner({user}){
         <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px"}}>
           <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 9px"}}>Classes</div>
           {adminV5VisibleClasses.map(cls=>{
-            const active = activeTimelineScope === "class" && cls.key === selectedClassKey;
+            const active = cls.key === selectedClassKey && (activeTimelineScope === "class" || activeTimelineScope === "teacher");
             const tone = getSectionTone(cls.display);
             const classActivityText = period === "today"
               ? `${cls.todayEntries.length} entr${cls.todayEntries.length === 1 ? "y" : "ies"} today`
               : `${cls.todayEntries.length} today · ${cls.recentEntries.length} in ${timelinePeriodLabel.toLowerCase()}`;
+            const classFreshLabel = cls.todayEntries.length
+              ? "Today"
+              : cls.lastDays === 1
+                ? "Yesterday"
+                : cls.cold
+                  ? "3+ days"
+                  : cls.lastLabel;
             return (
               <button
                 key={cls.key}
@@ -17772,24 +17812,24 @@ function AdminPanelInner({user}){
                 onClick={()=>selectAdminV5Class(cls.key)}
                 style={{
                   width:"100%",
-                  border:`1.5px solid ${active ? tone.border || G.blue : cls.cold ? "#FED7AA" : G.border}`,
+                  border:`1px solid ${active ? "#BFDBFE" : cls.cold ? "#FED7AA" : G.border}`,
                   borderRadius:8,
-                  background:active ? tone.surface || "#FFFFFF" : "#FFFFFF",
-                  padding:"12px",
-                  marginBottom:9,
+                  background:active ? "#EFF6FF" : "#FFFFFF",
+                  padding:"11px 12px",
+                  marginBottom:8,
                   textAlign:"left",
                   cursor:"pointer",
                   fontFamily:G.sans,
-                  boxShadow:active ? softShadow : "none",
+                  boxShadow:"none",
                 }}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:18,fontWeight:900,color:tone.ink || G.text,fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</div>
-                    <div style={{fontSize:12,color:G.textM,lineHeight:1.4,marginTop:5}}>{cls.teacherCount} teacher{cls.teacherCount===1?"":"s"} · {classActivityText} · {cls.lastLabel}</div>
+                    <div style={{fontSize:17,fontWeight:900,color:tone.ink || G.text,fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</div>
+                    <div style={{fontSize:11.5,color:G.textM,lineHeight:1.4,marginTop:5}}>{cls.teacherCount} teacher{cls.teacherCount===1?"":"s"} · {classActivityText}</div>
                   </div>
-                  {cls.cold&&<span style={{background:"#FFF7ED",border:"1px solid #FED7AA",color:G.amber,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>3+ days</span>}
+                  <span style={{background:cls.todayEntries.length ? "#ECFDF3" : "#FFF7ED",border:`1px solid ${cls.todayEntries.length ? "#A7F3D0" : "#FED7AA"}`,color:cls.todayEntries.length ? "#15803D" : G.amber,borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>{classFreshLabel}</span>
                 </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
                   {cls.subjects.slice(0,3).map(subject=>(
                     <span key={subject} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 8px",fontSize:11,color:G.textS,fontWeight:750}}>{subject}</span>
                   ))}
@@ -17834,26 +17874,20 @@ function AdminPanelInner({user}){
     );
     const renderTimelinePanel = () => (
       <main style={{background:shellBg,minWidth:0,height:isMobile?"auto":"100%",display:"flex",flexDirection:"column",overflow:isMobile?"visible":"hidden"}}>
-        <div style={{padding:isMobile ? "14px 14px 12px" : "18px 20px 14px",background:"#FFFFFF",borderBottom:panelBorder}}>
+        <div style={{padding:isMobile ? "14px 14px 12px" : "16px 20px 13px",background:"#FFFFFF",borderBottom:panelBorder}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
             <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Teacher / class timeline</div>
-              <div style={{fontSize:isMobile ? 24 : 30,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7}}>
+              <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Timeline</div>
+              <div style={{fontSize:isMobile ? 24 : 28,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7}}>
                 {timelineTitle}
               </div>
-              <div style={{fontSize:13,color:G.textM,lineHeight:1.45,marginTop:7}}>
+              <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:6}}>
                 {timelineSubtitle} · {timelinePeriodLabel}
               </div>
             </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
-              <button type="button" onClick={()=>openManageTab("report")} style={actionButton("blue")}>
-                <AppIcon icon={IconFileText} size={15} color={G.blue} />
-                Ledgr Report
-              </button>
-            </div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",gap:9,marginTop:15}}>
-            {metricTile("Health today", selectedInstitute ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}` : "0/0", selectedInstitute?.status?.key === "on_track" ? "green" : selectedInstitute?.status?.key === "critical" ? "red" : "amber")}
+            {metricTile("Updated today", selectedInstitute ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}` : "0/0", selectedInstitute?.status?.key === "on_track" ? "green" : selectedInstitute?.status?.key === "critical" ? "red" : "amber")}
             {metricTile("Timeline logs", timelineTotal > timelineEntries.length ? `${timelineEntries.length}/${timelineTotal}` : timelineEntries.length, timelineEntries.length ? "blue" : "amber")}
             {metricTile("Shown time", formatDurationShort(timelineMinutes), timelineMinutes ? "green" : "amber")}
             {metricTile("Pending", selectedInstitute?.pendingCount || 0, selectedInstitute?.pendingCount ? "amber" : "green")}
@@ -17945,6 +17979,11 @@ function AdminPanelInner({user}){
                     ? `This class has no loaded entries in ${timelinePeriodLabel.toLowerCase()}.`
                     : `This institute has no loaded entries in ${timelinePeriodLabel.toLowerCase()}.`}
               </div>
+              {period === "today"&&(
+                <button type="button" onClick={()=>handlePeriodChange("week")} style={{...actionButton("blue"),height:34,marginTop:14}}>
+                  View This Week
+                </button>
+              )}
             </div>
           )}
           {timelineEntries.map((entry,index)=>{
@@ -18023,7 +18062,7 @@ function AdminPanelInner({user}){
             })}
           </div>
           <div style={{margin:"10px -12px -4px"}}>
-            {renderRail(true)}
+            {renderRail(true, false)}
           </div>
         </div>
         <div style={{padding:"12px",flex:1,minHeight:0}}>
@@ -18037,12 +18076,15 @@ function AdminPanelInner({user}){
     if(isMobile) return renderMobileDashboard();
 
     return (
-      <div style={{height:"100svh",background:shellBg,fontFamily:G.sans,display:"grid",gridTemplateColumns:"78px minmax(278px,330px) minmax(330px,390px) minmax(0,1fr)",overflow:"hidden"}}>
+      <div style={{height:"100svh",background:shellBg,fontFamily:G.sans,display:"grid",gridTemplateRows:"58px minmax(0,1fr)",overflow:"hidden"}}>
         {renderOverlays()}
-        {renderRail(false)}
-        {renderInstituteDrawer()}
-        {renderClassPanel()}
-        {renderTimelinePanel()}
+        {renderTopBar()}
+        <div style={{minHeight:0,display:"grid",gridTemplateColumns:"58px minmax(260px,304px) minmax(310px,362px) minmax(0,1fr)",overflow:"hidden"}}>
+          {renderRail(false, false)}
+          {renderInstituteDrawer()}
+          {renderClassPanel()}
+          {renderTimelinePanel()}
+        </div>
       </div>
     );
   };
