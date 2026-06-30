@@ -18171,8 +18171,8 @@ function AdminPanelInner({user}){
               ? "Undated"
               : formatAdminDateKey(group.dateKey, { weekday:"long", month:"long", day:"numeric" });
             return (
-              <section key={group.dateKey} style={{marginBottom:18}}>
-                <div style={{display:"flex",alignItems:"center",gap:12,margin:"0 0 10px"}}>
+              <section key={group.dateKey} style={{background:"#FFFFFF",border:panelBorder,borderRadius:10,padding:isMobile ? "14px" : "16px 18px",marginBottom:14,boxShadow:softShadow}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
                   <div style={{fontSize:11.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,whiteSpace:"nowrap"}}>
                     {groupLabel}
                   </div>
@@ -18181,56 +18181,73 @@ function AdminPanelInner({user}){
                     {group.entries.length} entr{group.entries.length === 1 ? "y" : "ies"} · {formatDurationShort(group.minutes)}
                   </div>
                 </div>
-                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <div>
                   {group.entries.map((entry,index)=>{
                     const status = entry.status && STATUS_STYLES[entry.status] ? STATUS_STYLES[entry.status] : null;
                     const timeStart = fmt12(entry.timeStart);
                     const timeEnd = fmt12(entry.timeEnd);
-                    const timeLabel = [timeStart, timeEnd].filter(Boolean).join(" - ");
                     const durationLabel = entry.minutes ? formatDurationShort(entry.minutes) : "Untimed";
                     const entryKind = String(entry.tag || "Note").trim() || "Note";
                     const entryTitle = entry.title || entry.body || "Class entry";
                     const entryBody = entry.body && entry.body !== entryTitle ? entry.body : "";
+                    const subjectLabel = entry.subject || "No subject";
+                    const classLabel = entry.classDisplay || entry.className || "Class";
+                    const showTeacherName = activeTimelineScope !== "teacher";
                     return (
-                      <div key={`${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${entry.id || index}`} style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "92px minmax(0,1fr)",gap:isMobile ? 0 : 14,alignItems:"stretch"}}>
-                        {!isMobile&&(
-                          <div style={{position:"relative",minHeight:96,paddingTop:10,textAlign:"right"}}>
-                            <div style={{position:"absolute",top:0,bottom:-10,right:8,width:1,background:"#D9E2F0"}}/>
-                            <span style={{position:"absolute",top:33,right:3,width:11,height:11,borderRadius:999,background:"#FFFFFF",border:"2px solid #FACC15",zIndex:1}}/>
-                            <div style={{position:"relative",zIndex:2,paddingRight:22}}>
-                              <div style={{fontSize:13.5,fontWeight:900,color:G.text,fontFamily:G.mono,lineHeight:1.1}}>{timeStart || "Time"}</div>
-                              {timeEnd&&<div style={{fontSize:11.5,fontWeight:800,color:G.textL,marginTop:3,fontFamily:G.mono}}>{timeEnd}</div>}
-                              <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",marginTop:8,borderRadius:999,background:"#DCFCE7",color:"#15803D",padding:"4px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono}}>
-                                {durationLabel}
-                              </div>
-                            </div>
+                      <article
+                        key={`${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${entry.id || index}`}
+                        style={{
+                          display:"grid",
+                          gridTemplateColumns:isMobile ? "1fr" : "108px minmax(0,1fr)",
+                          gap:isMobile ? 8 : 24,
+                          padding:index === 0 ? "8px 0 14px" : "16px 0 14px",
+                          borderTop:index === 0 ? "none" : "1px solid rgba(148,163,184,0.20)",
+                          minWidth:0,
+                        }}>
+                        <div style={{textAlign:isMobile ? "left" : "left",fontFamily:G.mono}}>
+                          <div style={{display:"flex",alignItems:"baseline",gap:2,whiteSpace:"nowrap"}}>
+                            <span style={{fontSize:15,fontWeight:950,color:G.text,lineHeight:1.1}}>{timeStart || "Time"}</span>
+                            {timeEnd&&(
+                              <>
+                                <span style={{fontSize:14,fontWeight:900,color:"#94A3B8"}}>-</span>
+                                <span style={{fontSize:15,fontWeight:850,color:"#94A3B8",lineHeight:1.1}}>{timeEnd}</span>
+                              </>
+                            )}
                           </div>
-                        )}
-                        <article style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"14px 15px",boxShadow:reduceEffects ? "none" : "0 8px 20px rgba(15,23,42,0.045)",minWidth:0}}>
-                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-                            <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap",minWidth:0}}>
-                              <span style={{background:"#FFF7ED",color:G.amber,border:"1px solid #FED7AA",borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,textTransform:"capitalize"}}>
+                          <div style={{fontSize:12.5,fontWeight:950,color:"#15803D",lineHeight:1.2,marginTop:7}}>
+                            {durationLabel}
+                          </div>
+                        </div>
+                        <div style={{minWidth:0}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flexWrap:"wrap"}}>
+                              <span style={{background:"#FFF7ED",color:G.amber,border:"1px solid #FED7AA",borderRadius:6,padding:"3px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,textTransform:"uppercase",lineHeight:1}}>
                                 {entryKind}
                               </span>
-                              {isMobile&&timeLabel&&<span style={{fontSize:11,fontWeight:850,color:G.textL,fontFamily:G.mono}}>{timeLabel}</span>}
-                              {status&&<span style={{background:status.bg || G.bg,color:status.text || G.textS,border:`1px solid ${status.border || G.border}`,borderRadius:999,padding:"3px 7px",fontSize:10.5,fontWeight:850}}>{status.label}</span>}
+                              {status&&<span style={{background:status.bg || G.bg,color:status.text || G.textS,border:`1px solid ${status.border || G.border}`,borderRadius:999,padding:"3px 8px",fontSize:10.5,fontWeight:900,lineHeight:1}}>{status.label}</span>}
+                              <span style={{fontSize:15.5,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0,maxWidth:isMobile ? "100%" : 520}}>
+                                {entryTitle}
+                              </span>
                             </div>
-                            <div style={{fontSize:12,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:220}}>
-                              {entry.teacherName || "Teacher"}
+                            {showTeacherName&&(
+                              <span style={{fontSize:11.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:180,flexShrink:0}}>
+                                {entry.teacherName || "Teacher"}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginTop:7}}>
+                            <span style={{fontSize:12,color:G.textM,fontWeight:850}}>{subjectLabel}</span>
+                            <span style={{background:"#EAF2FF",color:G.blue,border:"1px solid #D7E5FF",borderRadius:999,padding:"2px 8px",fontSize:11.5,fontWeight:900,lineHeight:1.1}}>
+                              {classLabel}
+                            </span>
+                          </div>
+                          {entryBody&&(
+                            <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:7}}>
+                              {entryBody}
                             </div>
-                          </div>
-                          <div style={{fontSize:17,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.18,marginTop:9}}>
-                            {entryTitle}
-                          </div>
-                          {entryBody&&<div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:6}}>{entryBody}</div>}
-                          <div style={{height:1,background:"rgba(148,163,184,0.18)",margin:"13px 0 9px"}}/>
-                          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",fontSize:11.5,color:G.textL,fontWeight:800}}>
-                            <span>Subject: <strong style={{color:G.textM}}>{entry.subject || "No subject"}</strong></span>
-                            <span>Class: <strong style={{color:G.textM}}>{entry.classDisplay || entry.className || "Class"}</strong></span>
-                            {isMobile&&<span>{durationLabel}</span>}
-                          </div>
-                        </article>
-                      </div>
+                          )}
+                        </div>
+                      </article>
                     );
                   })}
                 </div>
