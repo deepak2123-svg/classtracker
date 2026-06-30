@@ -4305,11 +4305,19 @@ function _printHtml(html, filename){
     window.alert("Pop-ups are blocked. Please allow pop-ups for this site, then try again.");
     return;
   }
+  const printTitle = readableDownloadPart(
+    String(filename || "Ledgr Report").replace(/\.[a-z0-9]+$/i, ""),
+    "Ledgr Report"
+  );
+  const htmlWithTitle = /<title>[\s\S]*?<\/title>/i.test(html)
+    ? html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeExportHtml(printTitle)}</title>`)
+    : html.replace(/<head([^>]*)>/i, `<head$1><title>${escapeExportHtml(printTitle)}</title>`);
   // Inject a print-and-close script so Save as PDF works with one click
-  const htmlWithPrint = html.replace(
+  const htmlWithPrint = htmlWithTitle.replace(
     "</body>",
     `<script>
       window.onload = function(){
+        document.title = ${JSON.stringify(printTitle)};
         // Small delay so fonts finish loading before the dialog opens
         setTimeout(function(){ window.print(); }, 380);
       };
