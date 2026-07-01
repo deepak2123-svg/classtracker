@@ -2777,12 +2777,12 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
 }
 function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, syllabusTemplates = [], roles = {}, roleDetails = {}, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
-  const isReportTeachingAccount = uid => roles?.[uid] !== "admin"
+  const isExpectedReportTeacher = uid => roles?.[uid] !== "admin"
     || roleDetails?.[uid]?.adminMode === "admin_teacher"
     || roleDetails?.[uid]?.teaches === true;
   return institutes.map(inst => {
     const teacherRows = teachers
-      .filter(teacher => isReportTeachingAccount(teacher?.uid) && teacherBelongsToInstituteFromMap(teacher, inst, fullDataMap))
+      .filter(teacher => teacherBelongsToInstituteFromMap(teacher, inst, fullDataMap))
       .map(teacher => buildInstituteGlanceTeacherActivity({
         teacher,
         instituteName: inst,
@@ -2793,7 +2793,7 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
         rangeStartKey,
         rangeEndKey,
       }))
-      .filter(item => isReportTeachingAccount(item.uid));
+      .filter(item => isExpectedReportTeacher(item.uid) || item.updatedToday);
     const filledTeachers = teacherRows
       .filter(item => item.updatedToday)
       .sort((a, b) => {
@@ -11864,8 +11864,12 @@ function AdminPanelInner({user}){
   );
 
   const instituteGlanceTeacherList = useMemo(
-    () => teachers.filter(teacher => !!teacher?.uid && isTeachingSurfaceAccount(teacher)),
-    [teachers, isTeachingSurfaceAccount]
+    () => teachers.filter(teacher => {
+      const uid = teacher?.uid;
+      if(!uid) return false;
+      return isTeachingSurfaceAccount(teacher) || roles[uid] === "admin";
+    }),
+    [teachers, isTeachingSurfaceAccount, roles]
   );
   const activeTeacherUidSet = useMemo(
     () => new Set(instituteGlanceTeacherList.map(teacher => teacher.uid).filter(Boolean)),
@@ -11999,8 +12003,15 @@ function AdminPanelInner({user}){
       ...fullData,
     };
 
+    const isRelevantReportTeacher = (teacher, includeUnloadedAdmins = false) => {
+      const uid = teacher?.uid;
+      if(!uid) return false;
+      if(requestedInstitutes.some(inst => teacherBelongsToInstituteFromMap(teacher, inst, hydratedFullData))) return true;
+      return includeUnloadedAdmins && roles[uid] === "admin" && !hydratedFullData[uid];
+    };
+
     let relevantTeachers = instituteGlanceTeacherList.filter(teacher =>
-      requestedInstitutes.some(inst => teacherBelongsToInstituteFromMap(teacher, inst, hydratedFullData))
+      isRelevantReportTeacher(teacher, true)
     );
 
     const pendingUids = relevantTeachers
@@ -12040,7 +12051,7 @@ function AdminPanelInner({user}){
       );
 
       relevantTeachers = instituteGlanceTeacherList.filter(teacher =>
-        requestedInstitutes.some(inst => teacherBelongsToInstituteFromMap(teacher, inst, hydratedFullData))
+        isRelevantReportTeacher(teacher, false)
       );
     }
 
