@@ -277,7 +277,7 @@ function currentSession(){
 }
 function readClientProfile(){
   if(typeof window==="undefined"){
-    return { isMobile:false, reduceMotion:false, weakDevice:false, mobileLite:false, coarsePointer:false };
+    return { width:1024, isMobile:false, reduceMotion:false, weakDevice:false, mobileLite:false, coarsePointer:false };
   }
   const nav = window.navigator || {};
   const ua = String(nav.userAgent || "").toLowerCase();
@@ -292,6 +292,7 @@ function readClientProfile(){
   const weakCpu = hardwareConcurrency > 0 && hardwareConcurrency <= 4;
   const weakDevice = reduceMotion || (isAndroid && (weakMemory || weakCpu || width <= 412)) || (isMobile && weakMemory && weakCpu);
   return {
+    width,
     isMobile,
     reduceMotion,
     weakDevice,
@@ -11165,10 +11166,12 @@ function AdminPanelInner({user}){
   const [panelCollapsed, setPanelCollapsed] = useState({p1:false, p2:false, p3:false});
   const [panelDragging, setPanelDragging] = useState(false);
   const [isMobile,     setIsMobile]     = useState(false);
+  const [viewportWidth,setViewportWidth]= useState(1024);
   const [isWeakDevice, setIsWeakDevice] = useState(false);
   const [reduceEffects,setReduceEffects]= useState(false);
   const [mobileLiteMode,setMobileLiteMode] = useState(false);
   const [coarsePointer, setCoarsePointer] = useState(false);
+  const adminV5UsesPanelLayout = !isMobile || viewportWidth >= 600;
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections | report | messenger
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
   const [manageTeacherSort, setManageTeacherSort] = useState("recent");
@@ -11327,6 +11330,7 @@ function AdminPanelInner({user}){
     const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
     const check=()=>{
       const profile = readClientProfile();
+      setViewportWidth(profile.width || window.innerWidth || 1024);
       setIsMobile(profile.isMobile);
       setIsWeakDevice(profile.weakDevice);
       setReduceEffects(profile.reduceMotion);
@@ -13294,33 +13298,46 @@ function AdminPanelInner({user}){
     setPanelCollapsed(prev=>({...prev,[key]:willCollapse}));
   }, [PANEL_LIMITS, panelCollapsed, panelW, clampPanelWidth]);
 
-  const clampAdminV5PanelWidth = React.useCallback((key, nextWidth) => {
+  const getAdminV5ResponsivePanelLimits = React.useCallback((key) => {
     const limits = ADMIN_V5_PANEL_LIMITS[key];
+    if(!limits) return null;
+    if(!adminV5UsesPanelLayout || viewportWidth >= 900) return limits;
+    const fraction = key === "institutes" ? 0.34 : 0.38;
+    const responsiveMax = Math.max(limits.min, Math.min(limits.max, Math.round(viewportWidth * fraction)));
+    return {
+      ...limits,
+      max:responsiveMax,
+      default:Math.min(limits.default, responsiveMax),
+    };
+  }, [ADMIN_V5_PANEL_LIMITS, adminV5UsesPanelLayout, viewportWidth]);
+
+  const clampAdminV5PanelWidth = React.useCallback((key, nextWidth) => {
+    const limits = getAdminV5ResponsivePanelLimits(key);
     if(!limits) return nextWidth;
     return Math.max(limits.collapsed || limits.min, Math.min(limits.max, nextWidth));
-  }, [ADMIN_V5_PANEL_LIMITS]);
+  }, [getAdminV5ResponsivePanelLimits]);
 
   const resetAdminV5PanelWidth = React.useCallback((key) => {
-    const limits = ADMIN_V5_PANEL_LIMITS[key];
+    const limits = getAdminV5ResponsivePanelLimits(key);
     if(!limits) return;
     setAdminV5PanelW(widths => ({
       ...widths,
       [key]:limits.default,
     }));
-  }, [ADMIN_V5_PANEL_LIMITS]);
+  }, [getAdminV5ResponsivePanelLimits]);
 
   const expandAdminV5Panel = React.useCallback((key) => {
-    const limits = ADMIN_V5_PANEL_LIMITS[key];
+    const limits = getAdminV5ResponsivePanelLimits(key);
     if(!limits) return;
     setAdminV5PanelW(widths => ({
       ...widths,
       [key]:Math.max(limits.min, limits.default || limits.min),
     }));
-  }, [ADMIN_V5_PANEL_LIMITS]);
+  }, [getAdminV5ResponsivePanelLimits]);
 
   const beginAdminV5PanelResize = React.useCallback((key, event) => {
-    if(isMobile) return;
-    const limits = ADMIN_V5_PANEL_LIMITS[key];
+    if(!adminV5UsesPanelLayout) return;
+    const limits = getAdminV5ResponsivePanelLimits(key);
     if(!limits) return;
     event.preventDefault();
     const target = event.currentTarget;
@@ -13359,7 +13376,7 @@ function AdminPanelInner({user}){
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end);
     window.addEventListener("pointercancel", end);
-  }, [ADMIN_V5_PANEL_LIMITS, adminV5PanelW, clampAdminV5PanelWidth, isMobile]);
+  }, [adminV5PanelW, adminV5UsesPanelLayout, clampAdminV5PanelWidth, getAdminV5ResponsivePanelLimits]);
 
   const instituteGlanceReadyCount = Math.max(0, instituteGlanceReport.loadedInstitutes || 0);
   const instituteGlanceEffectiveRange = getInstituteGlancePeriodRange();
@@ -19442,6 +19459,12 @@ function AdminPanelInner({user}){
     const selectedClassKey = selectedClass?.key || "";
     const selectedTeacher = adminV5SelectedTeacher;
     const summary = adminV5Model.summary;
+    const adminV5StackedLayout = !adminV5UsesPanelLayout;
+    const adminV5PanelLayoutWidths = {
+      institutes:clampAdminV5PanelWidth("institutes", adminV5PanelW.institutes || getAdminV5ResponsivePanelLimits("institutes")?.default || 0),
+      classes:clampAdminV5PanelWidth("classes", adminV5PanelW.classes || getAdminV5ResponsivePanelLimits("classes")?.default || 0),
+    };
+    const adminV5ResizeHandleWidth = coarsePointer || viewportWidth < 900 ? 16 : 10;
     const adminName = user?.displayName || user?.email || "Admin";
     const adminInitials = String(adminName || "Admin").trim().split(/\s+/).slice(0, 2).map(part => part[0] || "").join("").toUpperCase() || "A";
     const overviewLoadedTeacherCount = adminV5Model.institutes.reduce((sum, item) => sum + (item.loadedCount || 0), 0);
@@ -20051,7 +20074,7 @@ function AdminPanelInner({user}){
       );
     };
     const renderInstituteDrawer = () => (
-      <section style={{background:"#FFFFFF",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
+      <section style={{background:"#FFFFFF",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:adminV5StackedLayout?"auto":"100%",overflow:adminV5StackedLayout?"visible":"hidden"}}>
         <div style={{padding:"12px",borderBottom:panelBorder}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
             <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>
@@ -20065,7 +20088,7 @@ function AdminPanelInner({user}){
             {renderSearchInput(adminV5InstituteSearch, setAdminV5InstituteSearch, "Search institutes", true)}
           </div>
         </div>
-        <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"7px 8px 14px"}}>
+        <div style={{flex:1,minHeight:0,overflowY:adminV5StackedLayout?"visible":"auto",padding:"7px 8px 14px"}}>
           {instituteGroups.map(group=>(
             <div key={group.key} style={{marginBottom:12}}>
               <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"8px 8px 5px"}}>
@@ -20095,7 +20118,7 @@ function AdminPanelInner({user}){
           </div>
         );
         return (
-          <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
+          <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:adminV5StackedLayout?"auto":"100%",overflow:adminV5StackedLayout?"visible":"hidden"}}>
             <div style={{padding:"16px 14px 12px",borderBottom:panelBorder,background:"#FFFFFF"}}>
               <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Overview</div>
               <div style={{fontSize:21,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.05,marginTop:7}}>No institute selected</div>
@@ -20103,7 +20126,7 @@ function AdminPanelInner({user}){
                 Choose an institute from the left to load its classes, teachers, and timeline.
               </div>
             </div>
-            <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px",display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{flex:1,minHeight:0,overflowY:adminV5StackedLayout?"visible":"auto",padding:"12px",display:"flex",flexDirection:"column",gap:10}}>
               {overviewTile("Institutes", adminV5Model.institutes.length, "Available in this admin panel")}
               {overviewTile("Teacher records", summary.activeTeachers, "From index and daily summaries")}
               {overviewTile("Loaded now", overviewLoadedTeacherCount, "Timeline records already cached")}
@@ -20501,7 +20524,7 @@ function AdminPanelInner({user}){
         );
       };
       return (
-        <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:isMobile?"auto":"100%",overflow:isMobile?"visible":"hidden"}}>
+        <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:adminV5StackedLayout?"auto":"100%",overflow:adminV5StackedLayout?"visible":"hidden"}}>
           <div style={{padding:"18px 16px 14px",borderBottom:panelBorder,background:"#FFFFFF"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
             <div style={{minWidth:0}}>
@@ -20525,7 +20548,7 @@ function AdminPanelInner({user}){
           </div>
           {renderSortControls()}
         </div>
-        <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:"12px"}}>
+        <div style={{flex:1,minHeight:0,overflowY:adminV5StackedLayout?"visible":"auto",padding:"12px"}}>
           <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 11px"}}>
             {adminV5BrowseMode === "class" ? "Classes" : adminV5BrowseMode === "teacher" ? "Teachers" : "Class + Teacher"}
           </div>
@@ -20560,23 +20583,23 @@ function AdminPanelInner({user}){
     const renderTimelinePanel = () => {
       if(!selectedInstitute){
         return (
-          <main style={{background:shellBg,minWidth:0,height:isMobile?"auto":"100%",display:"flex",flexDirection:"column",overflow:isMobile?"visible":"hidden"}}>
-            <div style={{padding:isMobile ? "14px 14px 12px" : "16px 20px 13px",background:"#FFFFFF",borderBottom:panelBorder}}>
+          <main style={{background:shellBg,minWidth:0,height:adminV5StackedLayout?"auto":"100%",display:"flex",flexDirection:"column",overflow:adminV5StackedLayout?"visible":"hidden"}}>
+            <div style={{padding:adminV5StackedLayout ? "14px 14px 12px" : "16px 20px 13px",background:"#FFFFFF",borderBottom:panelBorder}}>
               <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Overview</div>
-              <div style={{fontSize:isMobile ? 24 : 28,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7}}>
+              <div style={{fontSize:adminV5StackedLayout ? 24 : 28,fontFamily:G.display,fontWeight:900,color:G.text,lineHeight:1.04,marginTop:7}}>
                 Admin dashboard
               </div>
               <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:6}}>
                 No institute is open. Select an institute from the left to load live class and teacher timelines.
               </div>
-              <div style={{display:"grid",gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",gap:9,marginTop:15}}>
+              <div style={{display:"grid",gridTemplateColumns:adminV5StackedLayout ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))",gap:9,marginTop:15}}>
                 {metricTile("Institutes", adminV5Model.institutes.length, "blue")}
                 {metricTile("Teacher records", summary.activeTeachers, "blue")}
                 {metricTile("Loaded now", overviewLoadedTeacherCount, overviewLoadedTeacherCount ? "green" : "amber")}
                 {metricTile("Not loaded", overviewUnloadedTeacherCount, overviewUnloadedTeacherCount ? "amber" : "green")}
               </div>
             </div>
-            <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:isMobile ? "12px 14px 22px" : "16px 20px 22px"}}>
+            <div style={{flex:1,minHeight:0,overflowY:adminV5StackedLayout?"visible":"auto",padding:adminV5StackedLayout ? "12px 14px 22px" : "16px 20px 22px"}}>
               <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"22px",boxShadow:softShadow}}>
                 <div style={{fontSize:18,fontWeight:900,color:G.text,fontFamily:G.display}}>Choose an institute to begin</div>
                 <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:8,maxWidth:560}}>
@@ -20624,8 +20647,8 @@ function AdminPanelInner({user}){
             ? ["By Class", selectedClass?.display].filter(Boolean)
             : ["Institute", selectedInstituteName].filter(Boolean);
       return (
-        <main style={{background:shellBg,minWidth:0,height:isMobile?"auto":"100%",display:"flex",flexDirection:"column",overflow:isMobile?"visible":"hidden"}}>
-        <div style={{padding:isMobile ? "16px 16px 13px" : "20px 24px 16px",background:"#F8FAFC",borderBottom:panelBorder}}>
+        <main style={{background:shellBg,minWidth:0,height:adminV5StackedLayout?"auto":"100%",display:"flex",flexDirection:"column",overflow:adminV5StackedLayout?"visible":"hidden"}}>
+        <div style={{padding:adminV5StackedLayout ? "16px 16px 13px" : "20px 24px 16px",background:"#F8FAFC",borderBottom:panelBorder}}>
           <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,marginBottom:8}}>
             {timelineCrumb.map((item,index)=>(
               <React.Fragment key={`${item}_${index}`}>
@@ -20637,13 +20660,13 @@ function AdminPanelInner({user}){
             ))}
           </div>
           <div style={{fontSize:11,fontFamily:G.mono,fontWeight:950,letterSpacing:1.2,textTransform:"uppercase",color:G.textL}}>Timeline</div>
-          <div style={{fontSize:isMobile ? 28 : 34,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.02,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+          <div style={{fontSize:adminV5StackedLayout ? 28 : 34,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.02,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
             {timelineTitle}
           </div>
           <div style={{fontSize:14,color:G.textS,lineHeight:1.4,marginTop:8,fontWeight:850}}>
             {selectedInstituteName}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "68px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",gap:isMobile ? 10 : 0,alignItems:"center",background:"#EAF2FF",border:"1px solid #DFEAFF",borderRadius:12,padding:isMobile ? "12px" : "14px 18px",marginTop:18}}>
+          <div style={{display:"grid",gridTemplateColumns:adminV5StackedLayout ? "1fr" : "68px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",gap:adminV5StackedLayout ? 10 : 0,alignItems:"center",background:"#EAF2FF",border:"1px solid #DFEAFF",borderRadius:12,padding:adminV5StackedLayout ? "12px" : "14px 18px",marginTop:18}}>
             <span style={{width:44,height:44,borderRadius:999,background:"#FFFFFF",color:G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:950,fontFamily:G.mono}}>
               {timelineHeaderInitials}
             </span>
@@ -20652,13 +20675,13 @@ function AdminPanelInner({user}){
               ["Gap", gapLabel],
               [activeTimelineScope === "class" ? "Scope" : "Subject", timelineHeaderSubject],
             ].map(([label,value],index)=>(
-              <div key={label} style={{borderLeft:!isMobile && index > 0 ? "1px solid #C7D7F5" : "none",paddingLeft:!isMobile && index > 0 ? 18 : 0,minWidth:0}}>
+              <div key={label} style={{borderLeft:!adminV5StackedLayout && index > 0 ? "1px solid #C7D7F5" : "none",paddingLeft:!adminV5StackedLayout && index > 0 ? 18 : 0,minWidth:0}}>
                 <div style={{fontSize:11,color:G.blue,fontFamily:G.mono,fontWeight:950,letterSpacing:0.5,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
                 <div style={{fontSize:16,color:G.text,fontWeight:950,fontFamily:G.display,lineHeight:1.1,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{value}</div>
               </div>
             ))}
           </div>
-          <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:isMobile ? "9px" : "10px",marginTop:13}}>
+          <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:adminV5StackedLayout ? "9px" : "10px",marginTop:13}}>
             <PeriodSelector
               period={period}
               onChangePeriod={handlePeriodChange}
@@ -20671,7 +20694,7 @@ function AdminPanelInner({user}){
             />
           </div>
         </div>
-        <div style={{flex:1,minHeight:0,overflowY:isMobile?"visible":"auto",padding:isMobile ? "12px 14px 22px" : "16px 20px 22px"}}>
+        <div style={{flex:1,minHeight:0,overflowY:adminV5StackedLayout?"visible":"auto",padding:adminV5StackedLayout ? "12px 14px 22px" : "16px 20px 22px"}}>
           {loading&&(
             <div style={{background:"#FFFFFF",border:panelBorder,borderRadius:8,padding:"13px 14px",marginBottom:12,color:G.textM,fontSize:13,fontWeight:750}}>
               Loading admin data...
@@ -20704,7 +20727,7 @@ function AdminPanelInner({user}){
               ? "Undated"
               : formatAdminDateKey(group.dateKey, { weekday:"long", month:"long", day:"numeric" });
             return (
-              <section key={group.dateKey} style={{background:"#FFFFFF",border:panelBorder,borderRadius:10,padding:isMobile ? "14px" : "16px 18px",marginBottom:14,boxShadow:softShadow}}>
+              <section key={group.dateKey} style={{background:"#FFFFFF",border:panelBorder,borderRadius:10,padding:adminV5StackedLayout ? "14px" : "16px 18px",marginBottom:14,boxShadow:softShadow}}>
                 <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
                   <div style={{fontSize:11.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,whiteSpace:"nowrap"}}>
                     {groupLabel}
@@ -20738,13 +20761,13 @@ function AdminPanelInner({user}){
                         key={`${entry.teacherUid}_${entry.classId}_${entry.dateKey}_${entry.id || index}`}
                         style={{
                           display:"grid",
-                          gridTemplateColumns:isMobile ? "1fr" : "142px minmax(0,1fr)",
-                          gap:isMobile ? 8 : 16,
+                          gridTemplateColumns:adminV5StackedLayout ? "1fr" : "142px minmax(0,1fr)",
+                          gap:adminV5StackedLayout ? 8 : 16,
                           padding:index === 0 ? "8px 0 14px" : "16px 0 14px",
                           borderTop:index === 0 ? "none" : "1px solid rgba(148,163,184,0.20)",
                           minWidth:0,
                         }}>
-                        <div style={{textAlign:isMobile ? "left" : "left",fontFamily:G.mono}}>
+                        <div style={{textAlign:adminV5StackedLayout ? "left" : "left",fontFamily:G.mono}}>
                           <div style={{display:"flex",alignItems:"baseline",gap:2,whiteSpace:"nowrap"}}>
                             <span style={{fontSize:15,fontWeight:950,color:G.text,lineHeight:1.1}}>{timeStart || "Time"}</span>
                             {timeEnd&&(
@@ -20771,7 +20794,7 @@ function AdminPanelInner({user}){
                                   {statusLabel || status.label}
                                 </span>
                               )}
-                              <span style={{fontSize:15.5,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0,maxWidth:isMobile ? "100%" : 520}}>
+                              <span style={{fontSize:15.5,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0,maxWidth:adminV5StackedLayout ? "100%" : 520}}>
                                 {entryTitle}
                               </span>
                             </div>
@@ -20825,7 +20848,7 @@ function AdminPanelInner({user}){
     };
     const isAdminV5PanelLayered = (key) => {
       const limits = ADMIN_V5_PANEL_LIMITS[key] || {};
-      const width = adminV5PanelW[key] || limits.default || 0;
+      const width = adminV5PanelLayoutWidths[key] || adminV5PanelW[key] || limits.default || 0;
       return width <= (limits.layer || limits.collapsed || limits.min || 0);
     };
     const renderAdminV5PanelLayer = (key) => {
@@ -20930,8 +20953,8 @@ function AdminPanelInner({user}){
         onPointerDown={event=>beginAdminV5PanelResize(key, event)}
         onDoubleClick={()=>resetAdminV5PanelWidth(key)}
         style={{
-          width:10,
-          minWidth:10,
+          width:adminV5ResizeHandleWidth,
+          minWidth:adminV5ResizeHandleWidth,
           cursor:"col-resize",
           background:adminV5PanelDragging ? "#EAF2FF" : "#F8FAFC",
           borderRight:panelBorder,
@@ -20991,13 +21014,13 @@ function AdminPanelInner({user}){
       </div>
     );
 
-    if(isMobile) return renderMobileDashboard();
+    if(adminV5StackedLayout) return renderMobileDashboard();
 
     return (
       <div style={{height:"100svh",background:shellBg,fontFamily:G.sans,display:"grid",gridTemplateRows:"46px minmax(0,1fr)",overflow:"hidden"}}>
         {renderOverlays()}
         {renderTopBar()}
-        <div style={{minHeight:0,display:"grid",gridTemplateColumns:`48px ${adminV5PanelW.institutes}px 10px ${adminV5PanelW.classes}px 10px minmax(0,1fr)`,overflow:"hidden",transition:adminV5PanelDragging || reduceEffects ? "none" : "grid-template-columns 0.28s cubic-bezier(.2,.8,.2,1)",willChange:adminV5PanelDragging ? "grid-template-columns" : "auto"}}>
+        <div style={{minHeight:0,display:"grid",gridTemplateColumns:`48px ${adminV5PanelLayoutWidths.institutes}px ${adminV5ResizeHandleWidth}px ${adminV5PanelLayoutWidths.classes}px ${adminV5ResizeHandleWidth}px minmax(0,1fr)`,overflow:"hidden",transition:adminV5PanelDragging || reduceEffects ? "none" : "grid-template-columns 0.28s cubic-bezier(.2,.8,.2,1)",willChange:adminV5PanelDragging ? "grid-template-columns" : "auto"}}>
           {renderRail(false, false)}
           {isAdminV5PanelLayered("institutes") ? renderAdminV5PanelLayer("institutes") : renderInstituteDrawer()}
           {renderAdminV5PanelResizeHandle("institutes")}
