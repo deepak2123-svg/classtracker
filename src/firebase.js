@@ -202,6 +202,105 @@ function sameInstituteLabel(a, b) {
   return normaliseInstituteKey(a) === normaliseInstituteKey(b);
 }
 
+function normalisePersonKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function normaliseEmailKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function removedTeacherRecordFromSources(uid, sources = {}, extra = {}) {
+  const main = sources.main || {};
+  const index = sources.index || {};
+  const name = String(main?.profile?.name || index?.name || extra.name || "").trim();
+  const email = String(main?.profile?.email || index?.email || extra.email || "").trim();
+  const institutes = uniqueTrimmed([
+    ...(Array.isArray(index?.institutes) ? index.institutes : []),
+    ...(Array.isArray(main?.institutes) ? main.institutes : []),
+    ...(Array.isArray(main?.profile?.institutes) ? main.profile.institutes : []),
+    ...(Array.isArray(main?.classes) ? main.classes.map(c => c?.institute) : []),
+  ]);
+  return {
+    uid:String(uid || "").trim(),
+    name,
+    email,
+    nameKey:normalisePersonKey(name),
+    emailKey:normaliseEmailKey(email),
+    instituteKeys:institutes.map(normaliseInstituteKey).filter(Boolean),
+    removedAt:Number(extra.removedAt || Date.now()),
+    removedBy:String(extra.removedBy || "").trim(),
+  };
+}
+
+function removedTeacherConfigMeta(raw = {}) {
+  const ids = new Set(
+    Array.isArray(raw.ids)
+      ? raw.ids.map(uid => String(uid || "").trim()).filter(Boolean)
+      : []
+  );
+  const emails = new Set(
+    [
+      ...(Array.isArray(raw.emails) ? raw.emails : []),
+      ...(Array.isArray(raw.profiles) ? raw.profiles.map(item => item?.emailKey || item?.email) : []),
+    ].map(normaliseEmailKey).filter(Boolean)
+  );
+  const profiles = (Array.isArray(raw.profiles) ? raw.profiles : [])
+    .map(item => ({
+      uid:String(item?.uid || "").trim(),
+      nameKey:normalisePersonKey(item?.nameKey || item?.name),
+      emailKey:normaliseEmailKey(item?.emailKey || item?.email),
+      instituteKeys:Array.isArray(item?.instituteKeys)
+        ? item.instituteKeys.map(normaliseInstituteKey).filter(Boolean)
+        : [],
+    }))
+    .filter(item => item.uid || item.nameKey || item.emailKey);
+  return { ids, emails, profiles };
+}
+
+function teacherSummaryIdentity(teacher = {}) {
+  const institutes = uniqueTrimmed(teacher.institutes || []);
+  return {
+    uid:String(teacher.uid || "").trim(),
+    nameKey:normalisePersonKey(teacher.name),
+    emailKey:normaliseEmailKey(teacher.email),
+    instituteKeys:institutes.map(normaliseInstituteKey).filter(Boolean),
+  };
+}
+
+function isRemovedTeacherSummary(teacher, removedMeta) {
+  const identity = teacherSummaryIdentity(teacher);
+  if(identity.uid && removedMeta.ids.has(identity.uid)) return true;
+  if(identity.emailKey && removedMeta.emails.has(identity.emailKey)) return true;
+  if(identity.emailKey || !identity.nameKey) return false;
+  return removedMeta.profiles.some(profile => {
+    if(profile.emailKey || profile.nameKey !== identity.nameKey) return false;
+    if(!profile.instituteKeys.length || !identity.instituteKeys.length) return true;
+    return profile.instituteKeys.some(key => identity.instituteKeys.includes(key));
+  });
+}
+
+function suppressShadowTeacherDuplicates(rows) {
+  const withEmailByName = new Map();
+  rows.forEach(row => {
+    const identity = teacherSummaryIdentity(row);
+    if(!identity.nameKey || !identity.emailKey) return;
+    const list = withEmailByName.get(identity.nameKey) || [];
+    list.push({ row, identity });
+    withEmailByName.set(identity.nameKey, list);
+  });
+  return rows.filter(row => {
+    const identity = teacherSummaryIdentity(row);
+    if(!identity.nameKey || identity.emailKey) return true;
+    const namedEmailRows = withEmailByName.get(identity.nameKey) || [];
+    if(!namedEmailRows.length) return true;
+    return !namedEmailRows.some(item => {
+      if(!identity.instituteKeys.length || !item.identity.instituteKeys.length) return true;
+      return identity.instituteKeys.some(key => item.identity.instituteKeys.includes(key));
+    });
+  });
+}
+
 function replaceInstituteLabel(value, oldName, newName) {
   const label = String(value || "").trim().replace(/\s+/g, " ");
   if (!label) return "";
@@ -449,6 +548,7 @@ function buildTeacherIndexPayload(uid, data) {
   return {
     uid,
     name: data?.profile?.name || "",
+    email: data?.profile?.email || "",
     institutes: uniqueTrimmed([...classInstitutes, ...profileInstitutes]),
     subjects: uniqueTrimmed([...classSubjects, ...profileSubjects]),
     classCount: classes.length,
@@ -734,21 +834,17 @@ export async function getAllTeachers() {
       getDocs(collection(db, "roles")),
     ]);
 
-    const removedTeacherUids = new Set(
-      Array.isArray(removedConfigSnap.data()?.ids)
-        ? removedConfigSnap.data().ids.map(uid => String(uid || "").trim()).filter(Boolean)
-        : []
-    );
+    const removedMeta = removedTeacherConfigMeta(removedConfigSnap.data() || {});
 
     // Primary: teacher index (has institute/class summary)
     const indexed = teacherIndexSnap.docs
       .map(d => d.data())
-      .filter(teacher => teacher?.uid && !removedTeacherUids.has(teacher.uid));
+      .filter(teacher => teacher?.uid && !isRemovedTeacherSummary(teacher, removedMeta));
     const merged = new Map(indexed.map(t => [t.uid, t]));
 
     // Supplement: roles collection catches teachers not yet in index
     rolesSnap.docs.forEach(d => {
-      if (removedTeacherUids.has(d.id)) return;
+      if (removedMeta.ids.has(d.id)) return;
       if (!merged.has(d.id)) {
         merged.set(d.id, { uid: d.id, name: "", institutes: [], classCount: 0 });
       }
@@ -759,10 +855,11 @@ export async function getAllTeachers() {
       appdataSnap.docs.forEach(snap => {
         const uid = snap.ref.parent.parent?.id;
         if (!uid) return;
-        if (removedTeacherUids.has(uid)) return;
+        if (removedMeta.ids.has(uid)) return;
         const data = snap.data();
         const summary = buildTeacherIndexPayload(uid, data);
         if (!summary.name && summary.classCount === 0) return;
+        if (isRemovedTeacherSummary(summary, removedMeta)) return;
         const existing = merged.get(uid) || { uid, name: "", institutes: [], classCount: 0 };
         merged.set(uid, {
           ...existing,
@@ -774,13 +871,31 @@ export async function getAllTeachers() {
       });
     } catch {}
 
-    return Array.from(merged.values());
+    return suppressShadowTeacherDuplicates(
+      Array.from(merged.values()).filter(teacher => !isRemovedTeacherSummary(teacher, removedMeta))
+    );
   } catch { return []; }
 }
 
 export async function getTeacherFullData(uid) {
   // Reuse loadUserData which handles the split-doc architecture
   return loadUserData(uid);
+}
+
+async function getAllTeacherMainDocUids() {
+  const uids = new Set();
+  try {
+    const teacherIndexSnap = await getDocs(collection(db, "teachers"));
+    teacherIndexSnap.docs.forEach(d => { if(d.id) uids.add(d.id); });
+  } catch {}
+  try {
+    const appdataSnap = await getDocs(query(collectionGroup(db, "appdata"), where(documentId(), "==", "main")));
+    appdataSnap.docs.forEach(snap => {
+      const uid = snap.ref.parent.parent?.id;
+      if(uid) uids.add(uid);
+    });
+  } catch {}
+  return Array.from(uids).filter(Boolean);
 }
 
 export async function getAllRoles() {
@@ -869,15 +984,40 @@ export async function getInvites(adminUid) {
 export async function removeTeacherFromSystem(uid, removedByUid = null) {
   const now = Date.now();
   try {
-    const removedSnap = await getDoc(removedTeachersConfigRef());
-    const existingIds = Array.isArray(removedSnap.data()?.ids)
-      ? removedSnap.data().ids.map(item => String(item || "").trim()).filter(Boolean)
+    const [removedSnap, teacherSnap, mainSnap] = await Promise.all([
+      getDoc(removedTeachersConfigRef()),
+      getDoc(doc(db, "teachers", uid)),
+      getDoc(userDocRef(uid)),
+    ]);
+    const removedConfig = removedSnap.exists() ? (removedSnap.data() || {}) : {};
+    const existingIds = Array.isArray(removedConfig.ids)
+      ? removedConfig.ids.map(item => String(item || "").trim()).filter(Boolean)
       : [];
     if (!existingIds.includes(uid)) {
       existingIds.push(uid);
     }
+    const record = removedTeacherRecordFromSources(uid, {
+      index:teacherSnap.exists() ? teacherSnap.data() : {},
+      main:mainSnap.exists() ? mainSnap.data() : {},
+    }, {
+      removedAt:now,
+      removedBy:removedByUid || "",
+    });
+    const existingEmails = Array.isArray(removedConfig.emails)
+      ? removedConfig.emails.map(normaliseEmailKey).filter(Boolean)
+      : [];
+    const nextEmails = record.emailKey && !existingEmails.includes(record.emailKey)
+      ? [...existingEmails, record.emailKey]
+      : existingEmails;
+    const existingProfiles = Array.isArray(removedConfig.profiles) ? removedConfig.profiles : [];
+    const nextProfiles = [
+      ...existingProfiles.filter(item => String(item?.uid || "").trim() !== uid),
+      record,
+    ].slice(-500);
     await setDoc(removedTeachersConfigRef(), {
       ids: existingIds,
+      emails: nextEmails,
+      profiles: nextProfiles,
       updatedAt: now,
       lastRemovedUid: uid,
       lastRemovedBy: removedByUid || null,
@@ -1104,17 +1244,35 @@ export async function restoreClassFromTeacherTrash(uid, classId, extraRestoreFie
 export async function getGlobalInstitutes() {
   try {
     const snap = await getDoc(doc(db, "config", "institutes"));
-    if (snap.exists()) return snap.data().list || [];
+    if (snap.exists()) {
+      const data = snap.data() || {};
+      const deleted = Array.isArray(data.deletedList) ? data.deletedList : [];
+      return (Array.isArray(data.list) ? data.list : [])
+        .filter(item => normaliseInstituteKey(item) !== "__noop__")
+        .filter(item => !deleted.some(deletedName => sameInstituteLabel(deletedName, item)));
+    }
     return [];
   } catch { return []; }
 }
 
 export async function saveGlobalInstitute(name) {
-  const existing = await getGlobalInstitutes();
-  const lower = existing.map(i => i.toLowerCase());
-  if (lower.includes(name.trim().toLowerCase())) return; // duplicate
+  const label = String(name || "").trim();
+  if(!label) return;
+  if(normaliseInstituteKey(label) === "__noop__") return;
+  const snap = await getDoc(doc(db, "config", "institutes"));
+  const data = snap.exists() ? (snap.data() || {}) : {};
+  const existing = Array.isArray(data.list) ? data.list : [];
+  const lower = existing.map(i => normaliseInstituteKey(i));
+  const deletedList = Array.isArray(data.deletedList) ? data.deletedList : [];
+  if (lower.includes(normaliseInstituteKey(label))) {
+    await setDoc(doc(db, "config", "institutes"), {
+      deletedList: deletedList.filter(item => !sameInstituteLabel(item, label)),
+    }, { merge: true });
+    return; // duplicate restored from deletedList if needed
+  }
   await setDoc(doc(db, "config", "institutes"), {
-    list: [...existing, name.trim()]
+    list: [...existing, label],
+    deletedList: deletedList.filter(item => !sameInstituteLabel(item, label)),
   }, { merge: true });
 }
 
@@ -1839,12 +1997,16 @@ export async function saveLedgrTelegramConfig(config = {}, updatedBy = "") {
 }
 
 export async function deleteGlobalInstitute(name) {
-  const existing = await getGlobalInstitutes();
-  const filtered = existing.filter(i => i.toLowerCase() !== name.trim().toLowerCase());
-  // Keep any existing deletedList when overwriting list
   const snap = await getDoc(doc(db, "config", "institutes"));
-  const currentDeletedList = snap.exists() ? (snap.data().deletedList || []) : [];
-  await setDoc(doc(db, "config", "institutes"), { list: filtered, deletedList: currentDeletedList });
+  const data = snap.exists() ? (snap.data() || {}) : {};
+  const existing = Array.isArray(data.list) ? data.list : [];
+  const label = String(name || "").trim();
+  const filtered = existing.filter(i => !sameInstituteLabel(i, label));
+  const currentDeletedList = Array.isArray(data.deletedList) ? data.deletedList : [];
+  const nextDeletedList = currentDeletedList.some(item => sameInstituteLabel(item, label))
+    ? currentDeletedList
+    : [...currentDeletedList, label].filter(Boolean);
+  await setDoc(doc(db, "config", "institutes"), { list: filtered, deletedList: nextDeletedList });
 }
 
 // ── Deleted institutes list (persisted so UI survives page refresh) ────────────
@@ -1964,9 +2126,8 @@ export async function renameGlobalInstitute(oldName, newName, extra = {}) {
     };
   });
 
-  // Walk all teacher main docs using uid-based fetch (collectionGroup+documentId is invalid in Firestore)
-  const teacherIndexForRename = await getDocs(collection(db, "teachers"));
-  const renameUids = [...new Set(teacherIndexForRename.docs.map(d => d.id))].filter(Boolean);
+  // Walk all teacher main docs, including legacy appdata-only accounts.
+  const renameUids = await getAllTeacherMainDocUids();
   let affectedTeacherCount = 0;
   let notifiedTeacherCount = 0;
   const updatedMainUids = new Set();
@@ -2131,8 +2292,7 @@ export async function deleteInstituteCompletely(instituteName, extra = {}) {
   let affectedTeacherCount = 0;
   const classNotesDeleteQueue = []; // [{uid, classId}]
 
-  const teacherIndexSnap2 = await getDocs(collection(db, "teachers"));
-  const allUids = [...new Set(teacherIndexSnap2.docs.map(d => d.id))].filter(Boolean);
+  const allUids = await getAllTeacherMainDocUids();
 
   for (const uid of allUids) {
     const mainRef = userDocRef(uid);
@@ -2280,9 +2440,8 @@ export async function deleteInstituteAndMigrate(fromInstituteName, toInstituteNa
     }
   });
 
-  // Step 2: Rename all teacher data from → to using uid-based fetch
-  const teacherIndexSnap3 = await getDocs(collection(db, "teachers"));
-  const allUids2 = [...new Set(teacherIndexSnap3.docs.map(d => d.id))].filter(Boolean);
+  // Step 2: Rename all teacher data from -> to, including legacy appdata-only accounts.
+  const allUids2 = await getAllTeacherMainDocUids();
   let affectedTeacherCount = 0;
   let notifiedTeacherCount = 0;
   const updatedUids = new Set();

@@ -675,6 +675,9 @@ function normaliseName(raw){
   if(!raw) return raw;
   return String(raw).trim().replace(/\s+/g, " ");
 }
+function normaliseInstituteNameKey(raw){
+  return normaliseName(String(raw || "")).toLowerCase();
+}
 function classNum(name){const m=(name||"").match(/(\d+)/);return m?parseInt(m[1]):0;}
 const ALL_CLASSES_KEY = "__all_classes__";
 const ALL_TEACHERS_KEY = "__all_teachers__";
@@ -688,7 +691,7 @@ function exportClassMeta(name){
   return { gradeOrder, clean };
 }
 function sameInstituteName(a,b){
-  return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase();
+  return normaliseInstituteNameKey(a) === normaliseInstituteNameKey(b);
 }
 function replaceInstituteNameLocal(value, oldName, newName) {
   const label = String(value || "").trim();
@@ -11625,11 +11628,22 @@ function AdminPanelInner({user}){
     return pending;
   },[]);
 
+  const deletedInstituteKeys = useMemo(
+    () => new Set(Array.from(deletedInstitutes || []).map(normaliseInstituteNameKey).filter(Boolean)),
+    [deletedInstitutes]
+  );
+
+  const isDeletedInstituteName = React.useCallback((name) => {
+    const key = normaliseInstituteNameKey(name);
+    return !!key && deletedInstituteKeys.has(key);
+  }, [deletedInstituteKeys]);
+
   const getTeacherInstituteList = React.useCallback((teacher) => {
     const list = [];
     const add = (value) => {
       const next = String(value || "").trim();
       if(!next) return;
+      if(isDeletedInstituteName(next)) return;
       if(list.some(existing => sameInstituteName(existing, next))) return;
       list.push(next);
     };
@@ -11638,7 +11652,7 @@ function AdminPanelInner({user}){
     (data?.profile?.institutes || []).forEach(add);
     (data?.classes || []).forEach(cls => add(cls?.institute));
     return list;
-  }, [fullData]);
+  }, [fullData, isDeletedInstituteName]);
 
   const teacherBelongsToInstitute = React.useCallback((teacher, instituteName) => {
     if(!teacher || !instituteName) return false;
@@ -11727,25 +11741,38 @@ function AdminPanelInner({user}){
 
   // Keep the canonical institute list defined before any derived summaries use it.
   const institutes=useMemo(()=>{
-    const set=new Set();
+    const labelsByKey=new Map();
+    const addInstitute = (value) => {
+      const label = String(value || "").trim();
+      const key = normaliseInstituteNameKey(label);
+      if(!key || isDeletedInstituteName(label)) return;
+      if(!labelsByKey.has(key)) labelsByKey.set(key, label);
+    };
     // Primary: admin-created global list from config/institutes (accurate, mobile-safe)
-    globalInstList.forEach(i=>{ if(i) set.add(i.trim()); });
+    globalInstList.forEach(addInstitute);
     // Supplement: teacher index catches institutes not yet in admin list (legacy data)
-    teachers.forEach(t=>{
-      (t.institutes||[]).forEach(i=>{ if(i) set.add(i.trim()); });
+    teachers.filter(isTeachingSurfaceAccount).forEach(t=>{
+      (t.institutes||[]).forEach(addInstitute);
     });
     // Supplement: fullData for any institute added after last index sync
-    Object.values(fullData).forEach(d=>{
-      (d.classes||[]).forEach(c=>{ if(c.institute) set.add(c.institute.trim()); });
-      (d.profile?.institutes||[]).forEach(i=>{ if(i) set.add(String(i).trim()); });
+    Object.entries(fullData).forEach(([uid,d])=>{
+      const teacher = teachers.find(item=>item.uid===uid);
+      if(!isTeachingSurfaceAccount(teacher)) return;
+      (d.classes||[]).forEach(c=>addInstitute(c?.institute));
+      (d.profile?.institutes||[]).forEach(addInstitute);
     });
-    // Remove locally deleted institutes
-    deletedInstitutes.forEach(i=>set.delete(i));
     // Preserve admin-defined order from globalInstList, append any extras at end
-    const ordered = globalInstList.filter(i=>set.has(i));
-    const extras   = Array.from(set).filter(i=>!globalInstList.includes(i)).sort();
+    const ordered = [];
+    globalInstList.forEach(item => {
+      const key = normaliseInstituteNameKey(item);
+      if(labelsByKey.has(key)) ordered.push(labelsByKey.get(key));
+    });
+    const orderedKeys = new Set(ordered.map(normaliseInstituteNameKey));
+    const extras = Array.from(labelsByKey.values())
+      .filter(item=>!orderedKeys.has(normaliseInstituteNameKey(item)))
+      .sort(exportTextSorter.compare);
     return [...ordered, ...extras];
-  },[globalInstList,teachers,fullData,deletedInstitutes]);
+  },[globalInstList,teachers,fullData,isTeachingSurfaceAccount,isDeletedInstituteName]);
 
   React.useEffect(()=>{
     if(view !== "main" || !institutes.length){
@@ -12769,19 +12796,27 @@ function AdminPanelInner({user}){
 
   const openAllLegacySectionRepair = React.useCallback(async () => {
     try {
-      const instituteSet = new Set();
-      globalInstList.forEach(inst => { if(inst) instituteSet.add(String(inst).trim()); });
+      const instituteMap = new Map();
+      const addInstitute = inst => {
+        const label = String(inst || "").trim();
+        const key = normaliseInstituteNameKey(label);
+        if(!key || isDeletedInstituteName(label)) return;
+        if(!instituteMap.has(key)) instituteMap.set(key, label);
+      };
+      globalInstList.forEach(addInstitute);
       teachers.forEach(teacher => {
-        (teacher.institutes || []).forEach(inst => { if(inst) instituteSet.add(String(inst).trim()); });
+        (teacher.institutes || []).forEach(addInstitute);
       });
       Object.values(fullData).forEach(data => {
-        (data.classes || []).forEach(cls => { if(cls?.institute) instituteSet.add(String(cls.institute).trim()); });
-        (data.profile?.institutes || []).forEach(inst => { if(inst) instituteSet.add(String(inst).trim()); });
+        (data.classes || []).forEach(cls => addInstitute(cls?.institute));
+        (data.profile?.institutes || []).forEach(addInstitute);
       });
-      deletedInstitutes.forEach(inst => instituteSet.delete(inst));
+      const instituteSet = new Set(instituteMap.keys());
       const instituteNames = [
-        ...globalInstList.filter(inst => instituteSet.has(inst)),
-        ...Array.from(instituteSet).filter(inst => !globalInstList.includes(inst)).sort(exportTextSorter.compare),
+        ...globalInstList.filter(inst => instituteSet.has(normaliseInstituteNameKey(inst))),
+        ...Array.from(instituteMap.values())
+          .filter(inst => !globalInstList.some(globalInst => sameInstituteName(globalInst, inst)))
+          .sort(exportTextSorter.compare),
       ];
       const institutesWithSections = instituteNames.filter(inst => getInstituteSectionNames(getInstituteSectionConfig(instSectionsAll, inst)).length > 0);
       if(!institutesWithSections.length){
@@ -12818,7 +12853,7 @@ function AdminPanelInner({user}){
       console.error("openAllLegacySectionRepair", e);
       showAdminToast("Could not open institute repair: " + (e?.message || "Unknown error"));
     }
-  }, [globalInstList, teachers, fullData, deletedInstitutes, instSectionsAll, getInstituteTeacherUids, ensureFullData, showAdminToast]);
+  }, [globalInstList, teachers, fullData, isDeletedInstituteName, instSectionsAll, getInstituteTeacherUids, ensureFullData, showAdminToast]);
 
   const applyLegacySectionRepair = React.useCallback(async () => {
     if(!legacySectionRepair) return;
@@ -15318,10 +15353,9 @@ function AdminPanelInner({user}){
   // Save reordered institute list
   const saveInstOrder = async (newList) => {
     try {
-      await saveGlobalInstitute("__noop__"); // ensure doc exists
       const {doc: d, setDoc: s} = await import("firebase/firestore");
       const {db: fdb} = await import("./firebase");
-      await s(d(fdb, "config", "institutes"), {list: newList});
+      await s(d(fdb, "config", "institutes"), {list: newList}, { merge:true });
       setGlobalInstList(newList);
     } catch(e) { console.warn("reorder failed", e); }
   };
@@ -15350,9 +15384,8 @@ function AdminPanelInner({user}){
         ])
       ));
       setDeletedInstitutes(s => {
-        if (!s.has(oldName)) return s;
-        const n = new Set(s);
-        n.delete(oldName);
+        if (!Array.from(s).some(item=>sameInstituteName(item, oldName))) return s;
+        const n = new Set(Array.from(s).filter(item=>!sameInstituteName(item, oldName)));
         n.add(result.newLabel);
         return n;
       });
@@ -17615,11 +17648,10 @@ function AdminPanelInner({user}){
                                   await saveGlobalInstitute(item.name);
                                   await removeFromDeletedInstitutesList(item.name);
                                   setGlobalInstList(prev=>{
-                                    const lower=prev.map(i=>i.toLowerCase());
-                                    if(lower.includes(item.name.trim().toLowerCase())) return prev;
+                                    if(prev.some(i=>sameInstituteName(i, item.name))) return prev;
                                     return [...prev,item.name.trim()];
                                   });
-                                  setDeletedInstitutes(s=>{const n=new Set(s);n.delete(item.name.trim());return n;});
+                                  setDeletedInstitutes(s=>new Set(Array.from(s).filter(name=>!sameInstituteName(name, item.name))));
                                   persistAdminBin(b=>b.filter((_,j)=>j!==binIdx));
                                   showAdminToast(`Restored "${item.name}".`);
                                 }catch(e){showAdminToast("Restore failed: "+e.message);}
@@ -17630,15 +17662,14 @@ function AdminPanelInner({user}){
                           )}
                           <button
                             onClick={async()=>{
-                              if(!window.confirm(`Remove "${item.name}" from the recycle bin? ${isDeletedCompletely?"":"The institute data has already been deleted — this just clears this log entry."}`)) return;
+                              if(!window.confirm(`Clear "${item.name}" from the recycle bin log? The institute will stay blocked unless you restore it.`)) return;
                               try{
-                                await removeFromDeletedInstitutesList(item.name);
                                 persistAdminBin(b=>b.filter((_,j)=>j!==binIdx));
-                                showAdminToast(`"${item.name}" removed from bin.`);
+                                showAdminToast(`"${item.name}" log cleared. The deleted-institute block remains active.`);
                               }catch(e){showAdminToast("Failed: "+e.message);}
                             }}
                             style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",color:G.red,fontFamily:G.sans,fontWeight:600,whiteSpace:"nowrap"}}>
-                            {isDeletedCompletely ? "✕ Clear log" : "🗑 Delete Forever"}
+                            ✕ Clear log
                           </button>
                         </div>
                       </div>
@@ -17893,6 +17924,7 @@ function AdminPanelInner({user}){
         group.weekEntries += stats.weekEntries;
         group.lastTs = Math.max(group.lastTs, stats.lastTs || 0, Number(cls?.created || 0) || 0);
       });
+      (fallbackInstitutes || []).forEach(ensureGroup);
       if(!map.size){
         (fallbackInstitutes.length ? fallbackInstitutes : [primaryInstitute]).forEach(ensureGroup);
       }
@@ -17907,8 +17939,10 @@ function AdminPanelInner({user}){
     const loadedClassInstitutes = data => uniqueLabels(loadedTeacherClasses(data).map(cls=>cls?.institute));
     const effectiveTeacherInstitutes = (teacher, data, detailsReady) => {
       const classInstitutes = loadedClassInstitutes(data);
-      if(classInstitutes.length) return classInstitutes;
-      return detailsReady ? [] : getTeacherInstituteList(teacher);
+      const indexedInstitutes = getTeacherInstituteList(teacher);
+      const combined = uniqueLabels([...indexedInstitutes, ...classInstitutes]);
+      if(combined.length) return combined;
+      return detailsReady ? [] : indexedInstitutes;
     };
     const teacherHasLoadedClassInInstitute = (data, instituteName) => {
       if(!instituteName) return true;
@@ -17916,7 +17950,10 @@ function AdminPanelInner({user}){
     };
     const teacherMayBelongToInstitute = (teacher, data, detailsReady, instituteName) => {
       if(!instituteName) return true;
-      if(detailsReady) return teacherHasLoadedClassInInstitute(data, instituteName);
+      if(detailsReady) {
+        return teacherHasLoadedClassInInstitute(data, instituteName)
+          || getTeacherInstituteList(teacher).some(inst=>sameInstituteName(inst, instituteName));
+      }
       return teacherBelongsToInstitute(teacher, instituteName);
     };
     const isTeachingAccount = teacher => {
@@ -17937,7 +17974,7 @@ function AdminPanelInner({user}){
       ? teachingAccounts.filter(teacher=>{
           const data = fullData[teacher.uid] || {};
           const detailsReady = hasLoadedTeacherData(teacher);
-          return detailsReady && teacherHasLoadedClassInInstitute(data, selectedInstituteFilter);
+          return teacherMayBelongToInstitute(teacher, data, detailsReady, selectedInstituteFilter);
         })
       : teachingAccounts;
     const teacherInstituteOptions = !manageScopeInstitute
@@ -17958,7 +17995,7 @@ function AdminPanelInner({user}){
       const scopedClasses = selectedInstituteFilter
         ? allClasses.filter(cls=>sameInstituteName(cls?.institute, selectedInstituteFilter))
         : allClasses;
-      if(selectedInstituteFilter && detailsReady && scopedClasses.length === 0) return null;
+      if(selectedInstituteFilter && detailsReady && scopedClasses.length === 0 && !teacherMayBelongToInstitute(teacher, data, detailsReady, selectedInstituteFilter)) return null;
       const instituteList = effectiveTeacherInstitutes(teacher, data, detailsReady);
       const fallbackInstitutes = selectedInstituteFilter
         ? [selectedInstituteFilter]
@@ -18892,7 +18929,23 @@ function AdminPanelInner({user}){
                 ...td,
                 classes: (td.classes||[]).filter(c => !sameInstituteName(c?.institute, inst)),
                 institutes: (td.institutes||[]).filter(i => !sameInstituteName(i, inst)),
+                profile:{
+                  ...(td.profile || {}),
+                  institutes:(td.profile?.institutes || []).filter(i => !sameInstituteName(i, inst)),
+                },
+                trash:{
+                  ...(td.trash || {}),
+                  classes:(td.trash?.classes || []).filter(c => !sameInstituteName(c?.institute, inst)),
+                  notes:(td.trash?.notes || []).filter(n => !sameInstituteName(n?.institute, inst)),
+                },
               };
+            });
+            return next;
+          });
+          setInstSectionsAll(prev => {
+            const next = { ...(prev || {}) };
+            Object.keys(next).forEach(key => {
+              if(sameInstituteName(key, inst)) delete next[key];
             });
             return next;
           });
