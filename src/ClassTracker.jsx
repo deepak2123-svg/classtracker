@@ -140,6 +140,10 @@ function readStoredTeacherLocalNoticeSignature(storageKey){
 }
 
 function getTeacherLocalNoticeSignature(warning){
+  if(warning?.kind === "staleDraft"){
+    const savedAt = Number(warning?.savedAt || 0);
+    return savedAt > 0 ? `stale_draft_${savedAt}` : "";
+  }
   if(warning?.kind !== "orphaned") return "";
   const count = Number(warning?.count || 0);
   return count > 0 ? `orphaned_${count}` : "";
@@ -3355,6 +3359,21 @@ function getTeacherNoticeCopy(item) {
     };
   }
 
+  if (kind === "stale_draft") {
+    const savedAtLabel = fmtRecoveryStamp(item?.savedAt);
+    return {
+      icon:IconArchive,
+      badge:"Draft protected",
+      badgeBg:"rgba(37,99,235,0.10)",
+      badgeColor:"#1D4ED8",
+      title:"Older browser draft found",
+      summary:savedAtLabel
+        ? `We found an older unsynced browser draft from ${savedAtLabel}.`
+        : "We found an older unsynced browser draft.",
+      detail:"The latest cloud classes stayed visible so newer data could not be overwritten.",
+    };
+  }
+
   if (kind === "institute_renamed") {
     const oldInstitute = item.oldInstitute || "your old institute";
     const newInstitute = item.newInstitute || item.institute || "your updated institute";
@@ -3858,8 +3877,21 @@ function ClassTrackerInner({user}){
     [dataWarning]
   );
   const localTeacherNotice = useMemo(() => {
-    if(dataWarning?.kind !== "orphaned") return null;
+    if(dataWarning?.kind !== "orphaned" && dataWarning?.kind !== "staleDraft") return null;
     if(!currentTeacherLocalNoticeSignature || currentTeacherLocalNoticeSignature === dismissedTeacherLocalNoticeSignature) return null;
+    if(dataWarning?.kind === "staleDraft"){
+      return {
+        id:`local_notice_${currentTeacherLocalNoticeSignature}`,
+        kind:"stale_draft",
+        institute:"Teacher workspace",
+        subject:"",
+        savedAt:Number(dataWarning?.savedAt || 0),
+        cloudUpdatedAt:Number(dataWarning?.cloudUpdatedAt || 0),
+        eventAt:Number(dataWarning?.eventAt || Date.now()),
+        adminName:"System",
+        status:"info",
+      };
+    }
     return {
       id:`local_notice_${currentTeacherLocalNoticeSignature}`,
       kind:"orphaned_notes",
@@ -5271,13 +5303,6 @@ function ClassTrackerInner({user}){
           <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Offline now. Changes stay local until you reconnect.</span>
         </div>
       )}
-      {dataWarning?.kind==="staleDraft"&&(
-        <div style={{position:"fixed",top:isOffline?118:58,left:0,right:0,zIndex:9997,background:dataWarning.kind==="staleDraft"?"#7C2D12":"#92400E",color:"#fff",textAlign:"center",padding:"8px 16px",fontSize:13,fontWeight:600,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-          {dataWarning.kind==="staleDraft"
-            ? <><span>🗂</span> We found an older unsynced browser draft from {fmtRecoveryStamp(dataWarning.savedAt)}. The latest cloud classes are showing so nothing newer gets overwritten.</>
-            : <><span>🧩</span> We found {dataWarning.count} unattached class note file{dataWarning.count===1?"":"s"}. If anything looks missing, do not create duplicate classes — contact admin first.</>}
-        </div>
-      )}
       {teacherNoticePrompt?.items?.length > 0 && (
         <TeacherNotificationPromptModal
           items={teacherNoticePrompt.items}
@@ -5363,7 +5388,8 @@ function ClassTrackerInner({user}){
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
               {teacherNotificationItems.map(item=>{
                 const copy = getTeacherNoticeCopy(item);
-                const isLocalWarning = item.kind==="orphaned_notes";
+                const isStaleDraftNotice = item.kind==="stale_draft";
+                const isLocalWarning = item.kind==="orphaned_notes" || isStaleDraftNotice;
                 const isInstituteRename = item.kind==="institute_renamed";
                 const isInstituteDeleted = item.kind==="institute_deleted";
                 const isInstituteDeletedMigrated = item.kind==="institute_deleted_migrated";
@@ -5372,9 +5398,9 @@ function ClassTrackerInner({user}){
                 const isInstituteAction = isInstituteRename || isInstituteDeleted || isInstituteDeletedMigrated || isInstituteArchived;
                 const isTrash=item.status==="trash";
                 const isActive=item.status==="active";
-                const statusLabel=isLocalWarning?"Needs review":needsBranchChoice?"Choose branch":isInstituteArchived?"Branch changed":isInstituteDeletedMigrated?"Classes moved":isInstituteDeleted?"Institute removed":isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
-                const statusBg=isLocalWarning||needsBranchChoice?"rgba(245,158,11,0.14)":isInstituteArchived?"rgba(37,99,235,0.10)":isInstituteDeletedMigrated?"rgba(124,58,237,0.10)":isInstituteDeleted?"rgba(220,38,38,0.10)":isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
-                const statusColor=isLocalWarning||needsBranchChoice?"#B45309":isInstituteArchived?"#1D4ED8":isInstituteDeletedMigrated?"#6D28D9":isInstituteDeleted?"#B91C1C":isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
+                const statusLabel=isStaleDraftNotice?"Protected":isLocalWarning?"Needs review":needsBranchChoice?"Choose branch":isInstituteArchived?"Branch changed":isInstituteDeletedMigrated?"Classes moved":isInstituteDeleted?"Institute removed":isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
+                const statusBg=isStaleDraftNotice?"rgba(37,99,235,0.10)":isLocalWarning||needsBranchChoice?"rgba(245,158,11,0.14)":isInstituteArchived?"rgba(37,99,235,0.10)":isInstituteDeletedMigrated?"rgba(124,58,237,0.10)":isInstituteDeleted?"rgba(220,38,38,0.10)":isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
+                const statusColor=isStaleDraftNotice?"#1D4ED8":isLocalWarning||needsBranchChoice?"#B45309":isInstituteArchived?"#1D4ED8":isInstituteDeletedMigrated?"#6D28D9":isInstituteDeleted?"#B91C1C":isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
                 const dismissLabel=isLocalWarning||isInstituteAction||isActive||isTrash?"Mark as read":"Remove notice";
                 return(
                   <div key={item.id} style={{...card,padding:isMobile?"16px 16px 14px":"18px 18px 16px"}}>
@@ -5389,7 +5415,8 @@ function ClassTrackerInner({user}){
                         <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:8}}>
                           <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textS}}>{item.institute||"No institute"}</span>
                           {!isLocalWarning && !isInstituteAction && item.subject&&<span style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.16)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>{item.subject}</span>}
-                          {isLocalWarning && Number(item.count || 0) > 0 && <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309",fontFamily:G.mono}}>{item.count} file{item.count===1?"":"s"} found</span>}
+                          {item.kind==="orphaned_notes" && Number(item.count || 0) > 0 && <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309",fontFamily:G.mono}}>{item.count} file{item.count===1?"":"s"} found</span>}
+                          {item.kind==="stale_draft" && item.savedAt > 0 && <span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8",fontFamily:G.mono}}>Saved {fmtRecoveryStamp(item.savedAt)}</span>}
                           {!isLocalWarning && !isInstituteAction && <span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.entryCount} {item.entryCount===1?"entry":"entries"}</span>}
                           {!isLocalWarning && !isInstituteAction && item.activeDays>0&&<span style={{background:"rgba(15,23,42,0.04)",border:`1px solid ${G.border}`,borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:G.textM,fontFamily:G.mono}}>{item.activeDays} {item.activeDays===1?"day":"days"}</span>}
                           {isInstituteRename && Number(item.impactedClassCount || 0) > 0 && (
