@@ -13744,18 +13744,145 @@ function AdminPanelInner({user}){
     pending:(row?.pendingTeacherRows || []).map(teacher => safeAdminText(teacher?.name, "")).filter(Boolean),
   });
 
+  const formatInstituteGlanceCopyStamp = () => new Date().toLocaleString("en-IN", {
+    weekday:"short",
+    day:"numeric",
+    month:"short",
+    year:"numeric",
+    hour:"numeric",
+    minute:"2-digit",
+  });
+
+  const formatInstituteGlanceCopyDate = (dateKey) => {
+    const [year, month, day] = String(dateKey || "").split("-").map(Number);
+    if(!year || !month || !day) return safeAdminText(dateKey, "");
+    return new Date(year, month - 1, day).toLocaleDateString("en-IN", {
+      weekday:"short",
+      day:"numeric",
+      month:"short",
+      year:"numeric",
+    });
+  };
+
+  const formatInstituteGlanceAge = (ts) => {
+    const safeTs = Number(ts || 0);
+    if(!safeTs) return "";
+    const days = Math.max(0, Math.floor((Date.now() - safeTs) / 86400000));
+    if(days === 0) return "today";
+    if(days === 1) return "1 day ago";
+    if(days < 14) return `${days} days ago`;
+    if(days < 60){
+      const weeks = Math.floor(days / 7);
+      return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+    }
+    if(days < 365){
+      const months = Math.floor(days / 30);
+      return `${months} month${months === 1 ? "" : "s"} ago`;
+    }
+    const years = Math.floor(days / 365);
+    return `${years} year${years === 1 ? "" : "s"} ago`;
+  };
+
+  const cleanInstituteGlanceCopyText = (value, fallback = "") => (
+    safeAdminText(value, fallback).replace(/\s+/g, " ").trim()
+  );
+
+  const truncateInstituteGlanceCopyText = (value, maxLength = 180) => {
+    const text = cleanInstituteGlanceCopyText(value, "");
+    if(text.length <= maxLength) return text;
+    return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+  };
+
+  const buildInstituteGlanceUpdatedCopyLines = (teacher) => {
+    const name = cleanInstituteGlanceCopyText(teacher?.name, "Teacher");
+    const details = Array.isArray(teacher?.todayDetails) ? teacher.todayDetails : [];
+    const sections = (teacher?.sectionNames || []).map(item => cleanInstituteGlanceCopyText(item, "")).filter(Boolean);
+    const subjectSet = [...new Set(details.map(detail => cleanInstituteGlanceCopyText(detail?.subject, "")).filter(Boolean))];
+    const headMeta = [
+      `${teacher?.todayEntries || details.length || 0} entr${(teacher?.todayEntries || details.length || 0) === 1 ? "y" : "ies"}`,
+      getInstituteGlanceTeacherHoursLabel(teacher),
+      subjectSet.length ? `subjects: ${subjectSet.join(", ")}` : "",
+      sections.length ? `sections: ${sections.join(", ")}` : "",
+    ].filter(Boolean);
+    const lines = [`- ${name} - ${headMeta.join("; ")}`];
+    const visibleDetails = details.slice(0, 4);
+    visibleDetails.forEach(detail => {
+      const dateLabel = formatInstituteGlanceCopyDate(detail?.dateKey);
+      const timeLabel = formatExportPdfTime(detail?.timeStart, detail?.timeEnd) || "Time not set";
+      const sectionLabel = cleanInstituteGlanceCopyText(detail?.section, "");
+      const subjectLabel = cleanInstituteGlanceCopyText(detail?.subject, "");
+      const typeLabel = cleanInstituteGlanceCopyText(detail?.typeLabel, "");
+      const statusLabel = cleanInstituteGlanceCopyText(detail?.statusLabel, "");
+      const titleLabel = truncateInstituteGlanceCopyText(detail?.title || detail?.notes || detail?.subject || "Class entry", 140);
+      const meta = [
+        dateLabel,
+        timeLabel,
+        sectionLabel ? `section: ${sectionLabel}` : "",
+        subjectLabel ? `subject: ${subjectLabel}` : "",
+        [typeLabel, statusLabel].filter(Boolean).join(" / "),
+      ].filter(Boolean);
+      lines.push(`  * ${meta.join(" | ")} - ${titleLabel}`);
+    });
+    if(details.length > visibleDetails.length){
+      lines.push(`  * +${details.length - visibleDetails.length} more entr${details.length - visibleDetails.length === 1 ? "y" : "ies"}`);
+    }
+    return lines;
+  };
+
+  const buildInstituteGlancePendingCopyLine = (teacher, periodLabel) => {
+    const name = cleanInstituteGlanceCopyText(teacher?.name, "Teacher");
+    const periodText = cleanInstituteGlanceCopyText(periodLabel, "Today");
+    if(teacher?.lastEntryTs){
+      const lastLabel = longDateLabel(teacher.lastEntryTs);
+      const ageLabel = formatInstituteGlanceAge(teacher.lastEntryTs);
+      const notUpdatedLabel = periodText === "Today"
+        ? "not updated today"
+        : periodText === "Yesterday"
+          ? "not updated yesterday"
+          : periodText === "This week"
+            ? "not updated this week"
+            : periodText === "This month"
+              ? "not updated this month"
+              : `not updated in ${periodText}`;
+      return `- ${name} - ${notUpdatedLabel}; last update: ${lastLabel}${ageLabel ? ` (${ageLabel})` : ""}`;
+    }
+    if(teacher?.joinedAtTs){
+      const joinedLabel = longDateLabel(teacher.joinedAtTs);
+      const ageLabel = formatInstituteGlanceAge(teacher.joinedAtTs);
+      return `- ${name} - never logged; linked since ${joinedLabel}${ageLabel ? ` (${ageLabel})` : ""}`;
+    }
+    const fallback = cleanInstituteGlanceCopyText(teacher?.lastActivityLabel, "No logs yet");
+    return `- ${name} - ${fallback}`;
+  };
+
   const buildInstituteGlanceNamesText = (row) => {
-    const { updated, pending } = getInstituteGlanceNameLists(row);
+    const updatedRows = row?.filledTeacherRows || [];
+    const pendingRows = row?.pendingTeacherRows || [];
     const instituteName = safeAdminText(row?.institute, "Institute");
+    const total = row?.totalTeachers || 0;
+    const completionPct = Number.isFinite(Number(row?.completionPct))
+      ? Number(row.completionPct)
+      : total
+        ? Math.round((updatedRows.length / total) * 100)
+        : 0;
+    const periodLabel = row?.period === "daily"
+      ? "Today"
+      : row?.period === "weekly"
+        ? "This week"
+        : row?.period === "monthly"
+          ? "This month"
+          : cleanInstituteGlanceCopyText(row?.periodLabel, "Today");
     return [
-      instituteName,
-      `${updated.length}/${row?.totalTeachers || 0} updated`,
+      `Centre: ${instituteName}`,
+      `Report generated: ${formatInstituteGlanceCopyStamp()}`,
+      `Period: ${periodLabel}`,
+      `Summary: ${updatedRows.length}/${total} updated (${completionPct}%) - ${pendingRows.length} not updated`,
       "",
-      `Updated (${updated.length})`,
-      updated.length ? updated.join(", ") : "None",
+      `Updated (${updatedRows.length})`,
+      ...(updatedRows.length ? updatedRows.flatMap(buildInstituteGlanceUpdatedCopyLines) : ["None"]),
       "",
-      `Not updated (${pending.length})`,
-      pending.length ? pending.join(", ") : "None",
+      `Not updated (${pendingRows.length})`,
+      ...(pendingRows.length ? pendingRows.map(teacher => buildInstituteGlancePendingCopyLine(teacher, periodLabel)) : ["None"]),
     ].join("\n");
   };
 
@@ -13776,9 +13903,9 @@ function AdminPanelInner({user}){
         document.execCommand("copy");
         document.body.removeChild(textarea);
       }
-      showAdminToast(`Teacher names copied for ${safeAdminText(row.institute, "this institute")}.`);
+      showAdminToast(`Teacher details copied for ${safeAdminText(row.institute, "this institute")}.`);
     }catch(error){
-      showAdminToast("Could not copy teacher names.");
+      showAdminToast("Could not copy teacher details.");
     }
   };
 
@@ -13826,7 +13953,7 @@ function AdminPanelInner({user}){
             justifySelf:compact ? "stretch" : "start",
           }}>
           <AppIcon icon={IconCopy} size={14} color={G.blue} />
-          Copy names
+          Copy details
         </button>
       </div>
     );
@@ -13963,7 +14090,7 @@ function AdminPanelInner({user}){
                             gap:6,
                           }}>
                           <AppIcon icon={IconCopy} size={14} color={G.blue} />
-                          <span>Copy names</span>
+                          <span>Copy details</span>
                         </button>
                         <button
                           type="button"
