@@ -18589,21 +18589,21 @@ function AdminPanelInner({user}){
       const classCount = Number(group?.classCount || 0);
       const sourceShort = shortInstituteLabel(sourceInstitute);
       const optionForTarget = target => ({
-        label: target ? `Transferred to ${shortInstituteLabel(target)}` : "Archive without destination",
+        label: target ? `Transferred to ${shortInstituteLabel(target)}` : "Ask teacher to choose new branch",
         hint: target
           ? `${sourceShort} leaves the active teacher list. ${shortInstituteLabel(target)} remains active.`
-          : "Use this when the new branch is not connected to this teacher yet.",
+          : "Use this when you do not know the new branch yet. The teacher will choose it on next login.",
         tone: target ? "blue" : "neutral",
         onConfirm:()=>handleArchiveTeacherInstitute(row, group, target),
       });
       confirmDelete({
-        title:`Archive ${sourceShort} for ${row.name}?`,
+        title:`Remove ${sourceShort} for ${row.name}?`,
         lines:[
           "Use this when a teacher has moved to another branch and the old branch should stop appearing in their active list.",
           `${classCount || "No"} active ${classCount===1 ? "class" : "classes"} from ${sourceShort} will be removed from active teaching assignments.`,
-          "Existing entries remain saved and archived. The teacher will receive a branch-change notice.",
+          "Existing entries remain saved and archived. If no destination is selected, the teacher will be prompted to choose their current branch.",
         ],
-        confirmLabel:"Archive branch",
+        confirmLabel:"Remove from institute",
         options:[
           ...targetInstitutes.map(optionForTarget),
           optionForTarget(""),

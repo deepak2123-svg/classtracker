@@ -1201,6 +1201,7 @@ export async function archiveTeacherInstituteAssignment(uid, instituteName, extr
   const adminName = String(extra.adminName || extra.deletedByName || "Admin").trim() || "Admin";
   const adminUid = String(extra.adminUid || extra.deletedByUid || "").trim();
   const targetLabel = String(extra.targetInstituteName || extra.newInstitute || "").trim();
+  const requiresInstituteSelection = !targetLabel;
   const eventAt = Number(extra.eventAt || Date.now());
   const countEntries = (dateMap = {}) => Object.values(dateMap || {}).reduce(
     (sum, entries) => sum + (Array.isArray(entries) ? entries.length : 0),
@@ -1281,9 +1282,12 @@ export async function archiveTeacherInstituteAssignment(uid, instituteName, extr
     entryCount: archivedEntryCount,
     archived: true,
     transferArchive: true,
+    requiresInstituteSelection,
+    actionRequired: requiresInstituteSelection,
+    branchSelectionRequired: requiresInstituteSelection,
     archiveMessage: targetLabel
       ? `Your branch has been changed to ${targetLabel}. ${instLabel} classes were removed from your active list. They remain saved and archived.`
-      : `${instLabel} classes were removed from your active list after a branch change. They remain saved and archived.`,
+      : `${instLabel} classes were removed from your active list after a branch change. They remain saved and archived. Please choose your current branch when you next add a class.`,
   };
   const updatedMeta = withPendingAdminClassNotice(data, notice);
 

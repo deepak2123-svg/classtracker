@@ -3393,16 +3393,21 @@ function getTeacherNoticeCopy(item) {
     const newInstitute = item.newInstitute || item.targetInstitute || "";
     const impactedClassCount = Number(item?.impactedClassCount || 0);
     const entryCount = Number(item?.entryCount || 0);
+    const requiresBranchChoice = !!(item?.requiresInstituteSelection || item?.branchSelectionRequired) && !newInstitute;
     return {
       icon:IconArchive,
-      badge:"Branch changed",
-      badgeBg:"rgba(37,99,235,0.10)",
-      badgeColor:"#1D4ED8",
-      title:newInstitute || oldInstitute,
-      summary:newInstitute
+      badge:requiresBranchChoice ? "Choose branch" : "Branch changed",
+      badgeBg:requiresBranchChoice ? "rgba(245,158,11,0.14)" : "rgba(37,99,235,0.10)",
+      badgeColor:requiresBranchChoice ? "#B45309" : "#1D4ED8",
+      title:requiresBranchChoice ? "Choose your current branch" : (newInstitute || oldInstitute),
+      summary:requiresBranchChoice
+        ? `Your admin removed ${oldInstitute} from your active branch list.`
+        : newInstitute
         ? `Your branch has been changed to ${newInstitute}.`
         : `Your admin removed ${oldInstitute} from your active branch list.`,
-      detail:impactedClassCount > 0
+      detail:requiresBranchChoice
+        ? `${impactedClassCount > 0 ? `${impactedClassCount} ${impactedClassCount === 1 ? "class was" : "classes were"} archived. ` : ""}${entryCount > 0 ? `${entryCount} saved ${entryCount === 1 ? "entry remains" : "entries remain"} archived. ` : "Old records remain saved and archived. "}Choose your current institute before adding the next class.`
+        : impactedClassCount > 0
         ? `${impactedClassCount} ${impactedClassCount === 1 ? "class was" : "classes were"} removed from your active list. ${entryCount > 0 ? `${entryCount} saved ${entryCount === 1 ? "entry remains" : "entries remain"} archived.` : "Old records remain saved and archived."}`
         : "Old branch records remain saved and archived.",
     };
@@ -3479,7 +3484,7 @@ function getTeacherNoticeCopy(item) {
   };
 }
 
-function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications }) {
+function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications, onChooseBranch }) {
   const rows = [...(items || [])]
     .filter(item => item?.id)
     .sort((a, b) => (b.eventAt || 0) - (a.eventAt || 0));
@@ -3490,12 +3495,18 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
   const hasInstituteDeleted = rows.some(item => item.kind === "institute_deleted");
   const hasInstituteDeletedMigrated = rows.some(item => item.kind === "institute_deleted_migrated");
   const hasInstituteArchived = rows.some(item => item.kind === "institute_archived");
+  const requiresBranchChoice = rows.some(item => item.kind === "institute_archived" && (item.requiresInstituteSelection || item.branchSelectionRequired) && !(item.newInstitute || item.targetInstitute));
   const hasRenamed = hasClassRenamed || hasInstituteRenamed;
   const many = rows.length > 1;
   let title = "Review class changes from admin";
   let subtitle = "These updates are now saved in your Notification Panel. Review them there, then mark each notice read when you are done.";
 
-  if (hasInstituteArchived && !hasInstituteDeleted && !hasInstituteDeletedMigrated && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
+  if (requiresBranchChoice && !hasInstituteDeleted && !hasInstituteDeletedMigrated && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
+    title = many ? "Choose your current branches" : "Choose your current branch";
+    subtitle = many
+      ? "Your admin removed old branches from your active list. Previous entries remain saved and archived. Choose the current branch before adding new classes."
+      : "Your admin removed an old branch from your active list. Previous entries remain saved and archived. Choose your current branch before adding your next class.";
+  } else if (hasInstituteArchived && !hasInstituteDeleted && !hasInstituteDeletedMigrated && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
     title = many ? "Branches were changed" : "Branch was changed";
     subtitle = many
       ? "Your admin removed old branches from your active list. Your previous entries remain saved and archived."
@@ -3593,6 +3604,7 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
                     <span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8",display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArchive} size={13} color="#1D4ED8" />Archived: {item.oldInstitute}</span>
                     {item.newInstitute&&<span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>Now: {item.newInstitute}</span>}
+                    {(item.requiresInstituteSelection || item.branchSelectionRequired) && !(item.newInstitute || item.targetInstitute) && <span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309"}}>Action needed: choose current branch</span>}
                   </div>
                 )}
                 {item.kind==="institute_deleted" && item.oldInstitute && (
@@ -3613,7 +3625,8 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
 
         <div style={{padding:"12px 20px 22px",display:"flex",justifyContent:"flex-end",gap:10,borderTop:`1px solid ${G.border}`,flexWrap:"wrap"}}>
           <GhostBtn onClick={onClose}>Close</GhostBtn>
-          <PrimaryBtn onClick={onOpenNotifications}>Open notifications</PrimaryBtn>
+          {requiresBranchChoice ? <GhostBtn onClick={onOpenNotifications}>Open notifications</GhostBtn> : <PrimaryBtn onClick={onOpenNotifications}>Open notifications</PrimaryBtn>}
+          {requiresBranchChoice && onChooseBranch && <PrimaryBtn onClick={onChooseBranch}>Choose current branch</PrimaryBtn>}
         </div>
       </div>
     </div>
@@ -4672,6 +4685,21 @@ function ClassTrackerInner({user}){
     safeNav("notifications");
   }
 
+  function openTeacherBranchSelectionFromNotice(ids = []){
+    const noticeIds = (Array.isArray(ids) ? ids : [ids])
+      .map(id => String(id || ""))
+      .filter(Boolean);
+    const promptIds = noticeIds.length
+      ? noticeIds
+      : (teacherNoticePrompt?.items || []).map(item => item?.id).filter(Boolean);
+    if(promptIds.length) markAdminNoticesPrompted(promptIds);
+    setTeacherNoticePrompt(null);
+    setSelectedGroup(null);
+    setNewClass({ institute:"", section:"", subject:"" });
+    safeNav("addClass");
+    showInlineToast("Choose your current institute, then add the section you teach.");
+  }
+
   function openAdminNoticeClass(item, { history = false } = {}){
     const cls = (data.classes || []).find(entry => String(entry?.id || "") === String(item?.classId || ""));
     if(!cls){
@@ -5255,6 +5283,7 @@ function ClassTrackerInner({user}){
           items={teacherNoticePrompt.items}
           onClose={closeTeacherNoticePrompt}
           onOpenNotifications={openTeacherNotificationPanel}
+          onChooseBranch={openTeacherBranchSelectionFromNotice}
         />
       )}
       {/* In-app toast — replaces alert() */}
@@ -5339,12 +5368,13 @@ function ClassTrackerInner({user}){
                 const isInstituteDeleted = item.kind==="institute_deleted";
                 const isInstituteDeletedMigrated = item.kind==="institute_deleted_migrated";
                 const isInstituteArchived = item.kind==="institute_archived";
+                const needsBranchChoice = isInstituteArchived && !!(item.requiresInstituteSelection || item.branchSelectionRequired) && !(item.newInstitute || item.targetInstitute);
                 const isInstituteAction = isInstituteRename || isInstituteDeleted || isInstituteDeletedMigrated || isInstituteArchived;
                 const isTrash=item.status==="trash";
                 const isActive=item.status==="active";
-                const statusLabel=isLocalWarning?"Needs review":isInstituteArchived?"Branch changed":isInstituteDeletedMigrated?"Classes moved":isInstituteDeleted?"Institute removed":isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
-                const statusBg=isLocalWarning?"rgba(245,158,11,0.14)":isInstituteArchived?"rgba(37,99,235,0.10)":isInstituteDeletedMigrated?"rgba(124,58,237,0.10)":isInstituteDeleted?"rgba(220,38,38,0.10)":isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
-                const statusColor=isLocalWarning?"#B45309":isInstituteArchived?"#1D4ED8":isInstituteDeletedMigrated?"#6D28D9":isInstituteDeleted?"#B91C1C":isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
+                const statusLabel=isLocalWarning?"Needs review":needsBranchChoice?"Choose branch":isInstituteArchived?"Branch changed":isInstituteDeletedMigrated?"Classes moved":isInstituteDeleted?"Institute removed":isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
+                const statusBg=isLocalWarning||needsBranchChoice?"rgba(245,158,11,0.14)":isInstituteArchived?"rgba(37,99,235,0.10)":isInstituteDeletedMigrated?"rgba(124,58,237,0.10)":isInstituteDeleted?"rgba(220,38,38,0.10)":isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
+                const statusColor=isLocalWarning||needsBranchChoice?"#B45309":isInstituteArchived?"#1D4ED8":isInstituteDeletedMigrated?"#6D28D9":isInstituteDeleted?"#B91C1C":isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
                 const dismissLabel=isLocalWarning||isInstituteAction||isActive||isTrash?"Mark as read":"Remove notice";
                 return(
                   <div key={item.id} style={{...card,padding:isMobile?"16px 16px 14px":"18px 18px 16px"}}>
@@ -5408,6 +5438,7 @@ function ClassTrackerInner({user}){
                           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10,marginBottom:2}}>
                             <span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8",display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArchive} size={13} color="#1D4ED8" />Archived: {item.oldInstitute}</span>
                             {item.newInstitute&&<span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>Now: {item.newInstitute}</span>}
+                            {needsBranchChoice&&<span style={{background:"rgba(245,158,11,0.10)",border:"1px solid rgba(245,158,11,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B45309"}}>Choose current branch</span>}
                           </div>
                         )}
                         {item.kind==="institute_deleted" && item.oldInstitute && (
@@ -5425,6 +5456,7 @@ function ClassTrackerInner({user}){
                       {!isLocalWarning && !isInstituteRename && isActive && <PrimaryBtn onClick={()=>openAdminNoticeClass(item)} style={{padding:"10px 16px"}}>Open class</PrimaryBtn>}
                       {!isLocalWarning && !isInstituteRename && isActive && item.entryCount>0 && <GhostBtn onClick={()=>openAdminNoticeClass(item,{history:true})} style={{padding:"10px 16px"}}>View history</GhostBtn>}
                       {!isLocalWarning && !isInstituteRename && isTrash && <GhostBtn onClick={()=>safeNav("trash")} style={{padding:"10px 16px"}}>Open recycle bin</GhostBtn>}
+                      {needsBranchChoice && <PrimaryBtn onClick={()=>openTeacherBranchSelectionFromNotice(item.id)} style={{padding:"10px 16px"}}>Choose current branch</PrimaryBtn>}
 
                       <GhostBtn onClick={()=>isLocalWarning ? dismissLocalTeacherNotice(currentTeacherLocalNoticeSignature) : dismissAdminNotices(item.id)} style={{padding:"10px 16px"}}>{dismissLabel}</GhostBtn>
                     </div>
