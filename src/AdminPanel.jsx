@@ -13780,24 +13780,16 @@ function AdminPanelInner({user}){
     pending:(row?.pendingTeacherRows || []).map(teacher => safeAdminText(teacher?.name, "")).filter(Boolean),
   });
 
-  const formatInstituteGlanceCopyStamp = () => new Date().toLocaleString("en-IN", {
-    weekday:"short",
-    day:"numeric",
-    month:"short",
-    year:"numeric",
-    hour:"numeric",
-    minute:"2-digit",
-  });
-
-  const formatInstituteGlanceCopyDate = (dateKey) => {
-    const [year, month, day] = String(dateKey || "").split("-").map(Number);
-    if(!year || !month || !day) return safeAdminText(dateKey, "");
-    return new Date(year, month - 1, day).toLocaleDateString("en-IN", {
-      weekday:"short",
-      day:"numeric",
-      month:"short",
-      year:"numeric",
-    });
+  const formatInstituteGlanceCopyStamp = () => {
+    const date = new Date();
+    const weekday = date.toLocaleDateString("en-IN", { weekday:"short" });
+    const month = date.toLocaleDateString("en-IN", { month:"short" });
+    const time = date.toLocaleTimeString("en-IN", {
+      hour:"numeric",
+      minute:"2-digit",
+      hour12:true,
+    }).toLowerCase();
+    return `${weekday}, ${date.getDate()} ${month}, ${date.getFullYear()}, ${time}`;
   };
 
   const formatInstituteGlanceAge = (ts) => {
@@ -13823,12 +13815,6 @@ function AdminPanelInner({user}){
     safeAdminText(value, fallback).replace(/\s+/g, " ").trim()
   );
 
-  const truncateInstituteGlanceCopyText = (value, maxLength = 180) => {
-    const text = cleanInstituteGlanceCopyText(value, "");
-    if(text.length <= maxLength) return text;
-    return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
-  };
-
   const buildInstituteGlanceUpdatedCopyLines = (teacher) => {
     const name = cleanInstituteGlanceCopyText(teacher?.name, "Teacher");
     const details = Array.isArray(teacher?.todayDetails) ? teacher.todayDetails : [];
@@ -13840,29 +13826,7 @@ function AdminPanelInner({user}){
       subjectSet.length ? `subjects: ${subjectSet.join(", ")}` : "",
       sections.length ? `sections: ${sections.join(", ")}` : "",
     ].filter(Boolean);
-    const lines = [`- ${name} - ${headMeta.join("; ")}`];
-    const visibleDetails = details.slice(0, 4);
-    visibleDetails.forEach(detail => {
-      const dateLabel = formatInstituteGlanceCopyDate(detail?.dateKey);
-      const timeLabel = formatExportPdfTime(detail?.timeStart, detail?.timeEnd) || "Time not set";
-      const sectionLabel = cleanInstituteGlanceCopyText(detail?.section, "");
-      const subjectLabel = cleanInstituteGlanceCopyText(detail?.subject, "");
-      const typeLabel = cleanInstituteGlanceCopyText(detail?.typeLabel, "");
-      const statusLabel = cleanInstituteGlanceCopyText(detail?.statusLabel, "");
-      const titleLabel = truncateInstituteGlanceCopyText(detail?.title || detail?.notes || detail?.subject || "Class entry", 140);
-      const meta = [
-        dateLabel,
-        timeLabel,
-        sectionLabel ? `section: ${sectionLabel}` : "",
-        subjectLabel ? `subject: ${subjectLabel}` : "",
-        [typeLabel, statusLabel].filter(Boolean).join(" / "),
-      ].filter(Boolean);
-      lines.push(`  * ${meta.join(" | ")} - ${titleLabel}`);
-    });
-    if(details.length > visibleDetails.length){
-      lines.push(`  * +${details.length - visibleDetails.length} more entr${details.length - visibleDetails.length === 1 ? "y" : "ies"}`);
-    }
-    return lines;
+    return [`- ${name} - ${headMeta.join("; ")}`];
   };
 
   const buildInstituteGlancePendingCopyLine = (teacher, periodLabel) => {
