@@ -18677,6 +18677,9 @@ function AdminPanelInner({user}){
       const t = row.teacher;
       const data = fullData[t.uid] || {};
       const classes = Array.isArray(data.classes) ? data.classes : [];
+      const branchGroups = row.allInstituteGroups?.length ? row.allInstituteGroups : row.instituteGroups || [];
+      const primaryBranchGroup = branchGroups.find(group=>sameInstituteName(group.institute, row.primaryInstitute)) || branchGroups[0] || null;
+      const canMoveBranch = !!primaryBranchGroup?.institute && !isPlaceholderInstitute(primaryBranchGroup.institute);
       const sortedClasses = [...classes].sort((a,b)=>
         exportTextSorter.compare(a?.institute || "", b?.institute || "")
         || exportTextSorter.compare(classDisplayName(a), classDisplayName(b))
@@ -18727,6 +18730,13 @@ function AdminPanelInner({user}){
                 setRenamingTeacher({uid:t.uid,currentName:nextName});
                 setRenameVal(nextName);
               }} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+            )}
+            {canMoveBranch&&(
+              <button
+                onClick={()=>openArchiveTeacherInstituteModal(row, primaryBranchGroup)}
+                style={{...workspaceActionButtonStyle("blue"),background:"#EEF4FF",borderColor:"#BFDBFE",color:G.blue}}>
+                Move branch
+              </button>
             )}
             {!row.isMe && !row.isAdminTeacher && (
               <button onClick={()=>handlePromote(t.uid)} style={workspaceActionButtonStyle("blue")}>Make Admin</button>
