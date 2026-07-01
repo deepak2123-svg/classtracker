@@ -4769,6 +4769,10 @@ function AlsoAtInstitutes({ institutes = [], maxVisible = 2 }){
             color:G.textM,
             fontFamily:G.sans,
             fontWeight:600,
+            minWidth:0,
+            overflow:"hidden",
+            textOverflow:"ellipsis",
+            whiteSpace:"nowrap",
           }}>
           {inst}
         </span>
@@ -17879,6 +17883,10 @@ function AdminPanelInner({user}){
           fontWeight:800,
           fontFamily:G.sans,
           whiteSpace:"nowrap",
+          minWidth:0,
+          maxWidth:"100%",
+          overflow:"hidden",
+          textOverflow:"ellipsis",
           ...extraStyle,
         }}>
         {label}
@@ -17954,6 +17962,7 @@ function AdminPanelInner({user}){
                     textTransform:"uppercase",
                     letterSpacing:0.7,
                     fontFamily:G.mono,
+                    minWidth:0,
                   }}>
                   {column.label}
                 </div>
@@ -17970,7 +17979,11 @@ function AdminPanelInner({user}){
                     padding:isMobile ? "14px 12px" : "14px 16px",
                     background:"#FFFFFF",
                   }}>
-                  {renderDesktopCells(row, index)}
+                  {renderDesktopCells(row, index).map((cell, cellIndex)=>(
+                    <div key={cell?.key || columns[cellIndex]?.key || cellIndex} style={{minWidth:0,overflow:"hidden"}}>
+                      {cell}
+                    </div>
+                  ))}
                 </div>
                 {renderExpandedRow ? renderExpandedRow(row, index) : null}
               </div>
@@ -18252,6 +18265,7 @@ function AdminPanelInner({user}){
       border:`1px solid ${G.border}`,
       borderRadius:14,
       overflow:"hidden",
+      minWidth:0,
       boxShadow:reduceEffects ? "none" : G.shadowSm,
     };
     const teacherAvatar = (row, size = 38) => {
@@ -18296,6 +18310,10 @@ function AdminPanelInner({user}){
           fontSize:10.5,
           fontWeight:850,
           whiteSpace:"nowrap",
+          maxWidth:"100%",
+          minWidth:0,
+          overflow:"hidden",
+          textOverflow:"ellipsis",
         }}>
           {subject}
         </span>
@@ -18314,6 +18332,10 @@ function AdminPanelInner({user}){
         fontSize:11,
         fontWeight:800,
         whiteSpace:"nowrap",
+        maxWidth:"100%",
+        minWidth:0,
+        overflow:"hidden",
+        textOverflow:"ellipsis",
       }}>
         {section}
       </span>
@@ -18445,31 +18467,46 @@ function AdminPanelInner({user}){
       const breakdownMinutes = breakdownGroups.reduce((sum, group)=>sum + (group.weekMinutes || 0), 0);
       const breakdownInstituteCount = uniqueLabels(breakdownGroups.map(group=>group.institute)).length || row.instituteCount;
       return (
-        <div style={{borderTop:`1px solid ${G.border}`,background:"#F8F7FF",padding:isMobile ? "13px 12px" : "14px 18px"}}>
-          <div style={{fontSize:10.5,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.7,marginBottom:10}}>
+        <div style={{borderTop:`1px solid ${G.border}`,background:"#F8F7FF",padding:isMobile ? "13px 12px" : "14px 18px",minWidth:0,overflow:"hidden"}}>
+          <div style={{fontSize:10.5,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.7,marginBottom:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
             Institute breakdown - {row.name}
           </div>
-          <div style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"9px 12px",background:"#F5F3FF",borderBottom:"1px solid #DDD6FE"}}>
-              {["Institute","Subject","Sections","Classes","Hours 7d"].map(label=>(
-                <div key={label} style={{fontSize:10,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.6}}>{label}</div>
-              ))}
-            </div>
+          <div style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,overflow:"hidden",minWidth:0}}>
             {breakdownGroups.map(group=>(
-              <div key={`${row.teacher.uid}_bd_${group.key}`} style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"11px 12px",borderTop:`1px solid ${G.border}`,alignItems:"center"}}>
-                <div style={{fontSize:12.5,fontWeight:850,color:G.text}}>{group.institute}</div>
-                <div>{renderLimitedChips(group.subjects.length ? group.subjects : row.subjects, subjectChip, 2)}</div>
-                <div>{renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 4)}</div>
-                <div style={{fontSize:13.5,fontWeight:900,color:G.text}}>{group.classCount || "--"}</div>
-                <div style={{fontSize:13.5,fontWeight:900,color:G.text}}>{row.detailsReady ? formatDurationShort(group.weekMinutes) : "--"}</div>
+              <div key={`${row.teacher.uid}_bd_${group.key}`} style={{padding:"12px",borderTop:`1px solid ${G.border}`,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,minWidth:0}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div title={group.institute} style={{fontSize:13,fontWeight:900,color:G.text,lineHeight:1.25,overflowWrap:"anywhere"}}>
+                      {group.institute}
+                    </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:7,minWidth:0}}>
+                      {renderLimitedChips(group.subjects.length ? group.subjects : row.subjects, subjectChip, 2)}
+                    </div>
+                    {!!group.sections.length&&(
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:7,minWidth:0}}>
+                        {renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 4)}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"auto auto",gap:"4px 10px",alignItems:"baseline",flexShrink:0,textAlign:"right"}}>
+                    <div style={{fontSize:10,color:G.textL,fontWeight:850,textTransform:"uppercase",letterSpacing:0.4}}>Classes</div>
+                    <div style={{fontSize:13.5,fontWeight:950,color:G.text}}>{group.classCount || "--"}</div>
+                    <div style={{fontSize:10,color:G.textL,fontWeight:850,textTransform:"uppercase",letterSpacing:0.4}}>Hours</div>
+                    <div style={{fontSize:13.5,fontWeight:950,color:G.text}}>{row.detailsReady ? formatDurationShort(group.weekMinutes) : "--"}</div>
+                  </div>
+                </div>
               </div>
             ))}
-            <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"11px 12px",borderTop:"1px solid #DDD6FE",background:"#F5F3FF",alignItems:"center"}}>
-              <div style={{fontSize:12.5,fontWeight:950,color:"#6D28D9"}}>Total - {breakdownInstituteCount} institute{breakdownInstituteCount===1?"":"s"}</div>
-              <div style={{fontSize:12,fontWeight:850,color:G.textM}}>{breakdownSubjects.length || row.subjectCount} subject{(breakdownSubjects.length || row.subjectCount)===1?"":"s"}</div>
-              <div>{teacherChip(`${breakdownSections.length || row.sectionCount} section${(breakdownSections.length || row.sectionCount)===1?"":"s"}`, "green")}</div>
-              <div style={{fontSize:14,fontWeight:950,color:"#17926A"}}>{breakdownClassCount || row.classCount}</div>
-              <div style={{fontSize:14,fontWeight:950,color:"#17926A"}}>{row.detailsReady ? formatDurationShort(breakdownMinutes) : "--"}</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"11px 12px",borderTop:"1px solid #DDD6FE",background:"#F5F3FF",minWidth:0,flexWrap:"wrap"}}>
+              <div style={{fontSize:12.5,fontWeight:950,color:"#6D28D9",minWidth:0}}>
+                Total - {breakdownInstituteCount} institute{breakdownInstituteCount===1?"":"s"}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",minWidth:0}}>
+                {teacherChip(`${breakdownSubjects.length || row.subjectCount} subject${(breakdownSubjects.length || row.subjectCount)===1?"":"s"}`, "slate")}
+                {teacherChip(`${breakdownSections.length || row.sectionCount} section${(breakdownSections.length || row.sectionCount)===1?"":"s"}`, "green")}
+                {teacherChip(`${breakdownClassCount || row.classCount} classes`, "green")}
+                {teacherChip(row.detailsReady ? formatDurationShort(breakdownMinutes) : "--", "green")}
+              </div>
             </div>
           </div>
         </div>
@@ -18486,7 +18523,7 @@ function AdminPanelInner({user}){
       );
       return (
         <div style={{borderTop:`1px solid ${G.border}`,background:"#FBFCFE",padding:isMobile ? "14px 12px" : "16px"}}>
-          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(0,1.15fr) minmax(0,0.95fr)",gap:16}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))",gap:16,minWidth:0}}>
             <div style={{minWidth:0}}>
               <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Assigned subjects</div>
               {activeSubjects.length===0 ? (
@@ -18514,7 +18551,7 @@ function AdminPanelInner({user}){
             </div>
             <div style={{minWidth:0}}>
               <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Account summary</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",minWidth:0}}>
                 {teacherChip(row.primaryInstitute, "blue", {maxWidth:220,overflow:"hidden",textOverflow:"ellipsis"})}
                 {teacherChip(`${row.classCount} classes`, "slate")}
                 {teacherChip(`${row.subjectCount} subjects`, "slate")}
@@ -18530,10 +18567,10 @@ function AdminPanelInner({user}){
             {sortedClasses.length>0 ? (
               <div style={{display:"flex",flexDirection:"column",gap:7}}>
                 {sortedClasses.map(cls=>(
-                  <div key={cls.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#FFFFFF",borderRadius:10,padding:"10px 12px",border:`1px solid ${G.border}`,gap:8}}>
+                  <div key={cls.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#FFFFFF",borderRadius:10,padding:"10px 12px",border:`1px solid ${G.border}`,gap:8,minWidth:0}}>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:800,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{classDisplayName(cls)}</div>
-                      <div style={{fontSize:12,color:G.textM,marginTop:3}}>{cls.institute || row.primaryInstitute} - {classSubjectName(t, cls)}</div>
+                      <div style={{fontSize:12,color:G.textM,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.institute || row.primaryInstitute} - {classSubjectName(t, cls)}</div>
                     </div>
                     <button onClick={()=>handleRemoveFromClass(t.uid,cls.id,classDisplayName(cls))} style={workspaceActionButtonStyle("danger")}>
                       Remove
@@ -18574,7 +18611,7 @@ function AdminPanelInner({user}){
       );
     };
     const renderTeacherActions = row => (
-      <div style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap",minWidth:0,maxWidth:"100%"}}>
         {renamingTeacher?.uid===row.teacher.uid ? (
           <>
             <button
@@ -18621,7 +18658,7 @@ function AdminPanelInner({user}){
     );
     const renderTeacherCard = row => (
       <div key={`teacher_card_${row.teacher.uid}`} style={{...cardShell,borderColor:row.instituteCount>1 ? "#DDD6FE" : row.detailsReady && row.weekMinutes===0 ? "#FED7AA" : G.border}}>
-        <div style={{padding:"14px",display:"flex",alignItems:"flex-start",gap:10,borderBottom:`1px solid ${G.border}`}}>
+        <div style={{padding:"14px",display:"flex",alignItems:"flex-start",gap:10,borderBottom:`1px solid ${G.border}`,minWidth:0}}>
           {teacherAvatar(row, 42)}
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -18630,14 +18667,14 @@ function AdminPanelInner({user}){
             </div>
             <div style={{fontSize:12,color:G.textM,marginTop:3,fontFamily:G.mono,wordBreak:"break-all"}}>{row.email}</div>
           </div>
-          <div>{statusPill(row)}</div>
+          <div style={{flexShrink:0}}>{statusPill(row)}</div>
         </div>
         <div style={{padding:"10px 14px",background:row.instituteCount>1 ? "#FAF8FF" : "#F8FAFC",borderBottom:`1px solid ${G.border}`}}>
           {row.instituteGroups.slice(0,3).map(group=>(
             <div key={`${row.teacher.uid}_card_inst_${group.key}`} style={{display:"flex",alignItems:"center",gap:7,minWidth:0,marginBottom:5}}>
               <span style={{width:6,height:6,borderRadius:999,background:subjectColor(group.subjects[0] || row.name),flexShrink:0}} />
-              <span style={{fontSize:12,fontWeight:800,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{shortInstituteLabel(group.institute)}</span>
-              <span style={{marginLeft:"auto",fontSize:11,color:G.textM,fontWeight:750,whiteSpace:"nowrap"}}>
+              <span style={{fontSize:12,fontWeight:800,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0,flex:1}}>{shortInstituteLabel(group.institute)}</span>
+              <span style={{marginLeft:"auto",fontSize:11,color:G.textM,fontWeight:750,whiteSpace:"nowrap",flexShrink:0}}>
                 {group.classCount || (row.detailsReady ? 0 : row.classCount)} class{(group.classCount || row.classCount)===1?"":"es"}
                 {row.detailsReady ? ` - ${formatDurationShort(group.weekMinutes)}` : ""}
               </span>
