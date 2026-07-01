@@ -17946,6 +17946,7 @@ function AdminPanelInner({user}){
     emptyMessage,
     renderDesktopCells,
     renderExpandedRow = null,
+    getRowProps = null,
   }) => {
     if(!rows.length){
       return (
@@ -17983,9 +17984,14 @@ function AdminPanelInner({user}){
                 </div>
               ))}
             </div>
-            {rows.map((row, index)=>(
+            {rows.map((row, index)=>{
+              const extraRowProps = getRowProps ? (getRowProps(row, index) || {}) : {};
+              const { style:extraRowStyle = {}, className:extraRowClassName, ...restRowProps } = extraRowProps;
+              return (
               <div key={rowKey(row, index)} style={{borderTop:index===0 ? "none" : `1px solid ${G.border}`}}>
                 <div
+                  className={extraRowClassName}
+                  {...restRowProps}
                   style={{
                     display:"grid",
                     gridTemplateColumns:desktopGrid,
@@ -17993,6 +17999,7 @@ function AdminPanelInner({user}){
                     alignItems:"center",
                     padding:isMobile ? "14px 12px" : "14px 16px",
                     background:"#FFFFFF",
+                    ...extraRowStyle,
                   }}>
                   {renderDesktopCells(row, index).map((cell, cellIndex)=>(
                     <div key={cell?.key || columns[cellIndex]?.key || cellIndex} style={{minWidth:0,overflow:"hidden"}}>
@@ -18002,7 +18009,8 @@ function AdminPanelInner({user}){
                 </div>
                 {renderExpandedRow ? renderExpandedRow(row, index) : null}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -18012,7 +18020,6 @@ function AdminPanelInner({user}){
   const renderManageTeachersPanel = () => {
     const weekEndKey = todayKey();
     const weekStartKey = addDaysToDateKey(weekEndKey, -6);
-    const activeSubjects = globalSubjects.filter(subject=>subject.active);
     const uniqueLabels = values => {
       const output = [];
       (values || []).forEach(value=>{
@@ -18192,8 +18199,10 @@ function AdminPanelInner({user}){
       ]).filter(inst=>!isPlaceholderInstitute(inst));
       const displayInstituteCount = membershipInstitutes.length || uniqueLabels(groups.map(group=>group.institute)).length;
       const assignedSubjects = teacherSubjectNames(teacher);
+      const classSubjects = uniqueLabels(allGroups.flatMap(group=>group.subjects))
+        .filter(subject=>normaliseName(subject).toLowerCase() !== "no subject");
       const allSubjects = detailsReady
-        ? uniqueLabels([...allGroups.flatMap(group=>group.subjects), ...assignedSubjects])
+        ? classSubjects
         : assignedSubjects;
       const allSections = uniqueLabels(allGroups.flatMap(group=>group.sections));
       const classCount = detailsReady ? scopedClasses.length : Number(teacher.classCount || 0);
@@ -18369,14 +18378,61 @@ function AdminPanelInner({user}){
       if(row.detailsReady && row.weekMinutes === 0) return teacherChip("No 7d logs", "amber");
       return teacherChip("Active", "green");
     };
+    const toggleTeacherBreakdown = row => {
+      if(!row?.teacher?.uid || row.instituteCount <= 1) return;
+      ensureFullData(row.teacher.uid);
+      setManageTeacherBreakdownUid(current=>current===row.teacher.uid ? null : row.teacher.uid);
+    };
+    const stopTeacherAction = (event, action) => {
+      event?.stopPropagation?.();
+      action?.();
+    };
+    const openTeacherEntriesForInstitute = (row, instituteName = "") => {
+      setView("main");
+      if(instituteName && !isPlaceholderInstitute(instituteName)) setSelInst(instituteName);
+      setSelP2(row.teacher.uid);
+      setTab("teacher");
+      setMobileStep(2);
+    };
+    const teacherInstituteBadge = (row, label = `${row.instituteCount} institutes`) => {
+      if(row.instituteCount <= 1) return null;
+      const open = manageTeacherBreakdownUid===row.teacher.uid;
+      return (
+        <button
+          type="button"
+          className="admin-teacher-disclosure"
+          onClick={event=>stopTeacherAction(event, ()=>toggleTeacherBreakdown(row))}
+          title={open ? "Hide institute breakdown" : "Show institute breakdown"}
+          style={{
+            border:"1px solid #DDD6FE",
+            borderRadius:999,
+            background:open ? "#EDE9FE" : "#F5F3FF",
+            color:"#6D28D9",
+            padding:"3px 8px",
+            fontSize:10.5,
+            fontWeight:900,
+            cursor:"pointer",
+            fontFamily:G.sans,
+            display:"inline-flex",
+            alignItems:"center",
+            gap:5,
+            whiteSpace:"nowrap",
+            lineHeight:1.1,
+          }}>
+          <span style={{fontSize:10,transform:open ? "rotate(180deg)" : "none",transition:"transform 0.18s ease",display:"inline-block"}}>v</span>
+          {label}
+        </button>
+      );
+    };
     const renderTeacherName = row => (
       <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
         {teacherAvatar(row)}
         <div style={{minWidth:0}}>
           {renamingTeacher?.uid===row.teacher.uid ? (
-            <input
-              value={renameVal}
-              onChange={e=>setRenameVal(e.target.value)}
+              <input
+                value={renameVal}
+                onClick={event=>event.stopPropagation()}
+                onChange={e=>setRenameVal(e.target.value)}
               onKeyDown={e=>{
                 if(e.key==="Enter") handleRenameTeacher(row.teacher.uid,renameVal);
                 if(e.key==="Escape") clearTeacherRename();
@@ -18392,27 +18448,7 @@ function AdminPanelInner({user}){
                   {row.name}
                 </span>
                 {row.isAdminTeacher && teacherChip("Admin + teacher", "blue")}
-                {row.instituteCount > 1 && (
-                  <button
-                    type="button"
-                    onClick={()=>{
-                      ensureFullData(row.teacher.uid);
-                      setManageTeacherBreakdownUid(current=>current===row.teacher.uid ? null : row.teacher.uid);
-                    }}
-                    style={{
-                      border:"none",
-                      borderRadius:999,
-                      background:"#F5F3FF",
-                      color:"#6D28D9",
-                      padding:"3px 8px",
-                      fontSize:10.5,
-                      fontWeight:900,
-                      cursor:"pointer",
-                      fontFamily:G.sans,
-                    }}>
-                    {row.instituteCount} institutes
-                  </button>
-                )}
+                {teacherInstituteBadge(row)}
               </div>
               <div style={{fontSize:12,color:G.textM,marginTop:3,fontFamily:G.mono,wordBreak:"break-all"}}>{row.email}</div>
             </>
@@ -18425,16 +18461,35 @@ function AdminPanelInner({user}){
         <div style={{fontSize:13.5,fontWeight:850,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
           {row.primaryInstitute}
         </div>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:5}}>
-          {row.instituteGroups.slice(0, row.instituteCount > 1 ? 2 : 1).map(group=>(
-            <span key={group.key} style={{fontSize:11,color:G.textM,whiteSpace:"nowrap"}}>
-              {shortInstituteLabel(group.institute)}
-            </span>
-          ))}
-          {row.instituteGroups.length > 2 && teacherChip(`+${row.instituteGroups.length - 2}`, "slate")}
-          {row.extraInstitutes.length === 0 && row.instituteCount <= 1 && <span style={{fontSize:12,color:G.textL}}>Single institute</span>}
-        </div>
-        {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={2} />}
+        {row.instituteCount > 1 ? (
+          <div style={{marginTop:5,minWidth:0}}>
+            <button
+              type="button"
+              onClick={event=>stopTeacherAction(event, ()=>toggleTeacherBreakdown(row))}
+              style={{
+                border:"none",
+                background:"transparent",
+                padding:0,
+                color:"#6D28D9",
+                fontSize:11.5,
+                fontWeight:850,
+                cursor:"pointer",
+                fontFamily:G.sans,
+                display:"inline-flex",
+                alignItems:"center",
+                gap:4,
+              }}>
+              Also at {row.extraInstitutes.length || row.instituteCount - 1} more
+            </button>
+            {!!row.extraInstitutes.length&&(
+              <div title={row.extraInstitutes.join(", ")} style={{fontSize:11,color:G.textL,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                {row.extraInstitutes.map(shortInstituteLabel).join(", ")}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{fontSize:12,color:G.textL,marginTop:5}}>Single institute</div>
+        )}
       </div>
     );
     const renderSplitMetric = (row, type) => {
@@ -18562,82 +18617,93 @@ function AdminPanelInner({user}){
       const breakdownClassCount = breakdownGroups.reduce((sum, group)=>sum + (group.classCount || 0), 0);
       const breakdownMinutes = breakdownGroups.reduce((sum, group)=>sum + (group.weekMinutes || 0), 0);
       const breakdownInstituteCount = uniqueLabels(breakdownGroups.map(group=>group.institute)).length || row.instituteCount;
+      const compactBreakdown = isMobile || manageTeacherView==="cards";
       return (
-        <div style={{borderTop:`1px solid ${G.border}`,background:"#F8F7FF",padding:isMobile ? "13px 12px" : "14px 18px",minWidth:0,overflow:"hidden"}}>
-          <div style={{fontSize:10.5,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.7,marginBottom:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            Institute breakdown - {row.name}
+        <div className="admin-teacher-breakdown" style={{borderTop:`1px solid ${G.border}`,background:"linear-gradient(135deg,#F8F7FF 0%,#F3F1FE 100%)",padding:isMobile ? "13px 12px" : "14px 18px",minWidth:0,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+            <div style={{fontSize:10.5,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+              Breakdown by institute - {row.name}
+            </div>
+            <button
+              type="button"
+              onClick={event=>stopTeacherAction(event, ()=>setManageTeacherBreakdownUid(null))}
+              style={{border:"1px solid #DDD6FE",background:"#FFFFFF",color:"#6D28D9",borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:900,fontFamily:G.sans,cursor:"pointer"}}>
+              Hide
+            </button>
           </div>
-          <div style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,padding:10,minWidth:0,maxWidth:"100%",overflow:"hidden"}}>
-            <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:0,maxWidth:"100%"}}>
-              {breakdownGroups.map(group=>(
-                <div key={`${row.teacher.uid}_bd_${group.key}`} style={{padding:"12px",border:`1px solid ${G.border}`,borderRadius:12,background:"#FFFFFF",minWidth:0,maxWidth:"100%",overflow:"hidden"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,minWidth:0,flexWrap:"wrap"}}>
-                    <div style={{minWidth:0,flex:"1 1 220px"}}>
-                      <div title={group.institute} style={{fontSize:13.5,fontWeight:900,color:G.text,lineHeight:1.25,overflowWrap:"anywhere"}}>
+          <div style={{display:"grid",gridTemplateColumns:compactBreakdown ? "1fr" : "repeat(2, minmax(0, 1fr))",gap:10,maxWidth:compactBreakdown ? "100%" : 980,minWidth:0}}>
+            {breakdownGroups.map(group=>{
+              const groupSubjects = group.subjects.length ? group.subjects : row.subjects;
+              return (
+                <div key={`${row.teacher.uid}_bd_${group.key}`} className="admin-teacher-breakdown-card" style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:13,padding:12,minWidth:0,boxShadow:reduceEffects ? "none" : "0 1px 4px rgba(15,23,42,0.05)"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,minWidth:0}}>
+                    <button
+                      type="button"
+                      onClick={event=>stopTeacherAction(event, ()=>openTeacherEntriesForInstitute(row, group.institute))}
+                      title={`Open ${row.name}'s entries for ${group.institute}`}
+                      style={{border:"none",background:"transparent",padding:0,textAlign:"left",cursor:"pointer",minWidth:0,flex:"1 1 auto"}}>
+                      <span style={{display:"block",fontSize:13.5,fontWeight:950,color:G.text,lineHeight:1.25,overflowWrap:"anywhere"}}>
                         {group.institute}
-                      </div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8,minWidth:0,maxWidth:"100%"}}>
-                        {renderLimitedChips(group.subjects.length ? group.subjects : row.subjects, subjectChip, 3)}
-                      </div>
+                      </span>
+                      <span style={{display:"block",fontSize:11,color:G.textL,marginTop:3}}>
+                        Open teacher entries for this institute
+                      </span>
+                    </button>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap",justifyContent:"flex-end",flex:"0 0 auto",maxWidth:compactBreakdown ? "100%" : 210}}>
+                      {teacherChip(`${group.classCount || 0} class${(group.classCount || 0)===1?"":"es"}`, "green")}
+                      {teacherChip(row.detailsReady ? formatDurationShort(group.weekMinutes) : "--", "green")}
                     </div>
-                    {!isPlaceholderInstitute(group.institute) && (
-                      <button
-                        type="button"
-                        onClick={()=>openArchiveTeacherInstituteModal(row, group)}
-                        style={{
-                          border:"1.5px solid #FED7AA",
-                          background:"#FFF7ED",
-                          color:G.amber,
-                          borderRadius:9,
-                          padding:"7px 10px",
-                          fontSize:11,
-                          fontWeight:900,
-                          fontFamily:G.sans,
-                          cursor:"pointer",
-                          whiteSpace:"nowrap",
-                          flexShrink:0,
-                        }}>
-                        Archive branch
-                      </button>
+                  </div>
+
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:9,minWidth:0}}>
+                    {renderLimitedChips(groupSubjects.length ? groupSubjects : [row.detailsReady ? "No subject" : "Checking"], subjectChip, 3)}
+                  </div>
+
+                  <div style={{marginTop:10}}>
+                    <div style={{fontSize:10,color:G.textL,fontWeight:900,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6}}>Sections</div>
+                    {!!group.sections.length ? (
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6,minWidth:0}}>
+                        {renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 7)}
+                      </div>
+                    ) : (
+                      <span style={{fontSize:12,color:G.textL}}>{row.detailsReady ? "No sections" : "Checking classes"}</span>
                     )}
                   </div>
-                  {!!group.sections.length&&(
-                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:9,minWidth:0,maxWidth:"100%"}}>
-                      {renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 6)}
+
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:12,paddingTop:10,borderTop:`1px solid ${G.border}`,flexWrap:"wrap"}}>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
+                      {teacherChip(`${row.detailsReady ? group.weekEntries || 0 : "--"} session${group.weekEntries===1?"":"s"}`, "slate")}
                     </div>
-                  )}
-                  <div style={{
-                    display:"grid",
-                    gridTemplateColumns:isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(104px, 1fr))",
-                    gap:8,
-                    marginTop:11,
-                    minWidth:0,
-                    maxWidth:"100%",
-                  }}>
-                    {[
-                      ["Classes", group.classCount || 0],
-                      ["Hours 7d", row.detailsReady ? formatDurationShort(group.weekMinutes) : "--"],
-                      ["Sessions", row.detailsReady ? group.weekEntries || 0 : "--"],
-                    ].map(([label,value])=>(
-                      <div key={`${group.key}_${label}`} style={{border:`1px solid ${G.border}`,borderRadius:10,background:"#F8FAFC",padding:"8px 9px",minWidth:0}}>
-                        <div style={{fontSize:10,color:G.textL,fontWeight:850,textTransform:"uppercase",letterSpacing:0.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
-                        <div style={{fontSize:13.5,fontWeight:950,color:G.text,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{value}</div>
-                      </div>
-                    ))}
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                      <button
+                        type="button"
+                        onClick={event=>stopTeacherAction(event, ()=>openTeacherEntriesForInstitute(row, group.institute))}
+                        style={{...workspaceActionButtonStyle("neutral"),minHeight:30,borderRadius:9,fontSize:11.5,padding:"0 9px",boxShadow:"none"}}>
+                        Entries
+                      </button>
+                      {!isPlaceholderInstitute(group.institute) && (
+                        <button
+                          type="button"
+                          onClick={event=>stopTeacherAction(event, ()=>openArchiveTeacherInstituteModal(row, group))}
+                          style={{...workspaceActionButtonStyle("danger"),minHeight:30,borderRadius:9,fontSize:11.5,padding:"0 9px",boxShadow:"none",background:"#FFF7ED",borderColor:"#FED7AA",color:G.amber}}>
+                          Remove from institute
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,padding:"11px 2px 2px",marginTop:2,borderTop:"1px solid #DDD6FE",background:"#FFFFFF",minWidth:0,flexWrap:"wrap"}}>
-              <div style={{fontSize:12.5,fontWeight:950,color:"#6D28D9",minWidth:0}}>
+              );
+            })}
+          </div>
+          <div style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,marginTop:10,padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",maxWidth:compactBreakdown ? "100%" : 980}}>
+            <div style={{fontSize:12.5,fontWeight:950,color:"#6D28D9",minWidth:0}}>
                 Total - {breakdownInstituteCount} institute{breakdownInstituteCount===1?"":"s"}
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",minWidth:0}}>
-                {teacherChip(`${breakdownSubjects.length || row.subjectCount} subject${(breakdownSubjects.length || row.subjectCount)===1?"":"s"}`, "slate")}
-                {teacherChip(`${breakdownSections.length || row.sectionCount} section${(breakdownSections.length || row.sectionCount)===1?"":"s"}`, "green")}
-                {teacherChip(`${breakdownClassCount || row.classCount} classes`, "green")}
-                {teacherChip(row.detailsReady ? formatDurationShort(breakdownMinutes) : "--", "green")}
-              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",minWidth:0}}>
+              {teacherChip(`${breakdownSubjects.length || row.subjectCount} subject${(breakdownSubjects.length || row.subjectCount)===1?"":"s"}`, "slate")}
+              {teacherChip(`${breakdownSections.length || row.sectionCount} section${(breakdownSections.length || row.sectionCount)===1?"":"s"}`, "green")}
+              {teacherChip(`${breakdownClassCount || row.classCount} classes`, "green")}
+              {teacherChip(row.detailsReady ? formatDurationShort(breakdownMinutes) : "--", "green")}
             </div>
           </div>
         </div>
@@ -18654,43 +18720,17 @@ function AdminPanelInner({user}){
       );
       return (
         <div style={{borderTop:`1px solid ${G.border}`,background:"#FBFCFE",padding:isMobile ? "14px 12px" : "16px"}}>
-          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))",gap:16,minWidth:0}}>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Assigned subjects</div>
-              {activeSubjects.length===0 ? (
-                <div style={{fontSize:13,color:G.textM,lineHeight:1.55}}>Create subjects in the syllabus catalog before assigning them here.</div>
-              ) : (
-                <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                  {activeSubjects.map(subject=>{
-                    const selected = teacherAssignedSubjectIds(t).includes(subject.id);
-                    return (
-                      <button
-                        key={`${t.uid}_${subject.id}`}
-                        onClick={()=>handleToggleTeacherSubject(t,subject)}
-                        disabled={subjectAssignmentBusy===t.uid}
-                        style={{
-                          ...pill(selected?G.navy:G.surface,selected?"#fff":G.textS,selected?G.navy:G.borderM),
-                          fontSize:12.5,
-                          opacity:subjectAssignmentBusy===t.uid?0.65:1,
-                        }}>
-                        {selected?"✓ ":""}{subject.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+          <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:13,padding:"12px 14px",minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Account summary</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",minWidth:0}}>
+              {teacherChip(row.primaryInstitute, "blue", {maxWidth:260,overflow:"hidden",textOverflow:"ellipsis"})}
+              {teacherChip(`${row.classCount} classes`, "slate")}
+              {teacherChip(`${row.subjectCount} subject${row.subjectCount===1?"":"s"}`, "slate")}
+              {teacherChip(`${row.sectionCount} section${row.sectionCount===1?"":"s"}`, "slate")}
+              {row.isAdminTeacher && teacherChip("Admin account", "blue")}
+              {row.hasLeftWorkspace ? teacherChip(row.departedLabel, "red") : teacherChip("Ready to teach", "green")}
             </div>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Account summary</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",minWidth:0}}>
-                {teacherChip(row.primaryInstitute, "blue", {maxWidth:220,overflow:"hidden",textOverflow:"ellipsis"})}
-                {teacherChip(`${row.classCount} classes`, "slate")}
-                {teacherChip(`${row.subjectCount} subjects`, "slate")}
-                {row.isAdminTeacher && teacherChip("Admin account", "blue")}
-                {row.hasLeftWorkspace ? teacherChip(row.departedLabel, "red") : teacherChip("Ready to teach", "green")}
-              </div>
-              {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={3} />}
-            </div>
+            {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={3} />}
           </div>
 
           <div style={{marginTop:16}}>
@@ -18746,37 +18786,27 @@ function AdminPanelInner({user}){
         {renamingTeacher?.uid===row.teacher.uid ? (
           <>
             <button
-              onClick={()=>handleRenameTeacher(row.teacher.uid,renameVal)}
+              onClick={event=>stopTeacherAction(event, ()=>handleRenameTeacher(row.teacher.uid,renameVal))}
               disabled={!renameVal.trim()}
               style={{...workspaceActionButtonStyle("primary"),opacity:renameVal.trim()?1:0.55,cursor:renameVal.trim()?"pointer":"not-allowed"}}>
               Save
             </button>
-            <button onClick={clearTeacherRename} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
+            <button onClick={event=>stopTeacherAction(event, clearTeacherRename)} style={workspaceActionButtonStyle("neutral")}>Cancel</button>
             {!row.isMe&&(
-              <button onClick={()=>handleRemoveTeacher(row.teacher.uid,row.name || "this teacher")} style={workspaceActionButtonStyle("danger")}>Remove</button>
+              <button onClick={event=>stopTeacherAction(event, ()=>handleRemoveTeacher(row.teacher.uid,row.name || "this teacher"))} style={workspaceActionButtonStyle("danger")}>Remove</button>
             )}
           </>
         ) : (
           <>
             <button
-              onClick={()=>{
+              onClick={event=>stopTeacherAction(event, ()=>{
                 ensureFullData(row.teacher.uid);
                 setSelTeacher(selTeacher===row.teacher.uid ? null : row.teacher.uid);
-              }}
+              })}
               style={workspaceActionButtonStyle(selTeacher===row.teacher.uid ? "blue" : "neutral")}>
               {selTeacher===row.teacher.uid ? "Done" : "Manage"}
             </button>
-            <button onClick={()=>{setView("main");setSelP2(row.teacher.uid);setTab("teacher");setMobileStep(2);}} style={workspaceActionButtonStyle("neutral")}>Entries</button>
-            {row.instituteCount > 1 && (
-              <button
-                onClick={()=>{
-                  ensureFullData(row.teacher.uid);
-                  setManageTeacherBreakdownUid(current=>current===row.teacher.uid ? null : row.teacher.uid);
-                }}
-                style={workspaceActionButtonStyle(manageTeacherBreakdownUid===row.teacher.uid ? "blue" : "neutral")}>
-                Breakdown
-              </button>
-            )}
+            <button onClick={event=>stopTeacherAction(event, ()=>openTeacherEntriesForInstitute(row, row.primaryInstitute))} style={workspaceActionButtonStyle("neutral")}>Entries</button>
           </>
         )}
       </div>
@@ -18788,12 +18818,16 @@ function AdminPanelInner({user}){
       </>
     );
     const renderTeacherCard = row => (
-      <div key={`teacher_card_${row.teacher.uid}`} style={{...cardShell,borderColor:row.instituteCount>1 ? "#DDD6FE" : row.detailsReady && row.weekMinutes===0 ? "#FED7AA" : G.border}}>
+      <div
+        key={`teacher_card_${row.teacher.uid}`}
+        className={`admin-teacher-card-shell${manageTeacherBreakdownUid===row.teacher.uid ? " is-open" : ""}`}
+        style={{...cardShell,borderColor:row.instituteCount>1 ? "#DDD6FE" : row.detailsReady && row.weekMinutes===0 ? "#FED7AA" : G.border}}>
         <div style={{padding:"14px",display:"flex",alignItems:"flex-start",gap:10,borderBottom:`1px solid ${G.border}`,minWidth:0}}>
           {teacherAvatar(row, 42)}
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              <span style={{fontSize:15,fontWeight:900,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:220}}>{row.name}</span>
+              <span style={{fontSize:15,fontWeight:900,color:G.text,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:row.instituteCount>1 ? 170 : 220}}>{row.name}</span>
+              {teacherInstituteBadge(row)}
               {row.isAdminTeacher && teacherChip("Admin + teacher", "blue")}
             </div>
             <div style={{fontSize:12,color:G.textM,marginTop:3,fontFamily:G.mono,wordBreak:"break-all"}}>{row.email}</div>
@@ -18801,7 +18835,7 @@ function AdminPanelInner({user}){
           <div style={{flexShrink:0}}>{statusPill(row)}</div>
         </div>
         <div style={{padding:"10px 14px",background:row.instituteCount>1 ? "#FAF8FF" : "#F8FAFC",borderBottom:`1px solid ${G.border}`}}>
-          {row.instituteGroups.slice(0,3).map(group=>(
+          {row.instituteGroups.slice(0,2).map(group=>(
             <div key={`${row.teacher.uid}_card_inst_${group.key}`} style={{display:"flex",alignItems:"center",gap:7,minWidth:0,marginBottom:5}}>
               <span style={{width:6,height:6,borderRadius:999,background:subjectColor(group.subjects[0] || row.name),flexShrink:0}} />
               <span style={{fontSize:12,fontWeight:800,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0,flex:1}}>{shortInstituteLabel(group.institute)}</span>
@@ -18811,7 +18845,14 @@ function AdminPanelInner({user}){
               </span>
             </div>
           ))}
-          {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={2} />}
+          {row.extraInstitutes.length>0&&(
+            <button
+              type="button"
+              onClick={event=>stopTeacherAction(event, ()=>toggleTeacherBreakdown(row))}
+              style={{border:"none",background:"transparent",padding:0,marginTop:2,color:"#6D28D9",fontSize:11.5,fontWeight:850,cursor:"pointer",fontFamily:G.sans}}>
+              Show {row.extraInstitutes.length} other institute{row.extraInstitutes.length===1?"":"s"}
+            </button>
+          )}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",borderBottom:`1px solid ${G.border}`}}>
           {[
@@ -18840,6 +18881,38 @@ function AdminPanelInner({user}){
 
     return(
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:isMobile ? "14px" : "18px",boxShadow:reduceEffects ? "none" : G.shadowSm}}>
+        <style>{`
+          .admin-teacher-data-row {
+            transition: background 0.12s ease;
+          }
+          .admin-teacher-data-row:hover {
+            background: #FAFBFD !important;
+          }
+          .admin-teacher-disclosure {
+            transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+          }
+          .admin-teacher-disclosure:hover {
+            background: #EDE9FE !important;
+            border-color: #C4B5FD !important;
+          }
+          .admin-teacher-card-shell {
+            transition: border-color 0.16s ease, box-shadow 0.16s ease;
+          }
+          .admin-teacher-card-shell:hover {
+            border-color: #BCC8DC !important;
+            box-shadow: 0 4px 16px rgba(15,23,42,0.08) !important;
+          }
+          .admin-teacher-card-shell.is-open {
+            border-color: #A78BFA !important;
+          }
+          .admin-teacher-breakdown-card {
+            transition: border-color 0.14s ease, box-shadow 0.14s ease;
+          }
+          .admin-teacher-breakdown-card:hover {
+            border-color: #C4B5FD !important;
+            box-shadow: 0 4px 14px rgba(109,40,217,0.08) !important;
+          }
+        `}</style>
         <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:11,fontWeight:850,letterSpacing:0.8,textTransform:"uppercase",color:G.textL,marginBottom:4}}>Control Centre</div>
@@ -18970,7 +19043,7 @@ function AdminPanelInner({user}){
 
         {manageTeacherView==="cards" ? (
           teacherRows.length ? (
-            <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(auto-fit, minmax(330px, 1fr))",gap:14}}>
+            <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(auto-fit, minmax(340px, 1fr))",gap:14}}>
               {teacherRows.map(renderTeacherCard)}
             </div>
           ) : (
@@ -18987,11 +19060,17 @@ function AdminPanelInner({user}){
             { key:"status", label:"Status" },
             { key:"actions", label:"Actions" },
           ],
-          desktopGrid:"minmax(265px,1.45fr) minmax(220px,1.05fr) minmax(150px,0.82fr) minmax(180px,1fr) minmax(105px,0.55fr) minmax(120px,0.6fr) 128px minmax(250px,1.1fr)",
-          minWidth:1390,
+          desktopGrid:"minmax(245px,1.35fr) minmax(190px,1fr) minmax(125px,0.7fr) minmax(165px,0.9fr) minmax(86px,0.48fr) minmax(104px,0.55fr) minmax(112px,0.55fr) minmax(165px,0.75fr)",
+          minWidth:1180,
           rows:teacherRows,
           rowKey:row=>`teacher_${row.teacher.uid}`,
           emptyMessage:emptyTeacherMessage,
+          getRowProps:row=>row.instituteCount > 1 ? {
+            className:"admin-teacher-data-row",
+            onClick:()=>toggleTeacherBreakdown(row),
+            title:manageTeacherBreakdownUid===row.teacher.uid ? "Hide institute breakdown" : "Show institute breakdown",
+            style:{cursor:"pointer"},
+          } : {},
           renderDesktopCells:row=>[
             <div key="teacher">{renderTeacherName(row)}</div>,
             <div key="institutes">{renderInstituteSummary(row)}</div>,
