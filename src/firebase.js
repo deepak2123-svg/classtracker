@@ -663,7 +663,7 @@ export async function deleteClassNotes(uid, classId) {
 }
 
 // ── Role system ───────────────────────────────────────────────────────────────
-// roles/{uid} = { role: "teacher" | "admin", grantedAt, grantedBy }
+// roles/{uid} = { role: "teacher" | "admin", adminMode?: "admin_only" | "admin_teacher", grantedAt, grantedBy }
 export function roleDocRef(uid) { return doc(db, "roles", uid); }
 
 export async function getUserRole(uid) {
@@ -673,9 +673,12 @@ export async function getUserRole(uid) {
   } catch { return "teacher"; }
 }
 
-export async function promoteToAdmin(uid, grantedByUid) {
+export async function promoteToAdmin(uid, grantedByUid, adminMode = "admin_only") {
+  const mode = adminMode === "admin_teacher" ? "admin_teacher" : "admin_only";
   await setDoc(roleDocRef(uid), {
     role: "admin",
+    adminMode: mode,
+    teaches: mode === "admin_teacher",
     grantedAt: Date.now(),
     grantedBy: grantedByUid,
   });
@@ -685,9 +688,23 @@ export async function demoteToTeacher(uid, demotedByUid = null) {
   const now = Date.now();
   await setDoc(roleDocRef(uid), {
     role: "teacher",
+    adminMode: "teacher",
+    teaches: true,
     demotedAt: now,
     demotedBy: demotedByUid || null,
     updatedAt: now,
+  }, { merge: true });
+}
+
+export async function setAdminTeachingMode(uid, adminMode, updatedByUid = null) {
+  const mode = adminMode === "admin_teacher" ? "admin_teacher" : "admin_only";
+  const now = Date.now();
+  await setDoc(roleDocRef(uid), {
+    role: "admin",
+    adminMode: mode,
+    teaches: mode === "admin_teacher",
+    updatedAt: now,
+    updatedBy: updatedByUid || null,
   }, { merge: true });
 }
 
@@ -775,6 +792,15 @@ export async function getAllRoles() {
   } catch { return {}; }
 }
 
+export async function getAllRoleDetails() {
+  try {
+    const snap = await getDocs(collection(db, "roles"));
+    const map = {};
+    snap.docs.forEach(d => { map[d.id] = { uid:d.id, ...d.data() }; });
+    return map;
+  } catch { return {}; }
+}
+
 // ── Invite links ──────────────────────────────────────────────────────────────
 // invites/{token} = { createdAt, createdBy, expiresAt, used }
 export async function createInviteLink(adminUid) {
@@ -819,6 +845,8 @@ export async function useInviteToken(token, uid) {
     }, { merge: true });
     tx.set(roleRef, {
       role: "admin",
+      adminMode: "admin_only",
+      teaches: false,
       grantedAt: now,
       grantedBy: "invite-link",
       inviteToken: token,

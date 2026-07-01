@@ -31,7 +31,7 @@ import {
 } from "@tabler/icons-react";
 import {
   logout, getAllTeachers, getTeacherFullData,
-  getAllRoles, promoteToAdmin, demoteToTeacher, createInviteLink,
+  getAllRoleDetails, promoteToAdmin, demoteToTeacher, setAdminTeachingMode, createInviteLink,
   getAllInstituteSections, saveInstituteGradeGroups, deleteInstituteGradeGroup,
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData, deleteClassNotes,
@@ -308,7 +308,22 @@ const LEAVE_REASON_MAP = {
 };
 
 // ── Confirm Delete Modal ──────────────────────────────────────────────────────
-function ConfirmDeleteModal({ title, lines, confirmLabel, onConfirm, onClose, busy }) {
+function ConfirmDeleteModal({ title, lines, confirmLabel, onConfirm, onClose, busy, options = [] }) {
+  const hasOptions = Array.isArray(options) && options.length > 0;
+  const optionStyle = (tone = "neutral") => ({
+    width:"100%",
+    border:tone === "danger" ? "none" : `1.5px solid ${tone === "blue" ? "#BFDBFE" : G.border}`,
+    borderRadius:10,
+    padding:"10px 14px",
+    background:tone === "danger" ? "#DC2626" : tone === "blue" ? "#EEF4FF" : "#FFFFFF",
+    color:tone === "danger" ? "#FFFFFF" : tone === "blue" ? G.blue : G.text,
+    fontSize:14.5,
+    cursor:busy ? "not-allowed" : "pointer",
+    fontFamily:G.sans,
+    fontWeight:750,
+    textAlign:"left",
+    opacity:busy ? 0.7 : 1,
+  });
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
       <div style={{background:G.surface,borderRadius:18,padding:"26px 24px",width:"100%",maxWidth:420,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
@@ -317,6 +332,20 @@ function ConfirmDeleteModal({ title, lines, confirmLabel, onConfirm, onClose, bu
         {lines.map((l,i)=>(
           <p key={i} style={{fontSize:15,color:i===0?G.textM:G.textL,fontFamily:G.sans,lineHeight:1.55,marginBottom:i<lines.length-1?6:16}}>{l}</p>
         ))}
+        {hasOptions ? (
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {options.map(option=>(
+              <button key={option.label} onClick={option.onConfirm} disabled={busy} style={optionStyle(option.tone)}>
+                <span style={{display:"block"}}>{option.label}</span>
+                {option.hint&&<span style={{display:"block",fontSize:12,color:option.tone==="danger"?"rgba(255,255,255,0.82)":G.textM,fontWeight:600,marginTop:3,lineHeight:1.35}}>{option.hint}</span>}
+              </button>
+            ))}
+            <button onClick={onClose} disabled={busy}
+              style={{background:"none",border:`1.5px solid ${G.border}`,borderRadius:9,padding:"8px 18px",fontSize:15,cursor:"pointer",color:G.textM,fontFamily:G.sans,fontWeight:500,alignSelf:"flex-end"}}>
+              Cancel
+            </button>
+          </div>
+        ) : (
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button onClick={onClose} disabled={busy}
             style={{background:"none",border:`1.5px solid ${G.border}`,borderRadius:9,padding:"8px 18px",fontSize:15,cursor:"pointer",color:G.textM,fontFamily:G.sans,fontWeight:500}}>
@@ -327,6 +356,7 @@ function ConfirmDeleteModal({ title, lines, confirmLabel, onConfirm, onClose, bu
             {busy?"Deleting…":confirmLabel}
           </button>
         </div>
+        )}
       </div>
     </div>
   );
@@ -2742,11 +2772,14 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     untimedEntries,
   };
 }
-function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, syllabusTemplates = [], roles = {}, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
+function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap = {}, resolveSectionName = null, syllabusTemplates = [], roles = {}, roleDetails = {}, period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
+  const isReportTeachingAccount = uid => roles?.[uid] !== "admin"
+    || roleDetails?.[uid]?.adminMode === "admin_teacher"
+    || roleDetails?.[uid]?.teaches === true;
   return institutes.map(inst => {
     const teacherRows = teachers
-      .filter(teacher => teacherBelongsToInstituteFromMap(teacher, inst, fullDataMap))
+      .filter(teacher => isReportTeachingAccount(teacher?.uid) && teacherBelongsToInstituteFromMap(teacher, inst, fullDataMap))
       .map(teacher => buildInstituteGlanceTeacherActivity({
         teacher,
         instituteName: inst,
@@ -2757,7 +2790,7 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
         rangeStartKey,
         rangeEndKey,
       }))
-      .filter(item => roles[item.uid] !== "admin" || item.todayEntries > 0);
+      .filter(item => isReportTeachingAccount(item.uid));
     const filledTeachers = teacherRows
       .filter(item => item.updatedToday)
       .sort((a, b) => {
@@ -11036,6 +11069,7 @@ function AdminPanelInner({user}){
   const [teachers,    setTeachers]    = useState([]);
   const [fullData,    setFullData]    = useState({});
   const [roles,       setRoles]       = useState({});
+  const [roleDetails, setRoleDetails] = useState({});
   const [loading,     setLoading]     = useState(true);
   const [loadingUids, setLoadingUids] = useState(new Set());
   const [view,        setView]        = useState("main"); // main | manage
@@ -11375,9 +11409,9 @@ function AdminPanelInner({user}){
   useEffect(()=>{
     (async()=>{
       // Load index + roles + global institutes list in parallel
-      const [t,r,gInst,gSubjects,gSyllabi,gDeleted,savedBin,savedLedgrSchedule,savedTelegramConfig]=await Promise.all([
+      const [t,roleDocs,gInst,gSubjects,gSyllabi,gDeleted,savedBin,savedLedgrSchedule,savedTelegramConfig]=await Promise.all([
         getAllTeachers(),
-        getAllRoles(),
+        getAllRoleDetails(),
         getGlobalInstitutes(),
         getGlobalSubjects(),
         getSyllabusTemplates(),
@@ -11386,7 +11420,8 @@ function AdminPanelInner({user}){
         getLedgrReportSchedule(),
         getLedgrTelegramConfig(),
       ]);
-      setTeachers(t); setRoles(r);
+      const roleMap = Object.fromEntries(Object.entries(roleDocs || {}).map(([uid, detail])=>[uid, detail?.role || "teacher"]));
+      setTeachers(t); setRoles(roleMap); setRoleDetails(roleDocs || {});
       setGlobalSubjects(gSubjects);
       setSyllabusTemplates(gSyllabi);
       setLedgrReportSchedule(savedLedgrSchedule);
@@ -11626,6 +11661,24 @@ function AdminPanelInner({user}){
     return String(data?.profile?.email || teacher?.email || "").trim();
   }, [fullData]);
 
+  const getAdminTeachingMode = React.useCallback((uid) => {
+    if(roles[uid] !== "admin") return "teacher";
+    const detail = roleDetails[uid] || {};
+    return detail.adminMode === "admin_teacher" || detail.teaches === true
+      ? "admin_teacher"
+      : "admin_only";
+  }, [roleDetails, roles]);
+
+  const isAdminTeacherAccount = React.useCallback((uid) => (
+    roles[uid] === "admin" && getAdminTeachingMode(uid) === "admin_teacher"
+  ), [getAdminTeachingMode, roles]);
+
+  const isTeachingSurfaceAccount = React.useCallback((teacher) => {
+    const uid = teacher?.uid;
+    if(!uid) return false;
+    return roles[uid] !== "admin" || isAdminTeacherAccount(uid);
+  }, [isAdminTeacherAccount, roles]);
+
   React.useEffect(()=>{
     if(view!=="manage" || manageTab!=="teachers") return;
     const hasTeachingIndex = teacher => {
@@ -11639,7 +11692,7 @@ function AdminPanelInner({user}){
     const shouldHydrateTeacher = teacher => {
       if(!teacher?.uid) return false;
       if(roles[teacher.uid] !== "admin") return true;
-      return hasTeachingIndex(teacher) || !fullDataRef.current[teacher.uid];
+      return isAdminTeacherAccount(teacher.uid) && (hasTeachingIndex(teacher) || !fullDataRef.current[teacher.uid]);
     };
     const targetUids = teachers
       .filter(teacher=>teacher?.uid)
@@ -11664,6 +11717,7 @@ function AdminPanelInner({user}){
     roles,
     fullData,
     ensureFullData,
+    isAdminTeacherAccount,
   ]);
 
   const clearTeacherRename = React.useCallback(() => {
@@ -11766,18 +11820,19 @@ function AdminPanelInner({user}){
   const teacherOnlyList = useMemo(
     () => teachers.filter(t => {
       if(roles[t.uid] !== "admin") return true;
+      if(!isAdminTeacherAccount(t.uid)) return false;
       const data = fullData[t.uid] || {};
       return Number(t.classCount || 0) > 0
         || (Array.isArray(t.subjects) && t.subjects.length > 0)
         || (Array.isArray(t.assignedSubjectIds) && t.assignedSubjectIds.length > 0)
         || (Array.isArray(data.classes) && data.classes.length > 0);
     }),
-    [teachers, roles, fullData]
+    [teachers, roles, fullData, isAdminTeacherAccount]
   );
 
   const instituteGlanceTeacherList = useMemo(
-    () => teachers.filter(teacher => !!teacher?.uid),
-    [teachers]
+    () => teachers.filter(teacher => !!teacher?.uid && isTeachingSurfaceAccount(teacher)),
+    [teachers, isTeachingSurfaceAccount]
   );
   const activeTeacherUidSet = useMemo(
     () => new Set(instituteGlanceTeacherList.map(teacher => teacher.uid).filter(Boolean)),
@@ -11878,6 +11933,7 @@ function AdminPanelInner({user}){
       resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
       syllabusTemplates,
       roles,
+      roleDetails,
       period:resolved.period,
       rangeStartKey,
       rangeEndKey,
@@ -11888,7 +11944,7 @@ function AdminPanelInner({user}){
       loadedInstitutes: rows.filter(row => row.ready).length,
       totalInstitutes: rows.length,
     };
-  }, [getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, institutes, roles, syllabusTemplates]);
+  }, [getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, institutes, roles, roleDetails, syllabusTemplates]);
 
   const buildTargetedInstituteGlanceReport = React.useCallback(async (instituteNames = [], config = {}) => {
     const requestedInstitutes = [...new Set((instituteNames || []).map(name => String(name || "").trim()).filter(Boolean))];
@@ -11962,6 +12018,7 @@ function AdminPanelInner({user}){
       resolveSectionName:(section, instituteName) => resolveAdminSectionName(section, instituteName, instSectionsAll),
       syllabusTemplates,
       roles,
+      roleDetails,
       period:resolved.period,
       rangeStartKey,
       rangeEndKey,
@@ -11974,7 +12031,7 @@ function AdminPanelInner({user}){
       totalInstitutes: rows.length,
       ready: rows.every(row => row.ready),
     };
-  }, [ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, roles, syllabusTemplates]);
+  }, [ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, roles, roleDetails, syllabusTemplates]);
 
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
@@ -14181,34 +14238,43 @@ function AdminPanelInner({user}){
 
   const totalEntries=useMemo(()=>{
     let t=0;
-    Object.values(fullData).forEach(d=>{
+    Object.entries(fullData).forEach(([uid,d])=>{
+      const teacher = teachers.find(item=>item.uid===uid);
+      if(!isTeachingSurfaceAccount(teacher)) return;
       Object.values(d.notes||{}).forEach(byDate=>{
         if(!byDate||typeof byDate!=="object") return;
         Object.values(byDate).forEach(arr=>{if(Array.isArray(arr))t+=arr.length;});
       });
     });
     return t;
-  },[fullData]);
+  },[fullData, teachers, isTeachingSurfaceAccount]);
 
   // Class count from index (available immediately without fullData)
   const totalClasses=useMemo(()=>{
-    const fromIndex=teachers.reduce((s,t)=>s+(t.classCount||0),0);
-    const fromFull=Object.values(fullData).reduce((s,d)=>s+(d.classes||[]).length,0);
+    const teachingAccounts = teachers.filter(isTeachingSurfaceAccount);
+    const teachingUids = new Set(teachingAccounts.map(t=>t.uid).filter(Boolean));
+    const fromIndex=teachingAccounts.reduce((s,t)=>s+(t.classCount||0),0);
+    const fromFull=Object.entries(fullData).reduce((s,[uid,d])=>s+(teachingUids.has(uid) ? (d.classes||[]).length : 0),0);
     return Math.max(fromIndex,fromFull);
-  },[teachers,fullData]);
+  },[teachers,fullData,isTeachingSurfaceAccount]);
+
+  const teachingAccountCount = useMemo(
+    () => teachers.filter(isTeachingSurfaceAccount).length,
+    [teachers, isTeachingSurfaceAccount]
+  );
 
   const adminWorkspaceStats = useMemo(() => ([
     { key:"institutes", value:institutes.length, label:"Institutes", icon:IconBuilding, tone:"#DBEAFE", color:G.blue },
-    { key:"teachers", value:teachers.length, label:"Teachers", icon:IconUsersGroup, tone:"#E8F8EF", color:"#198754" },
+    { key:"teachers", value:teachingAccountCount, label:"Teachers", icon:IconUsersGroup, tone:"#E8F8EF", color:"#198754" },
     { key:"classes", value:totalClasses, label:"Classes", icon:IconSchool, tone:"#FEF3C7", color:G.amber },
     { key:"entries", value:totalEntries, label:"Entries", icon:IconChartBar, tone:"#F3E8FF", color:"#7C3AED" },
-  ]), [institutes.length, teachers.length, totalClasses, totalEntries]);
+  ]), [institutes.length, teachingAccountCount, totalClasses, totalEntries]);
 
   const instituteStats = useMemo(()=>{
     return institutes.reduce((acc, inst)=>{
       const teacherUids = new Set();
       const classKeys = new Set();
-      teachers.forEach(t=>{
+      teachers.filter(isTeachingSurfaceAccount).forEach(t=>{
         const d = fullData[t.uid];
         if(d){
           const classesHere = (d.classes||[]).filter(c=>sameInstituteName(c.institute, inst));
@@ -14230,13 +14296,13 @@ function AdminPanelInner({user}){
       };
       return acc;
     }, {});
-  },[getTeacherInstituteList, institutes,teachers,fullData,instSectionsAll]);
+  },[getTeacherInstituteList, institutes,teachers,fullData,instSectionsAll,isTeachingSurfaceAccount]);
 
   // ── Teachers at selected institute ────────────────────────────────────────
   const instTeachers=useMemo(()=>{
     if(!selInst) return [];
-    return teachers.filter(t=>teacherBelongsToInstitute(t, selInst));
-  },[selInst, teacherBelongsToInstitute, teachers]);
+    return teachers.filter(t=>isTeachingSurfaceAccount(t) && teacherBelongsToInstitute(t, selInst));
+  },[selInst, teacherBelongsToInstitute, teachers, isTeachingSurfaceAccount]);
 
   const teacherByUid = useMemo(
     ()=>Object.fromEntries((teachers || []).map(teacher => [teacher.uid, teacher])),
@@ -14259,7 +14325,7 @@ function AdminPanelInner({user}){
     if(!selInst) return [];
     const map={};
     // Use teachers that belong to this institute (from profile, index, or class data)
-    const relevantTeachers=teachers.filter(t=>teacherBelongsToInstitute(t, selInst));
+    const relevantTeachers=teachers.filter(t=>isTeachingSurfaceAccount(t) && teacherBelongsToInstitute(t, selInst));
     const norm = s => (s||"").trim().toLowerCase();
     relevantTeachers.forEach(t=>{
       const d=fullData[t.uid];
@@ -14623,7 +14689,7 @@ function AdminPanelInner({user}){
     const staleCutoff = addDaysToDateKey(today, -3);
     const lastWeekStartKey = addDaysToDateKey(today, -8);
     const lastWeekEndKey = addDaysToDateKey(today, -2);
-    const activeTeachers = teachers.filter(teacher => teacher?.uid);
+    const activeTeachers = teachers.filter(teacher => teacher?.uid && isTeachingSurfaceAccount(teacher));
     const daysSinceTs = (ts) => {
       if(!ts) return null;
       return Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
@@ -14646,7 +14712,6 @@ function AdminPanelInner({user}){
       const instituteTeachers = activeTeachers.filter(teacher => teacherBelongsToInstitute(teacher, instituteName));
       const teacherRows = instituteTeachers.map(teacher => {
         const uid = teacher.uid;
-        const isAdminAccount = roles[uid] === "admin";
         const teacherName = getTeacherDisplayName(teacher);
         const data = fullData[uid];
         const classesHere = data
@@ -14657,7 +14722,6 @@ function AdminPanelInner({user}){
         const teacherLastWeekEntries = [];
         const teacherRecentEntries = [];
         let teacherLastTs = Number(teacher?.lastActive || 0) || 0;
-        let adminTeachingEntrySeen = false;
 
         classesHere.forEach(cls => {
           const resolvedSection = resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section || cls.name || "Untitled section";
@@ -14680,14 +14744,6 @@ function AdminPanelInner({user}){
             .map(entry => withEntryMeta(entry, classKey));
           const recentEntries = collectEntriesForTeacherClass(uid, teacherName, cls.id, className, subjectLabel, instituteName, periodDays, periodStartKey, periodEndKey)
             .map(entry => withEntryMeta(entry, classKey));
-          const classHasLoadedEntry = !!classLastTs
-            || todayEntries.length > 0
-            || yesterdayEntries.length > 0
-            || lastWeekEntries.length > 0
-            || recentEntries.length > 0;
-          if(isAdminAccount && !classHasLoadedEntry) return;
-          if(isAdminAccount) adminTeachingEntrySeen = true;
-
           const bucket = classBuckets.get(classKey) || {
             key:classKey,
             raw:resolvedSection,
@@ -14743,7 +14799,6 @@ function AdminPanelInner({user}){
           teacherRecentEntries.push(...recentEntries);
         });
 
-        if(isAdminAccount && !adminTeachingEntrySeen) return null;
         const lastDays = daysSinceTs(teacherLastTs || null);
         return {
           uid,
@@ -14877,6 +14932,7 @@ function AdminPanelInner({user}){
     resolveAdminTeacherClassSubject,
     roles,
     adminV5DailySummaries,
+    isTeachingSurfaceAccount,
     teacherBelongsToInstitute,
     teachers,
   ]);
@@ -15537,6 +15593,36 @@ function AdminPanelInner({user}){
     }
   };
 
+  const resetInstituteGlanceAfterAccountChange = () => {
+    scheduleInstituteGlanceReport({
+      ...instituteGlanceReportRef.current,
+      configKey:"",
+      rows:[],
+      summary:EMPTY_INSTITUTE_GLANCE_SUMMARY,
+      loading:false,
+      loaded:0,
+      total:0,
+      loadedInstitutes:0,
+      totalInstitutes:0,
+      ready:false,
+      error:"",
+    });
+  };
+
+  const clearRemovedAccountFromAdminState = (uid) => {
+    setTeachers(ts => ts.filter(t => t.uid !== uid));
+    setRoles(r => { const n={...r}; delete n[uid]; return n; });
+    setRoleDetails(r => { const n={...r}; delete n[uid]; return n; });
+    setFullData(fd => { const n={...fd}; delete n[uid]; return n; });
+    if(instituteGlanceDataRef.current?.[uid]){
+      const nextCache = { ...instituteGlanceDataRef.current };
+      delete nextCache[uid];
+      instituteGlanceDataRef.current = nextCache;
+    }
+    resetInstituteGlanceAfterAccountChange();
+    setSelTeacher(null);
+  };
+
   // Fully remove a teacher from the system
   const handleRemoveTeacher = async (uid, name) => {
     confirmDelete({
@@ -15551,28 +15637,7 @@ function AdminPanelInner({user}){
         setDeleteBusy(true);
         try {
           await removeTeacherFromSystem(uid, user?.uid || null);
-          setTeachers(ts => ts.filter(t => t.uid !== uid));
-          setRoles(r => { const n={...r}; delete n[uid]; return n; });
-          setFullData(fd => { const n={...fd}; delete n[uid]; return n; });
-          if(instituteGlanceDataRef.current?.[uid]){
-            const nextCache = { ...instituteGlanceDataRef.current };
-            delete nextCache[uid];
-            instituteGlanceDataRef.current = nextCache;
-          }
-          scheduleInstituteGlanceReport({
-            ...instituteGlanceReportRef.current,
-            configKey:"",
-            rows:[],
-            summary:EMPTY_INSTITUTE_GLANCE_SUMMARY,
-            loading:false,
-            loaded:0,
-            total:0,
-            loadedInstitutes:0,
-            totalInstitutes:0,
-            ready:false,
-            error:"",
-          });
-          setSelTeacher(null);
+          clearRemovedAccountFromAdminState(uid);
         } catch(e) { showAdminToast("Failed: " + e.message); }
         setDeleteBusy(false); setDeleteModal(null);
       }
@@ -15604,26 +15669,93 @@ function AdminPanelInner({user}){
   };
 
   const handlePromote=async(uid)=>{
-    adminConfirmDialog("Promote to Admin? They will see all data.","Promote",async()=>{
-      await promoteToAdmin(uid,user.uid);
+    adminConfirmDialog("Promote to Admin? They will see all data. New admins start as Admin only until you mark them Admin + teacher.","Promote",async()=>{
+      await promoteToAdmin(uid,user.uid,"admin_only");
       setRoles(r=>({...r,[uid]:"admin"}));
+      setRoleDetails(r=>({
+        ...r,
+        [uid]:{ ...(r[uid] || {}), uid, role:"admin", adminMode:"admin_only", teaches:false, grantedBy:user.uid, grantedAt:Date.now() },
+      }));
+      resetInstituteGlanceAfterAccountChange();
     });
   };
-  const handleDemote=async(uid)=>{
+  const handleSetAdminMode = async (uid, mode) => {
+    const nextMode = mode === "admin_teacher" ? "admin_teacher" : "admin_only";
+    const target = teachers.find(t=>t.uid===uid);
+    const targetName = target ? getTeacherDisplayName(target) : "this admin";
+    try {
+      await setAdminTeachingMode(uid, nextMode, user.uid);
+      setRoles(r=>({...r,[uid]:"admin"}));
+      setRoleDetails(r=>({
+        ...r,
+        [uid]:{ ...(r[uid] || {}), uid, role:"admin", adminMode:nextMode, teaches:nextMode==="admin_teacher", updatedBy:user.uid, updatedAt:Date.now() },
+      }));
+      resetInstituteGlanceAfterAccountChange();
+      showAdminToast(`${targetName} is now ${nextMode === "admin_teacher" ? "Admin + teacher" : "Admin only"}.`);
+    } catch(e) {
+      showAdminToast("Could not update admin type: " + (e?.message || "Unknown error"));
+    }
+  };
+  const handleRemoveAdmin = (uid) => {
     if(uid===user.uid){
       showAdminToast("You cannot remove your own admin access.");
       return;
     }
     const target = teachers.find(t=>t.uid===uid);
     const targetName = target ? getTeacherDisplayName(target) : "this admin";
-    adminConfirmDialog(`Remove admin access for ${targetName}? They will remain a teacher account.`,"Remove Admin",async()=>{
-      try {
-        await demoteToTeacher(uid,user.uid);
-        setRoles(r=>({...r,[uid]:"teacher"}));
-        showAdminToast(`${targetName} is no longer an admin.`);
-      } catch(e) {
-        showAdminToast("Could not remove admin access: " + (e?.message || "Unknown error"));
-      }
+    const mode = getAdminTeachingMode(uid);
+    confirmDelete({
+      title:`How should ${targetName} be removed?`,
+      lines:[
+        mode === "admin_teacher"
+          ? "This account is currently Admin + teacher."
+          : "This account is currently Admin only.",
+        "Choose whether they should remain as a teacher or be removed from the system and excluded from Ledgr reports.",
+      ],
+      confirmLabel:"Remove",
+      options:[
+        {
+          label:"Remove admin access only",
+          hint:"They become a teacher. If they have classes or entries, they can still appear in Teachers and Ledgr Report.",
+          tone:"blue",
+          onConfirm:async()=>{
+            setDeleteBusy(true);
+            try{
+              await demoteToTeacher(uid,user.uid);
+              setRoles(r=>({...r,[uid]:"teacher"}));
+              setRoleDetails(r=>({
+                ...r,
+                [uid]:{ ...(r[uid] || {}), uid, role:"teacher", adminMode:"teacher", teaches:true, demotedBy:user.uid, demotedAt:Date.now() },
+              }));
+              resetInstituteGlanceAfterAccountChange();
+              showAdminToast(`${targetName} is now a teacher account.`);
+            }catch(e){
+              showAdminToast("Could not remove admin access: " + (e?.message || "Unknown error"));
+            }finally{
+              setDeleteBusy(false);
+              setDeleteModal(null);
+            }
+          },
+        },
+        {
+          label:"Remove from system",
+          hint:"Revokes access and excludes them from Teachers, Admins, panels, and Ledgr Report. Historical entries remain in Firestore for audit.",
+          tone:"danger",
+          onConfirm:async()=>{
+            setDeleteBusy(true);
+            try{
+              await removeTeacherFromSystem(uid, user?.uid || null);
+              clearRemovedAccountFromAdminState(uid);
+              showAdminToast(`${targetName} was removed from the system.`);
+            }catch(e){
+              showAdminToast("Failed: " + (e?.message || "Unknown error"));
+            }finally{
+              setDeleteBusy(false);
+              setDeleteModal(null);
+            }
+          },
+        },
+      ],
     });
   };
 
@@ -17789,6 +17921,7 @@ function AdminPanelInner({user}){
     };
     const isTeachingAccount = teacher => {
       if(!teacher?.uid) return false;
+      if(roles[teacher.uid] === "admin" && !isAdminTeacherAccount(teacher.uid)) return false;
       if(roles[teacher.uid] !== "admin") return true;
       const data = fullData[teacher.uid] || {};
       const detailsReady = hasLoadedTeacherData(teacher);
@@ -17845,7 +17978,7 @@ function AdminPanelInner({user}){
         Number(teacher.lastActive || teacher.lastActiveAt || teacher.updatedAt || 0) || 0
       );
       const hasLeftWorkspace = teacher.accountStatus === "departed" || teacher.active === false;
-      const isAdminTeacher = roles[teacher.uid] === "admin";
+      const isAdminTeacher = isAdminTeacherAccount(teacher.uid);
       return {
         teacher,
         rawName:getTeacherRawName(teacher),
@@ -19152,7 +19285,7 @@ function AdminPanelInner({user}){
         )}
         {binView&&<AdminBinModal/>}
         {instDeleteModal&&<InstDeleteModal/>}
-        {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
         {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         {instituteGlanceOptionsOpen&&(
@@ -20423,7 +20556,7 @@ function AdminPanelInner({user}){
     }
 
     const adminOnlyList = teachers.filter(t=>roles[t.uid]==="admin");
-    const teacherOnlyList = teachers.filter(t=>roles[t.uid]!=="admin");
+    const teacherOnlyList = teachers.filter(isTeachingSurfaceAccount);
     const manageTabItems = [
       { key:"teachers", label:"Teachers", icon:IconUsersGroup, count:teacherOnlyList.length, hint:"Accounts & classes" },
       { key:"institutes", label:"Institutes", icon:IconBuilding, count:institutes.length, hint:"Names & structure" },
@@ -20534,7 +20667,7 @@ function AdminPanelInner({user}){
         />
       )}
       {binView&&<AdminBinModal/>}
-      {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+      {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
       {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
       <AdminToastBanner message={adminToast} />
       {/* nav */}
@@ -20651,7 +20784,7 @@ function AdminPanelInner({user}){
                   <div style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,padding:"0 8px 7px"}}>Institute matches</div>
                   <div style={{display:"flex",flexDirection:"column",gap:3}}>
                     {sidebarInstitutes.slice(0,8).map((institute,index)=>{
-                      const teacherCount=instituteStats[institute]?.teacherCount||teachers.filter(teacher=>teacherBelongsToInstitute(teacher,institute)).length;
+                      const teacherCount=instituteStats[institute]?.teacherCount||teachers.filter(teacher=>isTeachingSurfaceAccount(teacher)&&teacherBelongsToInstitute(teacher,institute)).length;
                       const tones=["#2563EB","#0F9F78","#7C3AED","#DB2777","#C45A07"];
                       const tone=tones[index%tones.length];
                       return (
@@ -21180,7 +21313,7 @@ function AdminPanelInner({user}){
             ? institutes.filter(inst=>sameInstituteName(inst,manageScopeInstitute))
             : institutes.filter(inst=>!instituteSearchKey || inst.toLowerCase().includes(instituteSearchKey))
           ).map(inst=>{
-            const instTeacherList = teachers.filter(t=>teacherBelongsToInstitute(t, inst));
+            const instTeacherList = teachers.filter(t=>isTeachingSurfaceAccount(t) && teacherBelongsToInstitute(t, inst));
             const clsCount = instituteStats[inst]?.classCount || instTeacherList.length;
             const sectionCount = sectionCountsByInstitute[inst] || 0;
             const groupCount = (getInstituteSectionConfig(instSectionsAll, inst)?.gradeGroups || []).length;
@@ -21275,18 +21408,22 @@ function AdminPanelInner({user}){
 
         {manageTab==="admins"&&(()=>{
           const adminList = teachers.filter(t=>roles[t.uid]==="admin");
+          const adminTeacherCount = adminList.filter(t=>isAdminTeacherAccount(t.uid)).length;
+          const adminOnlyCount = Math.max(0, adminList.length - adminTeacherCount);
           const adminSearchKey = manageAdminSearch.trim().toLowerCase();
           const matchesAdmin = (teacher) => {
             if(!adminSearchKey) return true;
             const name = getTeacherDisplayName(teacher).toLowerCase();
             const email = String(teacher?.email || "").toLowerCase();
             const instituteText = getTeacherInstituteList(teacher).join(" ").toLowerCase();
-            return name.includes(adminSearchKey) || email.includes(adminSearchKey) || instituteText.includes(adminSearchKey);
+            const modeText = getAdminTeachingMode(teacher.uid) === "admin_teacher" ? "admin teacher admin + teacher" : "admin only";
+            return name.includes(adminSearchKey) || email.includes(adminSearchKey) || instituteText.includes(adminSearchKey) || modeText.includes(adminSearchKey);
           };
           const adminRows = adminList
             .filter(matchesAdmin)
             .map(t=>{
               const instituteList = getTeacherInstituteList(t);
+              const adminMode = getAdminTeachingMode(t.uid);
               return {
                 teacher:t,
                 rawName:getTeacherRawName(t),
@@ -21294,6 +21431,8 @@ function AdminPanelInner({user}){
                 email:getTeacherEmail(t) || "Email not available",
                 primaryInstitute:instituteList[0] || "No institute assigned",
                 otherInstitutes:instituteList.slice(1),
+                adminMode,
+                typeLabel:adminMode === "admin_teacher" ? "Admin + teacher" : "Admin only",
                 isMe:t.uid===user.uid,
               };
             })
@@ -21332,21 +21471,22 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
                   Admins ({adminList.length})
                 </div>
-                <div style={{fontSize:14,color:G.textM,marginBottom:10}}>Every admin is visible here with their parent institute, extra institutes, access level, and actions in one pass.</div>
+                <div style={{fontSize:14,color:G.textM,marginBottom:10}}>Every admin has an explicit type: {adminOnlyCount} admin only · {adminTeacherCount} admin + teacher.</div>
                 {manageSearchInput(manageAdminSearch,setManageAdminSearch,"Search admins by name, email, or institute")}
                 {adminList.length===0
                   ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No admins yet. Generate an invite link above.</div>
                   :renderWorkspaceTable({
                     columns:[
                       { key:"admin", label:"Admin" },
+                      { key:"type", label:"Type" },
                       { key:"primary", label:"Parent institute" },
                       { key:"alsoAt", label:"Also at" },
                       { key:"email", label:"Email" },
                       { key:"access", label:"Access" },
                       { key:"actions", label:"Actions" },
                     ],
-                    desktopGrid:"minmax(240px,1.5fr) minmax(220px,1.2fr) minmax(150px,1fr) minmax(230px,1.35fr) 120px minmax(210px,1fr)",
-                    minWidth:1170,
+                    desktopGrid:"minmax(230px,1.35fr) minmax(245px,1.25fr) minmax(190px,1fr) minmax(140px,0.8fr) minmax(210px,1.15fr) 115px minmax(220px,1fr)",
+                    minWidth:1350,
                     rows:adminRows,
                     rowKey:row=>`admin_${row.teacher.uid}`,
                     emptyMessage:"No admins match your search.",
@@ -21375,6 +21515,32 @@ function AdminPanelInner({user}){
                             </>
                           )}
                         </div>
+                      </div>,
+                      <div key="type" style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {[
+                          { key:"admin_only", label:"Admin only" },
+                          { key:"admin_teacher", label:"Admin + teacher" },
+                        ].map(option=>(
+                          <button
+                            key={`${row.teacher.uid}_${option.key}`}
+                            type="button"
+                            onClick={()=>handleSetAdminMode(row.teacher.uid, option.key)}
+                            style={{
+                              border:`1px solid ${row.adminMode===option.key ? G.navy : G.border}`,
+                              borderRadius:999,
+                              minHeight:30,
+                              padding:"0 10px",
+                              background:row.adminMode===option.key ? G.navy : "#FFFFFF",
+                              color:row.adminMode===option.key ? "#FFFFFF" : G.textM,
+                              fontSize:11.5,
+                              fontWeight:850,
+                              fontFamily:G.sans,
+                              cursor:"pointer",
+                              whiteSpace:"nowrap",
+                            }}>
+                            {option.label}
+                          </button>
+                        ))}
                       </div>,
                       <div key="primary" style={{minWidth:0}}>
                         <div style={{fontSize:14.5,fontWeight:700,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.primaryInstitute}</div>
@@ -21405,7 +21571,7 @@ function AdminPanelInner({user}){
                               setRenameVal(nextName);
                             }} style={workspaceActionButtonStyle("neutral")}>Rename</button>
                             {!row.isMe ? (
-                              <button onClick={()=>handleDemote(row.teacher.uid)} style={workspaceActionButtonStyle("danger")}>Remove Admin</button>
+                              <button onClick={()=>handleRemoveAdmin(row.teacher.uid)} style={workspaceActionButtonStyle("danger")}>Remove</button>
                             ) : (
                               <span style={{fontSize:12.5,color:G.textL,fontWeight:700,alignSelf:"center"}}>This account</span>
                             )}
@@ -21673,7 +21839,7 @@ function AdminPanelInner({user}){
           />
         )}
         {binView&&<AdminBinModal/>}
-        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
         {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
         <AdminToastBanner message={adminToast} />
         <MobileNav/>
@@ -21752,7 +21918,7 @@ function AdminPanelInner({user}){
                 icon={IconUsersGroup}
                 title="Teachers"
                 subtitle="Accounts, classes, assignments"
-                count={teachers.filter(t=>roles[t.uid]!=="admin").length}
+                count={teachers.filter(isTeachingSurfaceAccount).length}
                 onClick={()=>openMobileManageArea("teachers")}
               />
               <MobileManageTile
@@ -22020,7 +22186,7 @@ function AdminPanelInner({user}){
       <div style={mobilePageShellStyle}>
         <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
-        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
         {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
         <MobileNav/>
         <div style={mobilePageInnerStyle}>
@@ -22134,7 +22300,7 @@ function AdminPanelInner({user}){
       <div style={mobilePageShellStyle}>
         <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
-        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
         {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         {legacySectionRepair&&(
@@ -22351,7 +22517,7 @@ function AdminPanelInner({user}){
       <div style={mobilePageShellStyle}>
         <MobileMotionStyles />
         {binView&&<AdminBinModal/>}
-        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+        {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
         {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         <AdminToastBanner message={adminToast} />
@@ -22511,7 +22677,7 @@ function AdminPanelInner({user}){
         <div style={mobilePageShellStyle}>
           <MobileMotionStyles />
           {binView&&<AdminBinModal/>}
-          {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+          {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
           {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
           {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
           <AdminToastBanner message={adminToast} />
@@ -22766,7 +22932,7 @@ function AdminPanelInner({user}){
         />
       )}
       {binView&&<AdminBinModal/>}
-      {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy}/>}
+      {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
       {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
       {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
       <style>{`
