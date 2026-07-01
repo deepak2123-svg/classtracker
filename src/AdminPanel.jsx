@@ -11712,7 +11712,12 @@ function AdminPanelInner({user}){
       .filter(teacher=>teacher?.uid)
       .filter(shouldHydrateTeacher)
       .map(teacher=>teacher.uid)
-      .filter(uid=>!fullDataRef.current[uid] && !fullDataRequestRef.current[uid]);
+      .filter(uid=>!fullDataRef.current[uid] && !fullDataRequestRef.current[uid])
+      .sort((a, b) => {
+        if(a === user?.uid) return -1;
+        if(b === user?.uid) return 1;
+        return 0;
+      });
     let cancelled = false;
     const hydrate = async () => {
       for(const uid of targetUids){
@@ -11732,6 +11737,7 @@ function AdminPanelInner({user}){
     fullData,
     ensureFullData,
     isAdminTeacherAccount,
+    user?.uid,
   ]);
 
   const clearTeacherRename = React.useCallback(() => {
@@ -18064,6 +18070,10 @@ function AdminPanelInner({user}){
     const hasLoadedTeacherData = teacher => !!teacher?.uid && Object.prototype.hasOwnProperty.call(fullData, teacher.uid);
     const loadedTeacherClasses = data => Array.isArray(data?.classes) ? data.classes : [];
     const loadedClassInstitutes = data => uniqueLabels(loadedTeacherClasses(data).map(cls=>cls?.institute));
+    const isPlaceholderInstitute = value => {
+      const key = normaliseName(String(value || "")).toLowerCase();
+      return !key || key === "checking institute" || key === "no class institute" || key === "no institute assigned";
+    };
     const effectiveTeacherInstitutes = (teacher, data, detailsReady) => {
       const classInstitutes = loadedClassInstitutes(data);
       const indexedInstitutes = getTeacherInstituteList(teacher);
@@ -18129,16 +18139,29 @@ function AdminPanelInner({user}){
         : (instituteList.length ? instituteList : [detailsReady ? "No class institute" : "Checking institute"]);
       const primaryInstitute = selectedInstituteFilter || instituteList[0] || (detailsReady ? "No class institute" : "Checking institute");
       const groups = buildTeacherGroups(teacher, data, detailsReady ? scopedClasses : [], fallbackInstitutes, primaryInstitute);
+      const allGroups = buildTeacherGroups(
+        teacher,
+        data,
+        detailsReady ? allClasses : [],
+        instituteList.length ? instituteList : fallbackInstitutes,
+        primaryInstitute
+      );
+      const membershipInstitutes = uniqueLabels([
+        primaryInstitute,
+        ...instituteList,
+        ...allGroups.map(group=>group.institute),
+      ]).filter(inst=>!isPlaceholderInstitute(inst));
+      const displayInstituteCount = membershipInstitutes.length || uniqueLabels(groups.map(group=>group.institute)).length;
       const assignedSubjects = teacherSubjectNames(teacher);
       const allSubjects = detailsReady
-        ? uniqueLabels([...groups.flatMap(group=>group.subjects), ...assignedSubjects])
+        ? uniqueLabels([...allGroups.flatMap(group=>group.subjects), ...assignedSubjects])
         : assignedSubjects;
-      const allSections = uniqueLabels(groups.flatMap(group=>group.sections));
+      const allSections = uniqueLabels(allGroups.flatMap(group=>group.sections));
       const classCount = detailsReady ? scopedClasses.length : Number(teacher.classCount || 0);
       const weekMinutes = groups.reduce((sum, group)=>sum + (group.weekMinutes || 0), 0);
       const weekEntries = groups.reduce((sum, group)=>sum + (group.weekEntries || 0), 0);
       const lastActivityTs = Math.max(
-        ...groups.map(group=>group.lastTs || 0),
+        ...allGroups.map(group=>group.lastTs || 0),
         Number(teacher.lastActive || teacher.lastActiveAt || teacher.updatedAt || 0) || 0
       );
       const hasLeftWorkspace = teacher.accountStatus === "departed" || teacher.active === false;
@@ -18149,9 +18172,11 @@ function AdminPanelInner({user}){
         name:getTeacherDisplayName(teacher),
         email:getTeacherEmail(teacher) || "Email not available",
         primaryInstitute,
-        extraInstitutes:instituteList.filter(inst=>!sameInstituteName(inst, primaryInstitute)),
+        extraInstitutes:membershipInstitutes.filter(inst=>!sameInstituteName(inst, primaryInstitute)),
+        membershipInstitutes,
         instituteGroups:groups,
-        instituteCount:uniqueLabels(groups.map(group=>group.institute)).length,
+        allInstituteGroups:allGroups,
+        instituteCount:displayInstituteCount,
         subjects:allSubjects,
         sections:allSections,
         subjectCount:allSubjects.length,
@@ -18171,15 +18196,17 @@ function AdminPanelInner({user}){
     }).filter(Boolean);
     const teacherSearchKey = manageTeacherSearch.trim().toLowerCase();
     const matchesTeacherRow = row => {
-      if(manageTeacherInstituteFilter && !row.instituteGroups.some(group=>sameInstituteName(group.institute, manageTeacherInstituteFilter))) return false;
+      if(manageTeacherInstituteFilter && !(row.membershipInstitutes || []).some(inst=>sameInstituteName(inst, manageTeacherInstituteFilter))) return false;
       if(!teacherSearchKey) return true;
       const haystack = [
         row.name,
         row.email,
         row.primaryInstitute,
         row.extraInstitutes.join(" "),
+        (row.membershipInstitutes || []).join(" "),
         row.subjects.join(" "),
         row.sections.join(" "),
+        (row.allInstituteGroups || []).map(group=>group.institute).join(" "),
         row.instituteGroups.map(group=>group.institute).join(" "),
       ].join(" ").toLowerCase();
       return haystack.includes(teacherSearchKey);
@@ -18356,9 +18383,10 @@ function AdminPanelInner({user}){
               {shortInstituteLabel(group.institute)}
             </span>
           ))}
-          {row.instituteCount > 2 && teacherChip(`+${row.instituteCount - 2}`, "slate")}
-          {row.instituteCount <= 1 && <span style={{fontSize:12,color:G.textL}}>Single institute</span>}
+          {row.instituteGroups.length > 2 && teacherChip(`+${row.instituteGroups.length - 2}`, "slate")}
+          {row.extraInstitutes.length === 0 && row.instituteCount <= 1 && <span style={{fontSize:12,color:G.textL}}>Single institute</span>}
         </div>
+        {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={2} />}
       </div>
     );
     const renderSplitMetric = (row, type) => {
@@ -18398,36 +18426,44 @@ function AdminPanelInner({user}){
         </div>
       );
     };
-    const renderTeacherBreakdown = row => (
-      <div style={{borderTop:`1px solid ${G.border}`,background:"#F8F7FF",padding:isMobile ? "13px 12px" : "14px 18px"}}>
-        <div style={{fontSize:10.5,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.7,marginBottom:10}}>
-          Institute breakdown - {row.name}
-        </div>
-        <div style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"9px 12px",background:"#F5F3FF",borderBottom:"1px solid #DDD6FE"}}>
-            {["Institute","Subject","Sections","Classes","Hours 7d"].map(label=>(
-              <div key={label} style={{fontSize:10,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.6}}>{label}</div>
-            ))}
+    const renderTeacherBreakdown = row => {
+      const breakdownGroups = (row.allInstituteGroups?.length ? row.allInstituteGroups : row.instituteGroups);
+      const breakdownSubjects = uniqueLabels(breakdownGroups.flatMap(group=>group.subjects));
+      const breakdownSections = uniqueLabels(breakdownGroups.flatMap(group=>group.sections));
+      const breakdownClassCount = breakdownGroups.reduce((sum, group)=>sum + (group.classCount || 0), 0);
+      const breakdownMinutes = breakdownGroups.reduce((sum, group)=>sum + (group.weekMinutes || 0), 0);
+      const breakdownInstituteCount = uniqueLabels(breakdownGroups.map(group=>group.institute)).length || row.instituteCount;
+      return (
+        <div style={{borderTop:`1px solid ${G.border}`,background:"#F8F7FF",padding:isMobile ? "13px 12px" : "14px 18px"}}>
+          <div style={{fontSize:10.5,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.7,marginBottom:10}}>
+            Institute breakdown - {row.name}
           </div>
-          {row.instituteGroups.map(group=>(
-            <div key={`${row.teacher.uid}_bd_${group.key}`} style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"11px 12px",borderTop:`1px solid ${G.border}`,alignItems:"center"}}>
-              <div style={{fontSize:12.5,fontWeight:850,color:G.text}}>{group.institute}</div>
-              <div>{renderLimitedChips(group.subjects.length ? group.subjects : row.subjects, subjectChip, 2)}</div>
-              <div>{renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 4)}</div>
-              <div style={{fontSize:13.5,fontWeight:900,color:G.text}}>{group.classCount || "--"}</div>
-              <div style={{fontSize:13.5,fontWeight:900,color:G.text}}>{row.detailsReady ? formatDurationShort(group.weekMinutes) : "--"}</div>
+          <div style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"9px 12px",background:"#F5F3FF",borderBottom:"1px solid #DDD6FE"}}>
+              {["Institute","Subject","Sections","Classes","Hours 7d"].map(label=>(
+                <div key={label} style={{fontSize:10,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.6}}>{label}</div>
+              ))}
             </div>
-          ))}
-          <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"11px 12px",borderTop:"1px solid #DDD6FE",background:"#F5F3FF",alignItems:"center"}}>
-            <div style={{fontSize:12.5,fontWeight:950,color:"#6D28D9"}}>Total - {row.instituteCount} institute{row.instituteCount===1?"":"s"}</div>
-            <div style={{fontSize:12,fontWeight:850,color:G.textM}}>{row.subjectCount} subject{row.subjectCount===1?"":"s"}</div>
-            <div>{teacherChip(`${row.sectionCount} section${row.sectionCount===1?"":"s"}`, "green")}</div>
-            <div style={{fontSize:14,fontWeight:950,color:"#17926A"}}>{row.classCount}</div>
-            <div style={{fontSize:14,fontWeight:950,color:"#17926A"}}>{row.detailsReady ? formatDurationShort(row.weekMinutes) : "--"}</div>
+            {breakdownGroups.map(group=>(
+              <div key={`${row.teacher.uid}_bd_${group.key}`} style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"11px 12px",borderTop:`1px solid ${G.border}`,alignItems:"center"}}>
+                <div style={{fontSize:12.5,fontWeight:850,color:G.text}}>{group.institute}</div>
+                <div>{renderLimitedChips(group.subjects.length ? group.subjects : row.subjects, subjectChip, 2)}</div>
+                <div>{renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 4)}</div>
+                <div style={{fontSize:13.5,fontWeight:900,color:G.text}}>{group.classCount || "--"}</div>
+                <div style={{fontSize:13.5,fontWeight:900,color:G.text}}>{row.detailsReady ? formatDurationShort(group.weekMinutes) : "--"}</div>
+              </div>
+            ))}
+            <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(210px,1.15fr) minmax(140px,0.8fr) minmax(220px,1fr) 90px 110px",gap:10,padding:"11px 12px",borderTop:"1px solid #DDD6FE",background:"#F5F3FF",alignItems:"center"}}>
+              <div style={{fontSize:12.5,fontWeight:950,color:"#6D28D9"}}>Total - {breakdownInstituteCount} institute{breakdownInstituteCount===1?"":"s"}</div>
+              <div style={{fontSize:12,fontWeight:850,color:G.textM}}>{breakdownSubjects.length || row.subjectCount} subject{(breakdownSubjects.length || row.subjectCount)===1?"":"s"}</div>
+              <div>{teacherChip(`${breakdownSections.length || row.sectionCount} section${(breakdownSections.length || row.sectionCount)===1?"":"s"}`, "green")}</div>
+              <div style={{fontSize:14,fontWeight:950,color:"#17926A"}}>{breakdownClassCount || row.classCount}</div>
+              <div style={{fontSize:14,fontWeight:950,color:"#17926A"}}>{row.detailsReady ? formatDurationShort(breakdownMinutes) : "--"}</div>
+            </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    };
     const renderTeacherManagePanel = row => {
       const t = row.teacher;
       const data = fullData[t.uid] || {};
@@ -18596,6 +18632,7 @@ function AdminPanelInner({user}){
               </span>
             </div>
           ))}
+          {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={2} />}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",borderBottom:`1px solid ${G.border}`}}>
           {[
