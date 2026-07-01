@@ -35,7 +35,7 @@ import {
   getAllInstituteSections, saveInstituteGradeGroups, deleteInstituteGradeGroup,
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData, deleteClassNotes,
-  trashClassInTeacherData, restoreClassFromTeacherTrash,
+  trashClassInTeacherData, restoreClassFromTeacherTrash, archiveTeacherInstituteAssignment,
   getGlobalInstitutes, saveGlobalInstitute, deleteGlobalInstitute, renameGlobalInstitute, saveInstituteExtraSections,
   getGlobalSubjects, saveGlobalSubject, setGlobalSubjectActive, updateTeacherSubjectAssignments,
   getSyllabusTemplates, saveSyllabusDraft, publishSyllabusTemplate, deleteSyllabusTemplate,
@@ -310,6 +310,7 @@ const LEAVE_REASON_MAP = {
 // ── Confirm Delete Modal ──────────────────────────────────────────────────────
 function ConfirmDeleteModal({ title, lines, confirmLabel, onConfirm, onClose, busy, options = [] }) {
   const hasOptions = Array.isArray(options) && options.length > 0;
+  const modalIntent = /archive|transfer|branch/i.test(`${title || ""} ${confirmLabel || ""}`) ? "archive" : "delete";
   const optionStyle = (tone = "neutral") => ({
     width:"100%",
     border:tone === "danger" ? "none" : `1.5px solid ${tone === "blue" ? "#BFDBFE" : G.border}`,
@@ -327,7 +328,21 @@ function ConfirmDeleteModal({ title, lines, confirmLabel, onConfirm, onClose, bu
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"}}>
       <div style={{background:G.surface,borderRadius:18,padding:"26px 24px",width:"100%",maxWidth:420,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
-        <div style={{width:40,height:40,borderRadius:12,background:"#FEE2E2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,marginBottom:14}}>🗑</div>
+        <div style={{
+          width:40,
+          height:40,
+          borderRadius:12,
+          background:modalIntent==="archive" ? "#EAF2FF" : "#FEE2E2",
+          color:modalIntent==="archive" ? G.blue : G.red,
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          fontSize:20,
+          marginBottom:14,
+          fontWeight:900,
+        }}>
+          {modalIntent==="archive" ? "↪" : "🗑"}
+        </div>
         <h3 style={{fontSize:18,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:8}}>{title}</h3>
         {lines.map((l,i)=>(
           <p key={i} style={{fontSize:15,color:i===0?G.textM:G.textL,fontFamily:G.sans,lineHeight:1.55,marginBottom:i<lines.length-1?6:16}}>{l}</p>
@@ -18459,6 +18474,87 @@ function AdminPanelInner({user}){
         </div>
       );
     };
+    const patchTeacherAfterBranchArchive = (teacher, archivedInstitute, nextData) => {
+      const stillListed = uniqueLabels([
+        ...(teacher.institutes || []),
+        ...(nextData?.institutes || []),
+        ...(nextData?.profile?.institutes || []),
+        ...(nextData?.classes || []).map(cls=>cls?.institute),
+      ]).filter(inst=>!sameInstituteName(inst, archivedInstitute));
+      return {
+        ...teacher,
+        institutes:stillListed,
+        classCount:Array.isArray(nextData?.classes) ? nextData.classes.length : teacher.classCount,
+      };
+    };
+    const handleArchiveTeacherInstitute = async (row, group, targetInstitute = "") => {
+      const sourceInstitute = String(group?.institute || "").trim();
+      if(!row?.teacher?.uid || !sourceInstitute) return;
+      setDeleteBusy(true);
+      try {
+        const result = await archiveTeacherInstituteAssignment(row.teacher.uid, sourceInstitute, {
+          targetInstituteName: targetInstitute,
+          adminUid:user?.uid || "",
+          adminName:user?.displayName || user?.email || "Admin",
+        });
+        const nextData = result?.data || await getTeacherFullData(row.teacher.uid);
+        if(nextData){
+          setFullData(fd=>({...fd,[row.teacher.uid]:nextData}));
+          setTeachers(prev=>prev.map(teacher=>
+            teacher.uid===row.teacher.uid
+              ? patchTeacherAfterBranchArchive(teacher, sourceInstitute, nextData)
+              : teacher
+          ));
+        }
+        resetInstituteGlanceAfterAccountChange();
+        showAdminToast(
+          result?.archivedClassCount
+            ? `${row.name} archived from ${shortInstituteLabel(sourceInstitute)}. Old records remain saved.`
+            : `${row.name} was removed from ${shortInstituteLabel(sourceInstitute)}.`
+        );
+      } catch(e) {
+        showAdminToast("Could not archive branch: " + (e?.message || "Unknown error"));
+      } finally {
+        setDeleteBusy(false);
+        setDeleteModal(null);
+      }
+    };
+    const openArchiveTeacherInstituteModal = (row, group) => {
+      const sourceInstitute = String(group?.institute || "").trim();
+      if(!sourceInstitute) return;
+      if(!row.detailsReady){
+        ensureFullData(row.teacher.uid);
+        showAdminToast("Teacher details are still loading. Try again once the breakdown is ready.");
+        return;
+      }
+      const targetInstitutes = uniqueLabels(row.membershipInstitutes || [])
+        .filter(inst=>!sameInstituteName(inst, sourceInstitute))
+        .filter(inst=>!isPlaceholderInstitute(inst))
+        .slice(0, 5);
+      const classCount = Number(group?.classCount || 0);
+      const sourceShort = shortInstituteLabel(sourceInstitute);
+      const optionForTarget = target => ({
+        label: target ? `Transferred to ${shortInstituteLabel(target)}` : "Archive without destination",
+        hint: target
+          ? `${sourceShort} leaves the active teacher list. ${shortInstituteLabel(target)} remains active.`
+          : "Use this when the new branch is not connected to this teacher yet.",
+        tone: target ? "blue" : "neutral",
+        onConfirm:()=>handleArchiveTeacherInstitute(row, group, target),
+      });
+      confirmDelete({
+        title:`Archive ${sourceShort} for ${row.name}?`,
+        lines:[
+          "Use this when a teacher has moved to another branch and the old branch should stop appearing in their active list.",
+          `${classCount || "No"} active ${classCount===1 ? "class" : "classes"} from ${sourceShort} will be removed from active teaching assignments.`,
+          "Existing entries remain saved and archived. The teacher will receive a branch-change notice.",
+        ],
+        confirmLabel:"Archive branch",
+        options:[
+          ...targetInstitutes.map(optionForTarget),
+          optionForTarget(""),
+        ],
+      });
+    };
     const renderTeacherBreakdown = row => {
       const breakdownGroups = (row.allInstituteGroups?.length ? row.allInstituteGroups : row.instituteGroups);
       const breakdownSubjects = uniqueLabels(breakdownGroups.flatMap(group=>group.subjects));
@@ -18488,11 +18584,32 @@ function AdminPanelInner({user}){
                       </div>
                     )}
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"auto auto",gap:"4px 10px",alignItems:"baseline",flexShrink:0,textAlign:"right"}}>
-                    <div style={{fontSize:10,color:G.textL,fontWeight:850,textTransform:"uppercase",letterSpacing:0.4}}>Classes</div>
-                    <div style={{fontSize:13.5,fontWeight:950,color:G.text}}>{group.classCount || "--"}</div>
-                    <div style={{fontSize:10,color:G.textL,fontWeight:850,textTransform:"uppercase",letterSpacing:0.4}}>Hours</div>
-                    <div style={{fontSize:13.5,fontWeight:950,color:G.text}}>{row.detailsReady ? formatDurationShort(group.weekMinutes) : "--"}</div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:9,flexShrink:0,textAlign:"right"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"auto auto",gap:"4px 10px",alignItems:"baseline"}}>
+                      <div style={{fontSize:10,color:G.textL,fontWeight:850,textTransform:"uppercase",letterSpacing:0.4}}>Classes</div>
+                      <div style={{fontSize:13.5,fontWeight:950,color:G.text}}>{group.classCount || "--"}</div>
+                      <div style={{fontSize:10,color:G.textL,fontWeight:850,textTransform:"uppercase",letterSpacing:0.4}}>Hours</div>
+                      <div style={{fontSize:13.5,fontWeight:950,color:G.text}}>{row.detailsReady ? formatDurationShort(group.weekMinutes) : "--"}</div>
+                    </div>
+                    {!isPlaceholderInstitute(group.institute) && (
+                      <button
+                        type="button"
+                        onClick={()=>openArchiveTeacherInstituteModal(row, group)}
+                        style={{
+                          border:"1.5px solid #FED7AA",
+                          background:"#FFF7ED",
+                          color:G.amber,
+                          borderRadius:9,
+                          padding:"6px 9px",
+                          fontSize:11,
+                          fontWeight:900,
+                          fontFamily:G.sans,
+                          cursor:"pointer",
+                          whiteSpace:"nowrap",
+                        }}>
+                        Archive branch
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

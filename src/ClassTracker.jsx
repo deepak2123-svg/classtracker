@@ -3388,6 +3388,26 @@ function getTeacherNoticeCopy(item) {
     };
   }
 
+  if (kind === "institute_archived") {
+    const oldInstitute = item.oldInstitute || item.institute || "your old branch";
+    const newInstitute = item.newInstitute || item.targetInstitute || "";
+    const impactedClassCount = Number(item?.impactedClassCount || 0);
+    const entryCount = Number(item?.entryCount || 0);
+    return {
+      icon:IconArchive,
+      badge:"Branch changed",
+      badgeBg:"rgba(37,99,235,0.10)",
+      badgeColor:"#1D4ED8",
+      title:newInstitute || oldInstitute,
+      summary:newInstitute
+        ? `Your branch has been changed to ${newInstitute}.`
+        : `Your admin removed ${oldInstitute} from your active branch list.`,
+      detail:impactedClassCount > 0
+        ? `${impactedClassCount} ${impactedClassCount === 1 ? "class was" : "classes were"} removed from your active list. ${entryCount > 0 ? `${entryCount} saved ${entryCount === 1 ? "entry remains" : "entries remain"} archived.` : "Old records remain saved and archived."}`
+        : "Old branch records remain saved and archived.",
+    };
+  }
+
   if (kind === "institute_deleted_migrated") {
     const oldInstitute = item.oldInstitute || "the old institute";
     const newInstitute = item.newInstitute || "a new institute";
@@ -3469,22 +3489,28 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
   const hasInstituteRenamed = rows.some(item => item.kind === "institute_renamed");
   const hasInstituteDeleted = rows.some(item => item.kind === "institute_deleted");
   const hasInstituteDeletedMigrated = rows.some(item => item.kind === "institute_deleted_migrated");
+  const hasInstituteArchived = rows.some(item => item.kind === "institute_archived");
   const hasRenamed = hasClassRenamed || hasInstituteRenamed;
   const many = rows.length > 1;
   let title = "Review class changes from admin";
   let subtitle = "These updates are now saved in your Notification Panel. Review them there, then mark each notice read when you are done.";
 
-  if (hasInstituteDeleted && !hasInstituteDeletedMigrated && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
+  if (hasInstituteArchived && !hasInstituteDeleted && !hasInstituteDeletedMigrated && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
+    title = many ? "Branches were changed" : "Branch was changed";
+    subtitle = many
+      ? "Your admin removed old branches from your active list. Your previous entries remain saved and archived."
+      : "Your admin removed an old branch from your active list. Your previous entries remain saved and archived.";
+  } else if (hasInstituteDeleted && !hasInstituteDeletedMigrated && !hasInstituteArchived && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
     title = many ? "Institutes were deleted" : "Institute was deleted";
     subtitle = many
       ? "Your admin deleted some institutes. Classes under those institutes have been permanently removed from your account."
       : "Your admin deleted an institute. Classes under it have been permanently removed from your account.";
-  } else if (hasInstituteDeletedMigrated && !hasInstituteDeleted && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
+  } else if (hasInstituteDeletedMigrated && !hasInstituteDeleted && !hasInstituteArchived && !hasInstituteRenamed && !hasClassRenamed && !hasDeleted && !hasRestored) {
     title = many ? "Institutes deleted & classes moved" : "Institute deleted & classes moved";
     subtitle = many
       ? "Your admin deleted some institutes and moved your classes to new institutes. Your active classes are unchanged."
       : "Your admin deleted an institute and moved your classes to a new one. Your active classes are unchanged.";
-  } else if ((hasInstituteDeleted || hasInstituteDeletedMigrated) && !hasDeleted && !hasRestored && !hasRenamed) {
+  } else if ((hasInstituteDeleted || hasInstituteDeletedMigrated || hasInstituteArchived) && !hasDeleted && !hasRestored && !hasRenamed) {
     title = "Institute changes from admin";
     subtitle = "Your admin made changes to institutes on your account. Check the Notification Panel for full details.";
   } else if (hasInstituteRenamed && !hasDeleted && !hasRestored && !hasClassRenamed) {
@@ -3561,6 +3587,12 @@ function TeacherNotificationPromptModal({ items, onClose, onOpenNotifications })
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
                     <span style={{background:"rgba(220,38,38,0.07)",border:"1px solid rgba(220,38,38,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B91C1C",display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconTrash} size={13} color="#B91C1C" />Deleted: {item.oldInstitute}</span>
                     <span style={{background:"rgba(124,58,237,0.08)",border:"1px solid rgba(124,58,237,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#6D28D9"}}>Moved to: {item.newInstitute}</span>
+                  </div>
+                )}
+                {item.kind==="institute_archived" && item.oldInstitute && (
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                    <span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8",display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArchive} size={13} color="#1D4ED8" />Archived: {item.oldInstitute}</span>
+                    {item.newInstitute&&<span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>Now: {item.newInstitute}</span>}
                   </div>
                 )}
                 {item.kind==="institute_deleted" && item.oldInstitute && (
@@ -3882,7 +3914,8 @@ function ClassTrackerInner({user}){
       .map(item => {
         const isInstituteRename = item?.kind === "institute_renamed";
         const isInstituteDeleted = item?.kind === "institute_deleted" || item?.kind === "institute_deleted_migrated";
-        const isInstituteAction = isInstituteRename || isInstituteDeleted;
+        const isInstituteArchived = item?.kind === "institute_archived";
+        const isInstituteAction = isInstituteRename || isInstituteDeleted || isInstituteArchived;
         const activeClass = (data.classes || []).find(cls => String(cls?.id || "") === String(item?.classId || "")) || null;
         const trashedClass = (data.trash?.classes || []).find(cls => String(cls?.id || "") === String(item?.classId || "")) || null;
         const record = isInstituteAction ? (item || {}) : (activeClass || trashedClass || item || {});
@@ -5243,7 +5276,7 @@ function ClassTrackerInner({user}){
   if(view==="notifications"){
     const hasTrashLinkedNotice = adminNoticeItems.some(item => item.status === "trash");
     const renamedNoticeCount = adminNoticeItems.filter(item => item.kind === "section_renamed" || item.kind === "institute_renamed").length;
-    const instituteActionCount = adminNoticeItems.filter(item => item.kind === "institute_deleted" || item.kind === "institute_deleted_migrated").length;
+    const instituteActionCount = adminNoticeItems.filter(item => item.kind === "institute_deleted" || item.kind === "institute_deleted_migrated" || item.kind === "institute_archived").length;
     const deletedNoticeCount = adminNoticeItems.filter(item => item.kind === "class_deleted").length;
     const restoredNoticeCount = adminNoticeItems.filter(item => item.kind === "class_restored").length;
     return(
@@ -5305,12 +5338,13 @@ function ClassTrackerInner({user}){
                 const isInstituteRename = item.kind==="institute_renamed";
                 const isInstituteDeleted = item.kind==="institute_deleted";
                 const isInstituteDeletedMigrated = item.kind==="institute_deleted_migrated";
-                const isInstituteAction = isInstituteRename || isInstituteDeleted || isInstituteDeletedMigrated;
+                const isInstituteArchived = item.kind==="institute_archived";
+                const isInstituteAction = isInstituteRename || isInstituteDeleted || isInstituteDeletedMigrated || isInstituteArchived;
                 const isTrash=item.status==="trash";
                 const isActive=item.status==="active";
-                const statusLabel=isLocalWarning?"Needs review":isInstituteDeletedMigrated?"Classes moved":isInstituteDeleted?"Institute removed":isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
-                const statusBg=isLocalWarning?"rgba(245,158,11,0.14)":isInstituteDeletedMigrated?"rgba(124,58,237,0.10)":isInstituteDeleted?"rgba(220,38,38,0.10)":isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
-                const statusColor=isLocalWarning?"#B45309":isInstituteDeletedMigrated?"#6D28D9":isInstituteDeleted?"#B91C1C":isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
+                const statusLabel=isLocalWarning?"Needs review":isInstituteArchived?"Branch changed":isInstituteDeletedMigrated?"Classes moved":isInstituteDeleted?"Institute removed":isInstituteRename?"Institute updated":isTrash?"In recycle bin":isActive?"Active class":"Unavailable";
+                const statusBg=isLocalWarning?"rgba(245,158,11,0.14)":isInstituteArchived?"rgba(37,99,235,0.10)":isInstituteDeletedMigrated?"rgba(124,58,237,0.10)":isInstituteDeleted?"rgba(220,38,38,0.10)":isInstituteRename?"rgba(245,158,11,0.14)":isTrash?G.redL:isActive?G.greenL:"rgba(15,23,42,0.05)";
+                const statusColor=isLocalWarning?"#B45309":isInstituteArchived?"#1D4ED8":isInstituteDeletedMigrated?"#6D28D9":isInstituteDeleted?"#B91C1C":isInstituteRename?"#B45309":isTrash?G.red:isActive?G.green:G.textM;
                 const dismissLabel=isLocalWarning||isInstituteAction||isActive||isTrash?"Mark as read":"Remove notice";
                 return(
                   <div key={item.id} style={{...card,padding:isMobile?"16px 16px 14px":"18px 18px 16px"}}>
@@ -5338,6 +5372,11 @@ function ClassTrackerInner({user}){
                               {item.impactedClassCount} {item.impactedClassCount===1?"class":"classes"} affected
                             </span>
                           )}
+                          {isInstituteArchived && Number(item.impactedClassCount || 0) > 0 && (
+                            <span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8",fontFamily:G.mono}}>
+                              {item.impactedClassCount} {item.impactedClassCount===1?"class":"classes"} archived
+                            </span>
+                          )}
                         </div>
                         <div style={{fontSize:13,color:G.textM,lineHeight:1.7}}>
                           {copy.summary} {copy.detail}
@@ -5363,6 +5402,12 @@ function ClassTrackerInner({user}){
                           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10,marginBottom:2}}>
                             <span style={{background:"rgba(220,38,38,0.07)",border:"1px solid rgba(220,38,38,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#B91C1C",display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconTrash} size={13} color="#B91C1C" />Deleted: {item.oldInstitute}</span>
                             <span style={{background:"rgba(124,58,237,0.08)",border:"1px solid rgba(124,58,237,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#6D28D9"}}>Moved to: {item.newInstitute}</span>
+                          </div>
+                        )}
+                        {item.kind==="institute_archived" && item.oldInstitute && (
+                          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10,marginBottom:2}}>
+                            <span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8",display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArchive} size={13} color="#1D4ED8" />Archived: {item.oldInstitute}</span>
+                            {item.newInstitute&&<span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#1D4ED8"}}>Now: {item.newInstitute}</span>}
                           </div>
                         )}
                         {item.kind==="institute_deleted" && item.oldInstitute && (
@@ -7112,7 +7157,7 @@ function ClassTrackerInner({user}){
             <AppIcon icon={IconTrash} size={28} color={G.text} />
             <h2 style={{fontSize:26,letterSpacing:-0.5}}>Recycle Bin</h2>
           </div>
-          <p style={{fontSize:15,color:G.textM,fontFamily:G.sans,marginBottom:28}}>Items are permanently deleted after 30 days.</p>
+          <p style={{fontSize:15,color:G.textM,fontFamily:G.sans,marginBottom:28}}>Deleted items expire after 30 days. Branch-transfer archives stay saved unless an admin removes them.</p>
 
           {tClasses.length===0&&tNotes.length===0&&(
             <div style={{...card,textAlign:"center",padding:"72px 20px"}}>
@@ -7130,19 +7175,30 @@ function ClassTrackerInner({user}){
                   const color=getSectionTone(tc.section);
                   const ec=Object.values(tc.savedNotes||{}).reduce((s,arr)=>s+(Array.isArray(arr)?arr.length:0),0);
                   const dl=daysLeft(tc.deletedAt);
+                  const isTransferArchive=!!(tc.transferArchive || tc.archivedByAdmin);
                   return(
                     <div key={tc.id} className="trash-row" style={{...card,padding:"16px 20px",display:"flex",alignItems:"center",gap:16}}>
                       <div style={{width:4,alignSelf:"stretch",borderRadius:999,background:color.bg,flexShrink:0}}/>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:16,fontWeight:700,color:G.text,fontFamily:G.display}}>{tc.section}</div>
                         <div style={{fontSize:14,color:G.textM,marginTop:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><AppIcon icon={IconBuilding} size={14} color={G.textM} />{tc.institute}{tc.subject?` · ${tc.subject}`:""} · {ec} entries</div>
-                        <div style={{fontSize:14,color:dl<=7?G.red:G.textM,fontFamily:G.sans,marginTop:4,display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconClockHour4} size={14} color={dl<=7?G.red:G.textM} />{dl} day{dl!==1?"s":""} until permanent deletion</div>
+                        {isTransferArchive ? (
+                          <div style={{fontSize:14,color:"#1D4ED8",fontFamily:G.sans,marginTop:4,display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArchive} size={14} color="#1D4ED8" />Saved branch archive</div>
+                        ) : (
+                          <div style={{fontSize:14,color:dl<=7?G.red:G.textM,fontFamily:G.sans,marginTop:4,display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconClockHour4} size={14} color={dl<=7?G.red:G.textM} />{dl} day{dl!==1?"s":""} until permanent deletion</div>
+                        )}
                       </div>
                       <div className="trash-row-btns" style={{display:"flex",gap:8,flexShrink:0}}>
-                        <button onClick={()=>restoreClass(tc)} onPointerDown={e=>rpl(e,false)}
-                          style={{background:G.greenL,border:`1px solid rgba(27,138,76,0.2)`,color:G.green,borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden",display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconRestore} size={15} color={G.green} />Restore</button>
-                        <button onClick={()=>setConfirmModal({message:`Permanently delete "${tc.section}"? This cannot be undone.`,label:"Delete Class",onConfirm:()=>permDeleteClass(tc.id)})}
-                          style={{background:G.redL,border:"1px solid #F5CACA",color:G.red,borderRadius:9,padding:"8px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans}}>Delete Forever</button>
+                        {isTransferArchive ? (
+                          <span style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.18)",color:"#1D4ED8",borderRadius:9,padding:"8px 12px",fontSize:13,fontFamily:G.sans,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArchive} size={14} color="#1D4ED8" />Archived by admin</span>
+                        ) : (
+                          <>
+                            <button onClick={()=>restoreClass(tc)} onPointerDown={e=>rpl(e,false)}
+                              style={{background:G.greenL,border:`1px solid rgba(27,138,76,0.2)`,color:G.green,borderRadius:9,padding:"8px 16px",fontSize:14,cursor:"pointer",fontFamily:G.sans,fontWeight:600,position:"relative",overflow:"hidden",display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconRestore} size={15} color={G.green} />Restore</button>
+                            <button onClick={()=>setConfirmModal({message:`Permanently delete "${tc.section}"? This cannot be undone.`,label:"Delete Class",onConfirm:()=>permDeleteClass(tc.id)})}
+                              style={{background:G.redL,border:"1px solid #F5CACA",color:G.red,borderRadius:9,padding:"8px 14px",fontSize:14,cursor:"pointer",fontFamily:G.sans}}>Delete Forever</button>
+                          </>
+                        )}
                       </div>
                     </div>
                   );

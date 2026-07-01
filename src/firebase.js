@@ -1028,14 +1028,17 @@ export async function removeTeacherFromSystem(uid, removedByUid = null) {
 }
 
 // ── Trash auto-purge ──────────────────────────────────────────────────────────
-// Removes trash items older than 30 days from the user's local data object.
+// Removes ordinary trash items older than 30 days from the user's local data
+// object. Admin transfer archives are kept because they preserve branch history.
 // Call this after loadUserData so stale items never reach the UI.
 // No Firestore write needed here — the next saveUserData call persists the cleanup.
 export function purgeExpiredTrash(data) {
   if (!data) return data;
   const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
   const cutoff = Date.now() - THIRTY_DAYS;
-  const trashedClasses = (data.trash?.classes || []).filter(tc => (tc.deletedAt || 0) > cutoff);
+  const trashedClasses = (data.trash?.classes || []).filter(tc =>
+    tc?.transferArchive || tc?.archivedByAdmin || (tc.deletedAt || 0) > cutoff
+  );
   const trashedNotes   = (data.trash?.notes   || []).filter(tn => (tn.deletedAt || 0) > cutoff);
   return { ...data, trash: { classes: trashedClasses, notes: trashedNotes } };
 }
@@ -1186,6 +1189,129 @@ export async function trashClassInTeacherData(uid, classId, extraTrashFields = {
   }
 }
 
+export async function archiveTeacherInstituteAssignment(uid, instituteName, extra = {}) {
+  const teacherUid = String(uid || "").trim();
+  const instLabel = String(instituteName || "").trim();
+  if (!teacherUid) throw new Error("Teacher id is required.");
+  if (!instLabel) throw new Error("Institute name is required.");
+
+  const data = await loadUserData(teacherUid);
+  if (!data) throw new Error("Teacher data was not found.");
+
+  const adminName = String(extra.adminName || extra.deletedByName || "Admin").trim() || "Admin";
+  const adminUid = String(extra.adminUid || extra.deletedByUid || "").trim();
+  const targetLabel = String(extra.targetInstituteName || extra.newInstitute || "").trim();
+  const eventAt = Number(extra.eventAt || Date.now());
+  const countEntries = (dateMap = {}) => Object.values(dateMap || {}).reduce(
+    (sum, entries) => sum + (Array.isArray(entries) ? entries.length : 0),
+    0
+  );
+  const removeInstitute = values => uniqueTrimmed(
+    (values || []).filter(value => !sameInstituteLabel(value, instLabel))
+  );
+
+  const activeClasses = Array.isArray(data.classes) ? data.classes : [];
+  const classesToArchive = activeClasses.filter(cls => sameInstituteLabel(cls?.institute, instLabel));
+  const archivedClassIds = new Set(classesToArchive.map(cls => String(cls?.id || "")).filter(Boolean));
+  const wasListed =
+    (data.institutes || []).some(item => sameInstituteLabel(item, instLabel)) ||
+    (data.profile?.institutes || []).some(item => sameInstituteLabel(item, instLabel));
+
+  if (!classesToArchive.length && !wasListed) {
+    return {
+      changed: false,
+      archivedClassCount: 0,
+      archivedEntryCount: 0,
+      data,
+    };
+  }
+
+  const archivedClasses = classesToArchive.map(cls => {
+    const savedNotes = (data.notes || {})[cls.id] || {};
+    return {
+      ...cls,
+      deletedAt: eventAt,
+      savedNotes,
+      deletedByAdmin: true,
+      deletedBy: adminUid,
+      deletedByUid: adminUid,
+      deletedByName: adminName,
+      archivedByAdmin: true,
+      archivedByUid: adminUid,
+      archivedByName: adminName,
+      transferArchive: true,
+      transferReason: "branch_changed",
+      archivedFromInstitute: instLabel,
+      transferredToInstitute: targetLabel,
+      archiveLabel: targetLabel
+        ? `Transferred to ${targetLabel}`
+        : "Transferred to another branch",
+    };
+  });
+  const archivedEntryCount = archivedClasses.reduce(
+    (sum, cls) => sum + countEntries(cls.savedNotes || {}),
+    0
+  );
+
+  const updatedClasses = activeClasses.filter(cls => !archivedClassIds.has(String(cls?.id || "")));
+  const updatedNotes = Object.fromEntries(
+    Object.entries(data.notes || {}).filter(([classId]) => !archivedClassIds.has(String(classId || "")))
+  );
+  const updatedTrash = {
+    ...(data.trash || {}),
+    classes: [
+      ...(data.trash?.classes || []).filter(cls => !archivedClassIds.has(String(cls?.id || ""))),
+      ...archivedClasses,
+    ],
+  };
+  const notice = {
+    id: `institute_archived_${normaliseInstituteKey(instLabel) || "institute"}_${eventAt}`,
+    kind: "institute_archived",
+    classId: "",
+    section: "",
+    institute: instLabel,
+    subject: "",
+    adminName,
+    eventAt,
+    promptedAt: null,
+    oldInstitute: instLabel,
+    newInstitute: targetLabel,
+    targetInstitute: targetLabel,
+    impactedClassCount: archivedClasses.length,
+    entryCount: archivedEntryCount,
+    archived: true,
+    transferArchive: true,
+    archiveMessage: targetLabel
+      ? `Your branch has been changed to ${targetLabel}. ${instLabel} classes were removed from your active list. They remain saved and archived.`
+      : `${instLabel} classes were removed from your active list after a branch change. They remain saved and archived.`,
+  };
+  const updatedMeta = withPendingAdminClassNotice(data, notice);
+
+  const saved = await saveUserData(teacherUid, {
+    ...data,
+    classes: updatedClasses,
+    notes: updatedNotes,
+    institutes: removeInstitute(data.institutes),
+    profile: {
+      ...(data.profile || {}),
+      institutes: removeInstitute(data.profile?.institutes),
+    },
+    trash: updatedTrash,
+    _meta: updatedMeta,
+  }, { source: "adminArchiveTeacherInstituteAssignment" });
+
+  await Promise.allSettled(
+    Array.from(archivedClassIds).map(classId => deleteClassNotes(teacherUid, classId))
+  );
+
+  return {
+    changed: true,
+    archivedClassCount: archivedClasses.length,
+    archivedEntryCount,
+    data: saved.data,
+  };
+}
+
 export async function restoreClassFromTeacherTrash(uid, classId, extraRestoreFields = {}) {
   try {
     const data = await loadUserData(uid);
@@ -1200,6 +1326,14 @@ export async function restoreClassFromTeacherTrash(uid, classId, extraRestoreFie
       deletedByAdmin,
       deletedByUid,
       deletedByName,
+      archivedByAdmin,
+      archivedByUid,
+      archivedByName,
+      transferArchive,
+      transferReason,
+      archivedFromInstitute,
+      transferredToInstitute,
+      archiveLabel,
       ...restoredClass
     } = trashedClass;
 
