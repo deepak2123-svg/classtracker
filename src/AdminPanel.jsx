@@ -14871,6 +14871,16 @@ function AdminPanelInner({user}){
 
     const instituteRows = institutes.map((instituteName, index) => {
       const classBuckets = new Map();
+      const sectionConfig = getInstituteSectionConfig(instSectionsAll, instituteName) || {};
+      const officialSectionNames = uniqueSectionNames([
+        ...(sectionConfig.gradeGroups || []).flatMap(group => group.sections || []),
+        ...(sectionConfig.extraSections || []),
+      ]);
+      const officialSectionOrder = new Map(
+        officialSectionNames
+          .map((sectionName, sectionIndex) => [normaliseSectionKey(sectionName), sectionIndex])
+          .filter(([sectionKey]) => !!sectionKey)
+      );
       const instituteTeachers = activeTeachers.filter(teacher => teacherBelongsToInstitute(teacher, instituteName));
       const teacherRows = instituteTeachers.map(teacher => {
         const uid = teacher.uid;
@@ -14984,13 +14994,46 @@ function AdminPanelInner({user}){
         return exportTextSorter.compare(a.name || "", b.name || "");
       });
 
+      officialSectionNames.forEach(sectionName => {
+        const classKey = normaliseSectionKey(sectionName);
+        if(!classKey) return;
+        const existingBucket = classBuckets.get(classKey);
+        if(existingBucket){
+          existingBucket.official = true;
+          existingBucket.officialOrder = officialSectionOrder.get(classKey) ?? existingBucket.officialOrder ?? 999;
+          if(!existingBucket.raw) existingBucket.raw = sectionName;
+          if(!existingBucket.display) existingBucket.display = normaliseName(sectionName);
+          classBuckets.set(classKey, existingBucket);
+          return;
+        }
+        classBuckets.set(classKey, {
+          key:classKey,
+          raw:sectionName,
+          display:normaliseName(sectionName),
+          teachers:[],
+          subjects:new Set(),
+          todayEntries:[],
+          yesterdayEntries:[],
+          lastWeekEntries:[],
+          recentEntries:[],
+          todayMinutes:0,
+          lastTs:0,
+          lastDateKey:"",
+          official:true,
+          officialOrder:officialSectionOrder.get(classKey) ?? 999,
+        });
+      });
+
       const classRows = Array.from(classBuckets.values()).map(bucket => {
         const subjects = Array.from(bucket.subjects).sort((a,b)=>exportTextSorter.compare(a || "", b || ""));
         const teacherCount = new Set(bucket.teachers.map(item => item.uid).filter(Boolean)).size;
         const lastDays = daysSinceTs(bucket.lastTs || null);
         const lastDateKey = bucket.lastDateKey || "";
-        const isStale = !lastDateKey || lastDateKey <= staleCutoff;
-        const activityKey = bucket.todayEntries.length || lastDateKey === today
+        const hasTeachers = teacherCount > 0;
+        const isStale = hasTeachers && (!lastDateKey || lastDateKey <= staleCutoff);
+        const activityKey = !hasTeachers
+          ? "empty"
+          : bucket.todayEntries.length || lastDateKey === today
           ? "today"
           : lastDateKey === yesterday
             ? "yesterday"
@@ -14999,14 +15042,16 @@ function AdminPanelInner({user}){
               : isStale
                 ? "stale"
                 : "recent";
-        const activityLabel = activityKey === "today"
+        const activityLabel = activityKey === "empty"
+          ? "No teachers"
+          : activityKey === "today"
           ? "Today"
           : activityKey === "yesterday"
             ? "Yesterday"
             : activityKey === "last_week"
               ? "Last week"
               : lastEntryCaption(bucket.lastTs || null);
-        const activityRank = { today:0, yesterday:1, last_week:2, recent:3, stale:4 }[activityKey] ?? 5;
+        const activityRank = { today:0, yesterday:1, last_week:2, recent:3, stale:4, empty:5 }[activityKey] ?? 6;
         return {
           ...bucket,
           subjects,
@@ -15169,14 +15214,14 @@ function AdminPanelInner({user}){
   }, [adminV5ClassKey, adminV5TeacherUid, adminV5TimelineScope, periodEndKey, periodStartKey, selInst]);
 
   React.useEffect(()=>{
-    if(view !== "main" || !adminV5SelectedInstitute || adminV5ClassKey) return;
+    if(view !== "main" || !adminV5SelectedInstitute || adminV5ClassKey || adminV5TeacherUid || adminV5BrowseMode !== "class") return;
     const focus = getAdminV5DefaultFocus(adminV5SelectedInstitute.institute);
     if(!focus.classKey) return;
     setAdminV5ClassKey(focus.classKey);
     setAdminV5TeacherUid(focus.teacherUid);
     setAdminV5TimelineScope(focus.scope);
     if(focus.teacherUid) ensureFullData(focus.teacherUid);
-  }, [adminV5ClassKey, adminV5SelectedInstitute, ensureFullData, getAdminV5DefaultFocus, view]);
+  }, [adminV5BrowseMode, adminV5ClassKey, adminV5SelectedInstitute, adminV5TeacherUid, ensureFullData, getAdminV5DefaultFocus, view]);
 
   const fullViewEntries = useMemo(()=>{
     if(!fullView || !selInst) return [];
@@ -20206,7 +20251,7 @@ function AdminPanelInner({user}){
         const rows = group.rows || [];
         if(!rows.length) return null;
         return (
-          <div style={{display:"flex",flexWrap:"wrap",gap:7,padding:"0 2px 9px 22px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(98px,1fr))",gap:8,padding:"0 2px 11px 22px"}}>
             {rows.map(cls=>{
               const active = cls.key === selectedClassKey;
               const tone = getSectionTone(cls.display);
@@ -20219,27 +20264,29 @@ function AdminPanelInner({user}){
                   type="button"
                   onClick={()=>openSectionGroupClass(group, cls)}
                   style={{
-                    minHeight:34,
-                    maxWidth:"100%",
+                    width:"100%",
+                    minWidth:0,
+                    minHeight:36,
                     borderRadius:999,
                     border:`1px solid ${active ? G.blue : G.border}`,
                     background:active ? "#EAF2FF" : "#FFFFFF",
                     color:active ? G.blue : (tone.ink || G.textS),
-                    padding:"0 8px 0 12px",
+                    padding:"0 7px 0 11px",
                     display:"inline-flex",
                     alignItems:"center",
+                    justifyContent:"space-between",
                     gap:8,
-                    fontSize:13,
+                    fontSize:12.5,
                     fontWeight:950,
                     fontFamily:G.display,
                     cursor:"pointer",
                     boxShadow:active ? "0 0 0 2px rgba(29,78,216,0.10)" : "none",
                     whiteSpace:"nowrap",
                   }}>
-                  <span style={{overflow:"hidden",textOverflow:"ellipsis",maxWidth:160}}>{cls.display}</span>
+                  <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</span>
                   <span style={{
-                    minWidth:24,
-                    height:24,
+                    minWidth:25,
+                    height:25,
                     borderRadius:999,
                     padding:"0 7px",
                     display:"inline-flex",
@@ -20260,7 +20307,8 @@ function AdminPanelInner({user}){
           </div>
         );
       };
-      const renderSectionGroup = (group, index, renderRows, countLabel = "classes") => {
+      const renderSectionGroup = (group, index, renderRows, countLabel = "classes", options = {}) => {
+        const showRows = options.showRows !== false && typeof renderRows === "function";
         const selectedInside = (group.rows || []).some(row => row.key === selectedClassKey);
         const defaultExpanded = !!classSearchKey || selectedInside || index === 0;
         const storedKey = `${adminV5BrowseMode}:${group.key}`;
@@ -20271,6 +20319,7 @@ function AdminPanelInner({user}){
             <button
               type="button"
               onClick={()=>{
+                if(!showRows) return;
                 setAdminV5ExpandedGroupKeys(prev => ({
                   ...prev,
                   [storedKey]:!(Object.prototype.hasOwnProperty.call(prev, storedKey) ? prev[storedKey] : defaultExpanded),
@@ -20285,11 +20334,11 @@ function AdminPanelInner({user}){
                 alignItems:"center",
                 justifyContent:"space-between",
                 gap:10,
-                cursor:"pointer",
+                cursor:showRows ? "pointer" : "default",
                 fontFamily:G.sans,
               }}>
               <span style={{display:"inline-flex",alignItems:"center",gap:8,minWidth:0}}>
-                <span style={{fontSize:12,color:"#94A3B8",fontWeight:900,width:14}}>{expanded ? "▾" : "▸"}</span>
+                <span style={{fontSize:12,color:"#94A3B8",fontWeight:900,width:14}}>{showRows ? (expanded ? "▾" : "▸") : "•"}</span>
                 <span style={{fontSize:12.5,fontWeight:950,color:G.textS,fontFamily:G.mono,letterSpacing:0.45,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                   {group.label}
                 </span>
@@ -20299,7 +20348,7 @@ function AdminPanelInner({user}){
               </span>
             </button>
             {renderSectionPills(group)}
-            {expanded&&(
+            {showRows && expanded&&(
               <div>
                 {renderRows(group.rows)}
               </div>
@@ -20481,7 +20530,7 @@ function AdminPanelInner({user}){
             {adminV5BrowseMode === "class" ? "Classes" : adminV5BrowseMode === "teacher" ? "Teachers" : "Class + Teacher"}
           </div>
           {adminV5BrowseMode === "class"&&visibleClassSectionGroups.map((group,index)=>
-            renderSectionGroup(group, index, rows => rows.map(renderClassCard))
+            renderSectionGroup(group, index, null, "classes", { showRows:false })
           )}
           {adminV5BrowseMode === "teacher"&&visibleModeTeachers.map(renderTeacherCard)}
           {adminV5BrowseMode === "pair"&&visiblePairSectionGroups.map((group,index)=>
