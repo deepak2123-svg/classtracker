@@ -20403,59 +20403,54 @@ function AdminPanelInner({user}){
         }
         selectAdminV5Class(cls.key);
       };
-      const renderSectionPills = (group) => {
+      const renderSectionCards = (group) => {
         const rows = group.rows || [];
         if(!rows.length) return null;
         return (
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(98px,1fr))",gap:8,padding:"0 2px 11px 22px"}}>
+          <div style={{display:"grid",gridTemplateColumns:adminV5StackedLayout ? "1fr" : "repeat(auto-fit,minmax(190px,1fr))",gap:10,padding:"12px"}}>
             {rows.map(cls=>{
               const active = cls.key === selectedClassKey;
               const tone = getSectionTone(cls.display);
-              const count = adminV5BrowseMode === "pair"
-                ? (cls.visibleTeachers || cls.teachers || []).length
-                : rowPeriodCount(cls);
+              const teacherCount = Math.max(0, (cls.visibleTeachers || cls.teachers || []).length || cls.teacherCount || 0);
               return (
                 <button
-                  key={`${group.key}_pill_${cls.key}`}
+                  key={`${group.key}_section_${cls.key}`}
                   type="button"
                   onClick={()=>openSectionGroupClass(group, cls)}
                   style={{
                     width:"100%",
                     minWidth:0,
-                    minHeight:36,
-                    borderRadius:999,
+                    minHeight:adminV5StackedLayout ? 92 : 108,
+                    borderRadius:12,
                     border:`1px solid ${active ? G.blue : G.border}`,
                     background:active ? "#EAF2FF" : "#FFFFFF",
-                    color:active ? G.blue : (tone.ink || G.textS),
-                    padding:"0 7px 0 11px",
-                    display:"inline-flex",
-                    alignItems:"center",
-                    justifyContent:"space-between",
-                    gap:8,
-                    fontSize:12.5,
-                    fontWeight:950,
-                    fontFamily:G.display,
+                    color:G.text,
+                    padding:"13px 13px",
+                    display:"grid",
+                    gridTemplateColumns:"minmax(0,1fr) auto",
+                    gap:10,
+                    alignItems:"start",
+                    textAlign:"left",
                     cursor:"pointer",
-                    boxShadow:active ? "0 0 0 2px rgba(29,78,216,0.10)" : "none",
-                    whiteSpace:"nowrap",
+                    boxShadow:active ? "inset 0 0 0 1px rgba(37,99,235,0.45)" : "none",
                   }}>
-                  <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{cls.display}</span>
-                  <span style={{
-                    minWidth:25,
-                    height:25,
-                    borderRadius:999,
-                    padding:"0 7px",
-                    display:"inline-flex",
-                    alignItems:"center",
-                    justifyContent:"center",
-                    background:active ? "#FFFFFF" : "#F1F5F9",
-                    border:`1px solid ${active ? "#BFDBFE" : G.border}`,
-                    color:active ? G.blue : G.textM,
-                    fontSize:10.5,
-                    fontWeight:950,
-                    fontFamily:G.mono,
-                  }}>
-                    {count || 0}
+                  <span style={{minWidth:0}}>
+                    <span style={{display:"block",fontSize:22,fontWeight:950,color:active ? G.blue : (tone.ink || G.text),fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      {cls.display}
+                    </span>
+                    <span style={{display:"block",fontSize:12,color:G.textM,lineHeight:1.35,marginTop:6}}>
+                      {teacherCount} teacher{teacherCount===1?"":"s"}
+                    </span>
+                    <span style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+                      {cls.subjects.slice(0,3).map(subject=>(
+                        <span key={subject} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 8px",fontSize:10.5,color:G.textS,fontWeight:800,whiteSpace:"nowrap",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis"}}>{subject}</span>
+                      ))}
+                      {cls.subjects.length>3&&<span style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 8px",fontSize:10.5,color:G.textM,fontWeight:850,fontFamily:G.mono}}>+{cls.subjects.length - 3}</span>}
+                    </span>
+                  </span>
+                  <span style={{minWidth:52,minHeight:52,borderRadius:12,background:active ? "#FFFFFF" : "#F1F5F9",border:`1px solid ${active ? "#BFDBFE" : G.border}`,display:"inline-flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:G.text}}>
+                    <span style={{fontSize:19,fontWeight:950,fontFamily:G.display,lineHeight:1}}>{teacherCount}</span>
+                    <span style={{fontSize:8.5,fontWeight:950,fontFamily:G.mono,letterSpacing:0.45,textTransform:"uppercase",color:G.textM,marginTop:4}}>teachers</span>
                   </span>
                 </button>
               );
@@ -20464,18 +20459,21 @@ function AdminPanelInner({user}){
         );
       };
       const renderSectionGroup = (group, index, renderRows, countLabel = "classes", options = {}) => {
+        const showSectionCards = options.showSectionCards === true;
         const showRows = options.showRows !== false && typeof renderRows === "function";
+        const hasBody = showSectionCards || showRows;
         const selectedInside = (group.rows || []).some(row => row.key === selectedClassKey);
         const defaultExpanded = !!classSearchKey || selectedInside || index === 0;
         const storedKey = `${adminV5BrowseMode}:${group.key}`;
         const hasStored = Object.prototype.hasOwnProperty.call(adminV5ExpandedGroupKeys, storedKey);
         const expanded = hasStored ? !!adminV5ExpandedGroupKeys[storedKey] : defaultExpanded;
         return (
-          <div key={group.key} style={{marginBottom:13}}>
+          <div key={group.key} style={{background:"#FFFFFF",border:panelBorder,borderRadius:12,overflow:"hidden",marginBottom:13}}>
             <button
               type="button"
+              aria-expanded={hasBody ? expanded : undefined}
               onClick={()=>{
-                if(!showRows) return;
+                if(!hasBody) return;
                 setAdminV5ExpandedGroupKeys(prev => ({
                   ...prev,
                   [storedKey]:!(Object.prototype.hasOwnProperty.call(prev, storedKey) ? prev[storedKey] : defaultExpanded),
@@ -20484,29 +20482,23 @@ function AdminPanelInner({user}){
               style={{
                 width:"100%",
                 border:"none",
-                background:"transparent",
-                padding:"5px 2px 8px",
+                background:"#FFFFFF",
+                padding:"14px 16px",
                 display:"flex",
                 alignItems:"center",
-                justifyContent:"space-between",
-                gap:10,
-                cursor:showRows ? "pointer" : "default",
+                justifyContent:"flex-start",
+                gap:8,
+                cursor:hasBody ? "pointer" : "default",
                 fontFamily:G.sans,
               }}>
-              <span style={{display:"inline-flex",alignItems:"center",gap:8,minWidth:0}}>
-                <span style={{fontSize:12,color:"#94A3B8",fontWeight:900,width:14}}>{showRows ? (expanded ? "▾" : "▸") : "•"}</span>
-                <span style={{fontSize:12.5,fontWeight:950,color:G.textS,fontFamily:G.mono,letterSpacing:0.45,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                  {group.label}
-                </span>
-              </span>
-              <span style={{fontSize:11.5,fontWeight:850,color:G.textL,whiteSpace:"nowrap"}}>
-                {group.rows.length} {countLabel}
+              <span style={{fontSize:22,fontWeight:950,color:G.text,fontFamily:G.display,letterSpacing:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                {group.label}
               </span>
             </button>
-            {renderSectionPills(group)}
-            {showRows && expanded&&(
-              <div>
-                {renderRows(group.rows)}
+            {hasBody && expanded&&(
+              <div style={{borderTop:panelBorder}}>
+                {showSectionCards&&renderSectionCards(group)}
+                {showRows&&renderRows(group.rows)}
               </div>
             )}
           </div>
@@ -20663,7 +20655,6 @@ function AdminPanelInner({user}){
             <div style={{minWidth:0}}>
               <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Institute</div>
               <div style={{fontSize:22,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.05,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedInstituteName || "No institute"}</div>
-              {selectedInstitute&&<div style={{fontSize:13,color:G.textM,marginTop:6,lineHeight:1.4}}>{selectedInstitute.loggedCount}/{selectedInstitute.activeCount} updated today · {selectedInstitute.status.pct}% · {selectedInstitute.pendingCount} pending</div>}
             </div>
             {selectedInstitute&&(
               <span style={{background:selectedInstitute.status.bg,border:`1px solid ${selectedInstitute.status.border}`,color:selectedInstitute.status.accent,borderRadius:999,padding:"7px 12px",fontSize:12,fontWeight:950,fontFamily:G.mono,whiteSpace:"nowrap",textTransform:"uppercase"}}>
@@ -20686,7 +20677,7 @@ function AdminPanelInner({user}){
             {adminV5BrowseMode === "class" ? "Classes" : adminV5BrowseMode === "teacher" ? "Teachers" : "Class + Teacher"}
           </div>
           {adminV5BrowseMode === "class"&&visibleClassSectionGroups.map((group,index)=>
-            renderSectionGroup(group, index, null, "classes", { showRows:false })
+            renderSectionGroup(group, index, null, "classes", { showRows:false, showSectionCards:true })
           )}
           {adminV5BrowseMode === "teacher"&&visibleModeTeachers.map(renderTeacherCard)}
           {adminV5BrowseMode === "pair"&&visiblePairSectionGroups.map((group,index)=>
