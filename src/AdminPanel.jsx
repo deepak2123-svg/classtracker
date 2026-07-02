@@ -21470,7 +21470,7 @@ function AdminPanelInner({user}){
       </div>
       <div style={isMobile
         ? {maxWidth:860,margin:"0 auto",padding:mobileManageOuterPad}
-        : {width:"100%",boxSizing:"border-box",padding:"0 24px 72px 0",display:"grid",gridTemplateColumns:"72px minmax(0,1fr)",gap:18,alignItems:"start"}}>
+        : {width:"100%",boxSizing:"border-box",padding:"0 24px 72px 0",display:"grid",gridTemplateColumns:"48px minmax(0,1fr)",gap:18,alignItems:"start"}}>
 
         {/* Copy group to institutes modal */}
         {copyGroupModal&&(
@@ -21529,17 +21529,17 @@ function AdminPanelInner({user}){
         )}
 
         {!isMobile&&(
-          <aside style={{position:"sticky",top:0,alignSelf:"start",width:72,height:"calc(100vh - 54px)",maxHeight:"calc(100vh - 54px)",display:"flex",flexDirection:"column",alignItems:"center",background:"#0B111A",borderRight:"1px solid rgba(255,255,255,0.08)",boxShadow:reduceEffects ? "none" : "8px 0 18px rgba(15,23,42,0.08)",overflow:"hidden",padding:"12px 8px",boxSizing:"border-box"}}>
+          <aside style={{position:"fixed",top:54,left:0,zIndex:70,width:48,height:"calc(100svh - 54px)",maxHeight:"calc(100svh - 54px)",display:"flex",flexDirection:"column",alignItems:"center",background:"#0B111A",borderRight:"1px solid rgba(255,255,255,0.08)",boxShadow:"none",overflow:"hidden",padding:"8px 7px",boxSizing:"border-box"}}>
             <button
               type="button"
               onClick={()=>setView("main")}
               title="Overview"
               aria-label="Overview"
-              style={{width:40,height:40,borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"#109675",color:"#FFFFFF",fontFamily:G.display,fontSize:17,fontWeight:950,display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:14}}>
+              style={{width:34,height:34,borderRadius:8,border:"1px solid rgba(255,255,255,0.08)",background:"#109675",color:"#FFFFFF",fontFamily:G.display,fontSize:16,fontWeight:950,display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:10}}>
               L
             </button>
-            <div style={{height:1,width:48,background:"rgba(255,255,255,0.1)",marginBottom:10}} />
-            <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"center",width:"100%",minHeight:0}}>
+            <div style={{height:1,width:34,background:"rgba(255,255,255,0.12)",margin:"2px 0 7px"}} />
+            <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"center",width:"100%",minHeight:0}}>
               {[
                 { key:"dashboard", label:"Dashboard", icon:IconChartBar, active:false, onClick:()=>setView("main") },
                 ...manageTabItems.map(item=>({ ...item, active:manageTab===item.key, onClick:()=>openManageTab(item.key) })),
@@ -21553,49 +21553,49 @@ function AdminPanelInner({user}){
                   title={item.label}
                   aria-label={item.label}
                   style={{
-                    width:48,
-                    height:48,
-                    borderRadius:11,
-                    border:`1px solid ${item.active ? "rgba(96,165,250,0.35)" : "rgba(255,255,255,0.09)"}`,
-                    background:item.active ? "rgba(37,99,235,0.34)" : "rgba(255,255,255,0.04)",
+                    width:34,
+                    height:34,
+                    borderRadius:8,
+                    border:`1px solid ${item.active ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.08)"}`,
+                    background:item.active ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.055)",
                     color:"#FFFFFF",
                     display:"inline-flex",
                     alignItems:"center",
                     justifyContent:"center",
                     cursor:"pointer",
                     position:"relative",
-                    boxShadow:item.active && !reduceEffects ? "0 8px 18px rgba(37,99,235,0.22)" : "none",
+                    boxShadow:"none",
                   }}>
-                  <AppIcon icon={item.icon} size={22} color={item.active ? "#FFFFFF" : "rgba(255,255,255,0.78)"} />
+                  <AppIcon icon={item.icon} size={19} color={item.active ? "#FFFFFF" : "rgba(255,255,255,0.78)"} />
                 </button>
               ))}
             </div>
-            <div style={{marginTop:"auto",display:"flex",flexDirection:"column",gap:8,alignItems:"center",width:"100%"}}>
+            <div style={{marginTop:"auto",display:"flex",flexDirection:"column",gap:6,alignItems:"center",width:"100%"}}>
               <button
                 type="button"
                 onClick={openFeedbackInbox}
                 title="Teacher Feedback"
                 aria-label="Teacher Feedback"
-                style={{width:48,height:48,borderRadius:11,border:"1px solid rgba(255,255,255,0.09)",background:"rgba(255,255,255,0.04)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
-                <AppIcon icon={IconMessageCircle} size={22} color="rgba(255,255,255,0.78)" />
-                {feedbackUnreadCount>0&&<span style={{position:"absolute",right:7,top:7,width:8,height:8,borderRadius:999,background:"#60A5FA",border:"2px solid #0B111A"}} />}
+                style={{width:34,height:34,borderRadius:8,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.055)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
+                <AppIcon icon={IconMessageCircle} size={19} color="rgba(255,255,255,0.78)" />
+                {feedbackUnreadCount>0&&<span style={{position:"absolute",right:5,top:5,width:7,height:7,borderRadius:999,background:"#60A5FA",border:"2px solid #0B111A"}} />}
               </button>
               <button
                 type="button"
                 onClick={()=>setBinView(true)}
                 title="Recycle Bin"
                 aria-label="Recycle Bin"
-                style={{width:48,height:48,borderRadius:11,border:"1px solid rgba(255,255,255,0.09)",background:"rgba(255,255,255,0.04)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
-                <AppIcon icon={IconTrash} size={22} color="rgba(255,255,255,0.78)" />
-                {adminBin.length>0&&<span style={{position:"absolute",right:7,top:7,width:8,height:8,borderRadius:999,background:"#F87171",border:"2px solid #0B111A"}} />}
+                style={{width:34,height:34,borderRadius:8,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.055)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
+                <AppIcon icon={IconTrash} size={19} color="rgba(255,255,255,0.78)" />
+                {adminBin.length>0&&<span style={{position:"absolute",right:5,top:5,width:7,height:7,borderRadius:999,background:"#F87171",border:"2px solid #0B111A"}} />}
               </button>
               <button
                 type="button"
                 onClick={logout}
                 title="Sign out"
                 aria-label="Sign out"
-                style={{width:48,height:48,borderRadius:11,border:"1px solid rgba(248,113,113,0.25)",background:"rgba(127,29,29,0.3)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                <AppIcon icon={IconLogout} size={22} color="#FCA5A5" />
+                style={{width:34,height:34,borderRadius:8,border:"1px solid rgba(248,113,113,0.25)",background:"rgba(127,29,29,0.3)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                <AppIcon icon={IconLogout} size={19} color="#FCA5A5" />
               </button>
             </div>
           </aside>
