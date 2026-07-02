@@ -11249,8 +11249,8 @@ function AdminPanelInner({user}){
   const [manageTab,    setManageTab]    = useState("teachers"); // teachers | subjects | admins | institutes | sections | report | messenger
   const [manageTeacherSearch, setManageTeacherSearch] = useState("");
   const [manageTeacherSort, setManageTeacherSort] = useState("recent");
-  const [manageTeacherView, setManageTeacherView] = useState("table");
   const [manageTeacherInstituteFilter, setManageTeacherInstituteFilter] = useState("");
+  const [manageTeacherSubjectFilter, setManageTeacherSubjectFilter] = useState("");
   const [manageTeacherBreakdownUid, setManageTeacherBreakdownUid] = useState(null);
   const [teacherDetailsRefreshing, setTeacherDetailsRefreshing] = useState(false);
   const [manageAdminSearch, setManageAdminSearch] = useState("");
@@ -18277,7 +18277,10 @@ function AdminPanelInner({user}){
         || teacherSubjectNames(teacher).length > 0
         || classes.length > 0;
     };
-    const selectedInstituteFilter = manageScopeInstitute || manageTeacherInstituteFilter;
+    const NO_INSTITUTE_FILTER = "__no_institute__";
+    const NO_SUBJECT_FILTER = "__no_subject__";
+    const noInstituteFilterActive = !manageScopeInstitute && manageTeacherInstituteFilter === NO_INSTITUTE_FILTER;
+    const selectedInstituteFilter = manageScopeInstitute || (noInstituteFilterActive ? "" : manageTeacherInstituteFilter);
     const teachingAccounts = teachers.filter(isTeachingAccount);
     const scopedTeachingAccounts = selectedInstituteFilter
       ? teachingAccounts.filter(teacher=>{
@@ -18285,7 +18288,16 @@ function AdminPanelInner({user}){
           const detailsReady = hasLoadedTeacherData(teacher);
           return teacherMayBelongToInstitute(teacher, data, detailsReady, selectedInstituteFilter);
         })
+      : noInstituteFilterActive
+        ? teachingAccounts.filter(teacher=>{
+            const data = fullData[teacher.uid] || {};
+            return effectiveTeacherInstitutes(teacher, data, hasLoadedTeacherData(teacher)).length === 0;
+          })
       : teachingAccounts;
+    const noInstituteTeacherCount = teachingAccounts.filter(teacher=>{
+      const data = fullData[teacher.uid] || {};
+      return effectiveTeacherInstitutes(teacher, data, hasLoadedTeacherData(teacher)).length === 0;
+    }).length;
     const teacherInstituteOptions = !manageScopeInstitute
       ? institutes
           .map(inst=>({
@@ -18308,8 +18320,8 @@ function AdminPanelInner({user}){
       const instituteList = effectiveTeacherInstitutes(teacher, data, detailsReady);
       const fallbackInstitutes = selectedInstituteFilter
         ? [selectedInstituteFilter]
-        : (instituteList.length ? instituteList : [detailsReady ? "No class institute" : "Checking institute"]);
-      const primaryInstitute = selectedInstituteFilter || instituteList[0] || (detailsReady ? "No class institute" : "Checking institute");
+        : (instituteList.length ? instituteList : ["No institute assigned"]);
+      const primaryInstitute = selectedInstituteFilter || instituteList[0] || "No institute assigned";
       const groups = buildTeacherGroups(teacher, data, detailsReady ? scopedClasses : [], fallbackInstitutes, primaryInstitute);
       const allGroups = buildTeacherGroups(
         teacher,
@@ -18368,9 +18380,33 @@ function AdminPanelInner({user}){
         isAdminTeacher,
       };
     }).filter(Boolean);
+    const teacherSubjectFilterOptions = (() => {
+      const map = new Map();
+      teacherRowsBase.forEach(row=>{
+        const subjects = row.subjects.length ? row.subjects : [NO_SUBJECT_FILTER];
+        subjects.forEach(subject=>{
+          const label = subject === NO_SUBJECT_FILTER ? "No subject" : subject;
+          const key = subject === NO_SUBJECT_FILTER ? NO_SUBJECT_FILTER : normaliseName(subject).toLowerCase();
+          if(!map.has(key)) map.set(key, { key, label, count:0, color:subject === NO_SUBJECT_FILTER ? G.textL : subjectColor(subject) });
+          map.get(key).count += 1;
+        });
+      });
+      return Array.from(map.values()).sort((a,b)=>{
+        if(a.key === NO_SUBJECT_FILTER) return 1;
+        if(b.key === NO_SUBJECT_FILTER) return -1;
+        return b.count - a.count || exportTextSorter.compare(a.label, b.label);
+      });
+    })();
     const teacherSearchKey = manageTeacherSearch.trim().toLowerCase();
     const matchesTeacherRow = row => {
-      if(manageTeacherInstituteFilter && !(row.membershipInstitutes || []).some(inst=>sameInstituteName(inst, manageTeacherInstituteFilter))) return false;
+      if(!manageScopeInstitute && manageTeacherInstituteFilter && !noInstituteFilterActive && !(row.membershipInstitutes || []).some(inst=>sameInstituteName(inst, manageTeacherInstituteFilter))) return false;
+      if(manageTeacherSubjectFilter){
+        if(manageTeacherSubjectFilter === NO_SUBJECT_FILTER){
+          if(row.subjects.length) return false;
+        } else if(!row.subjects.some(subject=>normaliseName(subject).toLowerCase() === manageTeacherSubjectFilter)){
+          return false;
+        }
+      }
       if(!teacherSearchKey) return true;
       const haystack = [
         row.name,
@@ -18763,12 +18799,65 @@ function AdminPanelInner({user}){
       const breakdownClassCount = breakdownGroups.reduce((sum, group)=>sum + (group.classCount || 0), 0);
       const breakdownMinutes = breakdownGroups.reduce((sum, group)=>sum + (group.weekMinutes || 0), 0);
       const breakdownInstituteCount = uniqueLabels(breakdownGroups.map(group=>group.institute)).length || row.instituteCount;
-      const compactBreakdown = isMobile || manageTeacherView==="cards";
+      const compactBreakdown = isMobile;
+      const breakdownGrid = compactBreakdown
+        ? "1fr"
+        : "minmax(210px,1.15fr) minmax(118px,.68fr) minmax(210px,1.15fr) 82px 96px minmax(172px,.9fr)";
+      const cellPad = compactBreakdown ? "10px 12px" : "10px 12px";
+      const breakdownHeadStyle = {
+        fontSize:10.5,
+        fontWeight:950,
+        color:"#6D28D9",
+        fontFamily:G.mono,
+        letterSpacing:0.7,
+        textTransform:"uppercase",
+        minWidth:0,
+      };
+      const breakdownMetric = (value, sub, tone = G.text) => (
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:13.5,fontWeight:950,color:tone,lineHeight:1.05,whiteSpace:"nowrap"}}>{value}</div>
+          {sub&&<div style={{fontSize:10.5,color:G.textL,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}
+        </div>
+      );
+      const renderCompactBreakdownCard = group => {
+        const groupSubjects = group.subjects.length ? group.subjects : row.subjects;
+        return (
+          <div key={`${row.teacher.uid}_bd_${group.key}`} className="admin-teacher-breakdown-card" style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,padding:12,minWidth:0}}>
+            <button
+              type="button"
+              onClick={event=>stopTeacherAction(event, ()=>openTeacherEntriesForInstitute(row, group.institute))}
+              style={{border:"none",background:"transparent",padding:0,textAlign:"left",cursor:"pointer",width:"100%",fontFamily:G.sans}}>
+              <div style={{fontSize:14,fontWeight:950,color:G.text,lineHeight:1.25}}>{group.institute}</div>
+              <div style={{fontSize:11,color:G.textL,marginTop:3}}>Open teacher entries for this institute</div>
+            </button>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:9}}>
+              {renderLimitedChips(groupSubjects.length ? groupSubjects : [row.detailsReady ? "No subject" : "Checking"], subjectChip, 3)}
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:9}}>
+              {group.sections.length ? renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 7) : <span style={{fontSize:12,color:G.textL}}>{row.detailsReady ? "No sections" : "Checking classes"}</span>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:11}}>
+              {breakdownMetric(group.classCount || 0, "classes")}
+              {breakdownMetric(row.detailsReady ? formatDurationShort(group.weekMinutes) : "--", `${row.detailsReady ? group.weekEntries || 0 : "--"} sessions`, row.detailsReady && !group.weekMinutes ? G.amber : G.text)}
+            </div>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:11}}>
+              <button type="button" onClick={event=>stopTeacherAction(event, ()=>openTeacherEntriesForInstitute(row, group.institute))} style={{...workspaceActionButtonStyle("neutral"),minHeight:30,borderRadius:9,fontSize:11.5,padding:"0 9px",boxShadow:"none"}}>
+                Entries
+              </button>
+              {!isPlaceholderInstitute(group.institute)&&(
+                <button type="button" onClick={event=>stopTeacherAction(event, ()=>openArchiveTeacherInstituteModal(row, group))} style={{...workspaceActionButtonStyle("danger"),minHeight:30,borderRadius:9,fontSize:11.5,padding:"0 9px",boxShadow:"none",background:"#FFF7ED",borderColor:"#FED7AA",color:G.amber}}>
+                  Remove from institute
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      };
       return (
-        <div className="admin-teacher-breakdown" style={{borderTop:`1px solid ${G.border}`,background:"linear-gradient(135deg,#F8F7FF 0%,#F3F1FE 100%)",padding:isMobile ? "13px 12px" : "14px 18px",minWidth:0,overflow:"hidden"}}>
+        <div className="admin-teacher-breakdown" style={{borderTop:`1px solid ${G.border}`,background:"#F5F1FF",padding:isMobile ? "13px 12px" : "14px 18px",minWidth:0,overflow:"hidden"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10,flexWrap:"wrap"}}>
-            <div style={{fontSize:10.5,fontWeight:900,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-              Breakdown by institute - {row.name}
+            <div style={{fontSize:11,fontWeight:950,color:"#6D28D9",textTransform:"uppercase",letterSpacing:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:G.mono}}>
+              Institute breakdown - {row.name}
             </div>
             <button
               type="button"
@@ -18777,81 +18866,82 @@ function AdminPanelInner({user}){
               Hide
             </button>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:compactBreakdown ? "1fr" : "repeat(2, minmax(0, 1fr))",gap:10,maxWidth:compactBreakdown ? "100%" : 980,minWidth:0}}>
-            {breakdownGroups.map(group=>{
-              const groupSubjects = group.subjects.length ? group.subjects : row.subjects;
-              return (
-                <div key={`${row.teacher.uid}_bd_${group.key}`} className="admin-teacher-breakdown-card" style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:13,padding:12,minWidth:0,boxShadow:reduceEffects ? "none" : "0 1px 4px rgba(15,23,42,0.05)"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,minWidth:0}}>
-                    <button
-                      type="button"
-                      onClick={event=>stopTeacherAction(event, ()=>openTeacherEntriesForInstitute(row, group.institute))}
-                      title={`Open ${row.name}'s entries for ${group.institute}`}
-                      style={{border:"none",background:"transparent",padding:0,textAlign:"left",cursor:"pointer",minWidth:0,flex:"1 1 auto"}}>
-                      <span style={{display:"block",fontSize:13.5,fontWeight:950,color:G.text,lineHeight:1.25,overflowWrap:"anywhere"}}>
-                        {group.institute}
-                      </span>
-                      <span style={{display:"block",fontSize:11,color:G.textL,marginTop:3}}>
-                        Open teacher entries for this institute
-                      </span>
-                    </button>
-                    <div style={{display:"flex",gap:5,flexWrap:"wrap",justifyContent:"flex-end",flex:"0 0 auto",maxWidth:compactBreakdown ? "100%" : 210}}>
-                      {teacherChip(`${group.classCount || 0} class${(group.classCount || 0)===1?"":"es"}`, "green")}
-                      {teacherChip(row.detailsReady ? formatDurationShort(group.weekMinutes) : "--", "green")}
-                    </div>
-                  </div>
-
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:9,minWidth:0}}>
-                    {renderLimitedChips(groupSubjects.length ? groupSubjects : [row.detailsReady ? "No subject" : "Checking"], subjectChip, 3)}
-                  </div>
-
-                  <div style={{marginTop:10}}>
-                    <div style={{fontSize:10,color:G.textL,fontWeight:900,textTransform:"uppercase",letterSpacing:0.55,marginBottom:6}}>Sections</div>
-                    {!!group.sections.length ? (
-                      <div style={{display:"flex",flexWrap:"wrap",gap:6,minWidth:0}}>
-                        {renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 7)}
-                      </div>
-                    ) : (
-                      <span style={{fontSize:12,color:G.textL}}>{row.detailsReady ? "No sections" : "Checking classes"}</span>
-                    )}
-                  </div>
-
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:12,paddingTop:10,borderTop:`1px solid ${G.border}`,flexWrap:"wrap"}}>
-                    <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
-                      {teacherChip(`${row.detailsReady ? group.weekEntries || 0 : "--"} session${group.weekEntries===1?"":"s"}`, "slate")}
-                    </div>
-                    <div style={{display:"flex",gap:7,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          {compactBreakdown ? (
+            <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
+              {breakdownGroups.map(renderCompactBreakdownCard)}
+            </div>
+          ) : (
+            <div style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,overflow:"hidden",maxWidth:1120,minWidth:0}}>
+              <div style={{display:"grid",gridTemplateColumns:breakdownGrid,alignItems:"center",background:"#F0EAFE",borderBottom:"1px solid #DDD6FE"}}>
+                {["Institute","Subject","Sections","Classes","Hours (7d)","Actions"].map(label=>(
+                  <div key={label} style={{...breakdownHeadStyle,padding:cellPad}}>{label}</div>
+                ))}
+              </div>
+              {breakdownGroups.map(group=>{
+                const groupSubjects = group.subjects.length ? group.subjects : row.subjects;
+                return (
+                  <div key={`${row.teacher.uid}_bd_${group.key}`} className="admin-teacher-breakdown-row" style={{display:"grid",gridTemplateColumns:breakdownGrid,alignItems:"center",borderBottom:"1px solid #E9DFFF",minWidth:0}}>
+                    <div style={{padding:cellPad,minWidth:0}}>
                       <button
                         type="button"
                         onClick={event=>stopTeacherAction(event, ()=>openTeacherEntriesForInstitute(row, group.institute))}
-                        style={{...workspaceActionButtonStyle("neutral"),minHeight:30,borderRadius:9,fontSize:11.5,padding:"0 9px",boxShadow:"none"}}>
-                        Entries
+                        title={`Open ${row.name}'s entries for ${group.institute}`}
+                        style={{border:"none",background:"transparent",padding:0,textAlign:"left",cursor:"pointer",fontFamily:G.sans,maxWidth:"100%"}}>
+                        <span style={{display:"block",fontSize:13.5,fontWeight:950,color:G.text,lineHeight:1.25,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                          {group.institute}
+                        </span>
+                        <span style={{display:"block",fontSize:11,color:G.textL,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                          Open entries for this institute
+                        </span>
                       </button>
-                      {!isPlaceholderInstitute(group.institute) && (
-                        <button
-                          type="button"
-                          onClick={event=>stopTeacherAction(event, ()=>openArchiveTeacherInstituteModal(row, group))}
-                          style={{...workspaceActionButtonStyle("danger"),minHeight:30,borderRadius:9,fontSize:11.5,padding:"0 9px",boxShadow:"none",background:"#FFF7ED",borderColor:"#FED7AA",color:G.amber}}>
-                          Remove from institute
+                    </div>
+                    <div style={{padding:cellPad,minWidth:0}}>
+                      {renderLimitedChips(groupSubjects.length ? groupSubjects : [row.detailsReady ? "No subject" : "Checking"], subjectChip, 2)}
+                    </div>
+                    <div style={{padding:cellPad,minWidth:0}}>
+                      {group.sections.length ? renderLimitedChips(group.sections, section=>sectionChip(section, "blue"), 4) : <span style={{fontSize:12,color:G.textL}}>{row.detailsReady ? "No sections" : "Checking classes"}</span>}
+                    </div>
+                    <div style={{padding:cellPad,minWidth:0}}>
+                      {breakdownMetric(group.classCount || 0, "classes")}
+                    </div>
+                    <div style={{padding:cellPad,minWidth:0}}>
+                      {breakdownMetric(row.detailsReady ? formatDurationShort(group.weekMinutes) : "--", `${row.detailsReady ? group.weekEntries || 0 : "--"} sessions`, row.detailsReady && !group.weekMinutes ? G.amber : G.text)}
+                    </div>
+                    <div style={{padding:cellPad,minWidth:0}}>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                        <button type="button" onClick={event=>stopTeacherAction(event, ()=>openTeacherEntriesForInstitute(row, group.institute))} style={{...workspaceActionButtonStyle("neutral"),minHeight:29,borderRadius:8,fontSize:11.5,padding:"0 9px",boxShadow:"none"}}>
+                          Entries
                         </button>
-                      )}
+                        {!isPlaceholderInstitute(group.institute)&&(
+                          <button type="button" onClick={event=>stopTeacherAction(event, ()=>openArchiveTeacherInstituteModal(row, group))} style={{...workspaceActionButtonStyle("danger"),minHeight:29,borderRadius:8,fontSize:11.5,padding:"0 9px",boxShadow:"none",background:"#FFF7ED",borderColor:"#FED7AA",color:G.amber}}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
+                );
+              })}
+              <div style={{display:"grid",gridTemplateColumns:breakdownGrid,alignItems:"center",background:"#F5F1FF"}}>
+                <div style={{padding:cellPad,fontSize:12.5,fontWeight:950,color:"#6D28D9"}}>
+                  Total - {breakdownInstituteCount} institute{breakdownInstituteCount===1?"":"s"}
                 </div>
-              );
-            })}
-          </div>
-          <div style={{background:"#FFFFFF",border:"1px solid #DDD6FE",borderRadius:12,marginTop:10,padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",maxWidth:compactBreakdown ? "100%" : 980}}>
-            <div style={{fontSize:12.5,fontWeight:950,color:"#6D28D9",minWidth:0}}>
-                Total - {breakdownInstituteCount} institute{breakdownInstituteCount===1?"":"s"}
+                <div style={{padding:cellPad,fontSize:12.5,fontWeight:850,color:G.text}}>
+                  {breakdownSubjects.length || row.subjectCount} subject{(breakdownSubjects.length || row.subjectCount)===1?"":"s"}
+                </div>
+                <div style={{padding:cellPad}}>
+                  {teacherChip(`${breakdownSections.length || row.sectionCount} sections`, "green")}
+                </div>
+                <div style={{padding:cellPad}}>
+                  {breakdownMetric(breakdownClassCount || row.classCount, "classes", "#17926A")}
+                </div>
+                <div style={{padding:cellPad}}>
+                  {breakdownMetric(row.detailsReady ? formatDurationShort(breakdownMinutes) : "--", "total", "#17926A")}
+                </div>
+                <div style={{padding:cellPad}} />
+              </div>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",minWidth:0}}>
-              {teacherChip(`${breakdownSubjects.length || row.subjectCount} subject${(breakdownSubjects.length || row.subjectCount)===1?"":"s"}`, "slate")}
-              {teacherChip(`${breakdownSections.length || row.sectionCount} section${(breakdownSections.length || row.sectionCount)===1?"":"s"}`, "green")}
-              {teacherChip(`${breakdownClassCount || row.classCount} classes`, "green")}
-              {teacherChip(row.detailsReady ? formatDurationShort(breakdownMinutes) : "--", "green")}
-            </div>
-          </div>
+          )}
         </div>
       );
     };
@@ -19098,40 +19188,11 @@ function AdminPanelInner({user}){
               <AppIcon icon={IconRefresh} size={15} color="currentColor" />
               {teacherDetailsRefreshing ? "Refreshing" : "Refresh details"}
             </button>
-            <div style={{display:"flex",gap:0,background:"#F8FAFC",border:`1.5px solid ${G.borderM}`,borderRadius:10,padding:3}}>
-              {[
-                {key:"table",label:"Table",icon:IconFileText},
-                {key:"cards",label:"Cards",icon:IconUsersGroup},
-              ].map(item=>(
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={()=>setManageTeacherView(item.key)}
-                  style={{
-                    height:34,
-                    borderRadius:8,
-                    border:"none",
-                    background:manageTeacherView===item.key ? G.navy : "transparent",
-                    color:manageTeacherView===item.key ? "#FFFFFF" : G.textM,
-                    padding:"0 12px",
-                    display:"inline-flex",
-                    alignItems:"center",
-                    gap:6,
-                    fontSize:12,
-                    fontWeight:900,
-                    fontFamily:G.sans,
-                    cursor:"pointer",
-                  }}>
-                  <AppIcon icon={item.icon} size={15} color="currentColor" />
-                  {item.label}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
         {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search by name, email, institute, subject, or section")}
-        {!manageScopeInstitute&&teacherInstituteOptions.length>0&&(
+        {!manageScopeInstitute&&(teacherInstituteOptions.length>0 || noInstituteTeacherCount>0)&&(
           <div style={{display:"flex",gap:8,flexWrap:isMobile?"nowrap":"wrap",overflowX:isMobile?"auto":"visible",paddingBottom:isMobile?4:0,marginBottom:13,WebkitOverflowScrolling:"touch",scrollbarWidth:isMobile?"thin":"auto"}}>
             <button
               type="button"
@@ -19180,6 +19241,88 @@ function AdminPanelInner({user}){
                 </span>
               </button>
             ))}
+            {noInstituteTeacherCount>0&&(
+              <button
+                type="button"
+                onClick={()=>setManageTeacherInstituteFilter(current=>current===NO_INSTITUTE_FILTER ? "" : NO_INSTITUTE_FILTER)}
+                style={{
+                  border:`1px solid ${manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?G.navy:G.border}`,
+                  borderRadius:999,
+                  minHeight:34,
+                  padding:"0 11px",
+                  background:manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?G.navy:"#FFFFFF",
+                  color:manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?"#FFFFFF":G.textM,
+                  fontFamily:G.sans,
+                  fontSize:12,
+                  fontWeight:900,
+                  cursor:"pointer",
+                  whiteSpace:"nowrap",
+                  display:"inline-flex",
+                  alignItems:"center",
+                  gap:6,
+                  flexShrink:0,
+                }}>
+                <span>No institute</span>
+                <span style={{minWidth:22,height:22,borderRadius:999,padding:"0 6px",display:"inline-flex",alignItems:"center",justifyContent:"center",background:manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?"rgba(255,255,255,0.16)":G.bg,border:`1px solid ${manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?"rgba(255,255,255,0.18)":G.border}`,color:manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?"#FFFFFF":G.textL,fontSize:10,fontWeight:900,fontFamily:G.mono}}>
+                  {noInstituteTeacherCount}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
+        {teacherSubjectFilterOptions.length>0&&(
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:isMobile?"nowrap":"wrap",overflowX:isMobile?"auto":"visible",paddingBottom:isMobile?4:0,marginBottom:13,WebkitOverflowScrolling:"touch",scrollbarWidth:isMobile?"thin":"auto"}}>
+            <span style={{fontSize:11,fontWeight:900,color:G.textL,textTransform:"uppercase",letterSpacing:0.7,flexShrink:0}}>Subject</span>
+            <button
+              type="button"
+              onClick={()=>setManageTeacherSubjectFilter("")}
+              style={{
+                border:`1px solid ${!manageTeacherSubjectFilter?G.navy:G.border}`,
+                borderRadius:999,
+                minHeight:32,
+                padding:"0 12px",
+                background:!manageTeacherSubjectFilter?G.navy:"#FFFFFF",
+                color:!manageTeacherSubjectFilter?"#FFFFFF":G.textM,
+                fontFamily:G.sans,
+                fontSize:12,
+                fontWeight:900,
+                cursor:"pointer",
+                whiteSpace:"nowrap",
+                flexShrink:0,
+              }}>
+              All subjects
+            </button>
+            {teacherSubjectFilterOptions.map(item=>{
+              const active = manageTeacherSubjectFilter === item.key;
+              return (
+                <button
+                  key={`teacher_subject_filter_${item.key}`}
+                  type="button"
+                  onClick={()=>setManageTeacherSubjectFilter(current=>current===item.key ? "" : item.key)}
+                  style={{
+                    border:`1px solid ${active ? item.color : G.border}`,
+                    borderRadius:999,
+                    minHeight:32,
+                    padding:"0 10px",
+                    background:active ? alphaHex(item.color, 0.12) : "#FFFFFF",
+                    color:active ? item.color : G.textM,
+                    fontFamily:G.sans,
+                    fontSize:12,
+                    fontWeight:900,
+                    cursor:"pointer",
+                    whiteSpace:"nowrap",
+                    display:"inline-flex",
+                    alignItems:"center",
+                    gap:6,
+                    flexShrink:0,
+                  }}>
+                  <span>{item.label}</span>
+                  <span style={{minWidth:21,height:21,borderRadius:999,padding:"0 6px",display:"inline-flex",alignItems:"center",justifyContent:"center",background:active ? "#FFFFFF" : G.bg,border:`1px solid ${active ? alphaHex(item.color, 0.2) : G.border}`,color:active ? item.color : G.textL,fontSize:10,fontWeight:900,fontFamily:G.mono}}>
+                    {item.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:14}}>
@@ -19210,15 +19353,7 @@ function AdminPanelInner({user}){
           ))}
         </div>
 
-        {manageTeacherView==="cards" ? (
-          teacherRows.length ? (
-            <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "repeat(auto-fit, minmax(340px, 1fr))",gap:14}}>
-              {teacherRows.map(renderTeacherCard)}
-            </div>
-          ) : (
-            <div style={{fontSize:15,color:G.textM,padding:"22px 8px 10px",textAlign:"center"}}>{emptyTeacherMessage}</div>
-          )
-        ) : renderWorkspaceTable({
+        {renderWorkspaceTable({
           columns:[
             { key:"teacher", label:"Teacher" },
             { key:"institutes", label:"Institute(s)" },
@@ -19229,8 +19364,8 @@ function AdminPanelInner({user}){
             { key:"status", label:"Status" },
             { key:"actions", label:"Actions" },
           ],
-          desktopGrid:"minmax(245px,1.35fr) minmax(190px,1fr) minmax(125px,0.7fr) minmax(165px,0.9fr) minmax(86px,0.48fr) minmax(104px,0.55fr) minmax(112px,0.55fr) minmax(165px,0.75fr)",
-          minWidth:1180,
+          desktopGrid:"minmax(260px,1.4fr) minmax(230px,1.15fr) minmax(150px,0.72fr) minmax(210px,1fr) minmax(126px,0.55fr) minmax(138px,0.62fr) minmax(118px,0.52fr) minmax(178px,0.78fr)",
+          minWidth:1410,
           rows:teacherRows,
           rowKey:row=>`teacher_${row.teacher.uid}`,
           emptyMessage:emptyTeacherMessage,
@@ -21335,7 +21470,7 @@ function AdminPanelInner({user}){
       </div>
       <div style={isMobile
         ? {maxWidth:860,margin:"0 auto",padding:mobileManageOuterPad}
-        : {width:"100%",boxSizing:"border-box",padding:"0 24px 72px 0",display:"grid",gridTemplateColumns:"300px minmax(0,1fr)",gap:24,alignItems:"start"}}>
+        : {width:"100%",boxSizing:"border-box",padding:"0 24px 72px 0",display:"grid",gridTemplateColumns:"72px minmax(0,1fr)",gap:18,alignItems:"start"}}>
 
         {/* Copy group to institutes modal */}
         {copyGroupModal&&(
@@ -21394,6 +21529,79 @@ function AdminPanelInner({user}){
         )}
 
         {!isMobile&&(
+          <aside style={{position:"sticky",top:0,alignSelf:"start",width:72,height:"calc(100vh - 54px)",maxHeight:"calc(100vh - 54px)",display:"flex",flexDirection:"column",alignItems:"center",background:"#0B111A",borderRight:"1px solid rgba(255,255,255,0.08)",boxShadow:reduceEffects ? "none" : "8px 0 18px rgba(15,23,42,0.08)",overflow:"hidden",padding:"12px 8px",boxSizing:"border-box"}}>
+            <button
+              type="button"
+              onClick={()=>setView("main")}
+              title="Overview"
+              aria-label="Overview"
+              style={{width:40,height:40,borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"#109675",color:"#FFFFFF",fontFamily:G.display,fontSize:17,fontWeight:950,display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:14}}>
+              L
+            </button>
+            <div style={{height:1,width:48,background:"rgba(255,255,255,0.1)",marginBottom:10}} />
+            <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"center",width:"100%",minHeight:0}}>
+              {[
+                { key:"dashboard", label:"Dashboard", icon:IconChartBar, active:false, onClick:()=>setView("main") },
+                ...manageTabItems.map(item=>({ ...item, active:manageTab===item.key, onClick:()=>openManageTab(item.key) })),
+                { key:"report", label:"Ledgr Report", icon:IconFileText, active:manageTab==="report", onClick:()=>openManageTab("report") },
+                { key:"messenger", label:"Messenger", icon:IconSend, active:manageTab==="messenger", onClick:()=>openManageTab("messenger") },
+              ].map(item=>(
+                <button
+                  key={`manage_rail_${item.key}`}
+                  type="button"
+                  onClick={item.onClick}
+                  title={item.label}
+                  aria-label={item.label}
+                  style={{
+                    width:48,
+                    height:48,
+                    borderRadius:11,
+                    border:`1px solid ${item.active ? "rgba(96,165,250,0.35)" : "rgba(255,255,255,0.09)"}`,
+                    background:item.active ? "rgba(37,99,235,0.34)" : "rgba(255,255,255,0.04)",
+                    color:"#FFFFFF",
+                    display:"inline-flex",
+                    alignItems:"center",
+                    justifyContent:"center",
+                    cursor:"pointer",
+                    position:"relative",
+                    boxShadow:item.active && !reduceEffects ? "0 8px 18px rgba(37,99,235,0.22)" : "none",
+                  }}>
+                  <AppIcon icon={item.icon} size={22} color={item.active ? "#FFFFFF" : "rgba(255,255,255,0.78)"} />
+                </button>
+              ))}
+            </div>
+            <div style={{marginTop:"auto",display:"flex",flexDirection:"column",gap:8,alignItems:"center",width:"100%"}}>
+              <button
+                type="button"
+                onClick={openFeedbackInbox}
+                title="Teacher Feedback"
+                aria-label="Teacher Feedback"
+                style={{width:48,height:48,borderRadius:11,border:"1px solid rgba(255,255,255,0.09)",background:"rgba(255,255,255,0.04)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
+                <AppIcon icon={IconMessageCircle} size={22} color="rgba(255,255,255,0.78)" />
+                {feedbackUnreadCount>0&&<span style={{position:"absolute",right:7,top:7,width:8,height:8,borderRadius:999,background:"#60A5FA",border:"2px solid #0B111A"}} />}
+              </button>
+              <button
+                type="button"
+                onClick={()=>setBinView(true)}
+                title="Recycle Bin"
+                aria-label="Recycle Bin"
+                style={{width:48,height:48,borderRadius:11,border:"1px solid rgba(255,255,255,0.09)",background:"rgba(255,255,255,0.04)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
+                <AppIcon icon={IconTrash} size={22} color="rgba(255,255,255,0.78)" />
+                {adminBin.length>0&&<span style={{position:"absolute",right:7,top:7,width:8,height:8,borderRadius:999,background:"#F87171",border:"2px solid #0B111A"}} />}
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                title="Sign out"
+                aria-label="Sign out"
+                style={{width:48,height:48,borderRadius:11,border:"1px solid rgba(248,113,113,0.25)",background:"rgba(127,29,29,0.3)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                <AppIcon icon={IconLogout} size={22} color="#FCA5A5" />
+              </button>
+            </div>
+          </aside>
+        )}
+
+        {false&&!isMobile&&(
           <aside style={{position:"sticky",top:0,alignSelf:"start",height:"calc(100vh - 54px)",maxHeight:"calc(100vh - 54px)",display:"flex",flexDirection:"column",background:"#F8FAFD",borderRight:`1px solid ${G.border}`,borderBottom:`1px solid ${G.border}`,borderRadius:"0 0 16px 0",overflow:"hidden"}}>
             <div style={{padding:"15px 15px 12px",borderBottom:`1px solid ${G.border}`,background:"#FFFFFF"}}>
               <input value={manageInstituteFilter} onChange={event=>setManageInstituteFilter(event.target.value)} placeholder="Filter institutes" style={{width:"100%",boxSizing:"border-box",border:`1px solid ${G.borderM}`,borderRadius:11,padding:"10px 12px",fontFamily:G.sans,fontSize:13,color:G.text,outline:"none"}}/>
