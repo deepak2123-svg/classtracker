@@ -20407,7 +20407,7 @@ function AdminPanelInner({user}){
         const rows = group.rows || [];
         if(!rows.length) return null;
         return (
-          <div style={{display:"grid",gridTemplateColumns:adminV5StackedLayout ? "1fr" : "repeat(auto-fit,minmax(190px,1fr))",gap:10,padding:"12px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(108px,1fr))",gap:8,padding:"12px"}}>
             {rows.map(cls=>{
               const active = cls.key === selectedClassKey;
               const tone = getSectionTone(cls.display);
@@ -20420,37 +20420,25 @@ function AdminPanelInner({user}){
                   style={{
                     width:"100%",
                     minWidth:0,
-                    minHeight:adminV5StackedLayout ? 92 : 108,
-                    borderRadius:12,
+                    minHeight:40,
+                    borderRadius:999,
                     border:`1px solid ${active ? G.blue : G.border}`,
                     background:active ? "#EAF2FF" : "#FFFFFF",
-                    color:G.text,
-                    padding:"13px 13px",
-                    display:"grid",
-                    gridTemplateColumns:"minmax(0,1fr) auto",
-                    gap:10,
-                    alignItems:"start",
+                    color:active ? G.blue : (tone.ink || G.text),
+                    padding:"5px 6px 5px 12px",
+                    display:"flex",
+                    alignItems:"center",
+                    justifyContent:"space-between",
+                    gap:8,
                     textAlign:"left",
                     cursor:"pointer",
-                    boxShadow:active ? "inset 0 0 0 1px rgba(37,99,235,0.45)" : "none",
+                    boxShadow:active ? "0 0 0 2px rgba(37,99,235,0.10)" : "none",
                   }}>
-                  <span style={{minWidth:0}}>
-                    <span style={{display:"block",fontSize:22,fontWeight:950,color:active ? G.blue : (tone.ink || G.text),fontFamily:G.display,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                      {cls.display}
-                    </span>
-                    <span style={{display:"block",fontSize:12,color:G.textM,lineHeight:1.35,marginTop:6}}>
-                      {teacherCount} teacher{teacherCount===1?"":"s"}
-                    </span>
-                    <span style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                      {cls.subjects.slice(0,3).map(subject=>(
-                        <span key={subject} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 8px",fontSize:10.5,color:G.textS,fontWeight:800,whiteSpace:"nowrap",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis"}}>{subject}</span>
-                      ))}
-                      {cls.subjects.length>3&&<span style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 8px",fontSize:10.5,color:G.textM,fontWeight:850,fontFamily:G.mono}}>+{cls.subjects.length - 3}</span>}
-                    </span>
+                  <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:15,fontWeight:950,fontFamily:G.display,lineHeight:1}}>
+                    {cls.display}
                   </span>
-                  <span style={{minWidth:52,minHeight:52,borderRadius:12,background:active ? "#FFFFFF" : "#F1F5F9",border:`1px solid ${active ? "#BFDBFE" : G.border}`,display:"inline-flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:G.text}}>
-                    <span style={{fontSize:19,fontWeight:950,fontFamily:G.display,lineHeight:1}}>{teacherCount}</span>
-                    <span style={{fontSize:8.5,fontWeight:950,fontFamily:G.mono,letterSpacing:0.45,textTransform:"uppercase",color:G.textM,marginTop:4}}>teachers</span>
+                  <span style={{flex:"0 0 auto",minWidth:28,height:28,padding:"0 8px",borderRadius:999,background:active ? "#FFFFFF" : "#F1F5F9",border:`1px solid ${active ? "#BFDBFE" : G.border}`,display:"inline-flex",alignItems:"center",justifyContent:"center",color:G.textS,fontSize:12.5,fontWeight:950,fontFamily:G.display,lineHeight:1}}>
+                    {teacherCount}
                   </span>
                 </button>
               );
