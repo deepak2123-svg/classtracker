@@ -19192,139 +19192,71 @@ function AdminPanelInner({user}){
         </div>
 
         {manageSearchInput(manageTeacherSearch,setManageTeacherSearch,"Search by name, email, institute, subject, or section")}
-        {!manageScopeInstitute&&(teacherInstituteOptions.length>0 || noInstituteTeacherCount>0)&&(
-          <div style={{display:"flex",gap:8,flexWrap:isMobile?"nowrap":"wrap",overflowX:isMobile?"auto":"visible",paddingBottom:isMobile?4:0,marginBottom:13,WebkitOverflowScrolling:"touch",scrollbarWidth:isMobile?"thin":"auto"}}>
-            <button
-              type="button"
-              onClick={()=>setManageTeacherInstituteFilter("")}
-              style={{
-                border:`1px solid ${!manageTeacherInstituteFilter?G.navy:G.border}`,
-                borderRadius:999,
-                minHeight:34,
-                padding:"0 13px",
-                background:!manageTeacherInstituteFilter?G.navy:"#FFFFFF",
-                color:!manageTeacherInstituteFilter?"#FFFFFF":G.textM,
-                fontFamily:G.sans,
-                fontSize:12,
-                fontWeight:900,
-                cursor:"pointer",
-                whiteSpace:"nowrap",
-                flexShrink:0,
-              }}>
-              All institutes
-            </button>
-            {teacherInstituteOptions.map(item=>(
-              <button
-                key={`teacher_filter_${item.inst}`}
-                type="button"
-                onClick={()=>setManageTeacherInstituteFilter(current=>sameInstituteName(current, item.inst) ? "" : item.inst)}
+        <div style={{display:"grid",gridTemplateColumns:isMobile||manageScopeInstitute?"1fr":"repeat(2,minmax(240px,1fr))",gap:12,marginBottom:14}}>
+          {!manageScopeInstitute&&(
+            <label style={{position:"relative",display:"block",minWidth:0}}>
+              <select
+                value={manageTeacherInstituteFilter}
+                onChange={event=>setManageTeacherInstituteFilter(event.target.value)}
+                aria-label="Filter teachers by institute"
                 style={{
-                  border:`1px solid ${sameInstituteName(manageTeacherInstituteFilter, item.inst)?G.navy:G.border}`,
-                  borderRadius:999,
-                  minHeight:34,
-                  padding:"0 11px",
-                  background:sameInstituteName(manageTeacherInstituteFilter, item.inst)?G.navy:"#FFFFFF",
-                  color:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"#FFFFFF":G.textM,
+                  width:"100%",
+                  height:isMobile?46:52,
+                  borderRadius:14,
+                  border:`1px solid ${G.borderM}`,
+                  background:"#FFFFFF",
+                  color:G.text,
                   fontFamily:G.sans,
-                  fontSize:12,
-                  fontWeight:900,
+                  fontSize:isMobile?14.5:16,
+                  fontWeight:700,
+                  padding:"0 46px 0 16px",
+                  outline:"none",
+                  appearance:"none",
+                  WebkitAppearance:"none",
+                  boxShadow:"none",
                   cursor:"pointer",
-                  whiteSpace:"nowrap",
-                  display:"inline-flex",
-                  alignItems:"center",
-                  gap:6,
-                  flexShrink:0,
                 }}>
-                <span style={{maxWidth:isMobile?150:220,overflow:"hidden",textOverflow:"ellipsis"}}>{item.inst}</span>
-                <span style={{minWidth:22,height:22,borderRadius:999,padding:"0 6px",display:"inline-flex",alignItems:"center",justifyContent:"center",background:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"rgba(255,255,255,0.16)":G.bg,border:`1px solid ${sameInstituteName(manageTeacherInstituteFilter, item.inst)?"rgba(255,255,255,0.18)":G.border}`,color:sameInstituteName(manageTeacherInstituteFilter, item.inst)?"#FFFFFF":G.textL,fontSize:10,fontWeight:900,fontFamily:G.mono}}>
-                  {item.count}
-                </span>
-              </button>
-            ))}
-            {noInstituteTeacherCount>0&&(
-              <button
-                type="button"
-                onClick={()=>setManageTeacherInstituteFilter(current=>current===NO_INSTITUTE_FILTER ? "" : NO_INSTITUTE_FILTER)}
-                style={{
-                  border:`1px solid ${manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?G.navy:G.border}`,
-                  borderRadius:999,
-                  minHeight:34,
-                  padding:"0 11px",
-                  background:manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?G.navy:"#FFFFFF",
-                  color:manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?"#FFFFFF":G.textM,
-                  fontFamily:G.sans,
-                  fontSize:12,
-                  fontWeight:900,
-                  cursor:"pointer",
-                  whiteSpace:"nowrap",
-                  display:"inline-flex",
-                  alignItems:"center",
-                  gap:6,
-                  flexShrink:0,
-                }}>
-                <span>No institute</span>
-                <span style={{minWidth:22,height:22,borderRadius:999,padding:"0 6px",display:"inline-flex",alignItems:"center",justifyContent:"center",background:manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?"rgba(255,255,255,0.16)":G.bg,border:`1px solid ${manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?"rgba(255,255,255,0.18)":G.border}`,color:manageTeacherInstituteFilter===NO_INSTITUTE_FILTER?"#FFFFFF":G.textL,fontSize:10,fontWeight:900,fontFamily:G.mono}}>
-                  {noInstituteTeacherCount}
-                </span>
-              </button>
-            )}
-          </div>
-        )}
-        {teacherSubjectFilterOptions.length>0&&(
-          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:isMobile?"nowrap":"wrap",overflowX:isMobile?"auto":"visible",paddingBottom:isMobile?4:0,marginBottom:13,WebkitOverflowScrolling:"touch",scrollbarWidth:isMobile?"thin":"auto"}}>
-            <span style={{fontSize:11,fontWeight:900,color:G.textL,textTransform:"uppercase",letterSpacing:0.7,flexShrink:0}}>Subject</span>
-            <button
-              type="button"
-              onClick={()=>setManageTeacherSubjectFilter("")}
+                <option value="">All institutes</option>
+                {teacherInstituteOptions.map(item=>(
+                  <option key={`teacher_filter_option_${item.inst}`} value={item.inst}>{item.inst}</option>
+                ))}
+                {noInstituteTeacherCount>0&&<option value={NO_INSTITUTE_FILTER}>No institute</option>}
+              </select>
+              <span aria-hidden="true" style={{position:"absolute",right:17,top:"50%",transform:"translateY(-50%)",fontSize:17,color:G.textL,pointerEvents:"none"}}>▼</span>
+            </label>
+          )}
+          <label style={{position:"relative",display:"block",minWidth:0}}>
+            <select
+              value={manageTeacherSubjectFilter}
+              onChange={event=>setManageTeacherSubjectFilter(event.target.value)}
+              aria-label="Filter teachers by subject"
+              disabled={!teacherSubjectFilterOptions.length}
               style={{
-                border:`1px solid ${!manageTeacherSubjectFilter?G.navy:G.border}`,
-                borderRadius:999,
-                minHeight:32,
-                padding:"0 12px",
-                background:!manageTeacherSubjectFilter?G.navy:"#FFFFFF",
-                color:!manageTeacherSubjectFilter?"#FFFFFF":G.textM,
+                width:"100%",
+                height:isMobile?46:52,
+                borderRadius:14,
+                border:`1px solid ${G.borderM}`,
+                background:"#FFFFFF",
+                color:G.text,
                 fontFamily:G.sans,
-                fontSize:12,
-                fontWeight:900,
-                cursor:"pointer",
-                whiteSpace:"nowrap",
-                flexShrink:0,
+                fontSize:isMobile?14.5:16,
+                fontWeight:700,
+                padding:"0 46px 0 16px",
+                outline:"none",
+                appearance:"none",
+                WebkitAppearance:"none",
+                boxShadow:"none",
+                cursor:teacherSubjectFilterOptions.length?"pointer":"not-allowed",
+                opacity:teacherSubjectFilterOptions.length?1:0.64,
               }}>
-              All subjects
-            </button>
-            {teacherSubjectFilterOptions.map(item=>{
-              const active = manageTeacherSubjectFilter === item.key;
-              return (
-                <button
-                  key={`teacher_subject_filter_${item.key}`}
-                  type="button"
-                  onClick={()=>setManageTeacherSubjectFilter(current=>current===item.key ? "" : item.key)}
-                  style={{
-                    border:`1px solid ${active ? item.color : G.border}`,
-                    borderRadius:999,
-                    minHeight:32,
-                    padding:"0 10px",
-                    background:active ? alphaHex(item.color, 0.12) : "#FFFFFF",
-                    color:active ? item.color : G.textM,
-                    fontFamily:G.sans,
-                    fontSize:12,
-                    fontWeight:900,
-                    cursor:"pointer",
-                    whiteSpace:"nowrap",
-                    display:"inline-flex",
-                    alignItems:"center",
-                    gap:6,
-                    flexShrink:0,
-                  }}>
-                  <span>{item.label}</span>
-                  <span style={{minWidth:21,height:21,borderRadius:999,padding:"0 6px",display:"inline-flex",alignItems:"center",justifyContent:"center",background:active ? "#FFFFFF" : G.bg,border:`1px solid ${active ? alphaHex(item.color, 0.2) : G.border}`,color:active ? item.color : G.textL,fontSize:10,fontWeight:900,fontFamily:G.mono}}>
-                    {item.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+              <option value="">All subjects</option>
+              {teacherSubjectFilterOptions.map(item=>(
+                <option key={`teacher_subject_filter_option_${item.key}`} value={item.key}>{item.label}</option>
+              ))}
+            </select>
+            <span aria-hidden="true" style={{position:"absolute",right:17,top:"50%",transform:"translateY(-50%)",fontSize:17,color:G.textL,pointerEvents:"none"}}>▼</span>
+          </label>
+        </div>
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:14}}>
           <span style={{fontSize:11,fontWeight:900,color:G.textL,textTransform:"uppercase",letterSpacing:0.7}}>Sort</span>
           {[
