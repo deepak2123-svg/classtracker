@@ -19727,9 +19727,9 @@ function AdminPanelInner({user}){
       ].filter(group => group.rows.length)
       : [{ key:"overview", label:"Choose an institute to load", rows:adminV5VisibleInstitutes }];
     const browseModes = [
-      { key:"class", label:"By Class", shortLabel:"Class", icon:IconSchool, hint:"Pick a class to see every teacher entry in that class, latest first." },
-      { key:"teacher", label:"By Teacher", shortLabel:"Teacher", icon:IconUser, hint:"Pick a teacher to see their entries across every section they teach, latest first." },
-      { key:"pair", label:"Class + Teacher", shortLabel:"Class + Teacher", icon:IconUsersGroup, hint:"Pick a class + teacher pair to see only that teacher's entries in that one class, latest first." },
+      { key:"class", label:"By Class", shortLabel:"Class", icon:IconSchool },
+      { key:"teacher", label:"By Teacher", shortLabel:"Teacher", icon:IconUser },
+      { key:"pair", label:"Class + Teacher", shortLabel:"Class+Teacher", icon:IconUsersGroup },
     ];
     const activeBrowseMode = browseModes.find(item => item.key === adminV5BrowseMode) || browseModes[0];
     const classSearchKey = adminV5ClassSearch.trim().toLowerCase();
@@ -20644,11 +20644,6 @@ function AdminPanelInner({user}){
               <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Institute</div>
               <div style={{fontSize:22,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.05,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedInstituteName || "No institute"}</div>
             </div>
-            {selectedInstitute&&(
-              <span style={{background:selectedInstitute.status.bg,border:`1px solid ${selectedInstitute.status.border}`,color:selectedInstitute.status.accent,borderRadius:999,padding:"7px 12px",fontSize:12,fontWeight:950,fontFamily:G.mono,whiteSpace:"nowrap",textTransform:"uppercase"}}>
-                {selectedInstitute.status.pct}% updated
-              </span>
-            )}
           </div>
           {renderWarmupBanner(false)}
           {renderModeTabs()}
