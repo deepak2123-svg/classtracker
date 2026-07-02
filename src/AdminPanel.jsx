@@ -21455,9 +21455,14 @@ function AdminPanelInner({user}){
         ) : (
           <>
             <div style={{display:"flex",alignItems:"center",gap:9}}>
-              <div style={{width:28,height:28,background:G.blueV,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <button
+                type="button"
+                onClick={()=>setView("main")}
+                title="Overview"
+                aria-label="Overview"
+                style={{width:28,height:28,background:G.blueV,border:"none",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0,cursor:"pointer"}}>
                 <svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M4 3H7V13H14V16H4V3Z" fill="white"/></svg>
-              </div>
+              </button>
               <span style={{fontFamily:G.display,fontSize:18,fontWeight:800,color:"#fff",letterSpacing:-0.4}}>Ledgr</span>
               <span style={{fontSize:11,letterSpacing:2,color:"rgba(255,255,255,0.25)",fontFamily:G.mono,textTransform:"uppercase"}}>Admin</span>
             </div>
@@ -21530,15 +21535,6 @@ function AdminPanelInner({user}){
 
         {!isMobile&&(
           <aside style={{position:"fixed",top:54,left:0,zIndex:70,width:48,height:"calc(100svh - 54px)",maxHeight:"calc(100svh - 54px)",display:"flex",flexDirection:"column",alignItems:"center",background:"#0B111A",borderRight:"1px solid rgba(255,255,255,0.08)",boxShadow:"none",overflow:"hidden",padding:"8px 7px",boxSizing:"border-box"}}>
-            <button
-              type="button"
-              onClick={()=>setView("main")}
-              title="Overview"
-              aria-label="Overview"
-              style={{width:34,height:34,borderRadius:8,border:"1px solid rgba(255,255,255,0.08)",background:"#109675",color:"#FFFFFF",fontFamily:G.display,fontSize:16,fontWeight:950,display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:10}}>
-              L
-            </button>
-            <div style={{height:1,width:34,background:"rgba(255,255,255,0.12)",margin:"2px 0 7px"}} />
             <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"center",width:"100%",minHeight:0}}>
               {[
                 { key:"dashboard", label:"Dashboard", icon:IconChartBar, active:false, onClick:()=>setView("main") },
@@ -21669,7 +21665,7 @@ function AdminPanelInner({user}){
           </aside>
         )}
 
-        <main style={{minWidth:0,paddingTop:isMobile?0:22}}>
+        <main style={{minWidth:0,paddingTop:isMobile?0:22,gridColumn:isMobile?undefined:"2 / -1"}}>
 
         {/* Institute detail drill-down (replaces tab content when active) */}
         {instDetailView?(()=>{
