@@ -21,6 +21,7 @@ import {
   IconBooks,
   IconPhoto,
   IconPlus,
+  IconRefresh,
   IconSchool,
   IconSettings,
   IconSend,
@@ -97,6 +98,79 @@ const PANEL_RAIL_THEMES = {
 
 const APP_ICON_STROKE = 2.05;
 let instituteGlanceExportRuntimePromise = null;
+const ADMIN_TEACHER_DETAILS_CACHE_KEY = "ledgr_admin_teacher_details_v1";
+const ADMIN_TEACHER_DETAILS_CACHE_VERSION = 1;
+
+function getAdminTeacherDetailsCacheStorage(){
+  if(typeof window === "undefined") return null;
+  try{
+    const storage = window.localStorage;
+    const testKey = "__ledgr_admin_cache_test__";
+    storage.setItem(testKey, "1");
+    storage.removeItem(testKey);
+    return storage;
+  }catch{
+    try{ return window.sessionStorage || null; }catch{ return null; }
+  }
+}
+
+function readAdminTeacherDetailsCache(){
+  const storage = getAdminTeacherDetailsCacheStorage();
+  if(!storage) return {};
+  try{
+    const raw = storage.getItem(ADMIN_TEACHER_DETAILS_CACHE_KEY);
+    if(!raw) return {};
+    const parsed = JSON.parse(raw);
+    if(
+      !parsed
+      || parsed.version !== ADMIN_TEACHER_DETAILS_CACHE_VERSION
+      || parsed.dayKey !== todayKey()
+      || !parsed.records
+      || typeof parsed.records !== "object"
+    ){
+      storage.removeItem(ADMIN_TEACHER_DETAILS_CACHE_KEY);
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(parsed.records)
+        .filter(([uid, data]) => uid && data && typeof data === "object")
+    );
+  }catch{
+    return {};
+  }
+}
+
+function writeAdminTeacherDetailsCache(records){
+  const storage = getAdminTeacherDetailsCacheStorage();
+  if(!storage) return;
+  const entries = Object.entries(records || {})
+    .filter(([uid, data]) => uid && data && typeof data === "object");
+  try{
+    if(!entries.length){
+      storage.removeItem(ADMIN_TEACHER_DETAILS_CACHE_KEY);
+      return;
+    }
+    const payload = {
+      version:ADMIN_TEACHER_DETAILS_CACHE_VERSION,
+      dayKey:todayKey(),
+      savedAt:Date.now(),
+      records:Object.fromEntries(entries),
+    };
+    storage.setItem(ADMIN_TEACHER_DETAILS_CACHE_KEY, JSON.stringify(payload));
+  }catch{
+    try{
+      const trimmed = entries.slice(Math.max(0, entries.length - 90));
+      const payload = {
+        version:ADMIN_TEACHER_DETAILS_CACHE_VERSION,
+        dayKey:todayKey(),
+        savedAt:Date.now(),
+        pruned:true,
+        records:Object.fromEntries(trimmed),
+      };
+      storage.setItem(ADMIN_TEACHER_DETAILS_CACHE_KEY, JSON.stringify(payload));
+    }catch{}
+  }
+}
 
 function AppIcon({ icon, size = 18, color = "currentColor", stroke = APP_ICON_STROKE, style = {} }){
   if(!icon) return null;
@@ -11090,7 +11164,7 @@ function AdminPanelInner({user}){
     classes:{ min:220, max:560, collapsed:46, layer:124, default:360 },
   }),[]);
   const [teachers,    setTeachers]    = useState([]);
-  const [fullData,    setFullData]    = useState({});
+  const [fullData,    setFullData]    = useState(()=>readAdminTeacherDetailsCache());
   const [roles,       setRoles]       = useState({});
   const [roleDetails, setRoleDetails] = useState({});
   const [loading,     setLoading]     = useState(true);
@@ -11178,6 +11252,7 @@ function AdminPanelInner({user}){
   const [manageTeacherView, setManageTeacherView] = useState("table");
   const [manageTeacherInstituteFilter, setManageTeacherInstituteFilter] = useState("");
   const [manageTeacherBreakdownUid, setManageTeacherBreakdownUid] = useState(null);
+  const [teacherDetailsRefreshing, setTeacherDetailsRefreshing] = useState(false);
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [manageSectionSearch, setManageSectionSearch] = useState("");
   const [manageInstituteFilter, setManageInstituteFilter] = useState("");
@@ -11240,6 +11315,7 @@ function AdminPanelInner({user}){
   const instituteGlanceReportRef = React.useRef(instituteGlanceReport);
   const instituteGlanceAutoLoadKeyRef = React.useRef("");
   const instituteGlanceOptionsFrameRef = React.useRef(null);
+  const adminTeacherDetailsCacheTimerRef = React.useRef(null);
   const historyReadyRef = React.useRef(false);
   const historyRestoreRef = React.useRef(false);
   const lastHistoryKeyRef = React.useRef("");
@@ -11264,7 +11340,29 @@ function AdminPanelInner({user}){
     fullDataRef.current = fullData;
   }, [fullData]);
 
+  React.useEffect(() => {
+    if(typeof window === "undefined") return undefined;
+    if(adminTeacherDetailsCacheTimerRef.current){
+      window.clearTimeout(adminTeacherDetailsCacheTimerRef.current);
+    }
+    adminTeacherDetailsCacheTimerRef.current = window.setTimeout(() => {
+      writeAdminTeacherDetailsCache(fullDataRef.current || fullData);
+      adminTeacherDetailsCacheTimerRef.current = null;
+    }, 350);
+    return () => {
+      if(adminTeacherDetailsCacheTimerRef.current){
+        window.clearTimeout(adminTeacherDetailsCacheTimerRef.current);
+        adminTeacherDetailsCacheTimerRef.current = null;
+      }
+    };
+  }, [fullData]);
+
   React.useEffect(() => () => {
+    if(adminTeacherDetailsCacheTimerRef.current && typeof window !== "undefined"){
+      window.clearTimeout(adminTeacherDetailsCacheTimerRef.current);
+      writeAdminTeacherDetailsCache(fullDataRef.current || {});
+      adminTeacherDetailsCacheTimerRef.current = null;
+    }
     if(instituteGlanceOptionsFrameRef.current && typeof window !== "undefined"){
       window.cancelAnimationFrame(instituteGlanceOptionsFrameRef.current);
       instituteGlanceOptionsFrameRef.current = null;
@@ -11622,19 +11720,21 @@ function AdminPanelInner({user}){
     };
   }, [closeAdminOverlay, currentNavKey]);
 
-  // Lazy-load full data for a teacher only when needed
-  const ensureFullData = React.useCallback(async (uid) => {
+  // Lazy-load full data for a teacher only when needed; cached data survives reloads for the current day.
+  const ensureFullData = React.useCallback(async (uid, options = {}) => {
     if(!uid) return null;
-    if (fullDataRef.current[uid]) return fullDataRef.current[uid];
-    if (fullDataRequestRef.current[uid]) return fullDataRequestRef.current[uid];
+    const force = !!options.force;
+    if (!force && fullDataRef.current[uid]) return fullDataRef.current[uid];
+    if (!force && fullDataRequestRef.current[uid]) return fullDataRequestRef.current[uid];
     setLoadingUids(s=>s.has(uid)?s:new Set([...s,uid]));
     const pending = getTeacherFullData(uid)
       .then(d=>{
         if (d){
-          if(!fullDataRef.current[uid]){
-            fullDataRef.current = { ...fullDataRef.current, [uid]: d };
-          }
-          setFullData(prev=>prev[uid]?prev:{...prev,[uid]:d});
+          fullDataRef.current = { ...fullDataRef.current, [uid]: d };
+          setFullData(prev=>{
+            if(!force && prev[uid]) return prev;
+            return { ...prev, [uid]: d };
+          });
         }
         return d || null;
       })
@@ -12228,7 +12328,7 @@ function AdminPanelInner({user}){
 
         const uid = pendingUids[pendingIndex];
         try {
-          const data = await getTeacherFullData(uid);
+          const data = await ensureFullData(uid, { force });
           if(jobId !== instituteGlanceJobRef.current) return;
           if(data){
             hydratedFullData[uid] = data;
@@ -12261,7 +12361,7 @@ function AdminPanelInner({user}){
     };
     scheduleInstituteGlanceReport(finalReport);
     return finalReport;
-  }, [buildInstituteGlanceSnapshot, fullData, getInstituteGlanceConfig, getInstituteGlanceConfigKey, instituteGlanceTeacherList, institutes.length, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
+  }, [buildInstituteGlanceSnapshot, ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlanceConfigKey, instituteGlanceTeacherList, institutes.length, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
 
   React.useEffect(() => {
     const visible = instituteGlanceOpen || mobileSurface === "centreSummary";
@@ -18299,6 +18399,26 @@ function AdminPanelInner({user}){
           || exportTextSorter.compare(a.name, b.name);
       });
     const detailsReadyCount = teacherRows.filter(row=>row.detailsReady).length;
+    const refreshVisibleTeacherDetails = async () => {
+      if(teacherDetailsRefreshing) return;
+      const targetUids = [...new Set(
+        teacherRows
+          .map(row => row.teacher?.uid)
+          .filter(Boolean)
+      )];
+      if(!targetUids.length) return;
+      setTeacherDetailsRefreshing(true);
+      try{
+        const batchSize = isMobile ? 4 : 8;
+        for(let i = 0; i < targetUids.length; i += batchSize){
+          const batch = targetUids.slice(i, i + batchSize);
+          await Promise.all(batch.map(uid => ensureFullData(uid, { force:true }).catch(()=>null)));
+        }
+        showAdminToast(`Refreshed ${targetUids.length} teacher detail${targetUids.length === 1 ? "" : "s"}.`);
+      }finally{
+        setTeacherDetailsRefreshing(false);
+      }
+    };
     const scopedTeacherLoadingCount = selectedInstituteFilter
       ? teachingAccounts.filter(teacher=>{
           const data = fullData[teacher.uid] || {};
@@ -18965,6 +19085,19 @@ function AdminPanelInner({user}){
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <button
+              type="button"
+              onClick={refreshVisibleTeacherDetails}
+              disabled={teacherDetailsRefreshing || !teacherRows.length}
+              style={{
+                ...workspaceActionButtonStyle("blue"),
+                minHeight:36,
+                opacity:teacherDetailsRefreshing || !teacherRows.length ? 0.62 : 1,
+                cursor:teacherDetailsRefreshing || !teacherRows.length ? "not-allowed" : "pointer",
+              }}>
+              <AppIcon icon={IconRefresh} size={15} color="currentColor" />
+              {teacherDetailsRefreshing ? "Refreshing" : "Refresh details"}
+            </button>
             <div style={{display:"flex",gap:0,background:"#F8FAFC",border:`1.5px solid ${G.borderM}`,borderRadius:10,padding:3}}>
               {[
                 {key:"table",label:"Table",icon:IconFileText},
