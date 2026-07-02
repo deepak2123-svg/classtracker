@@ -19729,7 +19729,7 @@ function AdminPanelInner({user}){
     const browseModes = [
       { key:"class", label:"By Class", shortLabel:"Class", icon:IconSchool, hint:"Pick a class to see every teacher entry in that class, latest first." },
       { key:"teacher", label:"By Teacher", shortLabel:"Teacher", icon:IconUser, hint:"Pick a teacher to see their entries across every section they teach, latest first." },
-      { key:"pair", label:"Class + Teacher", shortLabel:"Pair", icon:IconUsersGroup, hint:"Pick a class + teacher pair to see only that teacher's entries in that one class, latest first." },
+      { key:"pair", label:"Class + Teacher", shortLabel:"Class + Teacher", icon:IconUsersGroup, hint:"Pick a class + teacher pair to see only that teacher's entries in that one class, latest first." },
     ];
     const activeBrowseMode = browseModes.find(item => item.key === adminV5BrowseMode) || browseModes[0];
     const classSearchKey = adminV5ClassSearch.trim().toLowerCase();
@@ -20652,9 +20652,6 @@ function AdminPanelInner({user}){
           </div>
           {renderWarmupBanner(false)}
           {renderModeTabs()}
-          <div style={{fontSize:13,color:"#8EA0BC",lineHeight:1.5,marginTop:13}}>
-            {activeBrowseMode.hint}
-          </div>
           <div style={{marginTop:13}}>
             {renderSearchInput(adminV5ClassSearch, setAdminV5ClassSearch, "Search class or teacher", true)}
           </div>
