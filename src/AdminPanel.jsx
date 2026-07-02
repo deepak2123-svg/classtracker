@@ -20407,7 +20407,7 @@ function AdminPanelInner({user}){
         const rows = group.rows || [];
         if(!rows.length) return null;
         return (
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(108px,1fr))",gap:8,padding:"12px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(104px,1fr))",gap:7,padding:"10px"}}>
             {rows.map(cls=>{
               const active = cls.key === selectedClassKey;
               const tone = getSectionTone(cls.display);
@@ -20420,12 +20420,12 @@ function AdminPanelInner({user}){
                   style={{
                     width:"100%",
                     minWidth:0,
-                    minHeight:40,
+                    minHeight:34,
                     borderRadius:999,
                     border:`1px solid ${active ? G.blue : G.border}`,
                     background:active ? "#EAF2FF" : "#FFFFFF",
                     color:active ? G.blue : (tone.ink || G.text),
-                    padding:"5px 6px 5px 12px",
+                    padding:"4px 5px 4px 11px",
                     display:"flex",
                     alignItems:"center",
                     justifyContent:"space-between",
@@ -20434,10 +20434,10 @@ function AdminPanelInner({user}){
                     cursor:"pointer",
                     boxShadow:active ? "0 0 0 2px rgba(37,99,235,0.10)" : "none",
                   }}>
-                  <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:15,fontWeight:950,fontFamily:G.display,lineHeight:1}}>
+                  <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12.5,fontWeight:850,fontFamily:G.sans,lineHeight:1}}>
                     {cls.display}
                   </span>
-                  <span style={{flex:"0 0 auto",minWidth:28,height:28,padding:"0 8px",borderRadius:999,background:active ? "#FFFFFF" : "#F1F5F9",border:`1px solid ${active ? "#BFDBFE" : G.border}`,display:"inline-flex",alignItems:"center",justifyContent:"center",color:G.textS,fontSize:12.5,fontWeight:950,fontFamily:G.display,lineHeight:1}}>
+                  <span style={{flex:"0 0 auto",minWidth:24,height:24,padding:"0 7px",borderRadius:999,background:active ? "#FFFFFF" : "#F1F5F9",border:`1px solid ${active ? "#BFDBFE" : G.border}`,display:"inline-flex",alignItems:"center",justifyContent:"center",color:G.textS,fontSize:11,fontWeight:950,fontFamily:G.sans,lineHeight:1}}>
                     {teacherCount}
                   </span>
                 </button>
@@ -20456,7 +20456,7 @@ function AdminPanelInner({user}){
         const hasStored = Object.prototype.hasOwnProperty.call(adminV5ExpandedGroupKeys, storedKey);
         const expanded = hasStored ? !!adminV5ExpandedGroupKeys[storedKey] : defaultExpanded;
         return (
-          <div key={group.key} style={{background:"#FFFFFF",border:panelBorder,borderRadius:12,overflow:"hidden",marginBottom:13}}>
+          <div key={group.key} style={{background:"#FFFFFF",border:panelBorder,borderRadius:9,overflow:"hidden",marginBottom:8}}>
             <button
               type="button"
               aria-expanded={hasBody ? expanded : undefined}
@@ -20471,7 +20471,7 @@ function AdminPanelInner({user}){
                 width:"100%",
                 border:"none",
                 background:"#FFFFFF",
-                padding:"14px 16px",
+                padding:"9px 12px",
                 display:"flex",
                 alignItems:"center",
                 justifyContent:"flex-start",
@@ -20479,7 +20479,7 @@ function AdminPanelInner({user}){
                 cursor:hasBody ? "pointer" : "default",
                 fontFamily:G.sans,
               }}>
-              <span style={{fontSize:22,fontWeight:950,color:G.text,fontFamily:G.display,letterSpacing:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+              <span style={{fontSize:12.5,fontWeight:850,color:G.text,fontFamily:G.sans,letterSpacing:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                 {group.label}
               </span>
             </button>
