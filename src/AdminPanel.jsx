@@ -1288,8 +1288,8 @@ function collectLegacySectionRepairItems(fullDataByUid, teachers, instituteName,
     const data = fullDataByUid?.[teacher.uid];
     if(!data) return;
     const teacherName = data.profile?.name || teacher.name || "Teacher";
-    (data.classes || []).forEach(cls => {
-      if(!cls || cls.left || !sameInstituteName(cls.institute, instituteName)) return;
+    activeAdminTeacherClasses(data).forEach(cls => {
+      if(!sameInstituteName(cls.institute, instituteName)) return;
       const rawSection = String(cls.section || "").trim();
       if(!rawSection) return;
       const rawKey = normaliseSectionKey(rawSection);
@@ -1371,8 +1371,8 @@ function collectPendingInstituteSections(fullDataByUid, teachers, instituteName,
     const data = fullDataByUid?.[teacher.uid];
     if(!data) return;
     const teacherName = data.profile?.name || teacher.name || "Teacher";
-    (data.classes || []).forEach(cls => {
-      if(!cls || cls.left || !sameInstituteName(cls.institute, instituteName)) return;
+    activeAdminTeacherClasses(data).forEach(cls => {
+      if(!sameInstituteName(cls.institute, instituteName)) return;
       const rawSection = String(cls.section || "").trim();
       const rawKey = normaliseSectionKey(rawSection);
       if(!rawKey || currentLookup.has(rawKey)) return;
@@ -1447,8 +1447,7 @@ function applyInstituteSectionActionsToTeacherData(data, instituteName, actionMa
 
   Object.entries(actions).forEach(([oldSectionKey, action]) => {
     const matchingClasses = classes.filter(cls =>
-      cls &&
-      !cls.left &&
+      isActiveAdminTeacherClass(cls) &&
       sameInstituteName(cls.institute, instituteName) &&
       normaliseSectionKey(cls.section) === oldSectionKey
     );
@@ -1468,9 +1467,8 @@ function applyInstituteSectionActionsToTeacherData(data, instituteName, actionMa
       const targetSection = action;
       const targetKey = normaliseSectionKey(targetSection);
       const existingTarget = classes.find(other =>
-        other &&
+        isActiveAdminTeacherClass(other) &&
         other.id !== cls.id &&
-        !other.left &&
         sameInstituteName(other.institute, cls.institute) &&
         normaliseSectionKey(other.section) === targetKey &&
         normaliseSectionKey(other.subject) === normaliseSectionKey(cls.subject)
@@ -1499,7 +1497,7 @@ function applyInstituteSectionActionsToTeacherData(data, instituteName, actionMa
     return action;
   }).filter(Boolean);
   const derivedSections = classes
-    .filter(cls => !cls?.left && sameInstituteName(cls?.institute, instituteName))
+    .filter(cls => isActiveAdminTeacherClass(cls) && sameInstituteName(cls?.institute, instituteName))
     .map(cls => String(cls.section || "").trim())
     .filter(Boolean);
 
@@ -2416,7 +2414,7 @@ function buildTeacherEntryStatusItem(teacher, data, instituteName, fallbackLastE
       lastEntryTs:fallbackLastEntryTs || null,
     };
   }
-  const classes = (data.classes||[]).filter(c=>sameInstituteName(c.institute, instituteName));
+  const classes = activeAdminTeacherClasses(data).filter(c=>sameInstituteName(c.institute, instituteName));
   const stats = classes.reduce((acc,c)=>{
     const classNotes = (data.notes||{})[c.id]||{};
     acc.todayEntries += getEntriesInRange(classNotes, 1).length;
@@ -2589,11 +2587,24 @@ function getTeacherInstituteListFromMap(teacher, fullDataMap){
     if(list.some(existing => sameInstituteName(existing, next))) return;
     list.push(next);
   };
-  (teacher?.institutes || []).forEach(add);
   const data = fullDataMap?.[teacher?.uid];
+  const hasLoadedClasses = Array.isArray(data?.classes);
+  if(hasLoadedClasses){
+    activeAdminTeacherClasses(data).forEach(cls => add(cls?.institute));
+    return list;
+  }
+  (teacher?.institutes || []).forEach(add);
   (data?.profile?.institutes || []).forEach(add);
-  (data?.classes || []).forEach(cls => add(cls?.institute));
   return list;
+}
+function isActiveAdminTeacherClass(cls){
+  if(!cls || typeof cls !== "object") return false;
+  if(cls.left || cls.archived || cls.archivedByAdmin || cls.transferArchive) return false;
+  const deletedAt = Number(cls.deletedAt || 0) || 0;
+  return deletedAt <= 0;
+}
+function activeAdminTeacherClasses(data){
+  return Array.isArray(data?.classes) ? data.classes.filter(isActiveAdminTeacherClass) : [];
 }
 function teacherBelongsToInstituteFromMap(teacher, instituteName, fullDataMap){
   if(!teacher || !instituteName) return false;
@@ -2712,7 +2723,7 @@ function getInstituteGlancePeriodMeta(period = "daily", rangeStartKey = "", rang
 function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataMap = {}, resolveSectionName = null, syllabusTemplates = [], period = "daily", rangeStartKey = "", rangeEndKey = "" }){
   const data = fullDataMap?.[teacher?.uid];
   const classesHere = data
-    ? (data.classes || []).filter(cls => sameInstituteName(cls?.institute, instituteName))
+    ? activeAdminTeacherClasses(data).filter(cls => sameInstituteName(cls?.institute, instituteName))
     : [];
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   const monthKey = currentMonthKey();
@@ -2883,7 +2894,7 @@ function buildInstituteGlanceRows({ institutes = [], teachers = [], fullDataMap 
         rangeStartKey,
         rangeEndKey,
       }))
-      .filter(item => isExpectedReportTeacher(item.uid) || item.updatedToday);
+      .filter(item => isExpectedReportTeacher(item.uid));
     const filledTeachers = teacherRows
       .filter(item => item.updatedToday)
       .sort((a, b) => {
@@ -8618,7 +8629,7 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
       // Use the same teacher-membership logic as instituteStats for consistency
       const instTeachers = teachers.filter(t => {
         const d = fullData[t.uid];
-        const hasClassHere = d && (d.classes || []).some(c => sameInstituteName(c?.institute, inst));
+        const hasClassHere = d && activeAdminTeacherClasses(d).some(c => sameInstituteName(c?.institute, inst));
         const listedHere = (t.institutes || []).some(i => sameInstituteName(i, inst));
         return hasClassHere || listedHere;
       });
@@ -8628,14 +8639,14 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
       const todayUpdatedTeachers = instTeachers.filter(t => {
         const d = fullData[t.uid];
         if (!d) return false;
-        return (d.classes || [])
+        return activeAdminTeacherClasses(d)
           .filter(c => sameInstituteName(c?.institute, inst))
           .some(c => getEntriesInRange((d.notes || {})[c.id] || {}, 1).length > 0);
       }).length;
       instTeachers.forEach(t => {
         const d = fullData[t.uid];
         if (!d) return;
-        const classesHere = (d.classes || []).filter(c => sameInstituteName(c?.institute, inst));
+        const classesHere = activeAdminTeacherClasses(d).filter(c => sameInstituteName(c?.institute, inst));
         classesHere.forEach(c => {
           const notes = (d.notes || {})[c.id] || {};
           weekEntries += getEntriesInRange(notes, 7).length;
@@ -8645,7 +8656,7 @@ function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, on
       const notFilledThisWeek = instTeachers.filter(t => {
         const d = fullData[t.uid];
         if (!d) return true;
-        const classesHere = (d.classes || []).filter(c => sameInstituteName(c?.institute, inst));
+        const classesHere = activeAdminTeacherClasses(d).filter(c => sameInstituteName(c?.institute, inst));
         return classesHere.every(c => getEntriesInRange((d.notes || {})[c.id] || {}, 7).length === 0);
       }).length;
       return { inst, registered, todayFilled: todayUpdatedTeachers, weekEntries, notFilledThisWeek };
@@ -11770,10 +11781,14 @@ function AdminPanelInner({user}){
       if(list.some(existing => sameInstituteName(existing, next))) return;
       list.push(next);
     };
-    (teacher?.institutes || []).forEach(add);
     const data = fullData[teacher?.uid];
+    const hasLoadedClasses = Array.isArray(data?.classes);
+    if(hasLoadedClasses){
+      activeAdminTeacherClasses(data).forEach(cls => add(cls?.institute));
+      return list;
+    }
+    (teacher?.institutes || []).forEach(add);
     (data?.profile?.institutes || []).forEach(add);
-    (data?.classes || []).forEach(cls => add(cls?.institute));
     return list;
   }, [fullData, isDeletedInstituteName]);
 
@@ -11821,10 +11836,12 @@ function AdminPanelInner({user}){
     const hasTeachingIndex = teacher => {
       if(!teacher?.uid) return false;
       const data = fullDataRef.current[teacher.uid] || fullData[teacher.uid] || {};
+      if(Object.prototype.hasOwnProperty.call(fullDataRef.current || {}, teacher.uid) || Object.prototype.hasOwnProperty.call(fullData || {}, teacher.uid)){
+        return activeAdminTeacherClasses(data).length > 0;
+      }
       return Number(teacher.classCount || 0) > 0
         || (Array.isArray(teacher.subjects) && teacher.subjects.length > 0)
-        || (Array.isArray(teacher.assignedSubjectIds) && teacher.assignedSubjectIds.length > 0)
-        || (Array.isArray(data.classes) && data.classes.length > 0);
+        || (Array.isArray(teacher.assignedSubjectIds) && teacher.assignedSubjectIds.length > 0);
     };
     const shouldHydrateTeacher = teacher => {
       if(!teacher?.uid) return false;
@@ -11887,7 +11904,7 @@ function AdminPanelInner({user}){
     Object.entries(fullData).forEach(([uid,d])=>{
       const teacher = teachers.find(item=>item.uid===uid);
       if(!isTeachingSurfaceAccount(teacher)) return;
-      (d.classes||[]).forEach(c=>addInstitute(c?.institute));
+      activeAdminTeacherClasses(d).forEach(c=>addInstitute(c?.institute));
       (d.profile?.institutes||[]).forEach(addInstitute);
     });
     // Preserve admin-defined order from globalInstList, append any extras at end
@@ -11978,10 +11995,12 @@ function AdminPanelInner({user}){
       if(roles[t.uid] !== "admin") return true;
       if(!isAdminTeacherAccount(t.uid)) return false;
       const data = fullData[t.uid] || {};
+      if(Object.prototype.hasOwnProperty.call(fullData, t.uid)){
+        return activeAdminTeacherClasses(data).length > 0;
+      }
       return Number(t.classCount || 0) > 0
         || (Array.isArray(t.subjects) && t.subjects.length > 0)
-        || (Array.isArray(t.assignedSubjectIds) && t.assignedSubjectIds.length > 0)
-        || (Array.isArray(data.classes) && data.classes.length > 0);
+        || (Array.isArray(t.assignedSubjectIds) && t.assignedSubjectIds.length > 0);
     }),
     [teachers, roles, fullData, isAdminTeacherAccount]
   );
@@ -11990,7 +12009,7 @@ function AdminPanelInner({user}){
     () => teachers.filter(teacher => {
       const uid = teacher?.uid;
       if(!uid) return false;
-      return isTeachingSurfaceAccount(teacher) || roles[uid] === "admin";
+      return isTeachingSurfaceAccount(teacher);
     }),
     [teachers, isTeachingSurfaceAccount, roles]
   );
@@ -12002,9 +12021,9 @@ function AdminPanelInner({user}){
   const getInstituteTeacherUids = React.useCallback((inst) => {
     const snapshot = fullDataRef.current || {};
     return teachers
-      .filter(t => teacherBelongsToInstituteFromMap(t, inst, snapshot))
+      .filter(t => isTeachingSurfaceAccount(t) && teacherBelongsToInstituteFromMap(t, inst, snapshot))
       .map(t => t.uid);
-  }, [teachers]);
+  }, [isTeachingSurfaceAccount, teachers]);
 
   const warmTeacherUids = React.useCallback(async (uids, instLabel = null) => {
     const tracksInstituteProgress = !!instLabel;
@@ -12948,7 +12967,7 @@ function AdminPanelInner({user}){
         (teacher.institutes || []).forEach(addInstitute);
       });
       Object.values(fullData).forEach(data => {
-        (data.classes || []).forEach(cls => addInstitute(cls?.institute));
+        activeAdminTeacherClasses(data).forEach(cls => addInstitute(cls?.institute));
         (data.profile?.institutes || []).forEach(addInstitute);
       });
       const instituteSet = new Set(instituteMap.keys());
@@ -14533,7 +14552,7 @@ function AdminPanelInner({user}){
     const teachingAccounts = teachers.filter(isTeachingSurfaceAccount);
     const teachingUids = new Set(teachingAccounts.map(t=>t.uid).filter(Boolean));
     const fromIndex=teachingAccounts.reduce((s,t)=>s+(t.classCount||0),0);
-    const fromFull=Object.entries(fullData).reduce((s,[uid,d])=>s+(teachingUids.has(uid) ? (d.classes||[]).length : 0),0);
+    const fromFull=Object.entries(fullData).reduce((s,[uid,d])=>s+(teachingUids.has(uid) ? activeAdminTeacherClasses(d).length : 0),0);
     return Math.max(fromIndex,fromFull);
   },[teachers,fullData,isTeachingSurfaceAccount]);
 
@@ -14556,7 +14575,7 @@ function AdminPanelInner({user}){
       teachers.filter(isTeachingSurfaceAccount).forEach(t=>{
         const d = fullData[t.uid];
         if(d){
-          const classesHere = (d.classes||[]).filter(c=>sameInstituteName(c.institute, inst));
+          const classesHere = activeAdminTeacherClasses(d).filter(c=>sameInstituteName(c.institute, inst));
           if(classesHere.length){
             teacherUids.add(t.uid);
             classesHere.forEach(c=>{
@@ -14594,7 +14613,7 @@ function AdminPanelInner({user}){
     const teacher = teacherByUid[cleanUid] || null;
     const teacherData = fullData[cleanUid] || null;
     const cls = cleanClassId
-      ? (Array.isArray(teacherData?.classes) ? teacherData.classes : []).find(item => String(item?.id || "").trim() === cleanClassId) || null
+      ? activeAdminTeacherClasses(teacherData).find(item => String(item?.id || "").trim() === cleanClassId) || null
       : null;
     return resolveAdminTeacherClassSubjectLabel(teacher, teacherData, cls, globalSubjects, fallbackSubject);
   }, [teacherByUid, fullData, globalSubjects]);
@@ -14609,7 +14628,7 @@ function AdminPanelInner({user}){
     relevantTeachers.forEach(t=>{
       const d=fullData[t.uid];
       if(!d) return; // fullData not loaded yet for this teacher
-      (d.classes||[]).filter(c=>norm(c.institute)===norm(selInst)).forEach(c=>{
+      activeAdminTeacherClasses(d).filter(c=>norm(c.institute)===norm(selInst)).forEach(c=>{
         const resolvedSection = resolveAdminSectionName(c.section, c.institute, instSectionsAll) || String(c.section || "").trim();
         const key = normaliseSectionKey(resolvedSection);
         if(!key) return;
@@ -14644,7 +14663,7 @@ function AdminPanelInner({user}){
       const d = fullData[t.uid];
       let ts = 0;
       if(d){
-        ts = (d.classes||[])
+        ts = activeAdminTeacherClasses(d)
           .filter(c=>sameInstituteName(c.institute, selInst))
           .reduce((latest,c)=>Math.max(latest, lastEntryTs((d.notes||{})[c.id]||{}) || 0), 0);
       } else {
@@ -14789,7 +14808,7 @@ function AdminPanelInner({user}){
       const d=fullData[selP2];
       const teacher = teacherByUid[selP2] || null;
       if(!d) return [];
-      return (d.classes||[])
+      return activeAdminTeacherClasses(d)
         .filter(c=>(c.institute||"").trim().toLowerCase()===(selInst||"").trim().toLowerCase())
         .map(c=>{
           const resolvedSection = resolveAdminSectionName(c.section, c.institute, instSectionsAll) || c.section;
@@ -14892,7 +14911,7 @@ function AdminPanelInner({user}){
     if(!selP3) return null;
     const d = fullData[selP3.teacherUid];
     if(!d) return null;
-    return (d.classes||[]).find(c=>c.id===selP3.classId) || null;
+    return activeAdminTeacherClasses(d).find(c=>c.id===selP3.classId) || null;
   },[selP3,fullData]);
   const selectedSubjectLabel = useMemo(()=>{
     const text = selectedClassMeta?.subject || selP3?.subject || "";
@@ -15004,7 +15023,7 @@ function AdminPanelInner({user}){
         const teacherName = getTeacherDisplayName(teacher);
         const data = fullData[uid];
         const classesHere = data
-          ? (data.classes || []).filter(cls => cls && !cls.left && sameInstituteName(cls.institute, instituteName))
+          ? activeAdminTeacherClasses(data).filter(cls => sameInstituteName(cls.institute, instituteName))
           : [];
         const teacherTodayEntries = [];
         const teacherYesterdayEntries = [];
@@ -15346,7 +15365,7 @@ function AdminPanelInner({user}){
       const d = fullData[fullView.teacherUid];
       const teacherName = fullView.teacherName || selectedTeacherName(fullView.teacherUid);
       if(!d) return [];
-      return (d.classes||[])
+      return activeAdminTeacherClasses(d)
         .filter(c=>sameInstituteName(c.institute, selInst))
         .flatMap(c=>collectEntriesForTeacherClass(
           fullView.teacherUid,
@@ -15419,7 +15438,7 @@ function AdminPanelInner({user}){
         const d = fullData[t.uid];
         if(!d) return [];
         const teacherName = d.profile?.name || t.name || "Teacher";
-        return (d.classes||[])
+        return activeAdminTeacherClasses(d)
           .filter(c=>sameInstituteName(c.institute, selInst))
           .flatMap(c=>collectEntriesForTeacherClass(
             t.uid,
@@ -15451,7 +15470,7 @@ function AdminPanelInner({user}){
     return teachers.reduce((sum,t)=>{
       const d = fullData[t.uid];
       if(!d) return sum;
-      return sum + (d.classes||[])
+      return sum + activeAdminTeacherClasses(d)
         .filter(c=>sameInstituteName(c.institute, selInst))
         .reduce((classSum,c)=>classSum + Object.values((d.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
     },0);
@@ -15462,7 +15481,7 @@ function AdminPanelInner({user}){
     return teachers.reduce((sum,t)=>{
       const d = fullData[t.uid];
       if(!d) return sum;
-      return sum + (d.classes||[])
+      return sum + activeAdminTeacherClasses(d)
         .filter(c=>sameInstituteName(c.institute, selInst))
         .reduce((classSum,c)=>classSum + getEntriesInRange((d.notes||{})[c.id]||{}, periodDays, periodStartKey, periodEndKey).length,0);
     },0);
@@ -15588,7 +15607,7 @@ function AdminPanelInner({user}){
       const d = fullData[t.uid];
       if(!d) return;
       const teacherName = d.profile?.name || t.name || "Teacher";
-      (d.classes||[])
+      activeAdminTeacherClasses(d)
         .filter(c=>!selInst || sameInstituteName(c.institute, selInst))
         .forEach(c=>{
           const className = normaliseName(resolveAdminSectionName(c.section, c.institute, instSectionsAll) || c.section);
@@ -15627,7 +15646,7 @@ function AdminPanelInner({user}){
         const entryCount = teachers.reduce((sum,t)=>{
           const d = fullData[t.uid];
           if(!d) return sum;
-          return sum + (d.classes||[])
+          return sum + activeAdminTeacherClasses(d)
             .filter(c=>sameInstituteName(c.institute,inst))
             .reduce((classSum,c)=>classSum + Object.values((d.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
         },0);
@@ -16782,7 +16801,7 @@ function AdminPanelInner({user}){
         filename: `${tName}_All_Classes`,
         title: `${tName} — All Classes`,
         meta: `${selInst}`,
-        getRows: (sk, ek) => (d.classes||[])
+        getRows: (sk, ek) => activeAdminTeacherClasses(d)
           .filter(c=>sameInstituteName(c.institute, selInst))
           .flatMap(c => rowsForTeacherClass(selP2, tName, c.id, normaliseName(resolveAdminSectionName(c.section, c.institute, instSectionsAll) || c.section), c.subject, sk, ek, c.institute || selInst))
           .sort(compareExportRows),
@@ -18240,7 +18259,7 @@ function AdminPanelInner({user}){
       });
     };
     const hasLoadedTeacherData = teacher => !!teacher?.uid && Object.prototype.hasOwnProperty.call(fullData, teacher.uid);
-    const loadedTeacherClasses = data => Array.isArray(data?.classes) ? data.classes : [];
+    const loadedTeacherClasses = data => activeAdminTeacherClasses(data);
     const loadedClassInstitutes = data => uniqueLabels(loadedTeacherClasses(data).map(cls=>cls?.institute));
     const isPlaceholderInstitute = value => {
       const key = normaliseName(String(value || "")).toLowerCase();
@@ -18716,12 +18735,12 @@ function AdminPanelInner({user}){
         ...(teacher.institutes || []),
         ...(nextData?.institutes || []),
         ...(nextData?.profile?.institutes || []),
-        ...(nextData?.classes || []).map(cls=>cls?.institute),
+        ...activeAdminTeacherClasses(nextData).map(cls=>cls?.institute),
       ]).filter(inst=>!sameInstituteName(inst, archivedInstitute));
       return {
         ...teacher,
         institutes:stillListed,
-        classCount:Array.isArray(nextData?.classes) ? nextData.classes.length : teacher.classCount,
+        classCount:Array.isArray(nextData?.classes) ? activeAdminTeacherClasses(nextData).length : teacher.classCount,
       };
     };
     const handleArchiveTeacherInstitute = async (row, group, targetInstitute = "") => {
@@ -18948,7 +18967,7 @@ function AdminPanelInner({user}){
     const renderTeacherManagePanel = row => {
       const t = row.teacher;
       const data = fullData[t.uid] || {};
-      const classes = Array.isArray(data.classes) ? data.classes : [];
+      const classes = activeAdminTeacherClasses(data);
       const branchGroups = row.allInstituteGroups?.length ? row.allInstituteGroups : row.instituteGroups || [];
       const primaryBranchGroup = branchGroups.find(group=>sameInstituteName(group.institute, row.primaryInstitute)) || branchGroups[0] || null;
       const canMoveBranch = !!primaryBranchGroup?.institute && !isPlaceholderInstitute(primaryBranchGroup.institute);
@@ -19296,8 +19315,8 @@ function AdminPanelInner({user}){
             { key:"status", label:"Status" },
             { key:"actions", label:"Actions" },
           ],
-          desktopGrid:"minmax(260px,1.4fr) minmax(230px,1.15fr) minmax(150px,0.72fr) minmax(210px,1fr) minmax(126px,0.55fr) minmax(138px,0.62fr) minmax(118px,0.52fr) minmax(178px,0.78fr)",
-          minWidth:1410,
+          desktopGrid:"minmax(230px,1.25fr) minmax(210px,1fr) minmax(132px,0.62fr) minmax(190px,0.92fr) minmax(130px,0.6fr) minmax(148px,0.68fr) minmax(102px,0.46fr) minmax(154px,0.7fr)",
+          minWidth:1280,
           rows:teacherRows,
           rowKey:row=>`teacher_${row.teacher.uid}`,
           emptyMessage:emptyTeacherMessage,
@@ -19796,7 +19815,7 @@ function AdminPanelInner({user}){
     const browseModes = [
       { key:"class", label:"By Class", shortLabel:"Class", icon:IconSchool },
       { key:"teacher", label:"By Teacher", shortLabel:"Teacher", icon:IconUser },
-      { key:"pair", label:"Class + Teacher", shortLabel:"Class+Teacher", icon:IconUsersGroup },
+      { key:"pair", label:"Class + teacher", shortLabel:"Class + teacher", icon:IconUsersGroup },
     ];
     const activeBrowseMode = browseModes.find(item => item.key === adminV5BrowseMode) || browseModes[0];
     const classSearchKey = adminV5ClassSearch.trim().toLowerCase();
@@ -20721,7 +20740,7 @@ function AdminPanelInner({user}){
         </div>
         <div style={{flex:1,minHeight:0,overflowY:adminV5StackedLayout?"visible":"auto",padding:"12px"}}>
           <div style={{fontSize:10.5,fontWeight:900,fontFamily:G.mono,letterSpacing:0.9,textTransform:"uppercase",color:G.textL,margin:"0 2px 11px"}}>
-            {adminV5BrowseMode === "class" ? "Classes" : adminV5BrowseMode === "teacher" ? "Teachers" : "Class + Teacher"}
+            {adminV5BrowseMode === "class" ? "Classes" : adminV5BrowseMode === "teacher" ? "Teachers" : "Class + teacher"}
           </div>
           {adminV5BrowseMode === "class"&&visibleClassSectionGroups.map((group,index)=>
             renderSectionGroup(group, index, null, "classes", { showRows:false, showSectionCards:true })
@@ -21407,7 +21426,7 @@ function AdminPanelInner({user}){
       </div>
       <div style={isMobile
         ? {maxWidth:860,margin:"0 auto",padding:mobileManageOuterPad}
-        : {width:"100%",boxSizing:"border-box",padding:"54px 24px 72px 0",display:"grid",gridTemplateColumns:"48px minmax(0,1fr)",gap:18,alignItems:"start"}}>
+        : {width:"100%",boxSizing:"border-box",padding:"54px 24px 72px 66px",display:"block"}}>
 
         {/* Copy group to institutes modal */}
         {copyGroupModal&&(
@@ -21597,7 +21616,7 @@ function AdminPanelInner({user}){
           </aside>
         )}
 
-        <main style={{minWidth:0,paddingTop:isMobile?0:22,gridColumn:isMobile?undefined:"2 / -1"}}>
+        <main style={{minWidth:0,paddingTop:isMobile?0:22}}>
 
         {/* Institute detail drill-down (replaces tab content when active) */}
         {instDetailView?(()=>{
@@ -21687,8 +21706,8 @@ function AdminPanelInner({user}){
                       </div>
                       <div style={{display:"flex",flexDirection:"column",gap:8}}>
                         {standaloneSections.map(section=>{
-                          const affectedTeachers = teachers.filter(t=>teacherBelongsToInstitute(t,instDetailView)&&(()=>{const d=fullData[t.uid];return d&&(d.classes||[]).some(c=>normaliseSectionKey(c.section)===normaliseSectionKey(section)&&sameInstituteName(c.institute,instDetailView));})());
-                          const affectedClassCount = affectedTeachers.reduce((sum,t)=>{const d=fullData[t.uid];return sum+(d?(d.classes||[]).filter(c=>normaliseSectionKey(c.section)===normaliseSectionKey(section)&&sameInstituteName(c.institute,instDetailView)).length:0);},0);
+                          const affectedTeachers = teachers.filter(t=>teacherBelongsToInstitute(t,instDetailView)&&(()=>{const d=fullData[t.uid];return d&&activeAdminTeacherClasses(d).some(c=>normaliseSectionKey(c.section)===normaliseSectionKey(section)&&sameInstituteName(c.institute,instDetailView));})());
+                          const affectedClassCount = affectedTeachers.reduce((sum,t)=>{const d=fullData[t.uid];return sum+(d?activeAdminTeacherClasses(d).filter(c=>normaliseSectionKey(c.section)===normaliseSectionKey(section)&&sameInstituteName(c.institute,instDetailView)).length:0);},0);
                           const standaloneItem = {section, affectedClassCount, affectedTeacherCount:affectedTeachers.length, subjects:[], teacherNames:affectedTeachers.map(t=>t.displayName||t.email||"").filter(Boolean)};
                           return(
                             <div key={section} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
@@ -23226,7 +23245,7 @@ function AdminPanelInner({user}){
             const name=d.profile?.name||t.name||"?";
             const otherInsts=(t.institutes||[]).filter(i=>i.trim().toLowerCase()!==(selInst||"").trim().toLowerCase());
             const activityLabel = instTeacherMeta[t.uid]?.label || lastEntryCaption(null);
-            const classCount = (d.classes||[]).filter(c=>sameInstituteName(c.institute, selInst)).length;
+            const classCount = activeAdminTeacherClasses(d).filter(c=>sameInstituteName(c.institute, selInst)).length;
             const initial = (name||"A").trim().charAt(0).toUpperCase();
             return(
               <div

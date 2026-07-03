@@ -539,18 +539,27 @@ function buildTeacherIdentityPatch(uid) {
   return patch;
 }
 
+function isActiveTeacherClassRecord(cls) {
+  if (!cls || typeof cls !== "object") return false;
+  if (cls.left || cls.archived || cls.archivedByAdmin || cls.transferArchive) return false;
+  const deletedAt = Number(cls.deletedAt || 0) || 0;
+  return deletedAt <= 0;
+}
+
 function buildTeacherIndexPayload(uid, data) {
-  const classes = Array.isArray(data?.classes) ? data.classes : [];
+  const classes = Array.isArray(data?.classes) ? data.classes.filter(isActiveTeacherClassRecord) : [];
   const classInstitutes = uniqueTrimmed(classes.map(c => c?.institute));
   const profileInstitutes = uniqueTrimmed(Array.isArray(data?.profile?.institutes) ? data.profile.institutes : []);
   const classSubjects = uniqueTrimmed(classes.map(c => c?.subject));
   const profileSubjects = uniqueTrimmed(Array.isArray(data?.profile?.subjects) ? data.profile.subjects : []);
+  const institutes = classInstitutes.length ? classInstitutes : profileInstitutes;
+  const subjects = classSubjects.length ? classSubjects : profileSubjects;
   return {
     uid,
     name: data?.profile?.name || "",
     email: data?.profile?.email || "",
-    institutes: uniqueTrimmed([...classInstitutes, ...profileInstitutes]),
-    subjects: uniqueTrimmed([...classSubjects, ...profileSubjects]),
+    institutes,
+    subjects,
     classCount: classes.length,
     mainRevision: safeRevision(data?._meta?.revision),
     lastActive: Date.now(),

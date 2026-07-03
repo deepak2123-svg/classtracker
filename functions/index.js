@@ -164,6 +164,17 @@ function classesFromMain(main) {
   return Array.isArray(main?.classes) ? main.classes.filter(Boolean) : [];
 }
 
+function isActiveClassRecord(cls) {
+  if (!cls || typeof cls !== "object") return false;
+  if (cls.left || cls.archived || cls.archivedByAdmin || cls.transferArchive) return false;
+  const deletedAt = Number(cls.deletedAt || 0) || 0;
+  return deletedAt <= 0;
+}
+
+function activeClassesFromMain(main) {
+  return classesFromMain(main).filter(isActiveClassRecord);
+}
+
 function classFromMain(main, classId) {
   const target = normaliseText(classId);
   if (!target) return null;
@@ -193,9 +204,23 @@ function teacherBelongsToInstitute(teacher, main, instituteName) {
   return instituteNamesFromTeacher(teacher, main).some(item => sameInstituteName(item, instituteName));
 }
 
+function activeInstituteNamesFromTeacher(teacher, main) {
+  const classes = classesFromMain(main);
+  const activeClassInstitutes = uniqueLabels(activeClassesFromMain(main).map(cls => cls?.institute));
+  if (classes.length) return activeClassInstitutes;
+  return uniqueLabels([
+    ...(Array.isArray(teacher?.institutes) ? teacher.institutes : []),
+    ...(Array.isArray(main?.institutes) ? main.institutes : []),
+    ...(Array.isArray(main?.profile?.institutes) ? main.profile.institutes : []),
+  ]);
+}
+
+function teacherActivelyBelongsToInstitute(teacher, main, instituteName) {
+  return activeInstituteNamesFromTeacher(teacher, main).some(item => sameInstituteName(item, instituteName));
+}
+
 function classesForInstitute(main, instituteName) {
-  return classesFromMain(main).filter(cls => {
-    if (cls?.left || cls?.archived) return false;
+  return activeClassesFromMain(main).filter(cls => {
     return sameInstituteName(cls?.institute, instituteName);
   });
 }
@@ -246,6 +271,22 @@ async function readRoles() {
   return roles;
 }
 
+async function readRoleDetails() {
+  const snap = await db.collection("roles").get();
+  const roles = new Map();
+  snap.docs.forEach(docSnap => {
+    const data = docSnap.data() || {};
+    const role = normaliseText(data.role || "teacher") || "teacher";
+    roles.set(docSnap.id, {
+      ...data,
+      role,
+      adminMode: normaliseText(data.adminMode || data.mode || ""),
+      teaches: data.teaches === true || data.isTeacher === true,
+    });
+  });
+  return roles;
+}
+
 async function readTeacherIndex() {
   const snap = await db.collection("teachers").get();
   const teachers = new Map();
@@ -289,26 +330,31 @@ async function readAllUserMains() {
 }
 
 function teacherSummaryFromMain(uid, main) {
-  const classes = classesFromMain(main);
+  const classes = activeClassesFromMain(main);
+  const classInstitutes = uniqueLabels(classes.map(cls => cls?.institute));
+  const profileInstitutes = uniqueLabels([
+    ...(Array.isArray(main?.institutes) ? main.institutes : []),
+    ...(Array.isArray(main?.profile?.institutes) ? main.profile.institutes : []),
+  ]);
+  const classSubjects = uniqueLabels(classes.map(classSubject));
+  const profileSubjects = uniqueLabels(Array.isArray(main?.profile?.subjects) ? main.profile.subjects : []);
   return {
     uid,
     name: normaliseText(main?.profile?.name),
-    institutes: instituteNamesFromMain(main),
-    subjects: uniqueLabels([
-      ...(Array.isArray(main?.profile?.subjects) ? main.profile.subjects : []),
-      ...classes.map(classSubject),
-    ]),
+    institutes: classInstitutes.length ? classInstitutes : profileInstitutes,
+    subjects: classSubjects.length ? classSubjects : profileSubjects,
     classCount: classes.length,
   };
 }
 
 async function buildStatsContext() {
-  const [removedTeacherIds, roles, teacherIndex, instituteConfig] = await Promise.all([
+  const [removedTeacherIds, roleDetails, teacherIndex, instituteConfig] = await Promise.all([
     readRemovedTeacherIds(),
-    readRoles(),
+    readRoleDetails(),
     readTeacherIndex(),
     readInstituteConfig(),
   ]);
+  const roles = new Map([...roleDetails.entries()].map(([uid, roleData]) => [uid, roleData.role || "teacher"]));
 
   const discoveredMains = await readAllUserMains();
   discoveredMains.forEach((main, uid) => {
@@ -321,12 +367,13 @@ async function buildStatsContext() {
       const existing = teacherIndex.get(uid) || { uid };
       const existingInstitutes = Array.isArray(existing.institutes) ? existing.institutes : [];
       const existingSubjects = Array.isArray(existing.subjects) ? existing.subjects : [];
+      const hasActiveClasses = (Number(summary.classCount || 0) || 0) > 0;
       teacherIndex.set(uid, {
         ...existing,
         name: existing.name || summary.name,
-        institutes: existingInstitutes.length ? existingInstitutes : summary.institutes,
-        subjects: existingSubjects.length ? existingSubjects : summary.subjects,
-        classCount: Math.max(Number(existing.classCount || 0) || 0, summary.classCount || 0),
+        institutes: hasActiveClasses ? summary.institutes : (existingInstitutes.length ? existingInstitutes : summary.institutes),
+        subjects: hasActiveClasses ? summary.subjects : (existingSubjects.length ? existingSubjects : summary.subjects),
+        classCount: hasActiveClasses ? summary.classCount : Math.max(Number(existing.classCount || 0) || 0, summary.classCount || 0),
         uid,
       });
     }
@@ -347,6 +394,7 @@ async function buildStatsContext() {
   return {
     removedTeacherIds,
     roles,
+    roleDetails,
     teachers: uids.map(uid => ({ ...(teacherIndex.get(uid) || {}), uid })),
     teachersByUid: teacherIndex,
     mains,
@@ -355,10 +403,23 @@ async function buildStatsContext() {
   };
 }
 
+function isAdminTeacherStatsAccount(context, uid) {
+  const roleData = context.roleDetails?.get?.(normaliseText(uid));
+  if (!roleData || roleData.role !== "admin") return false;
+  return roleData.teaches === true || roleData.adminMode === "admin_teacher" || roleData.adminMode === "admin+teacher";
+}
+
+function isCountedTeacherStatsAccount(context, uid) {
+  const safeUid = normaliseText(uid);
+  if (!safeUid || context.removedTeacherIds.has(safeUid)) return false;
+  const role = context.roles.get(safeUid) || "teacher";
+  if (role !== "admin") return true;
+  return isAdminTeacherStatsAccount(context, safeUid);
+}
+
 function isActiveTeacher(context, teacher) {
   const uid = normaliseText(teacher?.uid);
-  if (!uid || context.removedTeacherIds.has(uid)) return false;
-  return (context.roles.get(uid) || "teacher") !== "admin";
+  return isCountedTeacherStatsAccount(context, uid);
 }
 
 async function getNoteDocs(noteRefs) {
@@ -379,27 +440,25 @@ async function rebuildInstituteDateStats(instituteName, dateKey, context = null)
 
   let activeTeachers = 0;
   const loggedTeachers = new Set();
-  const teachingAdminTeachers = new Set();
   const classKeys = new Set();
   const noteRefs = [];
   const noteMeta = [];
 
   statsContext.teachers.forEach(teacher => {
     const uid = normaliseText(teacher.uid);
-    if (!uid || statsContext.removedTeacherIds.has(uid)) return;
-    const isAdminAccount = (statsContext.roles.get(uid) || "teacher") === "admin";
+    if (!isCountedTeacherStatsAccount(statsContext, uid)) return;
     const main = statsContext.mains.get(uid) || {};
-    if (!teacherBelongsToInstitute(teacher, main, institute)) return;
+    if (!teacherActivelyBelongsToInstitute(teacher, main, institute)) return;
 
-    if (!isAdminAccount) activeTeachers += 1;
+    activeTeachers += 1;
     classesForInstitute(main, institute).forEach(cls => {
       const classId = classIdOf(cls);
       const className = classDisplayName(cls);
       const classKey = classId || `${summaryKey(className)}::${summaryKey(classSubject(cls))}`;
-      if (classKey && !isAdminAccount) classKeys.add(classKey);
+      if (classKey) classKeys.add(classKey);
       if (!classId) return;
       noteRefs.push(db.doc(`users/${uid}/appdata/notes_${classId}`));
-      noteMeta.push({ uid, classId, className, classKey, isAdminAccount });
+      noteMeta.push({ uid, classId, className, classKey });
     });
   });
 
@@ -414,15 +473,10 @@ async function rebuildInstituteDateStats(instituteName, dateKey, context = null)
     const validEntries = entries.filter(entry => entry && typeof entry === "object");
     if (!validEntries.length) return;
     loggedTeachers.add(meta.uid);
-    if (meta.isAdminAccount) {
-      teachingAdminTeachers.add(meta.uid);
-      if (meta.classKey) classKeys.add(meta.classKey);
-    }
     entriesToday += validEntries.length;
     todayMinutes += validEntries.reduce((sum, entry) => sum + entryDurationMinutes(entry), 0);
   });
 
-  activeTeachers += teachingAdminTeachers.size;
   const loggedToday = loggedTeachers.size;
   const pendingTeachers = Math.max(0, activeTeachers - loggedToday);
   const updatedPct = activeTeachers ? Math.round((loggedToday / activeTeachers) * 100) : 0;
@@ -582,16 +636,24 @@ exports.refreshDailyInstituteStatsOnTeacherIndexWrite = onDocumentWritten(
 exports.refreshDailyInstituteStatsOnRoleWrite = onDocumentWritten(
   "roles/{uid}",
   async event => {
-    const beforeRole = normaliseText(event.data?.before?.data()?.role || "teacher") || "teacher";
-    const afterRole = normaliseText(event.data?.after?.data()?.role || "teacher") || "teacher";
-    if (beforeRole === afterRole) return;
+    const roleDigest = data => {
+      const roleData = data || {};
+      return JSON.stringify({
+        role: normaliseText(roleData.role || "teacher") || "teacher",
+        adminMode: normaliseText(roleData.adminMode || roleData.mode || ""),
+        teaches: roleData.teaches === true || roleData.isTeacher === true,
+      });
+    };
+    const beforeDigest = roleDigest(event.data?.before?.data() || {});
+    const afterDigest = roleDigest(event.data?.after?.data() || {});
+    if (beforeDigest === afterDigest) return;
 
     const today = dateKeyForTimeZone();
     const context = await buildStatsContext();
     const uid = normaliseText(event.params.uid);
     const main = context.mains.get(uid) || {};
     const teacher = context.teachersByUid.get(uid) || { uid };
-    await rebuildInstitutesForDate(instituteNamesFromTeacher(teacher, main), today, context);
+    await rebuildInstitutesForDate(activeInstituteNamesFromTeacher(teacher, main), today, context);
   }
 );
 
