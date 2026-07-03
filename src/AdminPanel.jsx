@@ -20836,38 +20836,12 @@ function AdminPanelInner({user}){
         : activeTimelineScope === "class"
           ? String(selectedClass?.display || "CL").slice(0, 2).toUpperCase()
           : "IN";
-      const timelineCrumb = pairTimelineActive
-        ? [selectedClass?.display, selectedTeacher?.name].filter(Boolean)
-        : activeTimelineScope === "teacher"
-          ? ["By Teacher", selectedTeacher?.name].filter(Boolean)
-          : activeTimelineScope === "class"
-            ? ["By Class", selectedClass?.display].filter(Boolean)
-            : ["Institute", selectedInstituteName].filter(Boolean);
-      const classOnlyTimeline = activeTimelineScope === "class" && !pairTimelineActive;
       return (
         <main style={{background:shellBg,minWidth:0,height:adminV5StackedLayout?"auto":"100%",display:"flex",flexDirection:"column",overflow:adminV5StackedLayout?"visible":"hidden"}}>
         <div style={{padding:adminV5StackedLayout ? "16px 16px 13px" : "20px 24px 16px",background:"#F8FAFC",borderBottom:panelBorder}}>
-          {!classOnlyTimeline&&(
-          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,marginBottom:8}}>
-            {timelineCrumb.map((item,index)=>(
-              <React.Fragment key={`${item}_${index}`}>
-                {index > 0&&<span style={{fontSize:12,color:G.textL,fontWeight:900}}>›</span>}
-                <span style={{fontSize:13,color:index === 0 ? G.blue : G.text,fontWeight:950,fontFamily:G.display,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:index === 0 ? 160 : 260}}>
-                  {item}
-                </span>
-              </React.Fragment>
-            ))}
-          </div>
-          )}
-          {!classOnlyTimeline&&<div style={{fontSize:11,fontFamily:G.mono,fontWeight:950,letterSpacing:1.2,textTransform:"uppercase",color:G.textL}}>Timeline</div>}
-          <div style={{fontSize:adminV5StackedLayout ? 28 : 34,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.02,marginTop:classOnlyTimeline ? 0 : 7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+          <div style={{fontSize:adminV5StackedLayout ? 28 : 34,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.02,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
             {timelineTitle}
           </div>
-          {!classOnlyTimeline&&(
-          <div style={{fontSize:14,color:G.textS,lineHeight:1.4,marginTop:8,fontWeight:850}}>
-            {selectedInstituteName}
-          </div>
-          )}
           <div style={{display:"grid",gridTemplateColumns:adminV5StackedLayout ? "1fr" : "68px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",gap:adminV5StackedLayout ? 10 : 0,alignItems:"center",background:"#EAF2FF",border:"1px solid #DFEAFF",borderRadius:12,padding:adminV5StackedLayout ? "12px" : "14px 18px",marginTop:18}}>
             <span style={{width:44,height:44,borderRadius:999,background:"#FFFFFF",color:G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:950,fontFamily:G.mono}}>
               {timelineHeaderInitials}
