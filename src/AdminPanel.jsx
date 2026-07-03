@@ -20807,40 +20807,11 @@ function AdminPanelInner({user}){
           </main>
         );
       }
-      const timelineTotalMinutes = timelineSourceEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
-      const timelineScopeValue = pairTimelineActive
-        ? `${selectedClass?.display || "Class"} only`
-        : activeTimelineScope === "teacher"
-          ? `${selectedTeacherSummary?.classList?.length || 0} section${selectedTeacherSummary?.classList?.length === 1 ? "" : "s"}`
-          : activeTimelineScope === "class"
-            ? `${selectedClassTeacherRows.length} teacher${selectedClassTeacherRows.length === 1 ? "" : "s"}`
-            : `${selectedInstitute?.classes?.length || 0} section${selectedInstitute?.classes?.length === 1 ? "" : "s"}`;
-      const timelineHeaderInitials = activeTimelineScope === "teacher"
-        ? adminV5Initials(selectedTeacher?.name)
-        : activeTimelineScope === "class"
-          ? String(selectedClass?.display || "CL").slice(0, 2).toUpperCase()
-          : "IN";
-      const timelineHeaderStats = [
-        ["Scope", timelineScopeValue],
-        ["Entries", entryCountText(timelineTotal)],
-        ["Shown time", formatDurationShort(timelineTotalMinutes)],
-      ];
       return (
         <main style={{background:shellBg,minWidth:0,height:adminV5StackedLayout?"auto":"100%",display:"flex",flexDirection:"column",overflow:adminV5StackedLayout?"visible":"hidden"}}>
         <div style={{padding:adminV5StackedLayout ? "16px 16px 13px" : "20px 24px 16px",background:"#F8FAFC",borderBottom:panelBorder}}>
           <div style={{fontSize:adminV5StackedLayout ? 28 : 34,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.02,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
             {timelineTitle}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:adminV5StackedLayout ? "1fr" : "68px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",gap:adminV5StackedLayout ? 10 : 0,alignItems:"center",background:"#EAF2FF",border:"1px solid #DFEAFF",borderRadius:12,padding:adminV5StackedLayout ? "12px" : "14px 18px",marginTop:18}}>
-            <span style={{width:44,height:44,borderRadius:999,background:"#FFFFFF",color:G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:950,fontFamily:G.mono}}>
-              {timelineHeaderInitials}
-            </span>
-            {timelineHeaderStats.map(([label,value],index)=>(
-              <div key={label} style={{borderLeft:!adminV5StackedLayout && index > 0 ? "1px solid #C7D7F5" : "none",paddingLeft:!adminV5StackedLayout && index > 0 ? 18 : 0,minWidth:0}}>
-                <div style={{fontSize:11,color:G.blue,fontFamily:G.mono,fontWeight:950,letterSpacing:0.5,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
-                <div style={{fontSize:16,color:G.text,fontWeight:950,fontFamily:G.display,lineHeight:1.1,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{value}</div>
-              </div>
-            ))}
           </div>
           <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:adminV5StackedLayout ? "9px" : "10px",marginTop:13}}>
             <PeriodSelector
