@@ -2579,6 +2579,156 @@ function triggerBlobDownload(blob, filename){
     URL.revokeObjectURL(url);
   }, 60000);
 }
+async function renderInstituteGlanceCopyTextImageBlob({ text, mimeType = "image/png" } = {}){
+  await waitForCanvasFonts();
+  const safeText = String(text || "").trim();
+  if(!safeText) throw new Error("No report text available.");
+
+  const rawLines = safeText.split(/\r?\n/);
+  const readValue = (prefix, fallback = "") => {
+    const found = rawLines.find(line => line.toLowerCase().startsWith(prefix.toLowerCase()));
+    return found ? found.replace(new RegExp(`^${prefix}\\s*`, "i"), "").trim() : fallback;
+  };
+  const centre = readValue("Centre:", "Institute");
+  const generated = readValue("Report generated:", "");
+  const period = readValue("Period:", "Today");
+  const summary = readValue("Summary:", "");
+  const bodyStart = rawLines.findIndex(line => /^Updated\s*\(/i.test(line));
+  const bodyLines = rawLines.slice(bodyStart >= 0 ? bodyStart : 0);
+
+  const width = 1180;
+  const margin = 34;
+  const cardX = 28;
+  const cardY = 28;
+  const cardWidth = width - cardX * 2;
+  const contentX = cardX + margin;
+  const contentWidth = cardWidth - margin * 2;
+  const metaGap = 14;
+  const metaWidth = (contentWidth - metaGap * 2) / 3;
+  const rowGap = 8;
+  const sectionGap = 14;
+
+  const measureCanvas = document.createElement("canvas");
+  measureCanvas.width = width;
+  measureCanvas.height = 400;
+  const measureCtx = measureCanvas.getContext("2d");
+  if(!measureCtx) throw new Error("Canvas is not available.");
+
+  const reportLineMeta = bodyLines.map(line => {
+    const value = String(line || "");
+    const blank = !value.trim();
+    const heading = /^Updated\s*\(|^Not updated\s*\(/i.test(value.trim());
+    const font = heading ? "800 24px 'Poppins',sans-serif" : "600 17px 'Inter',sans-serif";
+    measureCtx.font = font;
+    const wrapped = blank ? [] : wrapCanvasText(measureCtx, value, contentWidth - (heading ? 0 : 14));
+    const lineHeight = heading ? 31 : 23;
+    return {
+      value,
+      blank,
+      heading,
+      wrapped,
+      font,
+      lineHeight,
+      height: blank ? 12 : wrapped.length * lineHeight + (heading ? sectionGap : rowGap),
+    };
+  });
+
+  const titleFont = "800 42px 'Poppins',sans-serif";
+  measureCtx.font = titleFont;
+  const titleLines = wrapCanvasText(measureCtx, centre, contentWidth);
+  const titleHeight = Math.max(52, titleLines.length * 50);
+  const bodyHeight = reportLineMeta.reduce((sum, item) => sum + item.height, 0);
+  const cardHeight = 42 + 22 + titleHeight + 92 + 28 + bodyHeight + 34;
+  const height = Math.max(760, Math.ceil(cardY * 2 + cardHeight));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if(!ctx) throw new Error("Canvas is not available.");
+
+  ctx.fillStyle = "#F5F7FA";
+  ctx.fillRect(0, 0, width, height);
+  drawRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 28);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fill();
+  ctx.strokeStyle = "#DDE3ED";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  let y = cardY + 34;
+  ctx.fillStyle = G.blue;
+  ctx.font = "900 16px 'Inter',sans-serif";
+  ctx.textBaseline = "top";
+  ctx.fillText("LEDGR REPORT", contentX, y);
+  y += 28;
+
+  ctx.fillStyle = G.text;
+  ctx.font = titleFont;
+  titleLines.forEach(line => {
+    ctx.fillText(line, contentX, y);
+    y += 50;
+  });
+  y += 12;
+
+  const metaItems = [
+    { label:"Generated", value:generated || "Just now" },
+    { label:"Period", value:period },
+    { label:"Summary", value:summary || "No summary available" },
+  ];
+  metaItems.forEach((item, index) => {
+    const x = contentX + index * (metaWidth + metaGap);
+    drawRoundedRect(ctx, x, y, metaWidth, 78, 16);
+    ctx.fillStyle = "#EEF4FF";
+    ctx.fill();
+    ctx.strokeStyle = "#C7D7F5";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = G.blue;
+    ctx.font = "900 12px 'Inter',sans-serif";
+    ctx.fillText(item.label.toUpperCase(), x + 17, y + 15);
+    ctx.fillStyle = G.text;
+    ctx.font = "800 18px 'Inter',sans-serif";
+    const lines = wrapCanvasText(ctx, item.value, metaWidth - 34).slice(0, 2);
+    lines.forEach((line, lineIndex) => ctx.fillText(line, x + 17, y + 39 + lineIndex * 20));
+  });
+  y += 106;
+
+  reportLineMeta.forEach(item => {
+    if(item.blank){
+      y += item.height;
+      return;
+    }
+    ctx.font = item.font;
+    ctx.fillStyle = item.heading ? G.text : "#334155";
+    if(item.heading){
+      drawRoundedRect(ctx, contentX, y - 4, contentWidth, 42, 14);
+      ctx.fillStyle = "#F8FAFC";
+      ctx.fill();
+      ctx.strokeStyle = "#E5EAF2";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = G.text;
+      item.wrapped.forEach((line, lineIndex) => ctx.fillText(line, contentX + 16, y + lineIndex * item.lineHeight));
+    }else{
+      item.wrapped.forEach((line, lineIndex) => ctx.fillText(line, contentX + 8, y + lineIndex * item.lineHeight));
+    }
+    y += item.height;
+  });
+
+  const imageType = mimeType === "image/jpeg" ? "image/jpeg" : "image/png";
+  const quality = imageType === "image/jpeg" ? 0.94 : undefined;
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, imageType, quality));
+  if(!blob) throw new Error("Could not render report image.");
+  return blob;
+}
+async function copyBlobImageToClipboard(blob){
+  if(!blob) throw new Error("No image available.");
+  if(!navigator?.clipboard?.write || typeof ClipboardItem === "undefined"){
+    throw new Error("Image clipboard is not supported in this browser.");
+  }
+  await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+}
 function getTeacherInstituteListFromMap(teacher, fullDataMap){
   const list = [];
   const add = (value) => {
@@ -11227,6 +11377,7 @@ function AdminPanelInner({user}){
   const [instituteGlanceRangeEnd, setInstituteGlanceRangeEnd] = useState(() => todayKey());
   const [instituteGlanceExportBusy, setInstituteGlanceExportBusy] = useState("");
   const [instituteGlanceRowExportBusy, setInstituteGlanceRowExportBusy] = useState("");
+  const [instituteGlanceRowImageBusy, setInstituteGlanceRowImageBusy] = useState("");
   const [ledgrReportSchedule, setLedgrReportSchedule] = useState(null);
   const [ledgrReportScheduleLoading, setLedgrReportScheduleLoading] = useState(true);
   const [ledgrReportScheduleSaving, setLedgrReportScheduleSaving] = useState(false);
@@ -13503,7 +13654,7 @@ function AdminPanelInner({user}){
   const instituteGlanceProgressPct = instituteGlanceReport.total
     ? Math.max(0, Math.min(100, Math.round((instituteGlanceReport.loaded / instituteGlanceReport.total) * 100)))
     : 0;
-  const instituteGlanceAnyExportBusy = !!instituteGlanceExportBusy || !!instituteGlanceRowExportBusy;
+  const instituteGlanceAnyExportBusy = !!instituteGlanceExportBusy || !!instituteGlanceRowExportBusy || !!instituteGlanceRowImageBusy;
   const instituteGlanceExportDisabled = instituteGlanceAnyExportBusy || !instituteGlanceReport.ready || !!instituteGlanceReport.error;
   const instituteGlanceHoldListOnMobile = isMobile && instituteGlanceReport.loading && !instituteGlanceReport.ready;
 
@@ -14045,6 +14196,39 @@ function AdminPanelInner({user}){
     }
   };
 
+  const getInstituteGlanceImageBusyKey = (row, extension = "png") => `${row?.institute || "institute"}:${extension}`;
+  const isInstituteGlanceRowImageFormatBusy = (row, extension = "png") => (
+    instituteGlanceRowImageBusy === getInstituteGlanceImageBusyKey(row, extension)
+  );
+
+  const copyInstituteGlanceNamesImage = async (row, format = "png") => {
+    if(!row?.ready || instituteGlanceRowImageBusy) return;
+    const imageType = format === "jpeg" || format === "jpg" ? "image/jpeg" : "image/png";
+    const extension = imageType === "image/jpeg" ? "jpg" : "png";
+    const busyKey = getInstituteGlanceImageBusyKey(row, extension);
+    setInstituteGlanceRowImageBusy(busyKey);
+    try {
+      const text = buildInstituteGlanceNamesText(row);
+      const blob = await renderInstituteGlanceCopyTextImageBlob({ text, mimeType:imageType });
+      try {
+        await copyBlobImageToClipboard(blob);
+        showAdminToast(`Report ${extension.toUpperCase()} copied for ${safeAdminText(row.institute, "this institute")}.`);
+      } catch {
+        const { rangeStartKey, rangeEndKey } = getInstituteGlancePeriodRange();
+        triggerBlobDownload(
+          blob,
+          ledgrReportDownloadFilename(row.institute || "Institute", instituteGlancePeriod, rangeStartKey, rangeEndKey, extension, { prefix:"Ledgr Report Image" })
+        );
+        showAdminToast("Image clipboard is unavailable here, so the report image was downloaded.");
+      }
+    } catch (error) {
+      console.error("institute glance image copy failed", error);
+      showAdminToast("Could not copy the report image.");
+    } finally {
+      setInstituteGlanceRowImageBusy("");
+    }
+  };
+
   const renderInstituteGlanceNamesBlock = (row, compact = false) => {
     if(!row?.ready || row.noTeachersSignedUp) return null;
     const { updated, pending } = getInstituteGlanceNameLists(row);
@@ -14146,7 +14330,8 @@ function AdminPanelInner({user}){
                   : row.missingToday > 0
                     ? `${row.missingToday} teacher${row.missingToday === 1 ? "" : "s"} need follow-up.`
                     : "All linked teachers are updated.";
-              const actionDisabled = !interactive || !row.ready || !!instituteGlanceRowExportBusy;
+              const rowActionBusy = !!instituteGlanceRowExportBusy || !!instituteGlanceRowImageBusy;
+              const actionDisabled = !interactive || !row.ready || rowActionBusy;
               return (
                 <tr key={row.institute}>
                   <td style={{padding:"15px 16px",borderBottom:`1px solid ${G.border}`,verticalAlign:"top"}}>
@@ -14231,6 +14416,54 @@ function AdminPanelInner({user}){
                         <button
                           type="button"
                           className="admin-mobile-touch"
+                          onClick={()=>copyInstituteGlanceNamesImage(row, "png")}
+                          disabled={actionDisabled}
+                          style={{
+                            minHeight:34,
+                            padding:"0 11px",
+                            borderRadius:11,
+                            border:`1px solid #C7D7F5`,
+                            background:"#EFF6FF",
+                            color:G.blue,
+                            fontSize:12,
+                            fontWeight:800,
+                            fontFamily:G.sans,
+                            cursor:actionDisabled ? "not-allowed" : "pointer",
+                            opacity:actionDisabled && !isInstituteGlanceRowImageFormatBusy(row, "png") ? 0.65 : 1,
+                            display:"inline-flex",
+                            alignItems:"center",
+                            gap:6,
+                          }}>
+                          <AppIcon icon={IconPhoto} size={14} color={G.blue} />
+                          <span>{isInstituteGlanceRowImageFormatBusy(row, "png") ? "PNG..." : "Copy PNG"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-mobile-touch"
+                          onClick={()=>copyInstituteGlanceNamesImage(row, "jpg")}
+                          disabled={actionDisabled}
+                          style={{
+                            minHeight:34,
+                            padding:"0 11px",
+                            borderRadius:11,
+                            border:`1px solid #D8DEE8`,
+                            background:"#FFFFFF",
+                            color:G.text,
+                            fontSize:12,
+                            fontWeight:800,
+                            fontFamily:G.sans,
+                            cursor:actionDisabled ? "not-allowed" : "pointer",
+                            opacity:actionDisabled && !isInstituteGlanceRowImageFormatBusy(row, "jpg") ? 0.65 : 1,
+                            display:"inline-flex",
+                            alignItems:"center",
+                            gap:6,
+                          }}>
+                          <AppIcon icon={IconPhoto} size={14} color={G.text} />
+                          <span>{isInstituteGlanceRowImageFormatBusy(row, "jpg") ? "JPG..." : "Copy JPG"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-mobile-touch"
                           onClick={()=>exportInstituteGlanceRowPdf(row)}
                           disabled={actionDisabled}
                           style={{
@@ -14256,7 +14489,7 @@ function AdminPanelInner({user}){
                           type="button"
                           className="admin-mobile-touch"
                           onClick={()=>openInstituteFromGlance(row)}
-                          disabled={!row.ready || !!instituteGlanceRowExportBusy}
+                          disabled={!row.ready || rowActionBusy}
                           style={{
                             minHeight:34,
                             padding:"0 11px",
@@ -14267,8 +14500,8 @@ function AdminPanelInner({user}){
                             fontSize:12,
                             fontWeight:800,
                             fontFamily:G.sans,
-                            cursor:!row.ready || instituteGlanceRowExportBusy ? "not-allowed" : "pointer",
-                            opacity:!row.ready || instituteGlanceRowExportBusy ? 0.7 : 1,
+                            cursor:!row.ready || rowActionBusy ? "not-allowed" : "pointer",
+                            opacity:!row.ready || rowActionBusy ? 0.7 : 1,
                             display:"inline-flex",
                             alignItems:"center",
                             gap:6,
@@ -14317,6 +14550,7 @@ function AdminPanelInner({user}){
                 ? { bg:"#EEF4FF", border:"#C7D7F5", pillBg:"#DBEAFE", pillColor:G.blue, meta:"#1E3A8A" }
                 : { bg:"#FFF7ED", border:"#FED7AA", pillBg:"#FFEDD5", pillColor:"#B45309", meta:"#9A3412" };
           const canOpen = interactive && row.ready;
+          const cardActionBusy = !!instituteGlanceRowExportBusy || !!instituteGlanceRowImageBusy;
           const pendingText = !row.ready
             ? `Loading ${row.loadedTeachers}/${row.totalTeachers}`
             : row.noTeachersSignedUp
@@ -14406,8 +14640,32 @@ function AdminPanelInner({user}){
                   <button
                     type="button"
                     className="admin-mobile-touch"
-                    onClick={()=>exportInstituteGlanceRowPdf(row)}
-                    disabled={!!instituteGlanceRowExportBusy}
+                    onClick={()=>copyInstituteGlanceNamesImage(row, "png")}
+                    disabled={cardActionBusy}
+                    style={{
+                      minHeight:36,
+                      padding:"0 12px",
+                      borderRadius:12,
+                      border:`1px solid #C7D7F5`,
+                      background:"#EFF6FF",
+                      color:G.blue,
+                      fontSize:12.5,
+                      fontWeight:800,
+                      fontFamily:G.sans,
+                      cursor:cardActionBusy ? "not-allowed" : "pointer",
+                      opacity:cardActionBusy && !isInstituteGlanceRowImageFormatBusy(row, "png") ? 0.65 : 1,
+                      display:"inline-flex",
+                      alignItems:"center",
+                      gap:6,
+                    }}>
+                    <AppIcon icon={IconPhoto} size={14} color={G.blue} />
+                    <span>{isInstituteGlanceRowImageFormatBusy(row, "png") ? "PNG..." : "Copy PNG"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-mobile-touch"
+                    onClick={()=>copyInstituteGlanceNamesImage(row, "jpg")}
+                    disabled={cardActionBusy}
                     style={{
                       minHeight:36,
                       padding:"0 12px",
@@ -14418,8 +14676,32 @@ function AdminPanelInner({user}){
                       fontSize:12.5,
                       fontWeight:800,
                       fontFamily:G.sans,
-                      cursor:instituteGlanceRowExportBusy ? "not-allowed" : "pointer",
-                      opacity:instituteGlanceRowExportBusy && instituteGlanceRowExportBusy !== row.institute ? 0.65 : 1,
+                      cursor:cardActionBusy ? "not-allowed" : "pointer",
+                      opacity:cardActionBusy && !isInstituteGlanceRowImageFormatBusy(row, "jpg") ? 0.65 : 1,
+                      display:"inline-flex",
+                      alignItems:"center",
+                      gap:6,
+                    }}>
+                    <AppIcon icon={IconPhoto} size={14} color={G.text} />
+                    <span>{isInstituteGlanceRowImageFormatBusy(row, "jpg") ? "JPG..." : "Copy JPG"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-mobile-touch"
+                    onClick={()=>exportInstituteGlanceRowPdf(row)}
+                    disabled={cardActionBusy}
+                    style={{
+                      minHeight:36,
+                      padding:"0 12px",
+                      borderRadius:12,
+                      border:`1px solid ${G.border}`,
+                      background:"#FFFFFF",
+                      color:G.text,
+                      fontSize:12.5,
+                      fontWeight:800,
+                      fontFamily:G.sans,
+                      cursor:cardActionBusy ? "not-allowed" : "pointer",
+                      opacity:cardActionBusy && instituteGlanceRowExportBusy !== row.institute ? 0.65 : 1,
                       display:"inline-flex",
                       alignItems:"center",
                       gap:6,
@@ -14431,7 +14713,7 @@ function AdminPanelInner({user}){
                     type="button"
                     className="admin-mobile-touch"
                     onClick={()=>openInstituteFromGlance(row)}
-                    disabled={!!instituteGlanceRowExportBusy}
+                    disabled={cardActionBusy}
                     style={{
                       minHeight:36,
                       padding:"0 12px",
@@ -14442,8 +14724,8 @@ function AdminPanelInner({user}){
                       fontSize:12.5,
                       fontWeight:800,
                       fontFamily:G.sans,
-                      cursor:instituteGlanceRowExportBusy ? "not-allowed" : "pointer",
-                      opacity:instituteGlanceRowExportBusy ? 0.7 : 1,
+                      cursor:cardActionBusy ? "not-allowed" : "pointer",
+                      opacity:cardActionBusy ? 0.7 : 1,
                       display:"inline-flex",
                       alignItems:"center",
                       gap:6,
