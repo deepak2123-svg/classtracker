@@ -20548,7 +20548,7 @@ function AdminPanelInner({user}){
           { bg:"#ECFEFF", border:"#BAE6FD", ink:"#0E7490" },
         ][index % 5];
         return (
-          <div key={group.key} style={{background:"#FFFFFF",border:`1px solid ${expanded ? groupTone.border : "rgba(148,163,184,0.26)"}`,borderRadius:9,overflow:"hidden",marginBottom:8}}>
+          <div key={group.key} style={{background:"#FFFFFF",border:`1px solid ${groupTone.border}`,borderRadius:9,overflow:"hidden",marginBottom:8}}>
             <button
               type="button"
               aria-expanded={hasBody ? expanded : undefined}
@@ -20562,7 +20562,7 @@ function AdminPanelInner({user}){
               style={{
                 width:"100%",
                 border:"none",
-                background:expanded ? groupTone.bg : "#FFFFFF",
+                background:groupTone.bg,
                 padding:"9px 12px",
                 display:"flex",
                 alignItems:"center",
@@ -20571,8 +20571,8 @@ function AdminPanelInner({user}){
                 cursor:hasBody ? "pointer" : "default",
                 fontFamily:G.sans,
               }}>
-              {hasBody&&<span style={{fontSize:10.5,color:expanded ? groupTone.ink : G.textL,fontWeight:950,transform:expanded ? "rotate(90deg)" : "none",transition:"transform 160ms ease",flex:"0 0 auto"}}>›</span>}
-              <span style={{fontSize:12.5,fontWeight:850,color:expanded ? groupTone.ink : G.text,fontFamily:G.sans,letterSpacing:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+              {hasBody&&<span style={{fontSize:10.5,color:groupTone.ink,fontWeight:950,transform:expanded ? "rotate(90deg)" : "none",transition:"transform 160ms ease",flex:"0 0 auto"}}>›</span>}
+              <span style={{fontSize:12.5,fontWeight:850,color:groupTone.ink,fontFamily:G.sans,letterSpacing:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                 {group.label}
               </span>
             </button>
@@ -20807,35 +20807,24 @@ function AdminPanelInner({user}){
           </main>
         );
       }
-      const latestEntry = timelineSourceEntries[0] || null;
-      const latestDateLabel = latestEntry?.dateKey === todayKey()
-        ? "Today"
-        : latestEntry?.dateKey === addDaysToDateKey(todayKey(), -1)
-          ? "Yesterday"
-          : latestEntry?.dateKey
-            ? formatAdminDateKey(latestEntry.dateKey, { month:"short", day:"numeric" })
-            : "";
-      const latestTimeLabel = latestEntry?.timeStart ? fmt12(latestEntry.timeStart).replace(/\s?(AM|PM)$/i, "") : "";
-      const lastLoggedLabel = latestEntry
-        ? `${latestDateLabel}${latestTimeLabel ? `, ${latestTimeLabel}` : ""}`
-        : "No logs";
-      const gapLabel = latestEntry?.dateKey === todayKey()
-        ? "Same day"
-        : latestEntry?.dateKey
-          ? daysAgo(new Date(`${latestEntry.dateKey}T00:00:00`).getTime()) || latestDateLabel
-          : "No gap";
-      const timelineHeaderSubject = pairTimelineActive
-        ? adminV5SubjectText(pairTeacherSummary?.subjectList || [])
+      const timelineTotalMinutes = timelineSourceEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
+      const timelineScopeValue = pairTimelineActive
+        ? `${selectedClass?.display || "Class"} only`
         : activeTimelineScope === "teacher"
-          ? adminV5SubjectText(selectedTeacherSummary?.subjectList || [])
+          ? `${selectedTeacherSummary?.classList?.length || 0} section${selectedTeacherSummary?.classList?.length === 1 ? "" : "s"}`
           : activeTimelineScope === "class"
             ? `${selectedClassTeacherRows.length} teacher${selectedClassTeacherRows.length === 1 ? "" : "s"}`
-            : `${selectedInstitute?.classes?.length || 0} classes`;
+            : `${selectedInstitute?.classes?.length || 0} section${selectedInstitute?.classes?.length === 1 ? "" : "s"}`;
       const timelineHeaderInitials = activeTimelineScope === "teacher"
         ? adminV5Initials(selectedTeacher?.name)
         : activeTimelineScope === "class"
           ? String(selectedClass?.display || "CL").slice(0, 2).toUpperCase()
           : "IN";
+      const timelineHeaderStats = [
+        ["Scope", timelineScopeValue],
+        ["Entries", entryCountText(timelineTotal)],
+        ["Shown time", formatDurationShort(timelineTotalMinutes)],
+      ];
       return (
         <main style={{background:shellBg,minWidth:0,height:adminV5StackedLayout?"auto":"100%",display:"flex",flexDirection:"column",overflow:adminV5StackedLayout?"visible":"hidden"}}>
         <div style={{padding:adminV5StackedLayout ? "16px 16px 13px" : "20px 24px 16px",background:"#F8FAFC",borderBottom:panelBorder}}>
@@ -20846,11 +20835,7 @@ function AdminPanelInner({user}){
             <span style={{width:44,height:44,borderRadius:999,background:"#FFFFFF",color:G.blue,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:950,fontFamily:G.mono}}>
               {timelineHeaderInitials}
             </span>
-            {[
-              ["Last logged", lastLoggedLabel],
-              ["Gap", gapLabel],
-              [activeTimelineScope === "class" ? "Scope" : "Subject", timelineHeaderSubject],
-            ].map(([label,value],index)=>(
+            {timelineHeaderStats.map(([label,value],index)=>(
               <div key={label} style={{borderLeft:!adminV5StackedLayout && index > 0 ? "1px solid #C7D7F5" : "none",paddingLeft:!adminV5StackedLayout && index > 0 ? 18 : 0,minWidth:0}}>
                 <div style={{fontSize:11,color:G.blue,fontFamily:G.mono,fontWeight:950,letterSpacing:0.5,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
                 <div style={{fontSize:16,color:G.text,fontWeight:950,fontFamily:G.display,lineHeight:1.1,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{value}</div>
