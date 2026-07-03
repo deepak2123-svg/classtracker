@@ -19163,7 +19163,7 @@ function AdminPanelInner({user}){
           <div style={{minWidth:0}}>
             <div style={{fontSize:11,fontWeight:850,letterSpacing:0.8,textTransform:"uppercase",color:G.textL,marginBottom:4}}>Control Centre</div>
             <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
-              <span style={{fontSize:22,fontWeight:900,color:G.text,fontFamily:G.display,letterSpacing:-0.3}}>
+              <span style={{fontSize:20,fontWeight:900,color:G.text,fontFamily:G.display,letterSpacing:-0.2}}>
                 {manageScopeInstitute ? `Teachers at ${manageScopeInstitute}` : "Teachers"}
               </span>
               <span style={{fontSize:14,fontWeight:800,color:G.textL}}>{teacherRows.length}</span>
@@ -21365,7 +21365,7 @@ function AdminPanelInner({user}){
       {/* nav */}
       <div style={isMobile
         ? {background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:80}
-        : {background:G.navy,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+        : {background:"#0B111A",height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)",position:"sticky",top:0,zIndex:90}}>
         {isMobile ? (
           <>
             <button onClick={mobileManageBack} className="admin-mobile-touch" style={{display:"inline-flex",alignItems:"center",gap:6,height:38,borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",padding:"0 12px",cursor:"pointer",color:G.textS,fontFamily:G.sans,fontSize:12.5,fontWeight:700,boxShadow:reduceEffects ? "none" : G.shadowSm}}>
@@ -21805,11 +21805,14 @@ function AdminPanelInner({user}){
           );
         })():(<>
 
-        {!["report","messenger"].includes(manageTab)&&<div style={{marginBottom:isMobile?8:20,display:isMobile?"none":"block"}}>
-          <div style={{fontSize:11,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:1}}>Control centre</div>
-          <h2 style={{fontSize:isMobile?22:28,fontWeight:850,color:G.text,fontFamily:G.display,margin:"5px 0 0",lineHeight:1.15}}>
-            {manageScopeInstitute||manageTitle}
-          </h2>
+        {!["report","messenger"].includes(manageTab)&&<div style={{marginBottom:isMobile?8:16,display:isMobile?"none":"block"}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:10,maxWidth:"100%",background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:12,padding:"9px 13px",boxShadow:reduceEffects ? "none" : "0 1px 4px rgba(15,23,42,0.04)"}}>
+            <span style={{fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",letterSpacing:0.9,whiteSpace:"nowrap"}}>Control centre</span>
+            <span style={{width:1,height:18,background:G.border,flexShrink:0}} />
+            <h2 style={{fontSize:isMobile?22:21,fontWeight:850,color:G.text,fontFamily:G.display,margin:0,lineHeight:1.1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"min(520px, calc(100vw - 220px))"}}>
+              {manageScopeInstitute||manageTitle}
+            </h2>
+          </div>
           {!isMobile&&manageScopeInstitute&&(
             <div style={{fontSize:13.5,color:G.textM,marginTop:6}}>
               Manage this institute's {manageTab==="subjects"?"syllabus":manageTab}.
