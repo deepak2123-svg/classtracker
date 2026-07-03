@@ -21365,7 +21365,7 @@ function AdminPanelInner({user}){
       {/* nav */}
       <div style={isMobile
         ? {background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"12px 12px 10px",borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:80}
-        : {background:"#0B111A",height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)",position:"sticky",top:0,zIndex:90}}>
+        : {background:"#0B111A",height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderBottom:"1px solid rgba(255,255,255,0.06)",position:"fixed",top:0,left:0,right:0,zIndex:120,boxSizing:"border-box"}}>
         {isMobile ? (
           <>
             <button onClick={mobileManageBack} className="admin-mobile-touch" style={{display:"inline-flex",alignItems:"center",gap:6,height:38,borderRadius:14,border:`1px solid ${G.border}`,background:"#FFFFFF",padding:"0 12px",cursor:"pointer",color:G.textS,fontFamily:G.sans,fontSize:12.5,fontWeight:700,boxShadow:reduceEffects ? "none" : G.shadowSm}}>
@@ -21407,7 +21407,7 @@ function AdminPanelInner({user}){
       </div>
       <div style={isMobile
         ? {maxWidth:860,margin:"0 auto",padding:mobileManageOuterPad}
-        : {width:"100%",boxSizing:"border-box",padding:"0 24px 72px 0",display:"grid",gridTemplateColumns:"48px minmax(0,1fr)",gap:18,alignItems:"start"}}>
+        : {width:"100%",boxSizing:"border-box",padding:"54px 24px 72px 0",display:"grid",gridTemplateColumns:"48px minmax(0,1fr)",gap:18,alignItems:"start"}}>
 
         {/* Copy group to institutes modal */}
         {copyGroupModal&&(
