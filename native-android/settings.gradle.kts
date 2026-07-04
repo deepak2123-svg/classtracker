@@ -28,4 +28,5 @@ include(
     ":feature:entries",
     ":feature:profile",
     ":feature:today",
+    ":timetable-app",
 )
