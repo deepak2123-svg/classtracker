@@ -5596,11 +5596,12 @@ function ClassTrackerInner({user}){
       const subjectPillFill = isDarkTeacherTheme ? "rgba(255,255,255,0.08)" : "#FFFFFF";
       const subjectPillBorder = isDarkTeacherTheme ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.18)";
       const beginHold = e => {
-        if(!compact || !onHold || !e.touches?.length) return;
-        const touch = e.touches[0];
+        if(!compact || !onHold) return;
+        if(e.pointerType && e.pointerType !== "touch" && e.pointerType !== "pen") return;
         holdTriggeredRef.current = false;
         clearHold();
-        holdStartRef.current = { x:touch.clientX, y:touch.clientY };
+        holdStartRef.current = { x:e.clientX, y:e.clientY, pointerId:e.pointerId };
+        try{ e.currentTarget.setPointerCapture?.(e.pointerId); }catch(err){}
         holdTimerRef.current = window.setTimeout(() => {
           holdTriggeredRef.current = true;
           void triggerAppHaptic("hold");
@@ -5608,11 +5609,26 @@ function ClassTrackerInner({user}){
         }, 420);
       };
       const moveHold = e => {
-        if(!holdStartRef.current || !e.touches?.length) return;
-        const touch = e.touches[0];
-        const dx = Math.abs(touch.clientX - holdStartRef.current.x);
-        const dy = Math.abs(touch.clientY - holdStartRef.current.y);
-        if(dx > 10 || dy > 10) clearHold();
+        if(!holdStartRef.current) return;
+        const dx = Math.abs(e.clientX - holdStartRef.current.x);
+        const dy = Math.abs(e.clientY - holdStartRef.current.y);
+        if(dx > 12 || dy > 12) clearHold();
+      };
+      const finishHold = e => {
+        const pointerId = holdStartRef.current?.pointerId;
+        if(pointerId != null){
+          try{ e.currentTarget.releasePointerCapture?.(pointerId); }catch(err){}
+        }
+        clearHold();
+        if(holdTriggeredRef.current){
+          window.setTimeout(() => { holdTriggeredRef.current = false; }, 450);
+        }
+      };
+      const preventNativeHold = e => {
+        if(compact && onHold){
+          e.preventDefault();
+          e.stopPropagation();
+        }
       };
       const handleCardClick = e => {
         if(holdTriggeredRef.current){
@@ -5628,11 +5644,15 @@ function ClassTrackerInner({user}){
         return(
           <div className="ledgr-card ledgr-pressable"
             onClick={handleCardClick}
-            onTouchStart={beginHold}
-            onTouchMove={moveHold}
-            onTouchEnd={clearHold}
-            onTouchCancel={clearHold}
-            style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative"}}>
+            onPointerDown={beginHold}
+            onPointerMove={moveHold}
+            onPointerUp={finishHold}
+            onPointerCancel={finishHold}
+            onPointerLeave={clearHold}
+            onContextMenu={preventNativeHold}
+            onSelectStart={preventNativeHold}
+            onDragStart={preventNativeHold}
+            style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",position:"relative",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none",touchAction:"pan-y"}}>
             <div style={{background:sectionSurface,borderBottom:`1px solid ${G.border}`,padding:dense?"12px 14px":"13px 15px"}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                 <div style={{flex:1,minWidth:0}}>
@@ -5659,11 +5679,12 @@ function ClassTrackerInner({user}){
       return(
         <div className="ledgr-card"
           onClick={handleCardClick}
-          onTouchStart={beginHold}
-          onTouchMove={moveHold}
-          onTouchEnd={clearHold}
-          onTouchCancel={clearHold}
-          style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease"}}
+          onPointerMove={moveHold}
+          onPointerLeave={clearHold}
+          onContextMenu={preventNativeHold}
+          onSelectStart={preventNativeHold}
+          onDragStart={preventNativeHold}
+          style={{background:G.surface,borderRadius:20,border:`1.5px solid ${cardBorder}`,overflow:"hidden",boxShadow:reduceEffects?G.shadowSm:G.shadowMd,cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:reduceEffects?"none":"transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none",touchAction:"pan-y"}}
           onPointerDown={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="translateY(1px) scale(0.99)";e.currentTarget.style.boxShadow="0 6px 16px rgba(14,31,24,0.09)";})}
           onPointerUp={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}
           onPointerCancel={reduceEffects?undefined:(e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow=G.shadowMd;})}>
@@ -7323,6 +7344,31 @@ function ClassTrackerInner({user}){
     const saveLabel=isEdit?"Save Changes":"Save Entry";
     const lastTopicSuggestion=form.status==="inprogress" ? (getClassUrgencyMeta(activeClass).lastTopic||"").trim() : "";
     const topicSuggestionApplied=form.status==="inprogress"&&!!lastTopicSuggestion&&String(form.title||"").trim()===lastTopicSuggestion;
+    const suggestedTopicTone = isDarkTeacherTheme
+      ? {
+          bg:"rgba(245,158,11,0.13)",
+          border:"rgba(251,191,36,0.36)",
+          label:"#FCD34D",
+          text:"#F8FAFC",
+          buttonBg:"rgba(251,191,36,0.14)",
+          buttonBorder:"rgba(251,191,36,0.48)",
+          buttonText:"#FDE68A",
+          addedBg:"rgba(77,183,200,0.16)",
+          addedBorder:"rgba(77,183,200,0.34)",
+          addedText:"#74D0DE",
+        }
+      : {
+          bg:"#FFF7E8",
+          border:"#FCD34D",
+          label:"#B45309",
+          text:G.text,
+          buttonBg:"#FFFFFF",
+          buttonBorder:"#F59E0B",
+          buttonText:"#B45309",
+          addedBg:"#E8F8EF",
+          addedBorder:`${G.green}22`,
+          addedText:G.green,
+        };
     const detailsPanel=(
       <div style={{
         marginBottom:20,
@@ -7466,15 +7512,15 @@ function ClassTrackerInner({user}){
               <div style={{fontSize:12,color:G.textL,marginTop:5}}>Tap again to deselect</div>
             </div>
             {form.status==="inprogress"&&lastTopicSuggestion&&(
-              <div style={{marginBottom:18,background:"#FFF7E8",border:"1px solid #FCD34D",borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+              <div style={{marginBottom:18,background:suggestedTopicTone.bg,border:`1px solid ${suggestedTopicTone.border}`,borderRadius:14,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
                 <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:12,fontWeight:800,color:"#B45309",fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>Suggested topic heading</div>
-                  <div style={{fontSize:14,color:G.text,fontFamily:G.sans,fontWeight:600,marginTop:4,wordBreak:"break-word"}}>{lastTopicSuggestion}</div>
+                  <div style={{fontSize:12,fontWeight:800,color:suggestedTopicTone.label,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.5}}>Suggested topic heading</div>
+                  <div style={{fontSize:14,color:suggestedTopicTone.text,fontFamily:G.sans,fontWeight:600,marginTop:4,wordBreak:"break-word"}}>{lastTopicSuggestion}</div>
                 </div>
                 {topicSuggestionApplied
-                  ? <span style={{background:"#E8F8EF",border:`1px solid ${G.green}22`,borderRadius:999,padding:"7px 10px",fontSize:12,color:G.green,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>Added below</span>
+                  ? <span style={{background:suggestedTopicTone.addedBg,border:`1px solid ${suggestedTopicTone.addedBorder}`,borderRadius:999,padding:"7px 10px",fontSize:12,color:suggestedTopicTone.addedText,fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap"}}>Added below</span>
                   : <button type="button" onClick={()=>setForm({...form,title:lastTopicSuggestion})}
-                      style={{background:"#FFFFFF",border:"1px solid #F59E0B",borderRadius:10,padding:"9px 14px",fontSize:13,cursor:"pointer",color:"#B45309",fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}}>
+                      style={{background:suggestedTopicTone.buttonBg,border:`1px solid ${suggestedTopicTone.buttonBorder}`,borderRadius:10,padding:"9px 14px",fontSize:13,cursor:"pointer",color:suggestedTopicTone.buttonText,fontFamily:G.sans,fontWeight:700,whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}}>
                       Use this
                     </button>}
               </div>
