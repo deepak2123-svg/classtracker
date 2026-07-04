@@ -31,14 +31,6 @@ class TimetableRepository(
     fun observePeriods(timetableId: String): Flow<List<GeneratedPeriodEntity>> =
         dao.observePeriods(timetableId)
 
-    suspend fun seedIfEmpty() {
-        if (dao.getInstitutes().isNotEmpty()) return
-
-        database.withTransaction {
-            TimetableSeedData.seedDemo(dao, now = System.currentTimeMillis())
-        }
-    }
-
     suspend fun createInstitute(name: String): String {
         val id = "institute-${UUID.randomUUID()}"
         dao.upsertInstitute(
@@ -67,7 +59,7 @@ class TimetableRepository(
                     archivedAt = null,
                 ),
             )
-            dao.upsertSlots(TimetableSeedData.defaultSlots(id))
+            dao.upsertSlots(TimetableDefaults.defaultSlots(id))
         }
         return id
     }

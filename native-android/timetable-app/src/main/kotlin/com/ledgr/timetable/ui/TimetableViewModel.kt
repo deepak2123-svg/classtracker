@@ -116,12 +116,6 @@ class TimetableViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TimetableUiState())
 
-    init {
-        viewModelScope.launch {
-            repository.seedIfEmpty()
-        }
-    }
-
     fun selectInstitute(instituteId: String) {
         selectedInstituteId.value = instituteId
         selectedTimetableId.value = null

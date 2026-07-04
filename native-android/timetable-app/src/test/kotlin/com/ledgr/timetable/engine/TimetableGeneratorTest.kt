@@ -16,8 +16,8 @@ class TimetableGeneratorTest {
     fun `generator avoids teacher double booking`() {
         val result = generator.generate(
             slots = slots(count = 2),
-            sections = listOf(section("s1", "Virat 1"), section("s2", "Virat 2")),
-            staff = listOf(staff("t1", "Deepak")),
+            sections = listOf(section("s1", "Section A"), section("s2", "Section B")),
+            staff = listOf(staff("t1", "Teacher A")),
             mappings = listOf(
                 mapping("m1", "s1", "GS", "t1", 3),
                 mapping("m2", "s2", "GS", "t1", 3),
@@ -33,8 +33,8 @@ class TimetableGeneratorTest {
     fun `generator places requested frequency when solvable`() {
         val result = generator.generate(
             slots = slots(count = 4),
-            sections = listOf(section("s1", "Madhav 3")),
-            staff = listOf(staff("t1", "Deepak")),
+            sections = listOf(section("s1", "Section A")),
+            staff = listOf(staff("t1", "Teacher A")),
             mappings = listOf(mapping("m1", "s1", "GS", "t1", 5)),
             availability = emptyList(),
         )
@@ -47,8 +47,8 @@ class TimetableGeneratorTest {
     fun `generator reports conflict when impossible`() {
         val result = generator.generate(
             slots = slots(count = 1),
-            sections = listOf(section("s1", "Madhav 3")),
-            staff = listOf(staff("t1", "Deepak")),
+            sections = listOf(section("s1", "Section A")),
+            staff = listOf(staff("t1", "Teacher A")),
             mappings = listOf(mapping("m1", "s1", "GS", "t1", 10)),
             availability = emptyList(),
         )
