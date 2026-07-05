@@ -1,0 +1,1 @@
+T0.1 - Built the Kotlin/Jetpack Compose scaffold with Room and Navigation-Compose dependencies, package structure, a blank launch surface, and verified build/install/launch on ADB; assumed the blank T0.1 screen should render as an empty white Material surface.
