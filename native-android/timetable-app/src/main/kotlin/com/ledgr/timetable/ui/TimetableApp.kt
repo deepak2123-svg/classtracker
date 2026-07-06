@@ -2,6 +2,7 @@ package com.ledgr.timetable.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -33,13 +35,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -51,8 +63,12 @@ import com.ledgr.timetable.data.Section
 import com.ledgr.timetable.data.TIME_SLOT_TYPE_BREAK
 import com.ledgr.timetable.data.TIME_SLOT_TYPE_CLASS
 import com.ledgr.timetable.data.Teacher
+import com.ledgr.timetable.domain.AssignmentConflict
+import com.ledgr.timetable.domain.AssignmentConflictType
+import com.ledgr.timetable.domain.DraftAssignment
 import com.ledgr.timetable.domain.DraftTimeSlot
 import com.ledgr.timetable.ui.theme.TimetableTheme
+import kotlin.math.roundToInt
 
 @Composable
 fun TimetableApp() {
@@ -126,7 +142,13 @@ private fun TimetableNavHost(
             )
         }
         composable(TimetableRoute.WizardAssign.route) {
-            WizardAssignScreen(uiState = uiState, navController = navController)
+            WizardAssignScreen(
+                uiState = uiState,
+                onStartDraft = viewModel::startTimeSlotDraft,
+                onAssignTeacher = viewModel::assignTeacherToSubjectSlot,
+                onClearAssignment = viewModel::clearAssignment,
+                navController = navController,
+            )
         }
         composable(TimetableRoute.WizardAvailability.route) {
             WizardAvailabilityScreen(uiState = uiState, navController = navController)
@@ -639,23 +661,456 @@ private fun TimeSlotTypeChooser(
 @Composable
 private fun WizardAssignScreen(
     uiState: TimetableUiState,
+    onStartDraft: () -> Unit,
+    onAssignTeacher: (String, String, String, String) -> Unit,
+    onClearAssignment: (DraftAssignment) -> Unit,
     navController: NavHostController,
 ) {
-    PlaceholderScreen(
-        title = "Assign",
-        description = selectedInstituteLabel(uiState),
-        progressStep = 2,
-        primaryActions = listOf(
-            PlaceholderAction("Next: Availability") {
+    LaunchedEffect(uiState.selectedInstitute?.id) {
+        onStartDraft()
+    }
+
+    val targetBounds = remember { mutableStateMapOf<AssignTargetKey, Rect>() }
+    var draggingTeacher by remember { mutableStateOf<DraggingTeacher?>(null) }
+    val classSlots = uiState.draftTimeSlots.filter { it.type == TIME_SLOT_TYPE_CLASS }
+    val conflictAssignmentIds = remember(uiState.assignmentConflicts) {
+        uiState.assignmentConflicts.flatMap { it.assignmentIds }.toSet()
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        AppScaffold(
+            title = "Assign",
+            subtitle = selectedInstituteLabel(uiState),
+            progressStep = 2,
+        ) {
+            DndHintCard()
+            TeacherPoolCard(
+                teachers = uiState.teachers,
+                draggingTeacher = draggingTeacher,
+                onDragStart = { teacher, position ->
+                    draggingTeacher = DraggingTeacher(teacher = teacher, position = position)
+                },
+                onDrag = { delta ->
+                    draggingTeacher = draggingTeacher?.copy(
+                        position = draggingTeacher!!.position + delta,
+                    )
+                },
+                onDragEnd = {
+                    val draggedTeacher = draggingTeacher
+                    val target = draggedTeacher?.let { drag ->
+                        targetBounds.entries.firstOrNull { (_, bounds) ->
+                            bounds.contains(drag.position)
+                        }?.key
+                    }
+                    if (draggedTeacher != null && target != null) {
+                        onAssignTeacher(
+                            target.slotId,
+                            target.sectionId,
+                            target.subjectName,
+                            draggedTeacher.teacher.id,
+                        )
+                    }
+                    draggingTeacher = null
+                },
+                onDragCancel = { draggingTeacher = null },
+            )
+            AssignmentConflictSummary(
+                conflicts = uiState.assignmentConflicts,
+                teachers = uiState.teachers,
+                sections = uiState.sections,
+                slots = classSlots,
+            )
+            when {
+                uiState.teachers.isEmpty() -> EmptyStateCard(
+                    title = "No teachers yet",
+                    body = "Add teachers in roster settings before assigning.",
+                )
+                uiState.sections.isEmpty() -> EmptyStateCard(
+                    title = "No sections yet",
+                    body = "Add sections in roster settings before assigning.",
+                )
+                classSlots.isEmpty() -> EmptyStateCard(
+                    title = "No class periods yet",
+                    body = "Add at least one class time slot before assigning teachers.",
+                )
+                else -> classSlots.forEach { slot ->
+                    TimeSlotAssignmentGroup(
+                        slot = slot,
+                        sections = uiState.sections,
+                        teachers = uiState.teachers,
+                        assignments = uiState.draftAssignments,
+                        conflictAssignmentIds = conflictAssignmentIds,
+                        onTargetBoundsChanged = { key, bounds ->
+                            targetBounds[key] = bounds
+                        },
+                        onClearAssignment = onClearAssignment,
+                    )
+                }
+            }
+            ActionButton(
+                label = "Next: Availability",
+                onClick = {
                 navController.navigate(TimetableRoute.WizardAvailability.route)
             },
-        ),
-        secondaryActions = listOf(
-            PlaceholderAction("Back to home") {
+                style = ActionStyle.Primary,
+            )
+            ActionButton(
+                label = "Back to home",
+                onClick = {
                 navController.navigateHome()
             },
+                style = ActionStyle.Outlined,
+            )
+        }
+        draggingTeacher?.let { drag ->
+            DragGhost(
+                teacher = drag.teacher,
+                position = drag.position,
+                modifier = Modifier.zIndex(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DndHintCard() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    ) {
+        Text(
+            text = "Drag a teacher onto a subject slot to assign. Conflicts are flagged, not blocked.",
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun TeacherPoolCard(
+    teachers: List<Teacher>,
+    draggingTeacher: DraggingTeacher?,
+    onDragStart: (Teacher, Offset) -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         ),
-    )
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Teacher pool",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (teachers.isEmpty()) {
+                Text(
+                    text = "No teachers available.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    teachers.forEach { teacher ->
+                        DraggableTeacherChip(
+                            teacher = teacher,
+                            isDragging = draggingTeacher?.teacher?.id == teacher.id,
+                            onDragStart = onDragStart,
+                            onDrag = onDrag,
+                            onDragEnd = onDragEnd,
+                            onDragCancel = onDragCancel,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DraggableTeacherChip(
+    teacher: Teacher,
+    isDragging: Boolean,
+    onDragStart: (Teacher, Offset) -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+) {
+    var bounds by remember { mutableStateOf(Rect.Zero) }
+
+    Surface(
+        modifier = Modifier
+            .onGloballyPositioned { coordinates ->
+                bounds = coordinates.boundsInRoot()
+            }
+            .pointerInput(teacher.id) {
+                detectDragGestures(
+                    onDragStart = { localOffset ->
+                        onDragStart(teacher, bounds.topLeft + localOffset)
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount)
+                    },
+                    onDragEnd = onDragEnd,
+                    onDragCancel = onDragCancel,
+                )
+            },
+        shape = CircleShape,
+        color = if (isDragging) {
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = ":: ${teacher.name}",
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
+@Composable
+private fun DragGhost(
+    teacher: Teacher,
+    position: Offset,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .offset {
+                IntOffset(
+                    x = (position.x - 90f).roundToInt(),
+                    y = (position.y - 34f).roundToInt(),
+                )
+            },
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shadowElevation = 8.dp,
+    ) {
+        Text(
+            text = ":: ${teacher.name}",
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
+@Composable
+private fun AssignmentConflictSummary(
+    conflicts: List<AssignmentConflict>,
+    teachers: List<Teacher>,
+    sections: List<Section>,
+    slots: List<DraftTimeSlot>,
+) {
+    if (conflicts.isEmpty()) return
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "Conflict flagged",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            conflicts.forEach { conflict ->
+                Text(
+                    text = conflictLabel(conflict, teachers, sections, slots),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimeSlotAssignmentGroup(
+    slot: DraftTimeSlot,
+    sections: List<Section>,
+    teachers: List<Teacher>,
+    assignments: List<DraftAssignment>,
+    conflictAssignmentIds: Set<String>,
+    onTargetBoundsChanged: (AssignTargetKey, Rect) -> Unit,
+    onClearAssignment: (DraftAssignment) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "${slot.startTime} - ${slot.endTime}",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        sections.forEach { section ->
+            SectionAssignmentCard(
+                slot = slot,
+                section = section,
+                teachers = teachers,
+                assignments = assignments,
+                conflictAssignmentIds = conflictAssignmentIds,
+                onTargetBoundsChanged = onTargetBoundsChanged,
+                onClearAssignment = onClearAssignment,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionAssignmentCard(
+    slot: DraftTimeSlot,
+    section: Section,
+    teachers: List<Teacher>,
+    assignments: List<DraftAssignment>,
+    conflictAssignmentIds: Set<String>,
+    onTargetBoundsChanged: (AssignTargetKey, Rect) -> Unit,
+    onClearAssignment: (DraftAssignment) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = section.name,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            DefaultAssignSubjects.forEach { subject ->
+                val target = AssignTargetKey(
+                    slotId = slot.id,
+                    sectionId = section.id,
+                    subjectName = subject,
+                )
+                val assignment = assignments.firstOrNull { item ->
+                    item.slotId == slot.id &&
+                        item.sectionId == section.id &&
+                        item.subjectName == subject
+                }
+                val assignedTeacher = assignment?.let { assigned ->
+                    teachers.firstOrNull { teacher -> teacher.id == assigned.teacherId }
+                }
+                SubjectDropSlot(
+                    target = target,
+                    subject = subject,
+                    assignment = assignment,
+                    assignedTeacher = assignedTeacher,
+                    isConflict = assignment?.id in conflictAssignmentIds,
+                    onTargetBoundsChanged = onTargetBoundsChanged,
+                    onClearAssignment = onClearAssignment,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubjectDropSlot(
+    target: AssignTargetKey,
+    subject: String,
+    assignment: DraftAssignment?,
+    assignedTeacher: Teacher?,
+    isConflict: Boolean,
+    onTargetBoundsChanged: (AssignTargetKey, Rect) -> Unit,
+    onClearAssignment: (DraftAssignment) -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                onTargetBoundsChanged(target, coordinates.boundsInRoot())
+            },
+        shape = MaterialTheme.shapes.medium,
+        color = when {
+            isConflict -> MaterialTheme.colorScheme.errorContainer
+            assignment != null -> MaterialTheme.colorScheme.surface
+            else -> Color.Transparent
+        },
+        contentColor = if (isConflict) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        border = BorderStroke(
+            width = 1.5.dp,
+            color = when {
+                isConflict -> MaterialTheme.colorScheme.error
+                assignment != null -> Color.Transparent
+                else -> MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = subject,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Text(
+                    text = if (assignedTeacher == null) {
+                        "Drop teacher here"
+                    } else if (isConflict) {
+                        "Conflict: ${assignedTeacher.name}"
+                    } else {
+                        assignedTeacher.name
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isConflict) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            if (assignment != null) {
+                ActionButton(
+                    label = "Clear",
+                    onClick = { onClearAssignment(assignment) },
+                    style = if (isConflict) ActionStyle.Danger else ActionStyle.Outlined,
+                    modifier = Modifier.width(96.dp),
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -1336,10 +1791,46 @@ private fun selectedInstituteLabel(uiState: TimetableUiState): String {
     return uiState.selectedInstitute?.name ?: "Select an institute from Home"
 }
 
+private fun conflictLabel(
+    conflict: AssignmentConflict,
+    teachers: List<Teacher>,
+    sections: List<Section>,
+    slots: List<DraftTimeSlot>,
+): String {
+    val slotLabel = slots.firstOrNull { it.id == conflict.slotId }?.let { slot ->
+        "${slot.startTime}-${slot.endTime}"
+    } ?: "this slot"
+    return when (conflict.type) {
+        AssignmentConflictType.TeacherDoubleBooked -> {
+            val teacherName = teachers.firstOrNull { it.id == conflict.teacherId }?.name
+                ?: "A teacher"
+            "$teacherName is double-booked at $slotLabel."
+        }
+        AssignmentConflictType.SectionDoubleBooked -> {
+            val sectionName = sections.firstOrNull { it.id == conflict.sectionId }?.name
+                ?: "A section"
+            "$sectionName has more than one subject at $slotLabel."
+        }
+    }
+}
+
 private data class PlaceholderAction(
     val label: String,
     val onClick: () -> Unit,
 )
+
+private data class AssignTargetKey(
+    val slotId: String,
+    val sectionId: String,
+    val subjectName: String,
+)
+
+private data class DraggingTeacher(
+    val teacher: Teacher,
+    val position: Offset,
+)
+
+private val DefaultAssignSubjects = listOf("Mathematics", "Science")
 
 private enum class ActionStyle {
     Primary,

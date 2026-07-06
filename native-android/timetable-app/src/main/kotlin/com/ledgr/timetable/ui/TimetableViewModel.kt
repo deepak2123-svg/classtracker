@@ -9,8 +9,12 @@ import com.ledgr.timetable.data.Section
 import com.ledgr.timetable.data.Teacher
 import com.ledgr.timetable.data.TimetableDatabaseProvider
 import com.ledgr.timetable.data.TimetableRepository
+import com.ledgr.timetable.domain.AssignmentConflict
+import com.ledgr.timetable.domain.DraftAssignment
 import com.ledgr.timetable.domain.DraftTimeSlot
 import com.ledgr.timetable.domain.DraftTimeSlotEditor
+import com.ledgr.timetable.domain.findConflicts
+import com.ledgr.timetable.domain.toAssignment
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,6 +23,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimetableViewModel(
@@ -28,6 +33,7 @@ class TimetableViewModel(
     private val selectedInstituteId = MutableStateFlow<String?>(null)
     private val draftTimeSlotInstituteId = MutableStateFlow<String?>(null)
     private val draftTimeSlots = MutableStateFlow<List<DraftTimeSlot>>(emptyList())
+    private val draftAssignments = MutableStateFlow<List<DraftAssignment>>(emptyList())
     private val institutes = repository.observeInstitutes()
     private val teachers = selectedInstituteId.flatMapLatest { instituteId ->
         if (instituteId == null) {
@@ -43,21 +49,32 @@ class TimetableViewModel(
             repository.observeSectionsForInstitute(instituteId)
         }
     }
+    private val draftWizardState = combine(
+        draftTimeSlots,
+        draftAssignments,
+    ) { timeSlotRows, assignmentRows ->
+        DraftWizardState(
+            timeSlots = timeSlotRows,
+            assignments = assignmentRows,
+        )
+    }
 
     val uiState = combine(
         institutes,
         selectedInstituteId,
         teachers,
         sections,
-        draftTimeSlots,
-    ) { instituteRows, selectedId, teacherRows, sectionRows, timeSlotRows ->
+        draftWizardState,
+    ) { instituteRows, selectedId, teacherRows, sectionRows, draftState ->
         val selectedInstitute = instituteRows.firstOrNull { it.id == selectedId }
         TimetableUiState(
             institutes = instituteRows,
             selectedInstitute = selectedInstitute,
             teachers = teacherRows,
             sections = sectionRows,
-            draftTimeSlots = timeSlotRows,
+            draftTimeSlots = draftState.timeSlots,
+            draftAssignments = draftState.assignments,
+            assignmentConflicts = findConflicts(draftState.assignments.map { it.toAssignment() }),
         )
     }.stateIn(
         scope = viewModelScope,
@@ -66,6 +83,11 @@ class TimetableViewModel(
     )
 
     fun selectInstitute(id: String) {
+        if (selectedInstituteId.value != id) {
+            draftTimeSlotInstituteId.value = null
+            draftTimeSlots.value = emptyList()
+            draftAssignments.value = emptyList()
+        }
         selectedInstituteId.value = id
     }
 
@@ -74,6 +96,9 @@ class TimetableViewModel(
         if (trimmed.isEmpty()) return
 
         viewModelScope.launch {
+            draftTimeSlotInstituteId.value = null
+            draftTimeSlots.value = emptyList()
+            draftAssignments.value = emptyList()
             selectedInstituteId.value = repository.createInstitute(trimmed).id
         }
     }
@@ -174,6 +199,39 @@ class TimetableViewModel(
             slots = draftTimeSlots.value,
             id = slot.id,
         )
+        draftAssignments.value = draftAssignments.value.filterNot { it.slotId == slot.id }
+    }
+
+    fun assignTeacherToSubjectSlot(
+        slotId: String,
+        sectionId: String,
+        subjectName: String,
+        teacherId: String,
+    ) {
+        val existingAssignment = draftAssignments.value.firstOrNull { assignment ->
+            assignment.slotId == slotId &&
+                assignment.sectionId == sectionId &&
+                assignment.subjectName == subjectName
+        }
+        val nextAssignment = if (existingAssignment == null) {
+            DraftAssignment(
+                id = UUID.randomUUID().toString(),
+                slotId = slotId,
+                sectionId = sectionId,
+                subjectName = subjectName,
+                teacherId = teacherId,
+            )
+        } else {
+            existingAssignment.copy(teacherId = teacherId)
+        }
+
+        draftAssignments.value = draftAssignments.value
+            .filterNot { it.id == nextAssignment.id }
+            .plus(nextAssignment)
+    }
+
+    fun clearAssignment(assignment: DraftAssignment) {
+        draftAssignments.value = draftAssignments.value.filterNot { it.id == assignment.id }
     }
 
     companion object {
@@ -198,4 +256,11 @@ data class TimetableUiState(
     val teachers: List<Teacher> = emptyList(),
     val sections: List<Section> = emptyList(),
     val draftTimeSlots: List<DraftTimeSlot> = emptyList(),
+    val draftAssignments: List<DraftAssignment> = emptyList(),
+    val assignmentConflicts: List<AssignmentConflict> = emptyList(),
+)
+
+private data class DraftWizardState(
+    val timeSlots: List<DraftTimeSlot>,
+    val assignments: List<DraftAssignment>,
 )
