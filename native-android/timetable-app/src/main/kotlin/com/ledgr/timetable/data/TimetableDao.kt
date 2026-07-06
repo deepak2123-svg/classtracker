@@ -4,6 +4,8 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TimetableDao {
@@ -31,6 +33,24 @@ interface TimetableDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertSubjectTeacherDefault(value: SubjectTeacherDefault)
 
+    @Update
+    suspend fun updateTeacher(value: Teacher)
+
+    @Update
+    suspend fun updateSection(value: Section)
+
+    @Query("SELECT * FROM institutes ORDER BY name")
+    fun observeInstitutes(): Flow<List<Institute>>
+
+    @Query("SELECT * FROM teachers WHERE instituteId = :instituteId ORDER BY name")
+    fun observeTeachersForInstitute(instituteId: String): Flow<List<Teacher>>
+
+    @Query("SELECT * FROM sections WHERE instituteId = :instituteId ORDER BY name")
+    fun observeSectionsForInstitute(instituteId: String): Flow<List<Section>>
+
+    @Query("SELECT * FROM institutes ORDER BY name")
+    suspend fun getInstitutes(): List<Institute>
+
     @Query("SELECT * FROM institutes WHERE id = :id")
     suspend fun getInstitute(id: String): Institute?
 
@@ -57,4 +77,10 @@ interface TimetableDao {
 
     @Query("DELETE FROM institutes WHERE id = :id")
     suspend fun deleteInstitute(id: String)
+
+    @Query("DELETE FROM teachers WHERE id = :id")
+    suspend fun deleteTeacher(id: String)
+
+    @Query("DELETE FROM sections WHERE id = :id")
+    suspend fun deleteSection(id: String)
 }
