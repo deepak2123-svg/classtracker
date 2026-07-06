@@ -54,6 +54,7 @@ import { readAdminTeacherDetailsCache, writeAdminTeacherDetailsCache } from "./a
 import { ALL_CLASSES_KEY, ALL_TEACHERS_KEY, DELETE_SECTION_ACTION, KEEP_SECTION_ACTION } from "./admin/constants/adminKeys.js";
 import { AdminConfirmModal, ConfirmDeleteModal } from "./admin/components/common/AdminConfirmModals.jsx";
 import { AdminToastBanner } from "./admin/components/common/AdminToastBanner.jsx";
+import { AlsoAtInstitutes } from "./admin/components/common/AlsoAtInstitutes.jsx";
 import { AppIcon } from "./admin/components/common/AppIcon.jsx";
 import { PeriodSelector } from "./admin/components/common/PeriodSelector.jsx";
 import { DailyCentreSummary } from "./admin/dashboard/DailyCentreSummary.jsx";
@@ -77,6 +78,18 @@ import {
   ledgrReportDownloadFilename,
   readableDownloadPart,
 } from "./admin/reports/instituteGlanceReportUtils.js";
+import { copyBlobImageToClipboard, renderInstituteGlanceCopyTextImageBlob } from "./admin/reports/instituteGlanceCopyImage.js";
+import {
+  _avatarInitials,
+  _pendingBadge,
+  _pendingDaysLabel,
+  activityStatusMeta,
+  buildInstituteGlanceCentreCard,
+  buildInstituteGlanceDateCard,
+  formatInstituteReportEntryDate,
+  getInstituteGlanceGeneratedParts,
+  syllabusUpdatedLabelForReport,
+} from "./admin/reports/instituteGlanceHtmlUtils.js";
 import {
   buildInstituteGlanceRows,
   EMPTY_INSTITUTE_GLANCE_SUMMARY,
@@ -87,6 +100,7 @@ import {
   summariseInstituteGlanceRows,
 } from "./admin/reports/instituteGlanceRows.js";
 import { LedgrReportOptionsModal } from "./admin/reports/LedgrReportOptionsModal.jsx";
+import { downloadTeacherStatusShareImage } from "./admin/reports/teacherStatusShareImage.js";
 import { buildTeacherEntryStatusItem, sortTeacherStatusForShare } from "./admin/reports/teacherStatusUtils.js";
 import { CopyGroupToInstitutesModal, DurStepper, InstTypePicker } from "./admin/sections/InstituteGroupModals.jsx";
 import { LegacySectionRepairModal, SectionQuickRenameModal, SectionRenameReviewModal } from "./admin/sections/SectionAdminModals.jsx";
@@ -113,7 +127,6 @@ import {
   syllabusTemplateMatchesTargets,
   syllabusTemplateScope,
 } from "./admin/syllabus/syllabusUtils.js";
-import { syllabusReportNameKey } from "./admin/syllabus/syllabusReportUtils.js";
 import {
   buildAdminProgramClassGroups,
   compareClassCardsByActivity,
@@ -244,331 +257,6 @@ const LEAVE_REASON_MAP = {
   onhold:     { icon:"⏸",  label:"On Hold",   desc:"Class is paused for now, may continue later" },
 };
 
-async function renderInstituteGlanceCopyTextImageBlob({ text, mimeType = "image/png" } = {}){
-  await waitForCanvasFonts();
-  const safeText = String(text || "").trim();
-  if(!safeText) throw new Error("No report text available.");
-
-  const rawLines = safeText.split(/\r?\n/);
-  const readValue = (prefix, fallback = "") => {
-    const found = rawLines.find(line => line.toLowerCase().startsWith(prefix.toLowerCase()));
-    return found ? found.replace(new RegExp(`^${prefix}\\s*`, "i"), "").trim() : fallback;
-  };
-  const centre = readValue("Centre:", "Institute");
-  const generated = readValue("Report generated:", "");
-  const period = readValue("Period:", "Today");
-  const summary = readValue("Summary:", "");
-  const bodyStart = rawLines.findIndex(line => /^Updated\s*\(/i.test(line));
-  const bodyLines = rawLines.slice(bodyStart >= 0 ? bodyStart : 0);
-
-  const width = 1180;
-  const margin = 34;
-  const cardX = 28;
-  const cardY = 28;
-  const cardWidth = width - cardX * 2;
-  const contentX = cardX + margin;
-  const contentWidth = cardWidth - margin * 2;
-  const metaGap = 14;
-  const metaWidth = (contentWidth - metaGap * 2) / 3;
-  const rowGap = 8;
-  const sectionGap = 14;
-
-  const measureCanvas = document.createElement("canvas");
-  measureCanvas.width = width;
-  measureCanvas.height = 400;
-  const measureCtx = measureCanvas.getContext("2d");
-  if(!measureCtx) throw new Error("Canvas is not available.");
-
-  const reportLineMeta = bodyLines.map(line => {
-    const value = String(line || "");
-    const blank = !value.trim();
-    const heading = /^Updated\s*\(|^Not updated\s*\(/i.test(value.trim());
-    const font = heading ? "800 24px 'Poppins',sans-serif" : "600 17px 'Inter',sans-serif";
-    measureCtx.font = font;
-    const wrapped = blank ? [] : wrapCanvasText(measureCtx, value, contentWidth - (heading ? 0 : 14));
-    const lineHeight = heading ? 31 : 23;
-    return {
-      value,
-      blank,
-      heading,
-      wrapped,
-      font,
-      lineHeight,
-      height: blank ? 12 : wrapped.length * lineHeight + (heading ? sectionGap : rowGap),
-    };
-  });
-
-  const titleFont = "800 42px 'Poppins',sans-serif";
-  measureCtx.font = titleFont;
-  const titleLines = wrapCanvasText(measureCtx, centre, contentWidth);
-  const titleHeight = Math.max(52, titleLines.length * 50);
-  const bodyHeight = reportLineMeta.reduce((sum, item) => sum + item.height, 0);
-  const cardHeight = 42 + 22 + titleHeight + 92 + 28 + bodyHeight + 34;
-  const height = Math.max(760, Math.ceil(cardY * 2 + cardHeight));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if(!ctx) throw new Error("Canvas is not available.");
-
-  ctx.fillStyle = "#F5F7FA";
-  ctx.fillRect(0, 0, width, height);
-  drawRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 28);
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fill();
-  ctx.strokeStyle = "#DDE3ED";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  let y = cardY + 34;
-  ctx.fillStyle = G.blue;
-  ctx.font = "900 16px 'Inter',sans-serif";
-  ctx.textBaseline = "top";
-  ctx.fillText("LEDGR REPORT", contentX, y);
-  y += 28;
-
-  ctx.fillStyle = G.text;
-  ctx.font = titleFont;
-  titleLines.forEach(line => {
-    ctx.fillText(line, contentX, y);
-    y += 50;
-  });
-  y += 12;
-
-  const metaItems = [
-    { label:"Generated", value:generated || "Just now" },
-    { label:"Period", value:period },
-    { label:"Summary", value:summary || "No summary available" },
-  ];
-  metaItems.forEach((item, index) => {
-    const x = contentX + index * (metaWidth + metaGap);
-    drawRoundedRect(ctx, x, y, metaWidth, 78, 16);
-    ctx.fillStyle = "#EEF4FF";
-    ctx.fill();
-    ctx.strokeStyle = "#C7D7F5";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.fillStyle = G.blue;
-    ctx.font = "900 12px 'Inter',sans-serif";
-    ctx.fillText(item.label.toUpperCase(), x + 17, y + 15);
-    ctx.fillStyle = G.text;
-    ctx.font = "800 18px 'Inter',sans-serif";
-    const lines = wrapCanvasText(ctx, item.value, metaWidth - 34).slice(0, 2);
-    lines.forEach((line, lineIndex) => ctx.fillText(line, x + 17, y + 39 + lineIndex * 20));
-  });
-  y += 106;
-
-  reportLineMeta.forEach(item => {
-    if(item.blank){
-      y += item.height;
-      return;
-    }
-    ctx.font = item.font;
-    ctx.fillStyle = item.heading ? G.text : "#334155";
-    if(item.heading){
-      drawRoundedRect(ctx, contentX, y - 4, contentWidth, 42, 14);
-      ctx.fillStyle = "#F8FAFC";
-      ctx.fill();
-      ctx.strokeStyle = "#E5EAF2";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = G.text;
-      item.wrapped.forEach((line, lineIndex) => ctx.fillText(line, contentX + 16, y + lineIndex * item.lineHeight));
-    }else{
-      item.wrapped.forEach((line, lineIndex) => ctx.fillText(line, contentX + 8, y + lineIndex * item.lineHeight));
-    }
-    y += item.height;
-  });
-
-  const imageType = mimeType === "image/jpeg" ? "image/jpeg" : "image/png";
-  const quality = imageType === "image/jpeg" ? 0.94 : undefined;
-  const blob = await new Promise(resolve => canvas.toBlob(resolve, imageType, quality));
-  if(!blob) throw new Error("Could not render report image.");
-  return blob;
-}
-async function copyBlobImageToClipboard(blob){
-  if(!blob) throw new Error("No image available.");
-  if(!navigator?.clipboard?.write || typeof ClipboardItem === "undefined"){
-    throw new Error("Image clipboard is not supported in this browser.");
-  }
-  await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
-}
-async function downloadTeacherStatusShareImage({ instituteName, rows, summary, generatedOnLabel }){
-  await waitForCanvasFonts();
-  const width = 1080;
-  const cardX = 36;
-  const cardY = 36;
-  const cardWidth = width - cardX * 2;
-  const headerHeight = 290;
-  const rowHeight = 118;
-  const cardHeight = headerHeight + Math.max(1, rows.length) * rowHeight + 28;
-  const height = cardY * 2 + cardHeight;
-  const scale = 2;
-  const canvas = document.createElement("canvas");
-  canvas.width = width * scale;
-  canvas.height = height * scale;
-  const ctx = canvas.getContext("2d");
-  if(!ctx) throw new Error("Canvas is not available.");
-  ctx.scale(scale, scale);
-
-  ctx.fillStyle = "#F4F7FB";
-  ctx.fillRect(0, 0, width, height);
-
-  drawRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 30);
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fill();
-  ctx.strokeStyle = "#DDE3ED";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  const contentX = cardX + 28;
-  const contentWidth = cardWidth - 56;
-  let cursorY = cardY + 30;
-
-  ctx.fillStyle = "#111827";
-  ctx.font = "800 34px 'Poppins',sans-serif";
-  ctx.textBaseline = "top";
-  ctx.fillText("Teacher entry status", contentX, cursorY);
-
-  cursorY += 50;
-  ctx.fillStyle = "#1A2F5A";
-  ctx.font = "800 30px 'Poppins',sans-serif";
-  ctx.fillText(
-    fitCanvasText(ctx, instituteName, contentWidth),
-    contentX,
-    cursorY
-  );
-
-  cursorY += 40;
-  ctx.fillStyle = "#4B5563";
-  ctx.font = "600 18px 'Inter',sans-serif";
-  ctx.fillText(
-    fitCanvasText(ctx, `Generated ${generatedOnLabel}`, contentWidth),
-    contentX,
-    cursorY
-  );
-
-  cursorY += 32;
-  ctx.fillStyle = "#6B7280";
-  ctx.font = "500 20px 'Inter',sans-serif";
-  ctx.fillText(
-    fitCanvasText(ctx, "Who has updated class logs today, plus week and month entry counts.", contentWidth),
-    contentX,
-    cursorY
-  );
-
-  cursorY += 44;
-  let chipX = contentX;
-  chipX += drawCanvasPill(ctx, {
-    x: chipX,
-    y: cursorY,
-    label: `${summary.updatedToday}/${summary.totalTeachers} updated today`,
-    bg: "#DCFCE7",
-    border: "#BBF7D0",
-    color: "#166534",
-    font: "700 20px 'Inter',sans-serif",
-    padX: 18,
-    height: 48,
-  }) + 12;
-  chipX += drawCanvasPill(ctx, {
-    x: chipX,
-    y: cursorY,
-    label: `${summary.weekEntries} this week`,
-    bg: "#F8FAFC",
-    border: "#DDE3ED",
-    color: "#1F2937",
-    font: "700 20px 'Inter',sans-serif",
-    padX: 18,
-    height: 48,
-  }) + 12;
-  drawCanvasPill(ctx, {
-    x: chipX,
-    y: cursorY,
-    label: `${summary.monthEntries} this month`,
-    bg: "#F8FAFC",
-    border: "#DDE3ED",
-    color: "#1F2937",
-    font: "700 20px 'Inter',sans-serif",
-    padX: 18,
-    height: 48,
-  });
-
-  cursorY += 74;
-  ctx.strokeStyle = "#E5E7EB";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(contentX, cursorY);
-  ctx.lineTo(contentX + contentWidth, cursorY);
-  ctx.stroke();
-  cursorY += 16;
-
-  const rowsToDraw = rows.length ? rows : [{
-    uid:"empty",
-    name:"No teacher activity yet",
-    classCount:0,
-    todayEntries:0,
-    weekEntries:0,
-    monthEntries:0,
-    todayUpdated:false,
-  }];
-
-  rowsToDraw.forEach((item, index)=>{
-    const rowTop = cursorY + index * rowHeight;
-    const rowBottom = rowTop + rowHeight - 12;
-    const leftWidth = contentWidth - 240;
-    const pillLabel = item.todayUpdated ? "Updated today" : "No update today";
-    const safeClassCount = Number.isFinite(item.classCount) ? item.classCount : 0;
-
-    ctx.fillStyle = "#111827";
-    ctx.font = "800 30px 'Poppins',sans-serif";
-    ctx.fillText(fitCanvasText(ctx, item.name, leftWidth), contentX, rowTop);
-
-    ctx.fillStyle = "#6B7280";
-    ctx.font = "600 18px 'Inter',sans-serif";
-    const classCountLabel = safeClassCount === 1 ? "1 class in this institute" : `${safeClassCount} classes in this institute`;
-    ctx.fillText(fitCanvasText(ctx, classCountLabel, leftWidth), contentX, rowTop + 38);
-
-    ctx.fillStyle = "#6B7280";
-    ctx.font = "700 19px 'Inter',sans-serif";
-    ctx.fillText(`Today ${item.todayEntries} • Week ${item.weekEntries} • Month ${item.monthEntries}`, contentX, rowTop + 74);
-
-    ctx.font = "700 20px 'Inter',sans-serif";
-    const pillWidth = ctx.measureText(pillLabel).width + 36;
-    drawCanvasPill(ctx, {
-      x: contentX + contentWidth - pillWidth,
-      y: rowTop + 4,
-      label:pillLabel,
-      bg:item.todayUpdated ? "#DCFCE7" : "#F8FAFC",
-      border:item.todayUpdated ? "#BBF7D0" : "#DDE3ED",
-      color:item.todayUpdated ? "#166534" : "#1F2937",
-      font:"700 20px 'Inter',sans-serif",
-      padX:18,
-      height:46,
-    });
-
-    if(index < rowsToDraw.length - 1){
-      ctx.strokeStyle = "#E5E7EB";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(contentX, rowBottom);
-      ctx.lineTo(contentX + contentWidth, rowBottom);
-      ctx.stroke();
-    }
-  });
-
-  const blob = await new Promise(resolve=>canvas.toBlob(resolve, "image/png"));
-  if(blob){
-    triggerBlobDownload(blob, `${slugifyDownloadPart(instituteName)}_teacher_entry_status_${todayKey()}.png`);
-    return;
-  }
-  const fallbackUrl = canvas.toDataURL("image/png");
-  const anchor = Object.assign(document.createElement("a"), {
-    href:fallbackUrl,
-    download:`${slugifyDownloadPart(instituteName)}_teacher_entry_status_${todayKey()}.png`,
-  });
-  anchor.click();
-}
 async function renderInstituteGlanceCanvas({ rows, summary, generatedOnLabel, period = "daily", rangeStartKey = "", rangeEndKey = "", scopeLabel = "All institutes" }){
   await waitForCanvasFonts();
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
@@ -1258,130 +946,6 @@ const CENTRE_SUMMARY_CSS = `
     .followup-actions { display: none !important; }
   }
 `;
-
-function _avatarInitials(name){
-  const parts = String(name || "").trim().split(/\s+/);
-  if(parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return String(name || "?").slice(0, 2).toUpperCase();
-}
-
-function _pendingDaysLabel(teacher){
-  const last = teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher);
-  // Try to parse a days-ago number from strings like "28 May 2026" or "Signed up 28 May 2026"
-  const dateMatch = last.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
-  if(!dateMatch) return { label: "—", cls: "days-urgent" };
-  const d = new Date(`${dateMatch[2]} ${dateMatch[1]}, ${dateMatch[3]}`);
-  if(isNaN(d)) return { label: "—", cls: "days-urgent" };
-  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-  if(days <= 1) return { label: days === 1 ? "1 day" : "today", cls: "days-ok" };
-  if(days <= 8) return { label: `${days} days`, cls: "days-warn" };
-  return { label: `${days} days`, cls: "days-urgent" };
-}
-
-function _pendingBadge(teacher){
-  const last = teacher.lastActivityLabel || instituteGlanceLastActivityLabel(teacher);
-  const isNeverLogged = /no logs yet/i.test(last);
-  const isSignedUpOnly = /signed up/i.test(last) && teacher.monthEntries === 0;
-  const { cls } = _pendingDaysLabel(teacher);
-  if(isNeverLogged) return { label: "Never logged", cls: "badge-red" };
-  if(isSignedUpOnly) return { label: "New · no logs", cls: "badge-amber" };
-  if(cls === "days-urgent") return { label: "Inactive", cls: "badge-red" };
-  if(cls === "days-warn") return { label: "Missed today", cls: "badge-amber" };
-  return { label: "Active · missed today", cls: "badge-green" };
-}
-
-function getInstituteGlanceGeneratedParts(generatedOnLabel){
-  const raw = String(generatedOnLabel || "").replace(/^Generated\s+/i, "").trim();
-  const [datePart, timePart] = raw.split(",").map(part => part.trim());
-  return {
-    raw,
-    date: datePart || raw || "Today",
-    time: timePart || "",
-  };
-}
-
-function buildInstituteGlanceDateCard(generatedOnLabel, label = "Generated"){
-  const e = escapeExportHtml;
-  const parts = getInstituteGlanceGeneratedParts(generatedOnLabel);
-  return `
-    <div class="date-card">
-      <div class="label">${e(label)}</div>
-      <div class="date">${e(parts.date)}</div>
-      ${parts.time ? `<div class="time">${e(parts.time)}</div>` : ""}
-    </div>`;
-}
-
-function formatInstituteReportEntryDate(dateKey){
-  const [year, month, day] = String(dateKey || "").split("-").map(Number);
-  if(!year || !month || !day) return String(dateKey || "—");
-  return new Date(year, month - 1, day).toLocaleDateString("en-IN", {
-    day:"numeric",
-    month:"short",
-    year:"numeric",
-  });
-}
-
-function buildInstituteGlanceCentreCard(row, period = "daily", rangeStartKey = "", rangeEndKey = ""){
-  const e = escapeExportHtml;
-  const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
-  const tone = row.noTeachersSignedUp ? "empty" : row.missingToday === 0 ? "good" : "warn";
-  const status = row.noTeachersSignedUp
-    ? "No sign-ups yet"
-    : row.missingToday === 0
-      ? "All teachers updated"
-      : `${row.missingToday || 0} pending`;
-  const submission = row.noTeachersSignedUp
-    ? "No linked teachers"
-    : `${row.filledToday || 0}/${row.totalTeachers || 0} teachers updated`;
-  return `
-    <div class="centre-card ${tone}">
-      <span class="centre-pill ${tone}">${e(status)}</span>
-      <h3>${e(row.institute || "Institute")}</h3>
-      <div class="metric-line"><span>Submission</span><strong>${e(submission)}</strong></div>
-      <div class="metric-line"><span>Sections taught</span><strong>${row.sectionsTaught || 0}</strong></div>
-      <div class="metric-line"><span>Study hours</span><strong>${e(formatDurationShort(row.totalStudyMinutes || 0))}</strong></div>
-      <div class="metric-line"><span>Period</span><strong>${e(periodMeta.label)}</strong></div>
-    </div>`;
-}
-
-function reportValueMatches(a, b){
-  const left = normaliseName(String(a || "").trim());
-  const right = normaliseName(String(b || "").trim());
-  if(!left || !right) return true;
-  return left === right;
-}
-
-function activityStatusMeta(detail = {}, fallbackLabel = ""){
-  const label = String(detail.statusLabel || fallbackLabel || detail.status || "Started").trim() || "Started";
-  const raw = String(detail.status || label).toLowerCase();
-  const labelLower = label.toLowerCase();
-  if(raw.includes("complete") || labelLower.includes("complete")) return { label, cls:"completed" };
-  if(raw.includes("progress") || labelLower.includes("progress")) return { label, cls:"progress" };
-  if(raw.includes("start") || labelLower.includes("start")) return { label, cls:"started" };
-  return { label, cls:"other" };
-}
-
-function syllabusCoveredTitlesForReport(teacher = {}, syllabusRow = {}){
-  const rows = Array.isArray(teacher.syllabusCoveredRows) ? teacher.syllabusCoveredRows : [];
-  const seen = new Set();
-  return rows
-    .filter(row => reportValueMatches(row.section, syllabusRow.section) && reportValueMatches(row.subject, syllabusRow.subject))
-    .map(row => String(row.chapterTitle || "").trim())
-    .filter(title => {
-      if(!title) return false;
-      const key = syllabusReportNameKey(title);
-      if(seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
-
-function syllabusUpdatedLabelForReport(teacher = {}, syllabusRow = {}){
-  const rows = (Array.isArray(teacher.syllabusCoveredRows) ? teacher.syllabusCoveredRows : [])
-    .filter(row => reportValueMatches(row.section, syllabusRow.section) && reportValueMatches(row.subject, syllabusRow.subject))
-    .sort((a, b) => String(b.dateKey || "").localeCompare(String(a.dateKey || "")));
-  return rows[0]?.dateKey ? formatInstituteReportEntryDate(rows[0].dateKey) : "-";
-}
 
 function buildInstituteGlanceActivityHtmlPage(row, generatedOnLabel, options = {}){
   const e = escapeExportHtml;
@@ -2210,65 +1774,6 @@ function formatDateLabel(dk){
   const[y,m,d]=dk.split("-").map(Number);
   if(dk===todayKey()) return "Today";
   return new Date(y,m-1,d).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
-}
-
-function AlsoAtInstitutes({ institutes = [], maxVisible = 2 }){
-  const cleaned = [...new Set((institutes || []).map(inst => String(inst || "").trim()).filter(Boolean))];
-  if(!cleaned.length) return null;
-  const visible = cleaned.slice(0, maxVisible);
-  const remaining = cleaned.length - visible.length;
-  const hiddenLabel = cleaned.slice(maxVisible).join(", ");
-  return (
-    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8,alignItems:"center"}}>
-      <span style={{fontSize:11,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.8}}>
-        Also at
-      </span>
-      {visible.map(inst=>(
-        <span
-          key={inst}
-          title={inst}
-          style={{
-            display:"inline-flex",
-            alignItems:"center",
-            maxWidth:"100%",
-            background:G.bg,
-            border:`1px solid ${G.border}`,
-            borderRadius:999,
-            padding:"4px 10px",
-            fontSize:12,
-            lineHeight:1.35,
-            color:G.textM,
-            fontFamily:G.sans,
-            fontWeight:600,
-            minWidth:0,
-            overflow:"hidden",
-            textOverflow:"ellipsis",
-            whiteSpace:"nowrap",
-          }}>
-          {inst}
-        </span>
-      ))}
-      {remaining>0&&(
-        <span
-          title={hiddenLabel}
-          style={{
-            display:"inline-flex",
-            alignItems:"center",
-            background:"#EEF4FF",
-            border:"1px solid #C7D7F5",
-            borderRadius:999,
-            padding:"4px 10px",
-            fontSize:12,
-            lineHeight:1.35,
-            color:G.blue,
-            fontFamily:G.sans,
-            fontWeight:700,
-          }}>
-          +{remaining} more
-        </span>
-      )}
-    </div>
-  );
 }
 
 // ── Panel styles ──────────────────────────────────────────────────────────────
@@ -9405,7 +8910,7 @@ function AdminPanelInner({user}){
   const instituteGlanceHoldListOnMobile = isMobile && instituteGlanceReport.loading && !instituteGlanceReport.ready;
 
   const renderInstituteGlanceStatGrid = (compact = false) => (
-    <div style={{display:"grid",gridTemplateColumns:compact ? "repeat(2,minmax(0,1fr))" : "repeat(5,minmax(0,1fr))",gap:8,marginTop:12}}>
+    <div style={{display:"grid",gridTemplateColumns:compact ? "repeat(2,minmax(0,1fr))" : "repeat(5,minmax(0,1fr))",gap:compact ? 7 : 8,marginTop:compact ? 10 : 11}}>
       {[
         { label:"Institutes", value:instituteGlanceReport.summary.totalInstitutes },
         { label:instituteGlancePeriodMeta.updatedLabel, value:`${instituteGlanceReport.summary.filledToday}/${instituteGlanceReport.summary.totalTeachers}` },
@@ -9413,15 +8918,15 @@ function AdminPanelInner({user}){
         { label:"Sections taught", value:instituteGlanceReport.summary.sectionsTaught },
         { label:"Study hours", value:formatDurationShort(instituteGlanceReport.summary.totalStudyMinutes || 0) },
       ].map(item=>(
-        <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 11px"}}>
+        <div key={item.label} style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:12,padding:compact ? "9px 10px" : "9px 11px"}}>
           <div style={{fontSize:10,color:G.textL,fontFamily:G.mono,letterSpacing:0.6,textTransform:"uppercase"}}>{item.label}</div>
-          <div style={{fontSize:compact ? 18 : 20,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>{item.value}</div>
+          <div style={{fontSize:compact ? 18 : 19,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:7}}>{item.value}</div>
         </div>
       ))}
     </div>
   );
 
-  const renderInstituteGlanceActions = (compact = false) => {
+  const renderInstituteGlanceActions = (compact = false, flush = false) => {
     const baseButtonStyle = {
       minWidth:compact ? 84 : 92,
       height:compact ? 36 : 38,
@@ -9442,7 +8947,7 @@ function AdminPanelInner({user}){
     };
     const scheduleButtonBusy = !!ledgrReportScheduleSaving;
     return (
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:flush ? 0 : compact ? 10 : 11,justifyContent:compact ? "flex-start" : "flex-end"}}>
         <button
           type="button"
           className="admin-mobile-touch"
@@ -9452,44 +8957,17 @@ function AdminPanelInner({user}){
             event.stopPropagation();
             openInstituteGlanceOptions("export", "report");
           }}
-          disabled={scheduleButtonBusy}
+          disabled={!!instituteGlanceAnyExportBusy || scheduleButtonBusy}
           style={{
             ...baseButtonStyle,
-            minWidth:compact ? 170 : 210,
-            justifyContent:"space-between",
+            minWidth:compact ? 96 : 112,
             background:G.blueL,
             border:`1px solid #BFDBFE`,
             color:G.blue,
-            cursor:scheduleButtonBusy ? "not-allowed" : "pointer",
-            opacity:scheduleButtonBusy ? 0.65 : 1,
+            cursor:instituteGlanceAnyExportBusy || scheduleButtonBusy ? "not-allowed" : "pointer",
+            opacity:instituteGlanceAnyExportBusy || scheduleButtonBusy ? 0.65 : 1,
           }}>
-          <span style={{display:"inline-flex",alignItems:"center",gap:7,minWidth:0}}>
-            <AppIcon icon={IconCalendar} size={15} color={G.blue} />
-            <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{instituteGlancePeriodMeta.label}</span>
-          </span>
-          <span style={{fontSize:11,fontWeight:800,color:G.textM,whiteSpace:"nowrap"}}>
-            {ledgrReportSchedule?.enabled
-              ? `${ledgrReportSchedule.times?.length || 0} ${ledgrReportSchedule?.execution?.lastRunAt || ledgrReportSchedule?.lastRunAt ? "scheduled" : "saved"}`
-              : "Options"}
-          </span>
-        </button>
-        <button
-          type="button"
-          className="admin-mobile-touch"
-          onPointerDown={event=>event.stopPropagation()}
-          onClick={event=>{
-            event.preventDefault();
-            event.stopPropagation();
-            openInstituteGlanceOptions("export", "report");
-          }}
-          disabled={!!instituteGlanceAnyExportBusy}
-          style={{
-            ...baseButtonStyle,
-            minWidth:compact ? 96 : 108,
-            cursor:instituteGlanceAnyExportBusy ? "not-allowed" : "pointer",
-            opacity:instituteGlanceAnyExportBusy ? 0.65 : 1,
-          }}>
-          <AppIcon icon={IconDownload} size={15} color={G.text} />
+          <AppIcon icon={IconDownload} size={15} color={G.blue} />
           Export
         </button>
         <button
@@ -9504,27 +8982,29 @@ function AdminPanelInner({user}){
   };
 
   const renderInstituteGlanceProgressBlock = (compact = false) => (
-    <div style={{marginTop:14,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:16,padding:compact ? "12px 12px 13px" : "15px 16px 16px"}}>
+    <div style={{marginTop:compact ? 10 : 11,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:compact ? "10px 11px" : "11px 12px"}}>
       <style>{`
         @keyframes ledgrReportPulse{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
         @keyframes ledgrReportSkeletonShift{0%{background-position:200% 0}100%{background-position:-200% 0}}
       `}</style>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-        <div>
-          <div style={{fontSize:13,fontWeight:700,color:G.text,fontFamily:G.sans}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:800,color:G.text,fontFamily:G.sans}}>
             {instituteGlanceReport.loading
               ? instituteGlanceReport.ready ? "Updating the Ledgr report" : "Building the Ledgr report"
               : "Centres ready"}
           </div>
-          <div style={{fontSize:12,color:G.textM,lineHeight:1.55,marginTop:4}}>
+          {instituteGlanceReport.loading&&(
+          <div style={{fontSize:12,color:G.textM,lineHeight:1.45,marginTop:3}}>
             {instituteGlanceReport.loading
               ? instituteGlanceReport.ready
                 ? "The current report stays available while fresh data is synced."
                 : "Teacher records are syncing first. Centre cards appear as soon as the first pass completes."
               : "All institute data is ready."}
           </div>
+          )}
         </div>
-        <div style={{display:"grid",gap:6,justifyItems:"end"}}>
+        <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
           <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
             {instituteGlanceReport.loading
               ? "Background sync"
@@ -9537,13 +9017,13 @@ function AdminPanelInner({user}){
           </span>
         </div>
       </div>
-      <div style={{height:8,background:"#E5ECF6",borderRadius:999,overflow:"hidden",marginTop:12}}>
+      <div style={{height:6,background:"#E5ECF6",borderRadius:999,overflow:"hidden",marginTop:9}}>
         <div style={instituteGlanceReport.loading
           ? {height:"100%",width:"38%",borderRadius:999,background:"linear-gradient(90deg,#93C5FD 0%,#2563EB 100%)",animation:"ledgrReportPulse 1.3s ease-in-out infinite"}
           : {height:"100%",width:`${Math.max(instituteGlanceProgressPct, instituteGlanceReport.loaded>0 ? 5 : 0)}%`,borderRadius:999,background:"linear-gradient(90deg,#3B82F6 0%,#1D4ED8 100%)",transition:"width 0.2s ease"}} />
       </div>
       {!instituteGlanceReport.ready&&(
-        <div style={{fontSize:12.5,color:G.textM,lineHeight:1.55,marginTop:10}}>
+        <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5,marginTop:8}}>
           Report options unlock when the first background sync finishes.
         </div>
       )}
@@ -10134,7 +9614,7 @@ function AdminPanelInner({user}){
                   </td>
                   <td style={{padding:"15px 16px",borderBottom:`1px solid ${G.border}`,verticalAlign:"top"}}>
                     {interactive ? (
-                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <div style={{display:"flex",gap:7,flexWrap:"wrap",maxWidth:310}}>
                         <button
                           type="button"
                           className="admin-mobile-touch"
@@ -10157,7 +9637,7 @@ function AdminPanelInner({user}){
                             gap:6,
                           }}>
                           <AppIcon icon={IconCopy} size={14} color={G.blue} />
-                          <span>Copy details</span>
+                          <span>Details</span>
                         </button>
                         <button
                           type="button"
@@ -10181,31 +9661,7 @@ function AdminPanelInner({user}){
                             gap:6,
                           }}>
                           <AppIcon icon={IconPhoto} size={14} color={G.blue} />
-                          <span>{isInstituteGlanceRowImageFormatBusy(row, "png") ? "PNG..." : "Copy PNG"}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="admin-mobile-touch"
-                          onClick={()=>copyInstituteGlanceNamesImage(row, "jpg")}
-                          disabled={actionDisabled}
-                          style={{
-                            minHeight:34,
-                            padding:"0 11px",
-                            borderRadius:11,
-                            border:`1px solid #D8DEE8`,
-                            background:"#FFFFFF",
-                            color:G.text,
-                            fontSize:12,
-                            fontWeight:800,
-                            fontFamily:G.sans,
-                            cursor:actionDisabled ? "not-allowed" : "pointer",
-                            opacity:actionDisabled && !isInstituteGlanceRowImageFormatBusy(row, "jpg") ? 0.65 : 1,
-                            display:"inline-flex",
-                            alignItems:"center",
-                            gap:6,
-                          }}>
-                          <AppIcon icon={IconPhoto} size={14} color={G.text} />
-                          <span>{isInstituteGlanceRowImageFormatBusy(row, "jpg") ? "JPG..." : "Copy JPG"}</span>
+                          <span>{isInstituteGlanceRowImageFormatBusy(row, "png") ? "PNG..." : "PNG"}</span>
                         </button>
                         <button
                           type="button"
@@ -10229,7 +9685,7 @@ function AdminPanelInner({user}){
                             gap:6,
                           }}>
                           <AppIcon icon={IconDownload} size={14} color={G.text} />
-                          <span>{instituteGlanceRowExportBusy === row.institute ? "PDF..." : "Centre PDF"}</span>
+                          <span>{instituteGlanceRowExportBusy === row.institute ? "PDF..." : "PDF"}</span>
                         </button>
                         <button
                           type="button"
@@ -10252,7 +9708,7 @@ function AdminPanelInner({user}){
                             alignItems:"center",
                             gap:6,
                           }}>
-                          <span>Open centre</span>
+                          <span>Open</span>
                           <AppIcon icon={IconChevronRight} size={14} color={G.blue} />
                         </button>
                       </div>
@@ -10382,20 +9838,20 @@ function AdminPanelInner({user}){
               )}
 
               {canOpen&&(
-                <div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",marginTop:"auto",paddingTop:12}}>
+                <div style={{display:"flex",justifyContent:"flex-end",gap:7,flexWrap:"wrap",marginTop:"auto",paddingTop:12}}>
                   <button
                     type="button"
                     className="admin-mobile-touch"
                     onClick={()=>copyInstituteGlanceNamesImage(row, "png")}
                     disabled={cardActionBusy}
                     style={{
-                      minHeight:36,
-                      padding:"0 12px",
-                      borderRadius:12,
+                      minHeight:34,
+                      padding:"0 11px",
+                      borderRadius:11,
                       border:`1px solid #C7D7F5`,
                       background:"#EFF6FF",
                       color:G.blue,
-                      fontSize:12.5,
+                      fontSize:12,
                       fontWeight:800,
                       fontFamily:G.sans,
                       cursor:cardActionBusy ? "not-allowed" : "pointer",
@@ -10405,31 +9861,7 @@ function AdminPanelInner({user}){
                       gap:6,
                     }}>
                     <AppIcon icon={IconPhoto} size={14} color={G.blue} />
-                    <span>{isInstituteGlanceRowImageFormatBusy(row, "png") ? "PNG..." : "Copy PNG"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="admin-mobile-touch"
-                    onClick={()=>copyInstituteGlanceNamesImage(row, "jpg")}
-                    disabled={cardActionBusy}
-                    style={{
-                      minHeight:36,
-                      padding:"0 12px",
-                      borderRadius:12,
-                      border:`1px solid ${G.border}`,
-                      background:"#FFFFFF",
-                      color:G.text,
-                      fontSize:12.5,
-                      fontWeight:800,
-                      fontFamily:G.sans,
-                      cursor:cardActionBusy ? "not-allowed" : "pointer",
-                      opacity:cardActionBusy && !isInstituteGlanceRowImageFormatBusy(row, "jpg") ? 0.65 : 1,
-                      display:"inline-flex",
-                      alignItems:"center",
-                      gap:6,
-                    }}>
-                    <AppIcon icon={IconPhoto} size={14} color={G.text} />
-                    <span>{isInstituteGlanceRowImageFormatBusy(row, "jpg") ? "JPG..." : "Copy JPG"}</span>
+                    <span>{isInstituteGlanceRowImageFormatBusy(row, "png") ? "PNG..." : "PNG"}</span>
                   </button>
                   <button
                     type="button"
@@ -10437,13 +9869,13 @@ function AdminPanelInner({user}){
                     onClick={()=>exportInstituteGlanceRowPdf(row)}
                     disabled={cardActionBusy}
                     style={{
-                      minHeight:36,
-                      padding:"0 12px",
-                      borderRadius:12,
+                      minHeight:34,
+                      padding:"0 11px",
+                      borderRadius:11,
                       border:`1px solid ${G.border}`,
                       background:"#FFFFFF",
                       color:G.text,
-                      fontSize:12.5,
+                      fontSize:12,
                       fontWeight:800,
                       fontFamily:G.sans,
                       cursor:cardActionBusy ? "not-allowed" : "pointer",
@@ -10453,7 +9885,7 @@ function AdminPanelInner({user}){
                       gap:6,
                     }}>
                     <AppIcon icon={IconDownload} size={14} color={G.text} />
-                    <span>{instituteGlanceRowExportBusy===row.institute ? "PDF..." : "Centre PDF"}</span>
+                    <span>{instituteGlanceRowExportBusy===row.institute ? "PDF..." : "PDF"}</span>
                   </button>
                   <button
                     type="button"
@@ -10461,13 +9893,13 @@ function AdminPanelInner({user}){
                     onClick={()=>openInstituteFromGlance(row)}
                     disabled={cardActionBusy}
                     style={{
-                      minHeight:36,
-                      padding:"0 12px",
-                      borderRadius:12,
+                      minHeight:34,
+                      padding:"0 11px",
+                      borderRadius:11,
                       border:`1px solid ${G.border}`,
                       background:"#FFFFFF",
                       color:G.blue,
-                      fontSize:12.5,
+                      fontSize:12,
                       fontWeight:800,
                       fontFamily:G.sans,
                       cursor:cardActionBusy ? "not-allowed" : "pointer",
@@ -10476,7 +9908,7 @@ function AdminPanelInner({user}){
                       alignItems:"center",
                       gap:6,
                     }}>
-                    <span>Open centre</span>
+                    <span>Open</span>
                     <AppIcon icon={IconChevronRight} size={14} color={G.blue} />
                   </button>
                 </div>
@@ -10514,20 +9946,16 @@ function AdminPanelInner({user}){
             </div>
           )}
 
-          <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:26,padding:"18px 18px 20px",boxShadow:"0 18px 48px rgba(15,23,42,0.08)"}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+          <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:22,padding:"15px 16px 17px",boxShadow:"0 18px 48px rgba(15,23,42,0.08)"}}>
+            <div style={{display:"grid",gridTemplateColumns:isMobile ? "1fr" : "minmax(0,1fr) auto",alignItems:"start",gap:12}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>{embedded ? "Ledgr Report" : "Workspace"}</div>
-                <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:7,lineHeight:1.08}}>{embedded ? "All institutes report" : "All institutes"}</div>
-                <div style={{fontSize:13,color:G.textM,lineHeight:1.65,marginTop:8,maxWidth:920}}>
-                  {embedded ? "Submissions, pending teachers, sections, hours, and export actions without leaving the control panel." : "Compact centre boxes with export actions."}
+                <div style={{fontSize:21,fontWeight:800,color:G.text,fontFamily:G.display,marginTop:5,lineHeight:1.08}}>{embedded ? "All institutes report" : "All institutes"}</div>
+                <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45,marginTop:6,maxWidth:840}}>
+                  {embedded ? "Submissions, pending teachers, sections, hours, and exports." : "Compact centre boxes with export actions."}
                 </div>
               </div>
-              {instituteGlanceReport.loading&&(
-                <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:700,fontFamily:G.mono,whiteSpace:"nowrap"}}>
-                  {instituteGlanceReadyCount}/{Math.max(instituteGlanceReport.totalInstitutes || 0, instituteGlanceReport.summary.totalInstitutes || 0)} ready
-                </span>
-              )}
+              {!isMobile&&renderInstituteGlanceActions(false, true)}
             </div>
 
             {renderInstituteGlanceProgressBlock(false)}
@@ -10545,7 +9973,6 @@ function AdminPanelInner({user}){
             )}
 
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(false)}
-            {renderInstituteGlanceActions(false)}
 
             {instituteGlanceReport.loading && !instituteGlanceReport.rows.length ? (
               renderInstituteGlanceLoadingDeck(false)
@@ -11191,6 +10618,12 @@ function AdminPanelInner({user}){
       const classRows = Array.from(classBuckets.values()).map(bucket => {
         const subjects = Array.from(bucket.subjects).sort((a,b)=>exportTextSorter.compare(a || "", b || ""));
         const teacherCount = new Set(bucket.teachers.map(item => item.uid).filter(Boolean)).size;
+        const todayTeacherCount = new Set(
+          bucket.teachers
+            .filter(item => Number(item.todayEntries || 0) > 0)
+            .map(item => item.uid)
+            .filter(Boolean)
+        ).size;
         const lastDays = daysSinceTs(bucket.lastTs || null);
         const lastDateKey = bucket.lastDateKey || "";
         const hasTeachers = teacherCount > 0;
@@ -11220,6 +10653,7 @@ function AdminPanelInner({user}){
           ...bucket,
           subjects,
           teacherCount,
+          todayTeacherCount,
           todayEntries:bucket.todayEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
           yesterdayEntries:bucket.yesterdayEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
           lastWeekEntries:bucket.lastWeekEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
@@ -16526,6 +15960,7 @@ function AdminPanelInner({user}){
               const active = cls.key === selectedClassKey;
               const tone = getSectionTone(cls.display);
               const teacherCount = Math.max(0, (cls.visibleTeachers || cls.teachers || []).length || cls.teacherCount || 0);
+              const todayTeacherCount = Math.max(0, Number(cls.todayTeacherCount || 0));
               return (
                 <button
                   key={`${group.key}_section_${cls.key}`}
@@ -16552,7 +15987,7 @@ function AdminPanelInner({user}){
                     {cls.display}
                   </span>
                   <span style={{flex:"0 0 auto",minWidth:24,height:24,padding:"0 7px",borderRadius:999,background:active ? "#FFFFFF" : "#F1F5F9",border:`1px solid ${active ? "#BFDBFE" : G.border}`,display:"inline-flex",alignItems:"center",justifyContent:"center",color:G.textS,fontSize:11,fontWeight:950,fontFamily:G.sans,lineHeight:1}}>
-                    {teacherCount}
+                    {todayTeacherCount}/{teacherCount}
                   </span>
                 </button>
               );
