@@ -1,6 +1,7 @@
 package com.ledgr.timetable.data
 
 import kotlinx.coroutines.flow.Flow
+import com.ledgr.timetable.domain.DraftTimeSlot
 import java.util.UUID
 
 class TimetableRepository(
@@ -66,5 +67,19 @@ class TimetableRepository(
 
     suspend fun deleteSection(id: String) {
         dao.deleteSection(id)
+    }
+
+    suspend fun prefillTimeSlotsForNewDraft(instituteId: String): List<DraftTimeSlot> {
+        val latestTimetable = dao.getLatestTimetableForInstitute(instituteId) ?: return emptyList()
+        return dao.getTimeSlotsForTimetable(latestTimetable.id)
+            .mapIndexed { index, slot ->
+                DraftTimeSlot(
+                    id = newId(),
+                    startTime = slot.startTime,
+                    endTime = slot.endTime,
+                    type = slot.type,
+                    sortOrder = index,
+                )
+            }
     }
 }

@@ -48,7 +48,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ledgr.timetable.data.Institute
 import com.ledgr.timetable.data.Section
+import com.ledgr.timetable.data.TIME_SLOT_TYPE_BREAK
+import com.ledgr.timetable.data.TIME_SLOT_TYPE_CLASS
 import com.ledgr.timetable.data.Teacher
+import com.ledgr.timetable.domain.DraftTimeSlot
 import com.ledgr.timetable.ui.theme.TimetableTheme
 
 @Composable
@@ -112,7 +115,15 @@ private fun TimetableNavHost(
             )
         }
         composable(TimetableRoute.WizardTimeSlots.route) {
-            WizardTimeSlotsScreen(uiState = uiState, navController = navController)
+            WizardTimeSlotsScreen(
+                uiState = uiState,
+                onStartDraft = viewModel::startTimeSlotDraft,
+                onAddTimeSlot = viewModel::addTimeSlot,
+                onUpdateTimeSlot = viewModel::updateTimeSlot,
+                onMoveTimeSlot = viewModel::moveTimeSlot,
+                onDeleteTimeSlot = viewModel::deleteTimeSlot,
+                navController = navController,
+            )
         }
         composable(TimetableRoute.WizardAssign.route) {
             WizardAssignScreen(uiState = uiState, navController = navController)
@@ -325,23 +336,304 @@ private fun SectionRosterSection(
 @Composable
 private fun WizardTimeSlotsScreen(
     uiState: TimetableUiState,
+    onStartDraft: () -> Unit,
+    onAddTimeSlot: (String, String, String) -> Unit,
+    onUpdateTimeSlot: (DraftTimeSlot, String, String, String) -> Unit,
+    onMoveTimeSlot: (Int, Int) -> Unit,
+    onDeleteTimeSlot: (DraftTimeSlot) -> Unit,
     navController: NavHostController,
 ) {
-    PlaceholderScreen(
+    LaunchedEffect(uiState.selectedInstitute?.id) {
+        onStartDraft()
+    }
+
+    AppScaffold(
         title = "Time slots",
-        description = selectedInstituteLabel(uiState),
+        subtitle = selectedInstituteLabel(uiState),
         progressStep = 1,
-        primaryActions = listOf(
-            PlaceholderAction("Next: Assign") {
+    ) {
+        TimeSlotEditorPanel(onAddTimeSlot = onAddTimeSlot)
+        if (uiState.draftTimeSlots.isEmpty()) {
+            EmptyStateCard(
+                title = "No time slots yet",
+                body = "Add the first period for this timetable.",
+            )
+        } else {
+            uiState.draftTimeSlots.forEachIndexed { index, slot ->
+                key(slot.id) {
+                    DraftTimeSlotRow(
+                        slot = slot,
+                        index = index,
+                        isFirst = index == 0,
+                        isLast = index == uiState.draftTimeSlots.lastIndex,
+                        onUpdateTimeSlot = onUpdateTimeSlot,
+                        onMoveUp = { onMoveTimeSlot(index, index - 1) },
+                        onMoveDown = { onMoveTimeSlot(index, index + 1) },
+                        onDeleteTimeSlot = { onDeleteTimeSlot(slot) },
+                    )
+                }
+            }
+        }
+        ActionButton(
+            label = "Next: Assign",
+            onClick = {
                 navController.navigate(TimetableRoute.WizardAssign.route)
             },
-        ),
-        secondaryActions = listOf(
-            PlaceholderAction("Back to home") {
+            style = ActionStyle.Primary,
+        )
+        ActionButton(
+            label = "Back to home",
+            onClick = {
                 navController.navigateHome()
             },
+            style = ActionStyle.Outlined,
+        )
+    }
+}
+
+@Composable
+private fun TimeSlotEditorPanel(
+    onAddTimeSlot: (String, String, String) -> Unit,
+) {
+    var startTime by rememberSaveable { mutableStateOf("") }
+    var endTime by rememberSaveable { mutableStateOf("") }
+    var type by rememberSaveable { mutableStateOf(TIME_SLOT_TYPE_CLASS) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
-    )
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Add period",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            TimeFields(
+                startTime = startTime,
+                endTime = endTime,
+                onStartTimeChange = { startTime = it },
+                onEndTimeChange = { endTime = it },
+            )
+            TimeSlotTypeChooser(
+                selectedType = type,
+                onSelectedTypeChange = { type = it },
+            )
+            ActionButton(
+                label = "+ Add time slot",
+                onClick = {
+                    onAddTimeSlot(startTime, endTime, type)
+                    startTime = ""
+                    endTime = ""
+                    type = TIME_SLOT_TYPE_CLASS
+                },
+                style = ActionStyle.Primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DraftTimeSlotRow(
+    slot: DraftTimeSlot,
+    index: Int,
+    isFirst: Boolean,
+    isLast: Boolean,
+    onUpdateTimeSlot: (DraftTimeSlot, String, String, String) -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onDeleteTimeSlot: () -> Unit,
+) {
+    var isEditing by rememberSaveable { mutableStateOf(false) }
+    var startTime by rememberSaveable { mutableStateOf(slot.startTime) }
+    var endTime by rememberSaveable { mutableStateOf(slot.endTime) }
+    var type by rememberSaveable { mutableStateOf(slot.type) }
+
+    LaunchedEffect(slot, isEditing) {
+        if (!isEditing) {
+            startTime = slot.startTime
+            endTime = slot.endTime
+            type = slot.type
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (isEditing) {
+                TimeFields(
+                    startTime = startTime,
+                    endTime = endTime,
+                    onStartTimeChange = { startTime = it },
+                    onEndTimeChange = { endTime = it },
+                )
+                TimeSlotTypeChooser(
+                    selectedType = type,
+                    onSelectedTypeChange = { type = it },
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ActionButton(
+                        label = "Cancel",
+                        onClick = {
+                            startTime = slot.startTime
+                            endTime = slot.endTime
+                            type = slot.type
+                            isEditing = false
+                        },
+                        style = ActionStyle.Outlined,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ActionButton(
+                        label = "Save",
+                        onClick = {
+                            onUpdateTimeSlot(slot, startTime, endTime, type)
+                            isEditing = false
+                        },
+                        style = ActionStyle.Primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(11.dp),
+                ) {
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = CircleShape,
+                        color = if (slot.type == TIME_SLOT_TYPE_CLASS) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        },
+                        contentColor = if (slot.type == TIME_SLOT_TYPE_CLASS) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    ) {
+                        Text(
+                            text = "${slot.startTime} - ${slot.endTime}",
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                    Text(
+                        text = if (slot.type == TIME_SLOT_TYPE_CLASS) "Class" else "Break",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "#${index + 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ActionButton(
+                        label = "Edit",
+                        onClick = { isEditing = true },
+                        style = ActionStyle.Tonal,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ActionButton(
+                        label = "Up",
+                        onClick = onMoveUp,
+                        style = if (isFirst) ActionStyle.Outlined else ActionStyle.Tonal,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ActionButton(
+                        label = "Down",
+                        onClick = onMoveDown,
+                        style = if (isLast) ActionStyle.Outlined else ActionStyle.Tonal,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                ActionButton(
+                    label = "Remove",
+                    onClick = onDeleteTimeSlot,
+                    style = ActionStyle.Danger,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimeFields(
+    startTime: String,
+    endTime: String,
+    onStartTimeChange: (String) -> Unit,
+    onEndTimeChange: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = startTime,
+            onValueChange = onStartTimeChange,
+            modifier = Modifier.weight(1f),
+            label = { Text("Start") },
+            singleLine = true,
+            shape = MaterialTheme.shapes.medium,
+        )
+        OutlinedTextField(
+            value = endTime,
+            onValueChange = onEndTimeChange,
+            modifier = Modifier.weight(1f),
+            label = { Text("End") },
+            singleLine = true,
+            shape = MaterialTheme.shapes.medium,
+        )
+    }
+}
+
+@Composable
+private fun TimeSlotTypeChooser(
+    selectedType: String,
+    onSelectedTypeChange: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ActionButton(
+            label = "Class",
+            onClick = { onSelectedTypeChange(TIME_SLOT_TYPE_CLASS) },
+            style = if (selectedType == TIME_SLOT_TYPE_CLASS) ActionStyle.Primary else ActionStyle.Outlined,
+            modifier = Modifier.weight(1f),
+        )
+        ActionButton(
+            label = "Break",
+            onClick = { onSelectedTypeChange(TIME_SLOT_TYPE_BREAK) },
+            style = if (selectedType == TIME_SLOT_TYPE_BREAK) ActionStyle.Primary else ActionStyle.Outlined,
+            modifier = Modifier.weight(1f),
+        )
+    }
 }
 
 @Composable

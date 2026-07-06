@@ -63,6 +63,9 @@ interface TimetableDao {
     @Query("SELECT * FROM timetables WHERE id = :id")
     suspend fun getTimetable(id: String): Timetable?
 
+    @Query("SELECT * FROM timetables WHERE instituteId = :instituteId ORDER BY createdAt DESC LIMIT 1")
+    suspend fun getLatestTimetableForInstitute(instituteId: String): Timetable?
+
     @Query("SELECT * FROM time_slots WHERE timetableId = :timetableId ORDER BY sortOrder")
     suspend fun getTimeSlotsForTimetable(timetableId: String): List<TimeSlot>
 

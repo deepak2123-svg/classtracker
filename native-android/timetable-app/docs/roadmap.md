@@ -39,6 +39,7 @@ flagging conflicts — no automatic solver in v1.
 | 12 | Do off-days exist for hour/class counting? | Yes, fixed: Sunday is off, every other day (including Saturday) counts. No per-institute customization in v1. |
 | 13 | What did "simplify the wizard" actually mean? | Not fewer screens — ease of the core task itself: pairing a teacher to a class faster and with less repetition. Addressed in Section 9, not by cutting steps. |
 | 14 | Where does this app live in the monorepo? | native-android/timetable-app, package com.ledgr.timetable — independent build for now, intentionally positioned to merge into the LedgrNative workspace later. A prior auto-generator-based attempt at this path (commits e3fd36b, 7d68d77) was deleted, since it conflicted with the manual-assignment decision in this spec — recoverable via those commit hashes if ever needed. |
+| 15 | Should an interrupted wizard draft survive app kill/back-out before Review & Save? | No, for v1 — losing an in-progress draft on interruption is acceptable. Noted as a possible v2 improvement, not a current requirement. |
 
 ## 3. Data model
 
@@ -265,3 +266,5 @@ naturally, as a side effect of being contextual instead of upfront.
 - Side-by-side history comparison (mentioned as wanted "eventually").
 - Whether `SubjectTeacherDefault` should be editable mid-build or only
   managed from institute settings.
+- Draft persistence — currently in-memory only; revisit if interrupted
+  builds turn out to be a real usability problem.

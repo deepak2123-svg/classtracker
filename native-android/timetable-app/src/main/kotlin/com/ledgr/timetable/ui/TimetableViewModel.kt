@@ -9,6 +9,8 @@ import com.ledgr.timetable.data.Section
 import com.ledgr.timetable.data.Teacher
 import com.ledgr.timetable.data.TimetableDatabaseProvider
 import com.ledgr.timetable.data.TimetableRepository
+import com.ledgr.timetable.domain.DraftTimeSlot
+import com.ledgr.timetable.domain.DraftTimeSlotEditor
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,7 +24,10 @@ import kotlinx.coroutines.launch
 class TimetableViewModel(
     private val repository: TimetableRepository,
 ) : ViewModel() {
+    private val timeSlotEditor = DraftTimeSlotEditor()
     private val selectedInstituteId = MutableStateFlow<String?>(null)
+    private val draftTimeSlotInstituteId = MutableStateFlow<String?>(null)
+    private val draftTimeSlots = MutableStateFlow<List<DraftTimeSlot>>(emptyList())
     private val institutes = repository.observeInstitutes()
     private val teachers = selectedInstituteId.flatMapLatest { instituteId ->
         if (instituteId == null) {
@@ -44,13 +49,15 @@ class TimetableViewModel(
         selectedInstituteId,
         teachers,
         sections,
-    ) { instituteRows, selectedId, teacherRows, sectionRows ->
+        draftTimeSlots,
+    ) { instituteRows, selectedId, teacherRows, sectionRows, timeSlotRows ->
         val selectedInstitute = instituteRows.firstOrNull { it.id == selectedId }
         TimetableUiState(
             institutes = instituteRows,
             selectedInstitute = selectedInstitute,
             teachers = teacherRows,
             sections = sectionRows,
+            draftTimeSlots = timeSlotRows,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -121,6 +128,54 @@ class TimetableViewModel(
         }
     }
 
+    fun startTimeSlotDraft() {
+        val instituteId = selectedInstituteId.value ?: return
+        if (draftTimeSlotInstituteId.value == instituteId) return
+
+        viewModelScope.launch {
+            draftTimeSlots.value = repository.prefillTimeSlotsForNewDraft(instituteId)
+            draftTimeSlotInstituteId.value = instituteId
+        }
+    }
+
+    fun addTimeSlot(startTime: String, endTime: String, type: String) {
+        if (startTime.trim().isEmpty() || endTime.trim().isEmpty()) return
+
+        draftTimeSlots.value = timeSlotEditor.addSlot(
+            slots = draftTimeSlots.value,
+            startTime = startTime,
+            endTime = endTime,
+            type = type,
+        )
+    }
+
+    fun updateTimeSlot(slot: DraftTimeSlot, startTime: String, endTime: String, type: String) {
+        if (startTime.trim().isEmpty() || endTime.trim().isEmpty()) return
+
+        draftTimeSlots.value = timeSlotEditor.updateSlot(
+            slots = draftTimeSlots.value,
+            id = slot.id,
+            startTime = startTime,
+            endTime = endTime,
+            type = type,
+        )
+    }
+
+    fun moveTimeSlot(fromIndex: Int, toIndex: Int) {
+        draftTimeSlots.value = timeSlotEditor.moveSlot(
+            slots = draftTimeSlots.value,
+            fromIndex = fromIndex,
+            toIndex = toIndex,
+        )
+    }
+
+    fun deleteTimeSlot(slot: DraftTimeSlot) {
+        draftTimeSlots.value = timeSlotEditor.deleteSlot(
+            slots = draftTimeSlots.value,
+            id = slot.id,
+        )
+    }
+
     companion object {
         fun factory(context: Context): ViewModelProvider.Factory {
             val appContext = context.applicationContext
@@ -142,4 +197,5 @@ data class TimetableUiState(
     val selectedInstitute: Institute? = null,
     val teachers: List<Teacher> = emptyList(),
     val sections: List<Section> = emptyList(),
+    val draftTimeSlots: List<DraftTimeSlot> = emptyList(),
 )
