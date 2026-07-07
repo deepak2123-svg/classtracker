@@ -43,7 +43,7 @@ import {
   IconUser,
   IconX,
 } from "@tabler/icons-react";
-import { loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
+import { db, loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
 import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, toDateKey, formatDateLabel, fmt, formatPeriod, getSectionTone } from "./shared.jsx";
 
 const TEACHER_THEME_STORAGE_KEY = "classlog_teacher_theme";
@@ -481,6 +481,7 @@ function hasCompleteProfile(profile) {
 const DEFAULT_DATA = {classes:[],notes:{},subjects:[],institutes:[],sections:[],profile:normaliseProfile(),trash:{classes:[],notes:[]}};
 const TEACHER_ALLOWED_VIEWS = new Set([
   "home",
+  "syllabus",
   "profile",
   "notifications",
   "stats",
@@ -1069,6 +1070,218 @@ function buildClassTimelineSummary(classNotes = {}, options = {}){
   };
 }
 
+const SYLLABUS_PROGRESS_SNAPSHOT_TITLE = "Syllabus progress update";
+
+function syllabusChapterCompletionMarker(chapterId){
+  return `chapter:${chapterId}`;
+}
+
+function syllabusString(value){
+  return String(value || "").trim();
+}
+
+function syllabusNumber(value){
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function syllabusMillis(value){
+  if(value && typeof value.toMillis === "function") return syllabusNumber(value.toMillis());
+  if(value && typeof value.seconds === "number") return value.seconds * 1000;
+  return syllabusNumber(value);
+}
+
+function syllabusMapList(value){
+  return (Array.isArray(value) ? value : [])
+    .map(item => item && typeof item === "object" ? item : null)
+    .filter(Boolean);
+}
+
+function normaliseTeacherPublishedSyllabus(id, source = {}){
+  const chapters = syllabusMapList(source.chapters)
+    .map((chapter, index) => {
+      const chapterId = syllabusString(chapter.id);
+      const title = syllabusString(chapter.title);
+      if(!chapterId || !title) return null;
+      return {
+        id:chapterId,
+        title,
+        order:syllabusNumber(chapter.order) || index + 1,
+        topics:syllabusMapList(chapter.topics)
+          .map((topic, topicIndex) => {
+            const topicId = syllabusString(topic.id);
+            const topicTitle = syllabusString(topic.title);
+            if(!topicId || !topicTitle) return null;
+            return {
+              id:topicId,
+              title:topicTitle,
+              order:syllabusNumber(topic.order) || topicIndex + 1,
+            };
+          })
+          .filter(Boolean)
+          .sort((a,b)=>a.order-b.order),
+      };
+    })
+    .filter(Boolean)
+    .sort((a,b)=>a.order-b.order);
+
+  const targets = syllabusMapList(source.targets)
+    .map(target => {
+      const teacherUid = syllabusString(target.teacherUid);
+      const classId = syllabusString(target.classId);
+      if(!teacherUid || !classId) return null;
+      return {
+        teacherUid,
+        classId,
+        teacherName:syllabusString(target.teacherName),
+        className:syllabusString(target.className),
+        instituteName:syllabusString(target.instituteName),
+        sectionName:syllabusString(target.sectionName),
+        subjectName:syllabusString(target.subjectName),
+      };
+    })
+    .filter(Boolean);
+
+  if(!chapters.length || !targets.length) return null;
+  const subjectName = syllabusString(source.subjectName);
+  return {
+    templateId:syllabusString(source.templateId) || id,
+    name:syllabusString(source.name) || `${subjectName} syllabus`,
+    subjectName,
+    version:syllabusNumber(source.version),
+    academicYear:syllabusString(source.academicYear),
+    curriculum:syllabusString(source.curriculum),
+    gradeLabel:syllabusString(source.gradeLabel),
+    chapters,
+    targets,
+    publishedAt:syllabusMillis(source.publishedAt),
+  };
+}
+
+async function loadTeacherPublishedSyllabi(uid){
+  const teacherUid = syllabusString(uid);
+  if(!teacherUid) return [];
+  const { collection, getDocs } = await import("firebase/firestore");
+  const snap = await getDocs(collection(db, "publishedSyllabi"));
+  return snap.docs
+    .map(docSnap => normaliseTeacherPublishedSyllabus(docSnap.id, docSnap.data() || {}))
+    .filter(syllabus => syllabus?.targets?.some(target => target.teacherUid === teacherUid))
+    .sort((a,b)=>a.subjectName.localeCompare(b.subjectName, undefined, { sensitivity:"base" }) || (b.publishedAt || 0) - (a.publishedAt || 0));
+}
+
+function teacherClassDisplayName(cls = {}){
+  return syllabusString(cls.section || cls.sectionName || cls.name || "Untitled class");
+}
+
+function teacherClassInstitute(cls = {}){
+  return syllabusString(cls.institute || cls.instituteName);
+}
+
+function teacherClassSubject(cls = {}){
+  return syllabusString(cls.subject || cls.subjectName);
+}
+
+function flattenTeacherClassEntries(classNotes = {}){
+  return Object.entries(classNotes || {}).flatMap(([dateKey, entries]) => (
+    Array.isArray(entries)
+      ? entries.map(entry => ({...entry,dateKey,createdAt:syllabusNumber(entry?.created)}))
+      : []
+  ));
+}
+
+function relevantSyllabusEntries(entries = [], syllabus = {}){
+  const templateId = syllabusString(syllabus.templateId);
+  const version = syllabusNumber(syllabus.version);
+  return (entries || []).filter(entry => (
+    syllabusString(entry?.syllabusTemplateId) === templateId &&
+    syllabusNumber(entry?.syllabusVersion) <= version
+  ));
+}
+
+function completedSyllabusUnitIds(entries = []){
+  const latestSnapshot = [...(entries || [])]
+    .filter(entry => syllabusString(entry?.tag) === "syllabus" && syllabusString(entry?.title) === SYLLABUS_PROGRESS_SNAPSHOT_TITLE)
+    .sort((a,b)=>syllabusNumber(b?.created) - syllabusNumber(a?.created))[0] || null;
+  if(latestSnapshot) return new Set(Array.isArray(latestSnapshot.completedSyllabusTopicIds) ? latestSnapshot.completedSyllabusTopicIds.map(String) : []);
+
+  const completed = new Set();
+  (entries || []).forEach(entry => {
+    (Array.isArray(entry?.completedSyllabusTopicIds) ? entry.completedSyllabusTopicIds : []).forEach(id => {
+      const key = syllabusString(id);
+      if(key) completed.add(key);
+    });
+    if(entry?.syllabusChapterCompleted){
+      const chapterId = syllabusString(entry.syllabusChapterId);
+      if(chapterId) completed.add(syllabusChapterCompletionMarker(chapterId));
+    }
+  });
+  return completed;
+}
+
+function getSyllabusProgress(syllabus = {}, completedUnitIds = new Set()){
+  const chapters = Array.isArray(syllabus.chapters) ? syllabus.chapters : [];
+  const completedChapters = chapters.filter(chapter => {
+    const marker = syllabusChapterCompletionMarker(chapter.id);
+    const topics = Array.isArray(chapter.topics) ? chapter.topics : [];
+    return completedUnitIds.has(marker) || (topics.length > 0 && topics.every(topic => completedUnitIds.has(topic.id)));
+  }).length;
+  const completedTopics = chapters.reduce((sum, chapter) => (
+    sum + (Array.isArray(chapter.topics) ? chapter.topics.filter(topic => completedUnitIds.has(topic.id)).length : 0)
+  ), 0);
+  const totalTopics = chapters.reduce((sum, chapter) => sum + (Array.isArray(chapter.topics) ? chapter.topics.length : 0), 0);
+  const completedUnits = chapters.reduce((sum, chapter) => {
+    const topics = Array.isArray(chapter.topics) ? chapter.topics : [];
+    const marker = syllabusChapterCompletionMarker(chapter.id);
+    if(!topics.length) return sum + (completedUnitIds.has(marker) ? 1 : 0);
+    return sum + (completedUnitIds.has(marker) ? topics.length : topics.filter(topic => completedUnitIds.has(topic.id)).length);
+  }, 0);
+  const totalUnits = chapters.reduce((sum, chapter) => sum + Math.max(1, Array.isArray(chapter.topics) ? chapter.topics.length : 0), 0);
+  return {
+    completedChapters,
+    totalChapters:chapters.length,
+    completedTopics,
+    totalTopics,
+    completedUnits,
+    totalUnits,
+    percent:totalUnits === 0 ? 0 : Math.floor((completedUnits * 100) / totalUnits),
+  };
+}
+
+function syllabusSetSignature(ids){
+  return [...(ids || [])].map(String).sort().join("|");
+}
+
+function toggleSyllabusChapter(completedUnitIds, chapter){
+  const current = new Set(completedUnitIds || []);
+  const marker = syllabusChapterCompletionMarker(chapter.id);
+  const topicIds = (Array.isArray(chapter.topics) ? chapter.topics : []).map(topic => topic.id);
+  const chapterComplete = current.has(marker) || (topicIds.length > 0 && topicIds.every(id => current.has(id)));
+  if(chapterComplete){
+    current.delete(marker);
+    topicIds.forEach(id => current.delete(id));
+  } else {
+    current.add(marker);
+    topicIds.forEach(id => current.add(id));
+  }
+  return current;
+}
+
+function toggleSyllabusTopic(completedUnitIds, chapter, topicId){
+  const marker = syllabusChapterCompletionMarker(chapter.id);
+  const topicIds = (Array.isArray(chapter.topics) ? chapter.topics : []).map(topic => topic.id);
+  let next = new Set(completedUnitIds || []);
+  if(next.has(marker)){
+    next.delete(marker);
+    topicIds.forEach(id => next.add(id));
+  }
+  const currentlyComplete = next.has(topicId);
+  if(currentlyComplete) next.delete(topicId);
+  else next.add(topicId);
+  if(topicIds.length > 0 && topicIds.every(id => next.has(id))) next.add(marker);
+  else next.delete(marker);
+  return next;
+}
+
 // ── Ripple ────────────────────────────────────────────────────────────────────
 function rpl(e,white=false){
   const el=e.currentTarget,rect=el.getBoundingClientRect();
@@ -1264,6 +1477,7 @@ function OverflowMenu({ items = [], buttonSize = 36 }) {
 
 // ── Top Nav ───────────────────────────────────────────────────────────────────
 function getPrimaryTeacherTab(view){
+  if(view==="syllabus") return "syllabus";
   if(view==="stats" || view==="classTimeline") return "stats";
   return ["profile","trash","notifications"].includes(view) ? "profile" : "home";
 }
@@ -1372,12 +1586,12 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
   );
 }
 
-function TeacherBottomBar({activeTab,onHome,onStats,onProfile,profileBadge=0}){
+function TeacherBottomBar({activeTab,onHome,onSyllabus,onStats,onProfile,profileBadge=0}){
   const itemBase = isActive => ({
     flex:1,
-    minHeight:56,
+    minHeight:74,
     border:"none",
-    borderRadius:16,
+    borderRadius:22,
     background:"transparent",
     color:isActive ? G.green : G.textM,
     cursor:"pointer",
@@ -1385,22 +1599,31 @@ function TeacherBottomBar({activeTab,onHome,onStats,onProfile,profileBadge=0}){
     flexDirection:"column",
     alignItems:"center",
     justifyContent:"center",
-    gap:4,
+    gap:5,
     fontFamily:G.sans,
     fontWeight:isActive ? 700 : 600,
-    fontSize:11.5,
+    fontSize:14,
     position:"relative",
     WebkitTapHighlightColor:"transparent",
   });
 
   return(
-    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:170,background:G.navBg,borderTop:`1px solid ${G.navBorder}`,boxShadow:"0 -6px 20px rgba(16,24,40,0.08)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",pointerEvents:"auto"}}>
-      <div style={{maxWidth:430,margin:"0 auto",padding:"8px 12px calc(8px + env(safe-area-inset-bottom, 0px))",display:"flex",gap:10}}>
+    <div style={{position:"fixed",bottom:"calc(14px + env(safe-area-inset-bottom, 0px))",left:0,right:0,zIndex:170,pointerEvents:"none",padding:"0 16px"}}>
+      <div style={{maxWidth:430,margin:"0 auto",padding:"8px 12px",display:"flex",gap:8,background:G.navBg,border:`1px solid ${G.navBorder}`,borderRadius:32,boxShadow:"0 18px 40px rgba(16,24,40,0.10)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",pointerEvents:"auto"}}>
         <button type="button" onClick={onHome} style={itemBase(activeTab==="home")}>
           <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="home" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
             <AppIcon icon={IconHome2} size={22} color={activeTab==="home" ? G.green : G.textM} />
           </span>
           <span>home</span>
+        </button>
+        <button type="button" onClick={onSyllabus} style={itemBase(activeTab==="syllabus")}>
+          <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="syllabus" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
+            <AppIcon icon={IconBook2} size={22} color={activeTab==="syllabus" ? G.green : G.textM} />
+          </span>
+          <span>syllabus</span>
+          {activeTab==="syllabus" && (
+            <span style={{position:"absolute",bottom:4,width:32,height:5,borderRadius:999,background:G.green}} />
+          )}
         </button>
         <button type="button" onClick={onStats} style={itemBase(activeTab==="stats")}>
           <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="stats" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
@@ -1419,6 +1642,289 @@ function TeacherBottomBar({activeTab,onHome,onStats,onProfile,profileBadge=0}){
             </span>
           )}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function TeacherSyllabusPage({
+  user,
+  notificationCount = 0,
+  items = [],
+  loading = false,
+  loaded = false,
+  errorMessage = "",
+  onHome,
+  onNotifications,
+  onSaveProgress,
+  isMobile,
+  mobileBottomNavPad,
+  renderBottomBar,
+}){
+  const canvas = "#EAF4FF";
+  const ink = "#101828";
+  const muted = "#667085";
+  const accent = "#0F7A83";
+  const hasItems = items.length > 0;
+
+  return(
+    <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:canvas,fontFamily:G.sans,overflow:"hidden"}}>
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:isMobile ? `calc(28px + env(safe-area-inset-top, 0px)) 16px ${mobileBottomNavPad}` : "32px 32px 64px"}}>
+        <div style={{maxWidth:isMobile?430:1080,margin:"0 auto"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,marginBottom:isMobile?32:34}}>
+            <button type="button" onClick={onHome} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:16,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+              <div style={{width:isMobile?66:58,height:isMobile?66:58,borderRadius:isMobile?18:16,background:"#132452",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:isMobile?32:28,fontWeight:900,fontFamily:G.display,letterSpacing:0}}>
+                L
+              </div>
+              <div style={{fontSize:isMobile?33:32,lineHeight:1,fontWeight:900,color:"#111C3D",fontFamily:G.display,letterSpacing:0}}>
+                Ledgr
+              </div>
+            </button>
+            <button type="button" onClick={onNotifications} style={{width:isMobile?58:54,height:isMobile?58:54,borderRadius:"50%",border:"2px solid rgba(16,24,40,0.14)",background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative",boxShadow:"0 8px 18px rgba(16,24,40,0.05)",WebkitTapHighlightColor:"transparent"}}>
+              <AppIcon icon={IconBell} size={isMobile?27:24} color="#111C3D" />
+              {notificationCount>0&&(
+                <span style={{position:"absolute",right:8,top:8,minWidth:17,height:17,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>
+                  {notificationCount>9?"9+":notificationCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <div style={{marginBottom:isMobile?24:28}}>
+            <div style={{fontSize:isMobile?21:16,color:muted,fontWeight:600,letterSpacing:0,textTransform:"uppercase",marginBottom:10}}>
+              SYLLABUS
+            </div>
+            <h1 style={{margin:0,fontSize:isMobile?40:42,lineHeight:1.05,color:ink,fontFamily:G.display,fontWeight:900,letterSpacing:0}}>
+              Syllabus
+            </h1>
+          </div>
+
+          {errorMessage&&(
+            <div style={{borderRadius:22,border:"1px solid rgba(180,35,24,0.18)",background:"#FEF3F2",color:"#B42318",fontSize:14,fontWeight:700,padding:"13px 16px",marginBottom:16}}>
+              {errorMessage}
+            </div>
+          )}
+
+          {!loaded&&loading&&(
+            <div style={{borderRadius:28,border:"1px solid #CBD5E1",background:"#fff",padding:"24px 22px",fontSize:17,fontWeight:800,color:accent,boxShadow:"0 12px 28px rgba(16,24,40,0.04)"}}>
+              Loading syllabus...
+            </div>
+          )}
+
+          {loaded&&!hasItems&&(
+            <div style={{borderRadius:28,border:"1px solid #CBD5E1",background:"#fff",padding:"28px 22px",boxShadow:"0 12px 28px rgba(16,24,40,0.04)"}}>
+              <div style={{fontSize:25,fontWeight:900,color:ink,fontFamily:G.display,marginBottom:8}}>Syllabus coming soon</div>
+              <div style={{fontSize:16,lineHeight:1.55,color:muted,fontWeight:600}}>Your classes will appear here once they are ready.</div>
+            </div>
+          )}
+
+          {hasItems&&(
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2, minmax(0, 1fr))",gap:isMobile?16:18,alignItems:"start"}}>
+              {items.map(item => item.syllabus ? (
+                <TeacherSyllabusClassCard
+                  key={item.teacherClass.id}
+                  teacherClass={item.teacherClass}
+                  syllabus={item.syllabus}
+                  entries={item.entries}
+                  onSaveProgress={onSaveProgress}
+                  isMobile={isMobile}
+                />
+              ) : (
+                <TeacherSyllabusComingSoonCard
+                  key={item.teacherClass.id}
+                  teacherClass={item.teacherClass}
+                  isMobile={isMobile}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {renderBottomBar?.("syllabus")}
+    </div>
+  );
+}
+
+function TeacherSyllabusClassCard({teacherClass, syllabus, entries, onSaveProgress, isMobile}){
+  const accent = "#0F7A83";
+  const ink = "#101828";
+  const muted = "#667085";
+  const savedUnitIds = React.useMemo(
+    () => completedSyllabusUnitIds(relevantSyllabusEntries(entries, syllabus)),
+    [entries, syllabus]
+  );
+  const savedSignature = React.useMemo(() => syllabusSetSignature(savedUnitIds), [savedUnitIds]);
+  const [expanded,setExpanded] = React.useState(false);
+  const [draftUnitIds,setDraftUnitIds] = React.useState(() => new Set(savedUnitIds));
+
+  React.useEffect(() => {
+    setDraftUnitIds(new Set(savedUnitIds));
+  }, [savedSignature, syllabus.templateId]);
+
+  const draftSignature = syllabusSetSignature(draftUnitIds);
+  const hasChanges = draftSignature !== savedSignature;
+  const visibleUnitIds = expanded ? draftUnitIds : savedUnitIds;
+  const progress = getSyllabusProgress(syllabus, visibleUnitIds);
+  const remainingChapters = Math.max(0, progress.totalChapters - progress.completedChapters);
+  const className = teacherClassDisplayName(teacherClass);
+  const institute = teacherClassInstitute(teacherClass);
+  const subject = teacherClassSubject(teacherClass);
+
+  const toggleExpanded = () => {
+    setExpanded(current => {
+      if(current) setDraftUnitIds(new Set(savedUnitIds));
+      return !current;
+    });
+  };
+
+  const save = () => {
+    if(!hasChanges) return;
+    onSaveProgress(teacherClass, syllabus, draftUnitIds);
+    setExpanded(false);
+  };
+
+  return(
+    <div style={{background:"#fff",border:"1.5px solid #CBD5E1",borderRadius:isMobile?30:26,padding:isMobile?"22px 18px 20px":"22px",boxShadow:"0 12px 28px rgba(16,24,40,0.035)",overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
+        <div style={{minWidth:0,flex:1}}>
+          <div style={{fontSize:isMobile?30:28,lineHeight:1.08,fontWeight:900,color:ink,fontFamily:G.display,letterSpacing:0,wordBreak:"break-word"}}>
+            {className}
+          </div>
+          <div style={{fontSize:isMobile?20:18,lineHeight:1.35,fontWeight:500,color:muted,marginTop:6,wordBreak:"break-word"}}>
+            {[institute, subject].filter(Boolean).join(" - ")}
+          </div>
+        </div>
+        <div style={{fontSize:isMobile?35:32,lineHeight:1,fontWeight:900,color:accent,fontFamily:G.display,whiteSpace:"nowrap"}}>
+          {progress.percent}%
+        </div>
+      </div>
+
+      <div style={{height:8,borderRadius:999,background:"#E8E5DF",position:"relative",overflow:"hidden",margin:"22px 0 24px"}}>
+        <div style={{height:"100%",width:`${Math.max(0,Math.min(100,progress.percent))}%`,borderRadius:999,background:accent}} />
+        <div style={{position:"absolute",right:3,top:"50%",width:7,height:7,borderRadius:"50%",background:accent,transform:"translateY(-50%)"}} />
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:isMobile?10:12,marginBottom:20}}>
+        <TeacherSyllabusStatTile label="Completed" value={`${progress.completedChapters} ch.`} isMobile={isMobile} />
+        <TeacherSyllabusStatTile label="Remaining" value={`${remainingChapters} ch.`} isMobile={isMobile} />
+        <TeacherSyllabusStatTile label="Total" value={`${progress.totalChapters} ch.`} isMobile={isMobile} />
+      </div>
+
+      <button type="button" onClick={toggleExpanded} style={{border:"none",background:"transparent",padding:0,color:accent,fontSize:isMobile?25:21,fontWeight:900,fontFamily:G.display,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+        {expanded ? "Hide chapters  ^" : "View chapters  v"}
+      </button>
+
+      {expanded&&(
+        <div style={{marginTop:18,borderTop:"1px solid #CBD5E1",paddingTop:12}}>
+          <div style={{display:"grid",gap:0}}>
+            {(syllabus.chapters || []).map(chapter => (
+              <TeacherSyllabusCompletionRow
+                key={chapter.id}
+                chapter={chapter}
+                completedUnitIds={draftUnitIds}
+                onChange={setDraftUnitIds}
+                isMobile={isMobile}
+              />
+            ))}
+          </div>
+          <div style={{marginTop:14,background:"#EEF3F8",borderRadius:20,padding:14}}>
+            <div style={{fontSize:14,lineHeight:1.5,color:muted,fontWeight:700,marginBottom:12}}>
+              {hasChanges ? "Review your selections, then save syllabus progress." : "Select completed chapters or topics. You can untick anything before saving."}
+            </div>
+            <button type="button" disabled={!hasChanges} onClick={save} style={{width:"100%",border:"none",borderRadius:16,background:hasChanges?accent:"#C9D6DE",color:"#fff",fontSize:16,fontWeight:900,padding:"13px 16px",cursor:hasChanges?"pointer":"not-allowed",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+              Save syllabus progress
+            </button>
+            <button type="button" disabled={!hasChanges} onClick={()=>setDraftUnitIds(new Set(savedUnitIds))} style={{marginTop:10,width:"100%",border:"none",background:"transparent",color:hasChanges?accent:muted,fontSize:14,fontWeight:800,padding:"8px 10px",cursor:hasChanges?"pointer":"not-allowed",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+              Reset changes
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeacherSyllabusStatTile({label,value,isMobile}){
+  return(
+    <div style={{minHeight:isMobile?74:70,borderRadius:16,background:"#EEF3F8",padding:isMobile?"12px 12px":"12px 14px",display:"flex",flexDirection:"column",justifyContent:"space-between",minWidth:0}}>
+      <div style={{fontSize:isMobile?19:16,lineHeight:1.1,color:"#667085",fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+        {label}
+      </div>
+      <div style={{fontSize:isMobile?22:21,lineHeight:1.1,color:"#101828",fontWeight:900,fontFamily:G.display,whiteSpace:"nowrap"}}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function TeacherSyllabusCompletionRow({chapter, completedUnitIds, onChange, isMobile}){
+  const accent = "#0F7A83";
+  const muted = "#667085";
+  const marker = syllabusChapterCompletionMarker(chapter.id);
+  const topics = Array.isArray(chapter.topics) ? chapter.topics : [];
+  const chapterComplete = completedUnitIds.has(marker) || (topics.length > 0 && topics.every(topic => completedUnitIds.has(topic.id)));
+  return(
+    <div>
+      <button type="button" onClick={()=>onChange(toggleSyllabusChapter(completedUnitIds, chapter))} style={{width:"100%",border:"none",background:"transparent",padding:"10px 0",display:"flex",alignItems:"center",gap:11,textAlign:"left",cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+        <TeacherSyllabusCheckBox checked={chapterComplete} />
+        <span style={{fontSize:isMobile?17:16,lineHeight:1.35,fontWeight:900,color:chapterComplete?accent:"#101828",wordBreak:"break-word"}}>
+          {chapter.order}. {chapter.title}
+        </span>
+      </button>
+      <div style={{height:1,background:"#CBD5E1"}} />
+      {topics.map(topic => {
+        const topicComplete = completedUnitIds.has(marker) || completedUnitIds.has(topic.id);
+        return(
+          <React.Fragment key={topic.id}>
+            <button type="button" onClick={()=>onChange(toggleSyllabusTopic(completedUnitIds, chapter, topic.id))} style={{width:"100%",border:"none",background:"transparent",padding:"10px 0 10px 34px",display:"flex",alignItems:"center",gap:11,textAlign:"left",cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+              <TeacherSyllabusCheckBox checked={topicComplete} />
+              <span style={{fontSize:isMobile?16:15,lineHeight:1.35,fontWeight:800,color:topicComplete?accent:muted,wordBreak:"break-word"}}>
+                {topic.title}
+              </span>
+            </button>
+            <div style={{height:1,background:"#CBD5E1",marginLeft:34}} />
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function TeacherSyllabusCheckBox({checked}){
+  return(
+    <span style={{width:24,height:24,borderRadius:6,border:`2px solid ${checked ? "#0F7A83" : "#CBD5E1"}`,background:checked?"#0F7A83":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      {checked&&<AppIcon icon={IconCheck} size={17} color="#fff" stroke={2.8} />}
+    </span>
+  );
+}
+
+function TeacherSyllabusComingSoonCard({teacherClass,isMobile}){
+  const className = teacherClassDisplayName(teacherClass);
+  const institute = teacherClassInstitute(teacherClass);
+  const subject = teacherClassSubject(teacherClass);
+  return(
+    <div style={{background:"#fff",border:"1.5px solid #CBD5E1",borderRadius:isMobile?30:26,padding:isMobile?"22px 18px 20px":"22px",boxShadow:"0 12px 28px rgba(16,24,40,0.035)",minHeight:190}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
+        <div style={{minWidth:0,flex:1}}>
+          <div style={{fontSize:isMobile?30:28,lineHeight:1.08,fontWeight:900,color:"#101828",fontFamily:G.display,letterSpacing:0,wordBreak:"break-word"}}>
+            {className}
+          </div>
+          <div style={{fontSize:isMobile?20:18,lineHeight:1.35,fontWeight:500,color:"#667085",marginTop:6,wordBreak:"break-word"}}>
+            {[institute, subject].filter(Boolean).join(" - ")}
+          </div>
+        </div>
+        <div style={{fontSize:isMobile?35:32,lineHeight:1,fontWeight:900,color:"#98A2B3",fontFamily:G.display,whiteSpace:"nowrap"}}>
+          --
+        </div>
+      </div>
+      <div style={{height:8,borderRadius:999,background:"#E8E5DF",margin:"22px 0 22px"}} />
+      <div style={{borderRadius:18,background:"#EEF3F8",padding:"16px 14px"}}>
+        <div style={{fontSize:isMobile?24:22,lineHeight:1.1,fontWeight:900,color:"#0F7A83",fontFamily:G.display,marginBottom:6}}>
+          Syllabus coming soon
+        </div>
+        <div style={{fontSize:15,lineHeight:1.5,fontWeight:700,color:"#667085"}}>
+          Your assigned syllabus will appear here once it is published.
+        </div>
       </div>
     </div>
   );
@@ -3838,12 +4344,16 @@ function ClassTrackerInner({user}){
 
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups,extraSections}}
+  const [teacherSyllabi, setTeacherSyllabi] = useState([]);
+  const [teacherSyllabiLoading, setTeacherSyllabiLoading] = useState(false);
+  const [teacherSyllabiLoaded, setTeacherSyllabiLoaded] = useState(false);
+  const [teacherSyllabiError, setTeacherSyllabiError] = useState("");
   const [teacherNoticePrompt, setTeacherNoticePrompt] = useState(null);
   const pendingSaveKey = `classlog_pending_${user.uid}`;
   const bootCacheKey = `classlog_boot_${user.uid}`;
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
-  const mobileBottomNavPad = "calc(88px + env(safe-area-inset-bottom, 0px))";
+  const mobileBottomNavPad = "calc(124px + env(safe-area-inset-bottom, 0px))";
   const isEntryComposerView = view==="addNote" || view==="editNote";
   const activeEntryDraftForm = isEntryComposerView ? (view==="editNote" ? editNote : newNote) : null;
   const activeEntryDraftKey = useMemo(() => {
@@ -3932,6 +4442,26 @@ function ClassTrackerInner({user}){
   const teacherActiveClasses = teacherHomeModel.activeClasses;
   const teacherInstitutes = teacherHomeModel.institutes;
   const teacherFilteredClasses = teacherHomeModel.visibleClasses;
+  const teacherSyllabusItems = useMemo(() => {
+    const latestByClassId = new Map();
+    (teacherSyllabi || []).forEach(syllabus => {
+      (syllabus.targets || [])
+        .filter(target => target.teacherUid === user.uid)
+        .forEach(target => {
+          const classId = syllabusString(target.classId);
+          if(!classId) return;
+          const current = latestByClassId.get(classId);
+          if(!current || syllabusNumber(syllabus.version) > syllabusNumber(current.version)){
+            latestByClassId.set(classId, syllabus);
+          }
+        });
+    });
+    return (teacherActiveClasses || []).map(cls => ({
+      teacherClass:cls,
+      syllabus:latestByClassId.get(String(cls?.id || "")) || null,
+      entries:flattenTeacherClassEntries(data.notes?.[cls?.id] || {}),
+    }));
+  }, [data.notes, teacherActiveClasses, teacherSyllabi, user.uid]);
   const deferredTeacherVisibleClasses = React.useDeferredValue(teacherHomeModel.visibleClasses);
   const teacherClassMetricsMap = teacherHomeModel.classMetricsMap;
   const teacherQuickHomeSummary = teacherHomeModel.quickHomeSummary;
@@ -4006,6 +4536,7 @@ function ClassTrackerInner({user}){
       <TeacherBottomBar
         activeTab={getPrimaryTeacherTab(currentView)}
         onHome={()=>safeNav("home")}
+        onSyllabus={()=>safeNav("syllabus")}
         onStats={()=>openStatsView(statsOrigin)}
         onProfile={()=>safeNav("profile")}
         profileBadge={notificationCount}
@@ -4090,6 +4621,30 @@ function ClassTrackerInner({user}){
     getGlobalInstitutes().then(list => setGlobalInstitutes(list)).catch(()=>{});
     getAllInstituteSections().then(secs => setInstituteSections(secs||{})).catch(()=>{});
   },[]);
+
+  useEffect(()=>{
+    let cancelled = false;
+    setTeacherSyllabi([]);
+    setTeacherSyllabiLoaded(false);
+    setTeacherSyllabiLoading(true);
+    setTeacherSyllabiError("");
+    loadTeacherPublishedSyllabi(user.uid)
+      .then(syllabi => {
+        if(cancelled) return;
+        setTeacherSyllabi(syllabi);
+        setTeacherSyllabiLoaded(true);
+        setTeacherSyllabiLoading(false);
+      })
+      .catch(error => {
+        if(cancelled) return;
+        console.error("loadTeacherPublishedSyllabi", error);
+        setTeacherSyllabi([]);
+        setTeacherSyllabiLoaded(true);
+        setTeacherSyllabiLoading(false);
+        setTeacherSyllabiError("Syllabus is temporarily unavailable. Check your connection.");
+      });
+    return () => { cancelled = true; };
+  },[user.uid]);
 
   useEffect(()=>{
     const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -5204,6 +5759,47 @@ function ClassTrackerInner({user}){
     setDraftSaving(false);
     setNewNote({title:"",body:"",tag:"note",timeStart:"",timeEnd:"",status:""});setView("classDetail");
   };
+  const saveSyllabusProgress=(teacherClass, syllabus, unitIds)=>{
+    const classId = String(teacherClass?.id || "");
+    if(!classId || !syllabus?.templateId) return;
+    const now = Date.now();
+    const dateKey = todayKey();
+    const startTime = syllabusString(teacherClass?.timeStart || teacherClass?.startTime) || "00:00";
+    const completedIds = [...(unitIds || [])].map(String).filter(Boolean);
+    const entry = {
+      id:`syllabus_${now}`,
+      title:SYLLABUS_PROGRESS_SNAPSHOT_TITLE,
+      body:syllabus.name || "Syllabus",
+      tag:"syllabus",
+      status:"completed",
+      timeStart:startTime,
+      timeEnd:"",
+      teacherName,
+      created:now,
+      syllabusTemplateId:syllabus.templateId,
+      syllabusVersion:syllabusNumber(syllabus.version),
+      syllabusChapterId:"",
+      syllabusChapterTitle:"",
+      completedSyllabusTopicIds:completedIds,
+      syllabusChapterCompleted:false,
+    };
+    setData(d=>{
+      const cn = d.notes?.[classId] || {};
+      const dn = Array.isArray(cn[dateKey]) ? cn[dateKey] : [];
+      return {
+        ...d,
+        notes:{
+          ...d.notes,
+          [classId]:{
+            ...cn,
+            [dateKey]:[entry,...dn],
+          },
+        },
+      };
+    });
+    void triggerAppHaptic("entry");
+    showInlineToast("Syllabus progress saved.");
+  };
   const saveEdit=()=>{
     if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     const detailValidationMessage=getEntryDetailsValidationMessage(editNote);
@@ -5533,6 +6129,28 @@ function ClassTrackerInner({user}){
         />
         {renderTeacherBottomBar("profile")}
       </div>
+    );
+  }
+
+  if(view==="syllabus"){
+    return(
+      <>
+        {sharedModals}
+        <TeacherSyllabusPage
+          user={user}
+          notificationCount={notificationCount}
+          items={teacherSyllabusItems}
+          loading={teacherSyllabiLoading}
+          loaded={teacherSyllabiLoaded}
+          errorMessage={teacherSyllabiError}
+          onHome={()=>safeNav("home")}
+          onNotifications={()=>safeNav("notifications")}
+          onSaveProgress={saveSyllabusProgress}
+          isMobile={isMobile}
+          mobileBottomNavPad={mobileBottomNavPad}
+          renderBottomBar={renderTeacherBottomBar}
+        />
+      </>
     );
   }
 
