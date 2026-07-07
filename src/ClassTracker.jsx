@@ -1589,9 +1589,9 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 function TeacherBottomBar({activeTab,onHome,onSyllabus,onStats,onProfile,profileBadge=0}){
   const itemBase = isActive => ({
     flex:1,
-    minHeight:74,
+    minHeight:56,
     border:"none",
-    borderRadius:22,
+    borderRadius:16,
     background:"transparent",
     color:isActive ? G.green : G.textM,
     cursor:"pointer",
@@ -1599,17 +1599,17 @@ function TeacherBottomBar({activeTab,onHome,onSyllabus,onStats,onProfile,profile
     flexDirection:"column",
     alignItems:"center",
     justifyContent:"center",
-    gap:5,
+    gap:4,
     fontFamily:G.sans,
     fontWeight:isActive ? 700 : 600,
-    fontSize:14,
+    fontSize:11.5,
     position:"relative",
     WebkitTapHighlightColor:"transparent",
   });
 
   return(
-    <div style={{position:"fixed",bottom:"calc(14px + env(safe-area-inset-bottom, 0px))",left:0,right:0,zIndex:170,pointerEvents:"none",padding:"0 16px"}}>
-      <div style={{maxWidth:430,margin:"0 auto",padding:"8px 12px",display:"flex",gap:8,background:G.navBg,border:`1px solid ${G.navBorder}`,borderRadius:32,boxShadow:"0 18px 40px rgba(16,24,40,0.10)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",pointerEvents:"auto"}}>
+    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:170,background:G.navBg,borderTop:`1px solid ${G.navBorder}`,boxShadow:"0 -6px 20px rgba(16,24,40,0.08)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",pointerEvents:"auto"}}>
+      <div style={{maxWidth:430,margin:"0 auto",padding:"8px 8px calc(8px + env(safe-area-inset-bottom, 0px))",display:"flex",gap:6}}>
         <button type="button" onClick={onHome} style={itemBase(activeTab==="home")}>
           <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="home" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
             <AppIcon icon={IconHome2} size={22} color={activeTab==="home" ? G.green : G.textM} />
@@ -1621,9 +1621,6 @@ function TeacherBottomBar({activeTab,onHome,onSyllabus,onStats,onProfile,profile
             <AppIcon icon={IconBook2} size={22} color={activeTab==="syllabus" ? G.green : G.textM} />
           </span>
           <span>syllabus</span>
-          {activeTab==="syllabus" && (
-            <span style={{position:"absolute",bottom:4,width:32,height:5,borderRadius:999,background:G.green}} />
-          )}
         </button>
         <button type="button" onClick={onStats} style={itemBase(activeTab==="stats")}>
           <span style={{width:64,height:34,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",background:activeTab==="stats" ? G.navActiveBg : "transparent",transition:"background 0.18s ease"}}>
@@ -1648,53 +1645,30 @@ function TeacherBottomBar({activeTab,onHome,onSyllabus,onStats,onProfile,profile
 }
 
 function TeacherSyllabusPage({
-  user,
-  notificationCount = 0,
   items = [],
   loading = false,
   loaded = false,
   errorMessage = "",
-  onHome,
-  onNotifications,
   onSaveProgress,
   isMobile,
   mobileBottomNavPad,
   renderBottomBar,
 }){
-  const canvas = "#EAF4FF";
-  const ink = "#101828";
-  const muted = "#667085";
-  const accent = "#0F7A83";
+  const canvas = G.pageBg;
+  const ink = G.text;
+  const muted = G.textM;
+  const accent = G.green;
   const hasItems = items.length > 0;
 
   return(
-    <div style={{height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:canvas,fontFamily:G.sans,overflow:"hidden"}}>
-      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:isMobile ? `calc(28px + env(safe-area-inset-top, 0px)) 16px ${mobileBottomNavPad}` : "32px 32px 64px"}}>
-        <div style={{maxWidth:isMobile?430:1080,margin:"0 auto"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,marginBottom:isMobile?32:34}}>
-            <button type="button" onClick={onHome} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:16,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-              <div style={{width:isMobile?66:58,height:isMobile?66:58,borderRadius:isMobile?18:16,background:"#132452",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:isMobile?32:28,fontWeight:900,fontFamily:G.display,letterSpacing:0}}>
-                L
-              </div>
-              <div style={{fontSize:isMobile?33:32,lineHeight:1,fontWeight:900,color:"#111C3D",fontFamily:G.display,letterSpacing:0}}>
-                Ledgr
-              </div>
-            </button>
-            <button type="button" onClick={onNotifications} style={{width:isMobile?58:54,height:isMobile?58:54,borderRadius:"50%",border:"2px solid rgba(16,24,40,0.14)",background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative",boxShadow:"0 8px 18px rgba(16,24,40,0.05)",WebkitTapHighlightColor:"transparent"}}>
-              <AppIcon icon={IconBell} size={isMobile?27:24} color="#111C3D" />
-              {notificationCount>0&&(
-                <span style={{position:"absolute",right:8,top:8,minWidth:17,height:17,borderRadius:999,background:"#DC2626",color:"#fff",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>
-                  {notificationCount>9?"9+":notificationCount}
-                </span>
-              )}
-            </button>
-          </div>
-
-          <div style={{marginBottom:isMobile?24:28}}>
-            <div style={{fontSize:isMobile?21:16,color:muted,fontWeight:600,letterSpacing:0,textTransform:"uppercase",marginBottom:10}}>
+    <div style={{flex:1,display:"flex",flexDirection:"column",background:canvas,fontFamily:G.sans,overflow:"hidden"}}>
+      <div className="ledgr-page" style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:isMobile ? `18px 16px ${mobileBottomNavPad}` : "28px 32px 72px"}}>
+        <div style={{maxWidth:1080,margin:"0 auto"}}>
+          <div style={{marginBottom:isMobile?18:22}}>
+            <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,fontWeight:800,letterSpacing:0.65,textTransform:"uppercase",marginBottom:7}}>
               SYLLABUS
             </div>
-            <h1 style={{margin:0,fontSize:isMobile?40:42,lineHeight:1.05,color:ink,fontFamily:G.display,fontWeight:900,letterSpacing:0}}>
+            <h1 style={{margin:0,fontSize:isMobile?30:34,lineHeight:1.08,color:ink,fontFamily:G.display,fontWeight:800,letterSpacing:-0.6}}>
               Syllabus
             </h1>
           </div>
@@ -1706,20 +1680,20 @@ function TeacherSyllabusPage({
           )}
 
           {!loaded&&loading&&(
-            <div style={{borderRadius:28,border:"1px solid #CBD5E1",background:"#fff",padding:"24px 22px",fontSize:17,fontWeight:800,color:accent,boxShadow:"0 12px 28px rgba(16,24,40,0.04)"}}>
+            <div style={{...card,borderRadius:18,padding:"18px 18px",fontSize:15,fontWeight:800,color:accent}}>
               Loading syllabus...
             </div>
           )}
 
           {loaded&&!hasItems&&(
-            <div style={{borderRadius:28,border:"1px solid #CBD5E1",background:"#fff",padding:"28px 22px",boxShadow:"0 12px 28px rgba(16,24,40,0.04)"}}>
-              <div style={{fontSize:25,fontWeight:900,color:ink,fontFamily:G.display,marginBottom:8}}>Syllabus coming soon</div>
-              <div style={{fontSize:16,lineHeight:1.55,color:muted,fontWeight:600}}>Your classes will appear here once they are ready.</div>
+            <div style={{...card,borderRadius:18,padding:"22px 20px"}}>
+              <div style={{fontSize:21,fontWeight:800,color:ink,fontFamily:G.display,marginBottom:7}}>Syllabus coming soon</div>
+              <div style={{fontSize:15,lineHeight:1.6,color:muted,fontWeight:600}}>Your classes will appear here once they are ready.</div>
             </div>
           )}
 
           {hasItems&&(
-            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2, minmax(0, 1fr))",gap:isMobile?16:18,alignItems:"start"}}>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2, minmax(0, 1fr))",gap:isMobile?14:18,alignItems:"start"}}>
               {items.map(item => item.syllabus ? (
                 <TeacherSyllabusClassCard
                   key={item.teacherClass.id}
@@ -1746,9 +1720,9 @@ function TeacherSyllabusPage({
 }
 
 function TeacherSyllabusClassCard({teacherClass, syllabus, entries, onSaveProgress, isMobile}){
-  const accent = "#0F7A83";
-  const ink = "#101828";
-  const muted = "#667085";
+  const accent = G.green;
+  const ink = G.text;
+  const muted = G.textM;
   const savedUnitIds = React.useMemo(
     () => completedSyllabusUnitIds(relevantSyllabusEntries(entries, syllabus)),
     [entries, syllabus]
@@ -1769,6 +1743,7 @@ function TeacherSyllabusClassCard({teacherClass, syllabus, entries, onSaveProgre
   const className = teacherClassDisplayName(teacherClass);
   const institute = teacherClassInstitute(teacherClass);
   const subject = teacherClassSubject(teacherClass);
+  const metaText = [institute, subject].filter(Boolean).join(" · ");
 
   const toggleExpanded = () => {
     setExpanded(current => {
@@ -1784,38 +1759,37 @@ function TeacherSyllabusClassCard({teacherClass, syllabus, entries, onSaveProgre
   };
 
   return(
-    <div style={{background:"#fff",border:"1.5px solid #CBD5E1",borderRadius:isMobile?30:26,padding:isMobile?"22px 18px 20px":"22px",boxShadow:"0 12px 28px rgba(16,24,40,0.035)",overflow:"hidden"}}>
-      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
+    <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:isMobile?22:20,padding:isMobile?"16px 16px 15px":"18px",boxShadow:G.shadowSm,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:12}}>
         <div style={{minWidth:0,flex:1}}>
-          <div style={{fontSize:isMobile?30:28,lineHeight:1.08,fontWeight:900,color:ink,fontFamily:G.display,letterSpacing:0,wordBreak:"break-word"}}>
+          <div style={{fontSize:isMobile?24:25,lineHeight:1.14,fontWeight:800,color:ink,fontFamily:G.display,letterSpacing:-0.35,wordBreak:"break-word"}}>
             {className}
           </div>
-          <div style={{fontSize:isMobile?20:18,lineHeight:1.35,fontWeight:500,color:muted,marginTop:6,wordBreak:"break-word"}}>
-            {[institute, subject].filter(Boolean).join(" - ")}
+          <div style={{fontSize:isMobile?14.5:15,lineHeight:1.45,fontWeight:650,color:muted,marginTop:6,wordBreak:"break-word"}}>
+            {metaText}
           </div>
         </div>
-        <div style={{fontSize:isMobile?35:32,lineHeight:1,fontWeight:900,color:accent,fontFamily:G.display,whiteSpace:"nowrap"}}>
+        <div style={{fontSize:isMobile?25:26,lineHeight:1,fontWeight:800,color:accent,fontFamily:G.display,whiteSpace:"nowrap"}}>
           {progress.percent}%
         </div>
       </div>
 
-      <div style={{height:8,borderRadius:999,background:"#E8E5DF",position:"relative",overflow:"hidden",margin:"22px 0 24px"}}>
+      <div style={{height:7,borderRadius:999,background:G.surfaceAlt,position:"relative",overflow:"hidden",margin:"16px 0 16px"}}>
         <div style={{height:"100%",width:`${Math.max(0,Math.min(100,progress.percent))}%`,borderRadius:999,background:accent}} />
-        <div style={{position:"absolute",right:3,top:"50%",width:7,height:7,borderRadius:"50%",background:accent,transform:"translateY(-50%)"}} />
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:isMobile?10:12,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:isMobile?8:10,marginBottom:16}}>
         <TeacherSyllabusStatTile label="Completed" value={`${progress.completedChapters} ch.`} isMobile={isMobile} />
         <TeacherSyllabusStatTile label="Remaining" value={`${remainingChapters} ch.`} isMobile={isMobile} />
         <TeacherSyllabusStatTile label="Total" value={`${progress.totalChapters} ch.`} isMobile={isMobile} />
       </div>
 
-      <button type="button" onClick={toggleExpanded} style={{border:"none",background:"transparent",padding:0,color:accent,fontSize:isMobile?25:21,fontWeight:900,fontFamily:G.display,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+      <button type="button" onClick={toggleExpanded} style={{border:"none",background:"transparent",padding:0,color:accent,fontSize:isMobile?17:17,fontWeight:800,fontFamily:G.sans,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
         {expanded ? "Hide chapters  ^" : "View chapters  v"}
       </button>
 
       {expanded&&(
-        <div style={{marginTop:18,borderTop:"1px solid #CBD5E1",paddingTop:12}}>
+        <div style={{marginTop:14,borderTop:`1px solid ${G.border}`,paddingTop:10}}>
           <div style={{display:"grid",gap:0}}>
             {(syllabus.chapters || []).map(chapter => (
               <TeacherSyllabusCompletionRow
@@ -1827,14 +1801,14 @@ function TeacherSyllabusClassCard({teacherClass, syllabus, entries, onSaveProgre
               />
             ))}
           </div>
-          <div style={{marginTop:14,background:"#EEF3F8",borderRadius:20,padding:14}}>
+          <div style={{marginTop:14,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:16,padding:13}}>
             <div style={{fontSize:14,lineHeight:1.5,color:muted,fontWeight:700,marginBottom:12}}>
               {hasChanges ? "Review your selections, then save syllabus progress." : "Select completed chapters or topics. You can untick anything before saving."}
             </div>
-            <button type="button" disabled={!hasChanges} onClick={save} style={{width:"100%",border:"none",borderRadius:16,background:hasChanges?accent:"#C9D6DE",color:"#fff",fontSize:16,fontWeight:900,padding:"13px 16px",cursor:hasChanges?"pointer":"not-allowed",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+            <button type="button" disabled={!hasChanges} onClick={save} style={{width:"100%",border:"none",borderRadius:12,background:hasChanges?accent:"#C9D6DE",color:"#fff",fontSize:15,fontWeight:800,padding:"12px 14px",cursor:hasChanges?"pointer":"not-allowed",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
               Save syllabus progress
             </button>
-            <button type="button" disabled={!hasChanges} onClick={()=>setDraftUnitIds(new Set(savedUnitIds))} style={{marginTop:10,width:"100%",border:"none",background:"transparent",color:hasChanges?accent:muted,fontSize:14,fontWeight:800,padding:"8px 10px",cursor:hasChanges?"pointer":"not-allowed",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+            <button type="button" disabled={!hasChanges} onClick={()=>setDraftUnitIds(new Set(savedUnitIds))} style={{marginTop:8,width:"100%",border:"none",background:"transparent",color:hasChanges?accent:muted,fontSize:13.5,fontWeight:800,padding:"8px 10px",cursor:hasChanges?"pointer":"not-allowed",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
               Reset changes
             </button>
           </div>
@@ -1846,11 +1820,11 @@ function TeacherSyllabusClassCard({teacherClass, syllabus, entries, onSaveProgre
 
 function TeacherSyllabusStatTile({label,value,isMobile}){
   return(
-    <div style={{minHeight:isMobile?74:70,borderRadius:16,background:"#EEF3F8",padding:isMobile?"12px 12px":"12px 14px",display:"flex",flexDirection:"column",justifyContent:"space-between",minWidth:0}}>
-      <div style={{fontSize:isMobile?19:16,lineHeight:1.1,color:"#667085",fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+    <div style={{minHeight:isMobile?58:60,borderRadius:14,background:G.surfaceAlt,padding:isMobile?"10px 10px":"11px 12px",display:"flex",flexDirection:"column",justifyContent:"space-between",minWidth:0}}>
+      <div style={{fontSize:isMobile?12.5:13,lineHeight:1.15,color:G.textM,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
         {label}
       </div>
-      <div style={{fontSize:isMobile?22:21,lineHeight:1.1,color:"#101828",fontWeight:900,fontFamily:G.display,whiteSpace:"nowrap"}}>
+      <div style={{fontSize:isMobile?18:19,lineHeight:1.1,color:G.text,fontWeight:800,fontFamily:G.display,whiteSpace:"nowrap"}}>
         {value}
       </div>
     </div>
@@ -1858,31 +1832,31 @@ function TeacherSyllabusStatTile({label,value,isMobile}){
 }
 
 function TeacherSyllabusCompletionRow({chapter, completedUnitIds, onChange, isMobile}){
-  const accent = "#0F7A83";
-  const muted = "#667085";
+  const accent = G.green;
+  const muted = G.textM;
   const marker = syllabusChapterCompletionMarker(chapter.id);
   const topics = Array.isArray(chapter.topics) ? chapter.topics : [];
   const chapterComplete = completedUnitIds.has(marker) || (topics.length > 0 && topics.every(topic => completedUnitIds.has(topic.id)));
   return(
     <div>
-      <button type="button" onClick={()=>onChange(toggleSyllabusChapter(completedUnitIds, chapter))} style={{width:"100%",border:"none",background:"transparent",padding:"10px 0",display:"flex",alignItems:"center",gap:11,textAlign:"left",cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+      <button type="button" onClick={()=>onChange(toggleSyllabusChapter(completedUnitIds, chapter))} style={{width:"100%",border:"none",background:"transparent",padding:"10px 0",display:"flex",alignItems:"center",gap:10,textAlign:"left",cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
         <TeacherSyllabusCheckBox checked={chapterComplete} />
-        <span style={{fontSize:isMobile?17:16,lineHeight:1.35,fontWeight:900,color:chapterComplete?accent:"#101828",wordBreak:"break-word"}}>
+        <span style={{fontSize:isMobile?15:15.5,lineHeight:1.35,fontWeight:800,color:chapterComplete?accent:G.text,wordBreak:"break-word"}}>
           {chapter.order}. {chapter.title}
         </span>
       </button>
-      <div style={{height:1,background:"#CBD5E1"}} />
+      <div style={{height:1,background:G.border}} />
       {topics.map(topic => {
         const topicComplete = completedUnitIds.has(marker) || completedUnitIds.has(topic.id);
         return(
           <React.Fragment key={topic.id}>
-            <button type="button" onClick={()=>onChange(toggleSyllabusTopic(completedUnitIds, chapter, topic.id))} style={{width:"100%",border:"none",background:"transparent",padding:"10px 0 10px 34px",display:"flex",alignItems:"center",gap:11,textAlign:"left",cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
+            <button type="button" onClick={()=>onChange(toggleSyllabusTopic(completedUnitIds, chapter, topic.id))} style={{width:"100%",border:"none",background:"transparent",padding:"9px 0 9px 32px",display:"flex",alignItems:"center",gap:10,textAlign:"left",cursor:"pointer",fontFamily:G.sans,WebkitTapHighlightColor:"transparent"}}>
               <TeacherSyllabusCheckBox checked={topicComplete} />
-              <span style={{fontSize:isMobile?16:15,lineHeight:1.35,fontWeight:800,color:topicComplete?accent:muted,wordBreak:"break-word"}}>
+              <span style={{fontSize:isMobile?14:14.5,lineHeight:1.35,fontWeight:700,color:topicComplete?accent:muted,wordBreak:"break-word"}}>
                 {topic.title}
               </span>
             </button>
-            <div style={{height:1,background:"#CBD5E1",marginLeft:34}} />
+            <div style={{height:1,background:G.border,marginLeft:32}} />
           </React.Fragment>
         );
       })}
@@ -1892,7 +1866,7 @@ function TeacherSyllabusCompletionRow({chapter, completedUnitIds, onChange, isMo
 
 function TeacherSyllabusCheckBox({checked}){
   return(
-    <span style={{width:24,height:24,borderRadius:6,border:`2px solid ${checked ? "#0F7A83" : "#CBD5E1"}`,background:checked?"#0F7A83":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+    <span style={{width:22,height:22,borderRadius:6,border:`2px solid ${checked ? G.green : G.borderM}`,background:checked?G.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
       {checked&&<AppIcon icon={IconCheck} size={17} color="#fff" stroke={2.8} />}
     </span>
   );
@@ -1902,27 +1876,28 @@ function TeacherSyllabusComingSoonCard({teacherClass,isMobile}){
   const className = teacherClassDisplayName(teacherClass);
   const institute = teacherClassInstitute(teacherClass);
   const subject = teacherClassSubject(teacherClass);
+  const metaText = [institute, subject].filter(Boolean).join(" · ");
   return(
-    <div style={{background:"#fff",border:"1.5px solid #CBD5E1",borderRadius:isMobile?30:26,padding:isMobile?"22px 18px 20px":"22px",boxShadow:"0 12px 28px rgba(16,24,40,0.035)",minHeight:190}}>
-      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:14}}>
+    <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:isMobile?22:20,padding:isMobile?"16px 16px 15px":"18px",boxShadow:G.shadowSm,minHeight:0}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:12}}>
         <div style={{minWidth:0,flex:1}}>
-          <div style={{fontSize:isMobile?30:28,lineHeight:1.08,fontWeight:900,color:"#101828",fontFamily:G.display,letterSpacing:0,wordBreak:"break-word"}}>
+          <div style={{fontSize:isMobile?24:25,lineHeight:1.14,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:-0.35,wordBreak:"break-word"}}>
             {className}
           </div>
-          <div style={{fontSize:isMobile?20:18,lineHeight:1.35,fontWeight:500,color:"#667085",marginTop:6,wordBreak:"break-word"}}>
-            {[institute, subject].filter(Boolean).join(" - ")}
+          <div style={{fontSize:isMobile?14.5:15,lineHeight:1.45,fontWeight:650,color:G.textM,marginTop:6,wordBreak:"break-word"}}>
+            {metaText}
           </div>
         </div>
-        <div style={{fontSize:isMobile?35:32,lineHeight:1,fontWeight:900,color:"#98A2B3",fontFamily:G.display,whiteSpace:"nowrap"}}>
+        <div style={{fontSize:isMobile?25:26,lineHeight:1,fontWeight:800,color:G.textL,fontFamily:G.display,whiteSpace:"nowrap"}}>
           --
         </div>
       </div>
-      <div style={{height:8,borderRadius:999,background:"#E8E5DF",margin:"22px 0 22px"}} />
-      <div style={{borderRadius:18,background:"#EEF3F8",padding:"16px 14px"}}>
-        <div style={{fontSize:isMobile?24:22,lineHeight:1.1,fontWeight:900,color:"#0F7A83",fontFamily:G.display,marginBottom:6}}>
+      <div style={{height:7,borderRadius:999,background:G.surfaceAlt,margin:"16px 0 16px"}} />
+      <div style={{borderRadius:16,background:G.surfaceSoft,border:`1px solid ${G.border}`,padding:"13px 14px"}}>
+        <div style={{fontSize:isMobile?18:19,lineHeight:1.18,fontWeight:800,color:G.green,fontFamily:G.display,marginBottom:5}}>
           Syllabus coming soon
         </div>
-        <div style={{fontSize:15,lineHeight:1.5,fontWeight:700,color:"#667085"}}>
+        <div style={{fontSize:14,lineHeight:1.5,fontWeight:650,color:G.textM}}>
           Your assigned syllabus will appear here once it is published.
         </div>
       </div>
@@ -4353,7 +4328,7 @@ function ClassTrackerInner({user}){
   const bootCacheKey = `classlog_boot_${user.uid}`;
   const mobileLiteMode = isMobile && (isWeakDevice || reduceEffects);
   const mobileBatchSize = mobileLiteMode ? 8 : 14;
-  const mobileBottomNavPad = "calc(124px + env(safe-area-inset-bottom, 0px))";
+  const mobileBottomNavPad = "calc(88px + env(safe-area-inset-bottom, 0px))";
   const isEntryComposerView = view==="addNote" || view==="editNote";
   const activeEntryDraftForm = isEntryComposerView ? (view==="editNote" ? editNote : newNote) : null;
   const activeEntryDraftKey = useMemo(() => {
@@ -6134,23 +6109,32 @@ function ClassTrackerInner({user}){
 
   if(view==="syllabus"){
     return(
-      <>
+      <div style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TeacherSyllabusPage
+        <TopNav
           user={user}
+          teacherName={teacherName}
+          data={data}
+          onLogoClick={()=>safeNav("home")}
+          onSignOut={()=>setSignOutPrompt(true)}
+          onViewStats={()=>openStatsView("home")}
+          onViewTrash={()=>safeNav("trash")}
+          onViewNotifications={()=>safeNav("notifications")}
+          trashCount={trashCount}
           notificationCount={notificationCount}
+          showProfileMenu={!isMobile}
+        />
+        <TeacherSyllabusPage
           items={teacherSyllabusItems}
           loading={teacherSyllabiLoading}
           loaded={teacherSyllabiLoaded}
           errorMessage={teacherSyllabiError}
-          onHome={()=>safeNav("home")}
-          onNotifications={()=>safeNav("notifications")}
           onSaveProgress={saveSyllabusProgress}
           isMobile={isMobile}
           mobileBottomNavPad={mobileBottomNavPad}
           renderBottomBar={renderTeacherBottomBar}
         />
-      </>
+      </div>
     );
   }
 
