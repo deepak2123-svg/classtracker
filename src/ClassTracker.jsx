@@ -1503,7 +1503,7 @@ function getPrimaryTeacherTab(view){
   return ["profile","trash","notifications"].includes(view) ? "profile" : "home";
 }
 
-function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,onViewNotifications,trashCount,notificationCount=0,data,showProfileMenu=true}){
+function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onViewTrash,onViewSyllabus,onViewNotifications,trashCount,notificationCount=0,data,showProfileMenu=true}){
   const [profileOpen, setProfileOpen] = React.useState(false);
 
   return(
@@ -1527,6 +1527,14 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
 
         <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,minWidth:0}}>
           {right}
+
+          {showProfileMenu && onViewSyllabus && (
+            <button onClick={onViewSyllabus}
+              style={{height:40,padding:"0 12px",display:"flex",alignItems:"center",justifyContent:"center",gap:7,background:G.topbarButtonBg,border:`1px solid ${G.topbarButtonBorder}`,borderRadius:14,cursor:"pointer",color:G.textS,flexShrink:0,WebkitTapHighlightColor:"transparent",fontFamily:G.sans,fontSize:13,fontWeight:700}}>
+              <AppIcon icon={IconBook2} size={17} color={G.textS} />
+              <span style={{whiteSpace:"nowrap"}}>Syllabus</span>
+            </button>
+          )}
 
           {onViewNotifications && (
             <button onClick={onViewNotifications}
@@ -1570,6 +1578,14 @@ function TopNav({user,teacherName,right,onLogoClick,onSignOut,onViewStats,onView
                       <AppIcon icon={IconBell} size={16} color={G.textS} />
                       Notifications
                       {notificationCount>0&&<span style={{marginLeft:"auto",background:"rgba(240,140,0,0.14)",color:"#C2500A",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:800,fontFamily:G.mono}}>{notificationCount}</span>}
+                    </button>
+                  )}
+
+                  {onViewSyllabus && (
+                    <button onClick={()=>{setProfileOpen(false);onViewSyllabus();}}
+                      style={{width:"100%",marginBottom:6,padding:"11px 12px",background:G.greenL,border:`1px solid ${G.border}`,borderRadius:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:G.green,fontSize:14,fontFamily:G.sans,fontWeight:700,WebkitTapHighlightColor:"transparent"}}>
+                      <AppIcon icon={IconBook2} size={16} color={G.green} />
+                      Syllabus
                     </button>
                   )}
 
@@ -5962,6 +5978,7 @@ function ClassTrackerInner({user}){
           onSignOut={()=>setSignOutPrompt(true)}
           onViewStats={()=>openStatsView("profile")}
           onViewTrash={()=>safeNav("trash")}
+          onViewSyllabus={()=>safeNav("syllabus")}
           onViewNotifications={()=>safeNav("notifications")}
           trashCount={trashCount}
           notificationCount={notificationCount}
@@ -6130,6 +6147,7 @@ function ClassTrackerInner({user}){
           data={data}
           onLogoClick={()=>safeNav("home")}
           onSignOut={()=>setSignOutPrompt(true)}
+          onViewSyllabus={()=>safeNav("syllabus")}
           onViewNotifications={()=>safeNav("notifications")}
           notificationCount={notificationCount}
           showProfileMenu={!isMobile}
@@ -6166,6 +6184,7 @@ function ClassTrackerInner({user}){
           onSignOut={()=>setSignOutPrompt(true)}
           onViewStats={()=>openStatsView("home")}
           onViewTrash={()=>safeNav("trash")}
+          onViewSyllabus={()=>safeNav("syllabus")}
           onViewNotifications={()=>safeNav("notifications")}
           trashCount={trashCount}
           notificationCount={notificationCount}
@@ -6758,7 +6777,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>openStatsView("home")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={NavRight} showProfileMenu={!isMobile}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>openStatsView("home")} onViewTrash={()=>setView("trash")} onViewSyllabus={()=>safeNav("syllabus")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={NavRight} showProfileMenu={!isMobile}/>
         {isMobile ? <MobileHome/> : <SplitView/>}
         {renderTeacherBottomBar("home")}
       </div>
@@ -7030,7 +7049,7 @@ function ClassTrackerInner({user}){
     return(
       <div key={cls.id} className="ledgr-page" style={{...teacherThemeShell,height:"100svh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans,overflow:"hidden",touchAction:"pan-y"}} onTouchStart={handleDetailTouchStart} onTouchMove={handleDetailTouchMove} onTouchEnd={handleDetailTouchEnd} onTouchCancel={()=>{classSwipeStartRef.current=null;bounceDetailCardBack(160);}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewSyllabus={()=>safeNav("syllabus")} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<GhostBtn onClick={()=>setView("home")} style={{display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Classes</GhostBtn>}
         />
         <div style={{flex:1,overflow:"hidden"}}>
@@ -7100,7 +7119,7 @@ function ClassTrackerInner({user}){
 
     return(
     <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
-      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>{setSelectedGroup(null);setView("home");}} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
+      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>{setSelectedGroup(null);setView("home");}} onSignOut={()=>setSignOutPrompt(true)} onViewSyllabus={()=>safeNav("syllabus")} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
         right={<GhostBtn onClick={()=>{setSelectedGroup(null);setView("home");}} style={{display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Back</GhostBtn>}/>
       <div style={{maxWidth:520,margin:"0 auto",padding:"24px 16px calc(80px + env(safe-area-inset-bottom, 0px))"}}>
         <p style={{fontSize:14,color:G.textM,fontFamily:G.sans,marginBottom:6,textTransform:"uppercase",fontWeight:600}}>New Class</p>
@@ -7297,6 +7316,7 @@ function ClassTrackerInner({user}){
           data={data}
           onLogoClick={()=>safeNav("stats")}
           onSignOut={()=>setSignOutPrompt(true)}
+          onViewSyllabus={()=>safeNav("syllabus")}
           onViewNotifications={()=>safeNav("notifications")}
           notificationCount={notificationCount}
           showProfileMenu={!isMobile}
@@ -7624,7 +7644,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav(statsBackTarget)} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav(statsBackTarget)} onSignOut={()=>setSignOutPrompt(true)} onViewSyllabus={()=>safeNav("syllabus")} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<button onClick={()=>safeNav(statsBackTarget)} style={navBtnStyle}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Back</button>}/>
 
         <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:`16px 14px ${isMobile ? mobileBottomNavPad : "48px"}`,maxWidth:760,margin:"0 auto",width:"100%"}}>
@@ -7880,7 +7900,7 @@ function ClassTrackerInner({user}){
     return(
       <div style={{...teacherThemeShell,minHeight:"100svh",width:"100%",overflowX:"hidden",background:G.pageBg,fontFamily:G.sans}}>
         {sharedModals}
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>openStatsView("profile")} onViewTrash={()=>setView("trash")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={<GhostBtn onClick={()=>safeNav(mobileBackTarget)} style={{display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Back</GhostBtn>} showProfileMenu={!isMobile}/>
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>safeNav("home")} onSignOut={()=>setSignOutPrompt(true)} onViewStats={()=>openStatsView("profile")} onViewTrash={()=>setView("trash")} onViewSyllabus={()=>safeNav("syllabus")} onViewNotifications={()=>safeNav("notifications")} trashCount={trashCount} notificationCount={notificationCount} right={<GhostBtn onClick={()=>safeNav(mobileBackTarget)} style={{display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Back</GhostBtn>} showProfileMenu={!isMobile}/>
         <div className="mobile-pad" style={{maxWidth:880,margin:"0 auto",padding:`32px 32px ${isMobile ? mobileBottomNavPad : "72px"}`}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
             <AppIcon icon={IconTrash} size={28} color={G.text} />
@@ -8082,7 +8102,7 @@ function ClassTrackerInner({user}){
 
     return(
       <div style={{...teacherThemeShell,height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans}}>
-        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
+        <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={()=>setView("home")} onSignOut={()=>setSignOutPrompt(true)} onViewSyllabus={()=>safeNav("syllabus")} onViewNotifications={()=>safeNav("notifications")} notificationCount={notificationCount} showProfileMenu={!isMobile}
           right={<>
             <GhostBtn onClick={()=>setView("classDetail")} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />Back</GhostBtn>
           </>}
