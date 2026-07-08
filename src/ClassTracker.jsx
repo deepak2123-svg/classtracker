@@ -700,6 +700,23 @@ function countWorkingDaysElapsed(now = new Date()){
   return Math.max(total, 1);
 }
 
+function isTeacherSyllabusProgressEntry(entry){
+  if(!entry || typeof entry !== "object") return false;
+  const tag = String(entry?.tag || "").trim().toLowerCase();
+  const title = String(entry?.title || "").trim();
+  return tag === "syllabus"
+    || /syllabus progress update/i.test(title)
+    || Boolean(entry?.syllabusTemplateId || entry?.syllabusId || entry?.syllabusChapterId || entry?.syllabusChapterTitle);
+}
+
+function isTeacherTeachingActivityEntry(entry){
+  return !isTeacherSyllabusProgressEntry(entry);
+}
+
+function teacherTeachingEntries(entries = []){
+  return Array.isArray(entries) ? entries.filter(isTeacherTeachingActivityEntry) : [];
+}
+
 function buildTeacherQuickHomeSummary(activeClasses = [], notes = {}){
   const now = new Date();
   const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
@@ -710,11 +727,13 @@ function buildTeacherQuickHomeSummary(activeClasses = [], notes = {}){
 
   activeClasses.forEach(cls=>{
     const classNotes = notes?.[cls.id] || {};
-    const todayEntries = Array.isArray(classNotes[todayKey()]) ? classNotes[todayKey()].length : 0;
+    const todayEntries = teacherTeachingEntries(classNotes[todayKey()]).length;
     if(todayEntries > 0) loggedToday += 1;
     Object.entries(classNotes).forEach(([dk, arr])=>{
       if(!Array.isArray(arr) || !arr.length || !dk.startsWith(monthKey)) return;
-      monthEntries += arr.length;
+      const teachingEntries = teacherTeachingEntries(arr);
+      if(!teachingEntries.length) return;
+      monthEntries += teachingEntries.length;
       monthLoggedDaySet.add(dk);
     });
   });
@@ -743,12 +762,14 @@ function buildClassEntryMetrics(classNotes = {}, now = new Date()){
 
   Object.entries(classNotes || {}).forEach(([dk, arr])=>{
     if(!Array.isArray(arr) || !arr.length) return;
-    totalCount += arr.length;
-    noteDates[dk] = arr.length;
-    if(dk.startsWith(monthKey)) monthEntries += arr.length;
+    const teachingEntries = teacherTeachingEntries(arr);
+    if(!teachingEntries.length) return;
+    totalCount += teachingEntries.length;
+    noteDates[dk] = teachingEntries.length;
+    if(dk.startsWith(monthKey)) monthEntries += teachingEntries.length;
   });
 
-  const todayEntries = Array.isArray(classNotes?.[todayKey()]) ? classNotes[todayKey()].length : 0;
+  const todayEntries = teacherTeachingEntries(classNotes?.[todayKey()]).length;
   const activeDays = Object.keys(noteDates).length;
   const lastLoggedKey = Object.keys(noteDates).sort().pop() || null;
   const lastLogMeta = formatDaysSinceLastLog(lastLoggedKey);
@@ -880,7 +901,7 @@ function collectClassTimelineEntries(classNotes = {}, { startKey = "", endKey = 
       if(startKey && dateKey < startKey) return [];
       if(endKey && dateKey > endKey) return [];
       if(!Array.isArray(entries)) return [];
-      return entries.map((note, index) => ({
+      return teacherTeachingEntries(entries).map((note, index) => ({
         ...note,
         dateKey,
         durationMins:calcEntryDurationMins(note?.timeStart, note?.timeEnd),
@@ -2544,7 +2565,8 @@ function fmtAdminNoticeStamp(ts){
 
 function buildClassEntrySummary(noteMap = {}) {
   const rows = Object.entries(noteMap || {})
-    .filter(([, arr]) => Array.isArray(arr) && arr.length > 0)
+    .map(([dateKey, arr]) => [dateKey, teacherTeachingEntries(arr)])
+    .filter(([, arr]) => arr.length > 0)
     .sort(([a], [b]) => b.localeCompare(a));
   const entryCount = rows.reduce((sum, [, arr]) => sum + arr.length, 0);
   const activeDays = rows.length;
@@ -2811,7 +2833,8 @@ function HistoryModal({cls,classNotes={},selectedDate,onSelectDate,onClose}){
 
   const rows=useMemo(()=>{
     return Object.entries(classNotes)
-      .filter(([,arr])=>Array.isArray(arr)&&arr.length>0)
+      .map(([dk,arr])=>[dk, teacherTeachingEntries(arr)])
+      .filter(([,arr])=>arr.length>0)
       .sort(([a],[b])=>b.localeCompare(a))
       .map(([dk,arr])=>{
         const d=dateFromKey(dk);
@@ -3065,7 +3088,7 @@ function ExportModal({data, teacherName, onClose}){
       const dk=toKey(cur);
       (data.classes||[]).filter(c=>!c.left).forEach(cls=>{
         const dayNotes=(data.notes[cls.id]||{})[dk]||[];
-        dayNotes.forEach(note=>{
+        teacherTeachingEntries(dayNotes).forEach(note=>{
           rows.push({
             date:dk,
             class:cls.section,
@@ -3697,7 +3720,7 @@ function getDefaultKisSlot(notes, classId, kisSlots, usedStartsToday) {
   const freq = {};
   Object.values(notes[classId] || {}).forEach(entries => {
     if (!Array.isArray(entries)) return;
-    entries.forEach(e => {
+    teacherTeachingEntries(entries).forEach(e => {
       const slot = kisSlots.find(s => s.start === e.timeStart);
       if (slot) freq[slot.start] = (freq[slot.start] || 0) + 1;
     });
@@ -3716,7 +3739,7 @@ function getSuggestedTime(notes, classId, dateKey) {
     Object.entries(classNotes).forEach(([dk, entries]) => {
       if (!Array.isArray(entries)) return;
       if (!filterFn(dk)) return;
-      entries.forEach(e => {
+      teacherTeachingEntries(entries).forEach(e => {
         if (!e.timeStart||typeof e.timeStart!=="string") return;
         let dur = 60;
         if (e.timeEnd&&typeof e.timeEnd==="string") {
@@ -4570,6 +4593,14 @@ function ClassTrackerInner({user}){
     }catch(e){}
   }, [pendingSaveKey, cloudRevision]);
 
+  const setDataWithPendingDraft = React.useCallback((updater, reason = "local-change") => {
+    setData(previous => {
+      const next = typeof updater === "function" ? updater(previous) : updater;
+      storePendingDraft(next, reason);
+      return next;
+    });
+  }, [storePendingDraft]);
+
   const storeBootCache = React.useCallback((payload) => {
     try{
       localStorage.setItem(bootCacheKey, JSON.stringify({
@@ -5417,7 +5448,8 @@ function ClassTrackerInner({user}){
       data.classes.forEach(cls=>{
         const cn=data.notes[cls.id]||{};
         Object.entries(cn).forEach(([dk,arr])=>{
-          if(Array.isArray(arr)&&arr.length>0) map[dk]=(map[dk]||0)+arr.length;
+          const count=teacherTeachingEntries(arr).length;
+          if(count>0) map[dk]=(map[dk]||0)+count;
         });
       });
     } catch(e){}
@@ -5430,7 +5462,7 @@ function ClassTrackerInner({user}){
       const classNotes=data.notes?.[cls.id]||{};
       const recentEntries=Object.entries(classNotes)
         .sort(([a],[b])=>b.localeCompare(a))
-        .flatMap(([,entries])=>Array.isArray(entries)?[...entries].sort((a,b)=>(b.created||0)-(a.created||0)):[]);
+        .flatMap(([,entries])=>teacherTeachingEntries(entries).sort((a,b)=>(b.created||0)-(a.created||0)));
       const lastTitled=recentEntries.find(entry=>(entry?.title||"").trim());
       map[cls.id]={
         lastTopic:lastTitled?.title?.trim()||"",
@@ -5698,37 +5730,46 @@ function ClassTrackerInner({user}){
   const getEntryDetailsValidationMessage=(entry)=>!String(entry?.title||"").trim()
     ? "Please add the topic before saving."
     : "";
+  const findEntryTimeClash=(entry, existingEntries=[], ignoreId="")=>{
+    if(!entry?.timeStart) return null;
+    const toMins=t=>{
+      if(!/^\d{1,2}:\d{2}$/.test(String(t||""))) return null;
+      const [h,m]=String(t).split(":").map(Number);
+      if(Number.isNaN(h)||Number.isNaN(m)) return null;
+      return h*60+m;
+    };
+    const newStart=String(entry.timeStart||"");
+    const newEnd=String(entry.timeEnd||"");
+    return (existingEntries||[]).find(existing=>{
+      if(!existing || String(existing.id||"")===String(ignoreId||"")) return false;
+      if(!existing.timeStart) return false;
+      if(existing.timeStart===newStart) return true;
+      if(newEnd&&existing.timeEnd){
+        const ns=toMins(newStart);
+        const ne=toMins(newEnd);
+        const es=toMins(existing.timeStart);
+        const ee=toMins(existing.timeEnd);
+        if(ns===null||ne===null||es===null||ee===null||ne<=ns||ee<=es) return false;
+        return ns<ee&&ne>es;
+      }
+      return false;
+    }) || null;
+  };
 
   const addNote=()=>{
     if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     const detailValidationMessage=getEntryDetailsValidationMessage(newNote);
     if(detailValidationMessage){showInlineToast(detailValidationMessage);return;}
 
-    // Duplicate check — same class, same date, overlapping or identical time
     const existing=(data.notes?.[activeClass.id]||{})[selectedDate]||[];
-    if(newNote.timeStart){
-      const newStart=newNote.timeStart;
-      const clash=existing.find(e=>{
-        if(!e.timeStart)return false;
-        // Exact same start time = definite duplicate
-        if(e.timeStart===newStart)return true;
-        // Overlapping times check
-        if(newNote.timeEnd&&e.timeEnd){
-          const toMins=t=>{const[h,m]=t.split(":").map(Number);return h*60+m;};
-          const ns=toMins(newStart),ne=toMins(newNote.timeEnd);
-          const es=toMins(e.timeStart),ee=toMins(e.timeEnd);
-          return ns<ee&&ne>es; // overlap
-        }
-        return false;
-      });
-      if(clash){
-        showInlineToast(`Entry at ${clash.timeStart} already exists for this class on this date`);
-        return;
-      }
+    const clash=findEntryTimeClash(newNote, existing);
+    if(clash){
+      showInlineToast(`Entry at ${clash.timeStart} already exists for this class on this date`);
+      return;
     }
 
     const note={id:Date.now().toString(),...newNote,status:newNote.status||"",teacherName,created:Date.now()};
-    setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};});
+    setDataWithPendingDraft(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};},"entry-add");
     void triggerAppHaptic("entry");
     clearEntryDraft();
     setDraftSaving(false);
@@ -5758,7 +5799,7 @@ function ClassTrackerInner({user}){
       completedSyllabusTopicIds:completedIds,
       syllabusChapterCompleted:false,
     };
-    setData(d=>{
+    setDataWithPendingDraft(d=>{
       const cn = d.notes?.[classId] || {};
       const dn = Array.isArray(cn[dateKey]) ? cn[dateKey] : [];
       return {
@@ -5771,7 +5812,7 @@ function ClassTrackerInner({user}){
           },
         },
       };
-    });
+    },"syllabus-progress");
     void triggerAppHaptic("entry");
     showInlineToast("Syllabus progress saved.");
   };
@@ -5779,21 +5820,27 @@ function ClassTrackerInner({user}){
     if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     const detailValidationMessage=getEntryDetailsValidationMessage(editNote);
     if(detailValidationMessage){showInlineToast(detailValidationMessage);return;}
-    setData(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};});
+    const existing=(data.notes?.[activeClass.id]||{})[selectedDate]||[];
+    const clash=findEntryTimeClash(editNote, existing, editNote.id);
+    if(clash){
+      showInlineToast(`Entry at ${clash.timeStart} already exists for this class on this date`);
+      return;
+    }
+    setDataWithPendingDraft(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};},"entry-edit");
     clearEntryDraft();
     setDraftSaving(false);
     setEditNote(null);setView("classDetail");
   };
-  const deleteNote=(noteId)=>setData(d=>{
+  const deleteNote=(noteId)=>setDataWithPendingDraft(d=>{
     const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];
     const note=dn.find(n=>n.id===noteId);if(!note)return d;
     const tn={...note,classId:activeClass.id,className:activeClass.section,institute:activeClass.institute,dateKey:selectedDate,deletedAt:Date.now()};
     return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.filter(n=>n.id!==noteId)}},trash:{...d.trash,notes:[...(d.trash?.notes||[]),tn]}};
-  });
-  const restoreNote=(tn)=>{setData(d=>{const{classId,dateKey,deletedAt,className,institute,...note}=tn;const cn=d.notes[classId]||{};const dn=cn[dateKey]||[];return{...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:[note,...dn]}},trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==note.id)}};});};
-  const permDeleteNote=(id)=>setData(d=>({...d,trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==id)}}));
+  },"entry-delete");
+  const restoreNote=(tn)=>{setDataWithPendingDraft(d=>{const{classId,dateKey,deletedAt,className,institute,...note}=tn;const cn=d.notes[classId]||{};const dn=cn[dateKey]||[];return{...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:[note,...dn]}},trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==note.id)}};},"entry-restore");};
+  const permDeleteNote=(id)=>setDataWithPendingDraft(d=>({...d,trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==id)}}),"entry-perm-delete");
 
-  const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>a+(Array.isArray(arr)?arr.length:0),0);},0);
+  const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>a+teacherTeachingEntries(arr).length,0);},0);
   const canAdd=isDateAllowed(selectedDate);
   const isReadOnlyDate=!canAdd;
   const dates=buildDateWindow();
@@ -5892,7 +5939,7 @@ function ClassTrackerInner({user}){
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
       {historyClassId && (()=>{const cls=data.classes.find(c=>c.id===historyClassId);return cls?<HistoryModal cls={cls} classNotes={data.notes[historyClassId]||{}} selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={()=>setHistoryClassId(null)}/>:null;})()}
-      {mobileClassSheetId && (()=>{const cls=data.classes.find(c=>c.id===mobileClassSheetId);const entryCount=cls?Object.values(data.notes?.[mobileClassSheetId]||{}).reduce((sum,arr)=>sum+(Array.isArray(arr)?arr.length:0),0):0;return cls?<TeacherClassQuickSheet cls={cls} entryCount={entryCount} onOpenHistory={()=>{setMobileClassSheetId(null);setHistoryClassId(cls.id);}} onDelete={()=>{setMobileClassSheetId(null);setLeaveModal(cls.id);}} onClose={()=>setMobileClassSheetId(null)}/>:null;})()}
+      {mobileClassSheetId && (()=>{const cls=data.classes.find(c=>c.id===mobileClassSheetId);const entryCount=cls?Object.values(data.notes?.[mobileClassSheetId]||{}).reduce((sum,arr)=>sum+teacherTeachingEntries(arr).length,0):0;return cls?<TeacherClassQuickSheet cls={cls} entryCount={entryCount} onOpenHistory={()=>{setMobileClassSheetId(null);setHistoryClassId(cls.id);}} onDelete={()=>{setMobileClassSheetId(null);setLeaveModal(cls.id);}} onClose={()=>setMobileClassSheetId(null)}/>:null;})()}
       {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} instituteSections={instituteSections} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal && (()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);setActiveClass(null);setView("home");}} onClose={()=>setLeaveModal(null)}/>:null;})()}
     </>
@@ -6833,7 +6880,7 @@ function ClassTrackerInner({user}){
       setEditNote({...note});
       setView("editNote");
     };
-    const deleteNoteFromClass = (surfaceCls, noteId) => setData(d => {
+    const deleteNoteFromClass = (surfaceCls, noteId) => setDataWithPendingDraft(d => {
       const cn = d.notes[surfaceCls.id] || {};
       const dn = cn[selectedDate] || [];
       const note = dn.find(entry => entry.id === noteId);
@@ -6844,7 +6891,7 @@ function ClassTrackerInner({user}){
         notes:{...d.notes,[surfaceCls.id]:{...cn,[selectedDate]:dn.filter(entry => entry.id !== noteId)}},
         trash:{...d.trash,notes:[...(d.trash?.notes || []),tn]}
       };
-    });
+    },"entry-delete");
     const renderDetailSurface = (surfaceCls, panelKey) => {
       const surfaceColor = getSectionTone(surfaceCls.section);
       const surfaceTheme = getTeacherSectionSurfaceStyles(surfaceColor, isDarkTeacherTheme);
@@ -7855,7 +7902,7 @@ function ClassTrackerInner({user}){
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {tClasses.map(tc=>{
                   const color=getSectionTone(tc.section);
-                  const ec=Object.values(tc.savedNotes||{}).reduce((s,arr)=>s+(Array.isArray(arr)?arr.length:0),0);
+                  const ec=Object.values(tc.savedNotes||{}).reduce((s,arr)=>s+teacherTeachingEntries(arr).length,0);
                   const dl=daysLeft(tc.deletedAt);
                   const isTransferArchive=!!(tc.transferArchive || tc.archivedByAdmin);
                   return(

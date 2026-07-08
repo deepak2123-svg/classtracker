@@ -10,12 +10,12 @@ export function daysAgo(ts){
   return `${Math.floor(days/30)}mo ago`;
 }
 
-export function lastEntryTs(notes={}){
+export function lastEntryTs(notes={}, entryFilter = null){
   let latest=0;
   try {
     const scan = (value) => {
       if (Array.isArray(value)) {
-        value.forEach(entry=>{ if(entry && entry.created>latest) latest=entry.created; });
+        value.forEach(entry=>{ if(entry && (!entryFilter || entryFilter(entry)) && entry.created>latest) latest=entry.created; });
         return;
       }
       if (!value || typeof value !== "object") return;
@@ -78,12 +78,16 @@ export function countEntriesForMonth(classNotes = {}, monthKey = currentMonthKey
 }
 
 export function getEntriesInRange(classNotes = {}, days = null, startKey = null, endKey = null){
-  const cutoff = days ? Date.now() - days * 24 * 60 * 60 * 1000 : 0;
+  const dayCount = Number(days || 0);
+  const hasExplicitRange = !!(startKey || endKey);
+  const rangeEnd = endKey || (hasExplicitRange ? startKey : (dayCount ? todayKey() : null));
+  const rangeStart = startKey || (hasExplicitRange ? endKey : (dayCount ? addDaysToDateKey(rangeEnd, -(Math.max(1, dayCount) - 1)) : null));
+  const firstKey = rangeStart && rangeEnd && rangeStart > rangeEnd ? rangeEnd : rangeStart;
+  const lastKey = rangeStart && rangeEnd && rangeStart > rangeEnd ? rangeStart : rangeEnd;
   const result = [];
   Object.entries(classNotes || {}).forEach(([dateKey, entries]) => {
-    if(days && new Date(dateKey).getTime() < cutoff) return;
-    if(!days && startKey && dateKey < startKey) return;
-    if(!days && endKey && dateKey > endKey) return;
+    if(firstKey && dateKey < firstKey) return;
+    if(lastKey && dateKey > lastKey) return;
     if(!Array.isArray(entries)) return;
     entries.forEach(entry => { if(entry) result.push({ dateKey, entry }); });
   });
@@ -150,13 +154,22 @@ export function adminPeriodLabel(period, rangeStart = null, rangeEnd = null){
 }
 
 export function getPeriodFilter(period, rangeStart = null, rangeEnd = null){
-  if(period==="today") return {days:1,startKey:null,endKey:null};
+  if(period==="today"){
+    const today = todayKey();
+    return {days:null,startKey:today,endKey:today};
+  }
   if(period==="yesterday"){
     const yesterday = addDaysToDateKey(todayKey(), -1);
     return {days:null,startKey:yesterday,endKey:yesterday};
   }
-  if(period==="week") return {days:7,startKey:null,endKey:null};
-  if(period==="month") return {days:30,startKey:null,endKey:null};
+  if(period==="week"){
+    const today = todayKey();
+    return {days:null,startKey:addDaysToDateKey(today, -6),endKey:today};
+  }
+  if(period==="month"){
+    const bounds = monthBoundsFromKey(currentMonthKey());
+    return {days:null,startKey:bounds.startKey,endKey:bounds.endKey};
+  }
   if(period==="range"){
     const fallback=todayKey();
     const start=/^\d{4}-\d{2}-\d{2}$/.test(String(rangeStart||"")) ? String(rangeStart) : (/^\d{4}-\d{2}-\d{2}$/.test(String(rangeEnd||"")) ? String(rangeEnd) : fallback);

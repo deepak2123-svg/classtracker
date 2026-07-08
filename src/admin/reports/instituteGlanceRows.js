@@ -21,6 +21,7 @@ import {
   getPublishedSyllabusPayload,
   getSyllabusProgressChapterTitle,
   isSyllabusProgressEntry,
+  isTeachingActivityEntry,
 } from "../syllabus/syllabusReportUtils.js";
 import { getInstituteGlancePeriodMeta } from "./instituteGlanceReportUtils.js";
 
@@ -153,7 +154,7 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     }
 
     notesToday.forEach(({ dateKey, entry }) => {
-      if (isSyllabusProgressEntry(entry)) return;
+      if (!isTeachingActivityEntry(entry)) return;
       const mins = entryDurationMinutes(entry);
       todayEntries += 1;
       totalMinutes += mins;
@@ -177,11 +178,11 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
       });
     });
 
-    sectionMap.set(sectionLabel, currentSection);
+    if (currentSection.entryCount > 0) sectionMap.set(sectionLabel, currentSection);
   });
 
   const lastEntry = data
-    ? classesHere.reduce((latest, cls) => Math.max(latest, lastEntryTs((data.notes || {})[cls.id] || {}) || 0), 0)
+    ? classesHere.reduce((latest, cls) => Math.max(latest, lastEntryTs((data.notes || {})[cls.id] || {}, isTeachingActivityEntry) || 0), 0)
     : Number(teacher?.lastActive || 0) || 0;
   const joinedAtTs = classesHere.length
     ? firstClassCreatedTs(classesHere)

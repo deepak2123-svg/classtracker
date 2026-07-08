@@ -35,6 +35,10 @@ export function isSyllabusProgressEntry(entry) {
   );
 }
 
+export function isTeachingActivityEntry(entry) {
+  return !isSyllabusProgressEntry(entry);
+}
+
 function syllabusReportArray(value) {
   if (Array.isArray(value)) return value.map(item => String(item || "").trim()).filter(Boolean);
   if (typeof value === "string") {
@@ -217,6 +221,6 @@ export function buildSyllabusReportRowsForClass({ publishedSyllabi = [], teacher
 export function countTeachingEntriesForMonth(classNotes = {}, monthKey = currentMonthKey()) {
   return Object.entries(classNotes || {}).reduce((sum, [dk, entries]) => {
     if (!dk.startsWith(monthKey) || !Array.isArray(entries)) return sum;
-    return sum + entries.filter(entry => !isSyllabusProgressEntry(entry)).length;
+    return sum + entries.filter(isTeachingActivityEntry).length;
   }, 0);
 }

@@ -1,4 +1,6 @@
-import { getEntriesInRange, lastEntryTs } from "../utils/adminDates.js";
+import { todayKey } from "../../shared.jsx";
+import { addDaysToDateKey, currentMonthKey, getEntriesInRange, lastEntryTs, monthBoundsFromKey } from "../utils/adminDates.js";
+import { isTeachingActivityEntry } from "../syllabus/syllabusReportUtils.js";
 import { activeAdminTeacherClasses } from "../utils/adminTeachers.js";
 import { exportTextSorter, sameInstituteName } from "../utils/adminText.js";
 
@@ -18,12 +20,18 @@ export function buildTeacherEntryStatusItem(teacher, data, instituteName, fallba
     };
   }
   const classes = activeAdminTeacherClasses(data).filter(c => sameInstituteName(c.institute, instituteName));
+  const today = todayKey();
+  const weekStart = addDaysToDateKey(today, -6);
+  const monthBounds = monthBoundsFromKey(currentMonthKey());
+  const teachingEntryCount = (classNotes, startKey, endKey) => getEntriesInRange(classNotes, null, startKey, endKey)
+    .filter(({ entry }) => isTeachingActivityEntry(entry))
+    .length;
   const stats = classes.reduce((acc, c) => {
     const classNotes = (data.notes || {})[c.id] || {};
-    acc.todayEntries += getEntriesInRange(classNotes, 1).length;
-    acc.weekEntries += getEntriesInRange(classNotes, 7).length;
-    acc.monthEntries += getEntriesInRange(classNotes, 30).length;
-    acc.lastEntryTs = Math.max(acc.lastEntryTs, lastEntryTs(classNotes) || 0);
+    acc.todayEntries += teachingEntryCount(classNotes, today, today);
+    acc.weekEntries += teachingEntryCount(classNotes, weekStart, today);
+    acc.monthEntries += teachingEntryCount(classNotes, monthBounds.startKey, monthBounds.endKey);
+    acc.lastEntryTs = Math.max(acc.lastEntryTs, lastEntryTs(classNotes, isTeachingActivityEntry) || 0);
     return acc;
   }, { todayEntries: 0, weekEntries: 0, monthEntries: 0, lastEntryTs: fallbackLastEntryTs || 0 });
   return {

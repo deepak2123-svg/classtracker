@@ -1,14 +1,21 @@
 import React from "react";
+import { todayKey } from "../../shared.jsx";
 import { G } from "../styles/adminTheme.js";
-import { getEntriesInRange } from "../utils/adminDates.js";
+import { addDaysToDateKey, getEntriesInRange } from "../utils/adminDates.js";
 import { activeAdminTeacherClasses } from "../utils/adminTeachers.js";
 import { sameInstituteName } from "../utils/adminText.js";
+import { isTeachingActivityEntry } from "../syllabus/syllabusReportUtils.js";
 
 export function DailyCentreSummary({ institutes, teachers, fullData, instituteStats, onSelectInstitute }) {
   const [filter, setFilter] = React.useState("all");
   const [copied, setCopied] = React.useState(false);
 
   const rows = React.useMemo(() => {
+    const today = todayKey();
+    const weekStart = addDaysToDateKey(today, -6);
+    const teachingEntryCount = (classNotes, startKey, endKey) => getEntriesInRange(classNotes, null, startKey, endKey)
+      .filter(({ entry }) => isTeachingActivityEntry(entry))
+      .length;
     return institutes.map(inst => {
       const stats = instituteStats[inst] || { teacherCount: 0, classCount: 0 };
       // Use the same teacher-membership logic as instituteStats for consistency
@@ -26,7 +33,7 @@ export function DailyCentreSummary({ institutes, teachers, fullData, instituteSt
         if (!d) return false;
         return activeAdminTeacherClasses(d)
           .filter(c => sameInstituteName(c?.institute, inst))
-          .some(c => getEntriesInRange((d.notes || {})[c.id] || {}, 1).length > 0);
+          .some(c => teachingEntryCount((d.notes || {})[c.id] || {}, today, today) > 0);
       }).length;
       instTeachers.forEach(t => {
         const d = fullData[t.uid];
@@ -34,7 +41,7 @@ export function DailyCentreSummary({ institutes, teachers, fullData, instituteSt
         const classesHere = activeAdminTeacherClasses(d).filter(c => sameInstituteName(c?.institute, inst));
         classesHere.forEach(c => {
           const notes = (d.notes || {})[c.id] || {};
-          weekEntries += getEntriesInRange(notes, 7).length;
+          weekEntries += teachingEntryCount(notes, weekStart, today);
         });
       });
       // Teachers who haven't filled any entry this week
@@ -42,7 +49,7 @@ export function DailyCentreSummary({ institutes, teachers, fullData, instituteSt
         const d = fullData[t.uid];
         if (!d) return true;
         const classesHere = activeAdminTeacherClasses(d).filter(c => sameInstituteName(c?.institute, inst));
-        return classesHere.every(c => getEntriesInRange((d.notes || {})[c.id] || {}, 7).length === 0);
+        return classesHere.every(c => teachingEntryCount((d.notes || {})[c.id] || {}, weekStart, today) === 0);
       }).length;
       return { inst, registered, todayFilled: todayUpdatedTeachers, weekEntries, notFilledThisWeek };
     });

@@ -69,7 +69,7 @@ export function getInstituteGlancePeriodMeta(period = "daily", rangeStartKey = "
   if (period === "weekly") {
     return {
       key: "weekly",
-      days: 7,
+      days: null,
       startKey: addDaysToDateKey(today, -6),
       endKey: today,
       filePart: "weekly",
@@ -105,7 +105,7 @@ export function getInstituteGlancePeriodMeta(period = "daily", rangeStartKey = "
   }
   return {
     key: "daily",
-    days: 1,
+    days: null,
     startKey: today,
     endKey: today,
     filePart: "daily",

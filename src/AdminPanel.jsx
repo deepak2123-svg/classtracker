@@ -124,6 +124,7 @@ import {
   syllabusTemplateMatchesTargets,
   syllabusTemplateScope,
 } from "./admin/syllabus/syllabusUtils.js";
+import { isTeachingActivityEntry } from "./admin/syllabus/syllabusReportUtils.js";
 import {
   buildAdminProgramClassGroups,
   compareClassCardsByActivity,
@@ -585,6 +586,15 @@ function groupByDate(flatEntries){
     map[dateKey].push(entry);
   });
   return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0]));
+}
+function getTeachingEntriesInRange(classNotes, days, startKey, endKey){
+  return getEntriesInRange(classNotes, days, startKey, endKey)
+    .filter(({ entry }) => isTeachingActivityEntry(entry));
+}
+function countTeachingEntriesInDateMap(classNotes = {}){
+  return Object.values(classNotes || {}).reduce((sum, entries) => (
+    sum + (Array.isArray(entries) ? entries.filter(isTeachingActivityEntry).length : 0)
+  ), 0);
 }
 function formatDateLabel(dk){
   if(!dk) return "";
@@ -5539,6 +5549,7 @@ function AdminPanelInner({user}){
   const [instWarmup, setInstWarmup] = useState({ inst:null, total:0, loaded:0 });
   const fullDataRequestRef = React.useRef({});
   const fullDataRef = React.useRef(fullData);
+  const teachersRef = React.useRef(teachers);
   const warmupJobRef = React.useRef(0);
   const instituteGlanceJobRef = React.useRef(0);
   const instituteGlanceDataRef = React.useRef({});
@@ -5569,6 +5580,10 @@ function AdminPanelInner({user}){
   React.useEffect(() => {
     fullDataRef.current = fullData;
   }, [fullData]);
+
+  React.useEffect(() => {
+    teachersRef.current = teachers;
+  }, [teachers]);
 
   React.useEffect(() => {
     if(typeof window === "undefined") return undefined;
@@ -5950,11 +5965,23 @@ function AdminPanelInner({user}){
     };
   }, [closeAdminOverlay, currentNavKey]);
 
-  // Lazy-load full data for a teacher only when needed; cached data survives reloads for the current day.
+  const isTeacherFullDataStale = React.useCallback((uid, sourceMap = fullDataRef.current) => {
+    const cleanUid = String(uid || "").trim();
+    if(!cleanUid) return false;
+    const cached = sourceMap?.[cleanUid];
+    if(!cached) return true;
+    const teacher = (teachersRef.current || []).find(item => item?.uid === cleanUid);
+    const indexRevision = Number(teacher?.mainRevision || 0) || 0;
+    if(!indexRevision) return false;
+    const cachedRevision = Number(cached?._meta?.revision || 0) || 0;
+    return cachedRevision < indexRevision;
+  }, []);
+
+  // Lazy-load full data for a teacher only when needed; cached data is refreshed when the teacher index revision is newer.
   const ensureFullData = React.useCallback(async (uid, options = {}) => {
     if(!uid) return null;
     const force = !!options.force;
-    if (!force && fullDataRef.current[uid]) return fullDataRef.current[uid];
+    if (!force && fullDataRef.current[uid] && !isTeacherFullDataStale(uid)) return fullDataRef.current[uid];
     if (!force && fullDataRequestRef.current[uid]) return fullDataRequestRef.current[uid];
     setLoadingUids(s=>s.has(uid)?s:new Set([...s,uid]));
     const pending = getTeacherFullData(uid)
@@ -5962,7 +5989,7 @@ function AdminPanelInner({user}){
         if (d){
           fullDataRef.current = { ...fullDataRef.current, [uid]: d };
           setFullData(prev=>{
-            if(!force && prev[uid]) return prev;
+            if(!force && prev[uid] && !isTeacherFullDataStale(uid, prev)) return prev;
             return { ...prev, [uid]: d };
           });
         }
@@ -5979,7 +6006,7 @@ function AdminPanelInner({user}){
       });
     fullDataRequestRef.current[uid] = pending;
     return pending;
-  },[]);
+  },[isTeacherFullDataStale]);
 
   const deletedInstituteKeys = useMemo(
     () => new Set(Array.from(deletedInstitutes || []).map(normaliseInstituteNameKey).filter(Boolean)),
@@ -6248,7 +6275,7 @@ function AdminPanelInner({user}){
     const tracksInstituteProgress = !!instLabel;
     const requestId = tracksInstituteProgress ? ++warmupJobRef.current : warmupJobRef.current;
     const unique = [...new Set((uids || []).filter(Boolean))];
-    const missing = unique.filter(uid => !fullDataRef.current[uid]);
+    const missing = unique.filter(uid => isTeacherFullDataStale(uid));
 
     if(instLabel){
       setInstWarmup({ inst:instLabel, total:missing.length, loaded:0 });
@@ -6272,7 +6299,7 @@ function AdminPanelInner({user}){
         await new Promise(resolve=>window.setTimeout(resolve, 16));
       }
     }
-  }, [ensureFullData, isWeakDevice, mobileLiteMode]);
+  }, [ensureFullData, isTeacherFullDataStale, isWeakDevice, mobileLiteMode]);
 
   const warmInstitute = React.useCallback((inst) => {
     warmTeacherUids(getInstituteTeacherUids(inst), inst);
@@ -6378,7 +6405,7 @@ function AdminPanelInner({user}){
     const pendingUids = relevantTeachers
       .map(teacher => teacher?.uid)
       .filter(Boolean)
-      .filter(uid => !hydratedFullData[uid]);
+      .filter(uid => isTeacherFullDataStale(uid, hydratedFullData));
 
     if(pendingUids.length){
       let nextPendingIndex = 0;
@@ -6436,7 +6463,7 @@ function AdminPanelInner({user}){
       totalInstitutes: rows.length,
       ready: rows.every(row => row.ready),
     };
-  }, [ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, isMobile, isWeakDevice, mobileLiteMode, roles, roleDetails, syllabusTemplates]);
+  }, [ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlancePeriodRange, instSectionsAll, instituteGlanceTeacherList, isMobile, isTeacherFullDataStale, isWeakDevice, mobileLiteMode, roles, roleDetails, syllabusTemplates]);
 
   const scheduleInstituteGlanceReport = React.useCallback((nextReport) => {
     instituteGlanceReportRef.current = nextReport;
@@ -6495,18 +6522,19 @@ function AdminPanelInner({user}){
     const configKey = getInstituteGlanceConfigKey(resolvedConfig);
     const currentReport = instituteGlanceReportRef.current;
     const currentMatches = currentReport.configKey === configKey;
-    if(!force && currentMatches && currentReport.loading) return currentReport;
-    if(!force && currentMatches && currentReport.ready && !currentReport.error) return currentReport;
-
-    const jobId = ++instituteGlanceJobRef.current;
     const teacherUids = instituteGlanceTeacherList.map(t => t.uid).filter(Boolean);
     const total = teacherUids.length;
     const cachedMap = force ? {} : instituteGlanceDataRef.current;
     const hydratedFullData = { ...fullData, ...cachedMap };
+    const staleUids = teacherUids.filter(uid => isTeacherFullDataStale(uid, hydratedFullData));
+    if(!force && currentMatches && currentReport.loading) return currentReport;
+    if(!force && currentMatches && currentReport.ready && !currentReport.error && !staleUids.length) return currentReport;
+
+    const jobId = ++instituteGlanceJobRef.current;
     const pendingUids = force
       ? teacherUids
-      : teacherUids.filter(uid => !hydratedFullData[uid]);
-    let loaded = force ? 0 : teacherUids.filter(uid => !!hydratedFullData[uid]).length;
+      : staleUids;
+    let loaded = force ? 0 : Math.max(0, total - staleUids.length);
 
     if(!pendingUids.length){
       const snapshot = buildInstituteGlanceSnapshot(hydratedFullData, resolvedConfig);
@@ -6599,7 +6627,7 @@ function AdminPanelInner({user}){
     };
     scheduleInstituteGlanceReport(finalReport);
     return finalReport;
-  }, [buildInstituteGlanceSnapshot, ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlanceConfigKey, instituteGlanceTeacherList, institutes.length, isMobile, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
+  }, [buildInstituteGlanceSnapshot, ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlanceConfigKey, instituteGlanceTeacherList, institutes.length, isMobile, isTeacherFullDataStale, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
 
   React.useEffect(() => {
     const visible = instituteGlanceOpen || mobileSurface === "centreSummary";
@@ -8813,7 +8841,7 @@ function AdminPanelInner({user}){
       if(!isTeachingSurfaceAccount(teacher)) return;
       Object.values(d.notes||{}).forEach(byDate=>{
         if(!byDate||typeof byDate!=="object") return;
-        Object.values(byDate).forEach(arr=>{if(Array.isArray(arr))t+=arr.length;});
+        Object.values(byDate).forEach(arr=>{if(Array.isArray(arr))t+=arr.filter(isTeachingActivityEntry).length;});
       });
     });
     return t;
@@ -8907,8 +8935,8 @@ function AdminPanelInner({user}){
         if(!map[key]) map[key]={raw:resolvedSection,display:normaliseName(resolvedSection),subjects:new Set(),teachers:[],lastActivityTs:0};
         const subjectLabel = resolveAdminTeacherClassSubjectLabel(t, d, c, globalSubjects, c.subject);
         if(subjectLabel) map[key].subjects.add(subjectLabel);
-        const entryCount=Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0);
-        const lastActive=lastEntryTs((d.notes||{})[c.id]||{});
+        const entryCount=countTeachingEntriesInDateMap((d.notes||{})[c.id]||{});
+        const lastActive=lastEntryTs((d.notes||{})[c.id]||{}, isTeachingActivityEntry);
         const activityTs=Math.max(lastActive || 0, Number(c.created || 0) || 0);
         map[key].lastActivityTs=Math.max(map[key].lastActivityTs || 0, activityTs);
         map[key].teachers.push({uid:t.uid,name:d.profile?.name||t.name,entryCount,lastActive,classId:c.id,subject:subjectLabel,lastActivityTs:activityTs});
@@ -8937,7 +8965,7 @@ function AdminPanelInner({user}){
       if(d){
         ts = activeAdminTeacherClasses(d)
           .filter(c=>sameInstituteName(c.institute, selInst))
-          .reduce((latest,c)=>Math.max(latest, lastEntryTs((d.notes||{})[c.id]||{}) || 0), 0);
+          .reduce((latest,c)=>Math.max(latest, lastEntryTs((d.notes||{})[c.id]||{}, isTeachingActivityEntry) || 0), 0);
       } else {
         ts = Number(t.lastActive || 0);
       }
@@ -9084,14 +9112,14 @@ function AdminPanelInner({user}){
         .filter(c=>(c.institute||"").trim().toLowerCase()===(selInst||"").trim().toLowerCase())
         .map(c=>{
           const resolvedSection = resolveAdminSectionName(c.section, c.institute, instSectionsAll) || c.section;
-          const activityTs = Math.max(lastEntryTs((d.notes||{})[c.id]||{}) || 0, Number(c.created || 0) || 0);
+          const activityTs = Math.max(lastEntryTs((d.notes||{})[c.id]||{}, isTeachingActivityEntry) || 0, Number(c.created || 0) || 0);
           return ({
           display:normaliseName(resolvedSection),
           raw:resolvedSection,
           subject:resolveAdminTeacherClassSubjectLabel(teacher, d, c, globalSubjects, c.subject),
           institute:c.institute||"",
           classId:c.id,
-          entryCount:Object.values((d.notes||{})[c.id]||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0),
+          entryCount:countTeachingEntriesInDateMap((d.notes||{})[c.id]||{}),
           lastActivityTs:activityTs,
         });
         })
@@ -9176,7 +9204,7 @@ function AdminPanelInner({user}){
     const d=fullData[teacherUid];
     if(!d) return null;
     const classNotes=(d.notes||{})[classId]||{};
-    const flat=getEntriesInRange(classNotes,periodDays,periodStartKey,periodEndKey);
+    const flat=getTeachingEntriesInRange(classNotes,periodDays,periodStartKey,periodEndKey);
     return groupByDate(flat);
   },[selP3,fullData,period,periodDays,periodStartKey,periodEndKey]);
   const selectedClassMeta = useMemo(()=>{
@@ -9194,7 +9222,7 @@ function AdminPanelInner({user}){
     if(!selP3) return null;
     const d = fullData[selP3.teacherUid];
     const classNotes = (d?.notes||{})[selP3.classId] || {};
-    const flat = getEntriesInRange(classNotes, periodDays, periodStartKey, periodEndKey);
+    const flat = getTeachingEntriesInRange(classNotes, periodDays, periodStartKey, periodEndKey);
     const statusMap = {};
     const daySet = new Set();
     let totalMinutes = 0;
@@ -9212,7 +9240,7 @@ function AdminPanelInner({user}){
         untimedEntries += 1;
       }
     });
-    const lastTs = lastEntryTs(classNotes);
+    const lastTs = lastEntryTs(classNotes, isTeachingActivityEntry);
     return {
       entryCount: flat.length,
       totalMinutes,
@@ -9235,7 +9263,7 @@ function AdminPanelInner({user}){
     const d = fullData[teacherUid];
     if(!d) return [];
     const subjectLabel = safeAdminText(resolveAdminTeacherClassSubject(teacherUid, classId, subject), "No subject");
-    return getEntriesInRange((d.notes||{})[classId]||{}, days, sk, ek).map(({dateKey, entry})=>({
+    return getTeachingEntriesInRange((d.notes||{})[classId]||{}, days, sk, ek).map(({dateKey, entry})=>({
       id: safeAdminText(entry.id, `${teacherUid}_${classId}_${dateKey}`),
       dateKey:safeAdminText(dateKey, ""),
       timeStart: safeAdminText(entry.timeStart, ""),
@@ -9301,7 +9329,7 @@ function AdminPanelInner({user}){
         const teacherYesterdayEntries = [];
         const teacherLastWeekEntries = [];
         const teacherRecentEntries = [];
-        let teacherLastTs = Number(teacher?.lastActive || 0) || 0;
+        let teacherLastTs = data ? 0 : (Number(teacher?.lastActive || 0) || 0);
 
         classesHere.forEach(cls => {
           const resolvedSection = resolveAdminSectionName(cls.section, cls.institute, instSectionsAll) || cls.section || cls.name || "Untitled section";
@@ -9310,9 +9338,11 @@ function AdminPanelInner({user}){
           if(!classKey) return;
           const subjectLabel = resolveAdminTeacherClassSubject(uid, cls.id, cls.subject || "");
           const classNotes = (data.notes || {})[cls.id] || {};
-          const classLastTs = lastEntryTs(classNotes) || 0;
+          const classLastTs = lastEntryTs(classNotes, isTeachingActivityEntry) || 0;
           const classLastDateKey = Object.keys(classNotes || {})
-            .filter(dateKey => /^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || "")) && Array.isArray(classNotes[dateKey]) && classNotes[dateKey].length)
+            .filter(dateKey => /^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || ""))
+              && Array.isArray(classNotes[dateKey])
+              && classNotes[dateKey].some(isTeachingActivityEntry))
             .sort()
             .pop() || "";
           teacherLastTs = Math.max(teacherLastTs, classLastTs);
@@ -9741,7 +9771,7 @@ function AdminPanelInner({user}){
       if(!d) return sum;
       return sum + activeAdminTeacherClasses(d)
         .filter(c=>sameInstituteName(c.institute, selInst))
-        .reduce((classSum,c)=>classSum + Object.values((d.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
+        .reduce((classSum,c)=>classSum + countTeachingEntriesInDateMap((d.notes||{})[c.id]||{}),0);
     },0);
   },[selInst,teacherBelongsToInstitute,teachers,fullData]);
 
@@ -9752,7 +9782,7 @@ function AdminPanelInner({user}){
       if(!d) return sum;
       return sum + activeAdminTeacherClasses(d)
         .filter(c=>sameInstituteName(c.institute, selInst))
-        .reduce((classSum,c)=>classSum + getEntriesInRange((d.notes||{})[c.id]||{}, periodDays, periodStartKey, periodEndKey).length,0);
+        .reduce((classSum,c)=>classSum + getTeachingEntriesInRange((d.notes||{})[c.id]||{}, periodDays, periodStartKey, periodEndKey).length,0);
     },0);
   },[selInst,teachers,fullData,periodDays,periodStartKey,periodEndKey]);
 
@@ -9828,7 +9858,7 @@ function AdminPanelInner({user}){
         (cls.teachers||[]).forEach(t=>{
           const d = fullData[t.uid];
           if(!d) return;
-          const entries = getEntriesInRange((d.notes||{})[t.classId]||{}, periodDays, periodStartKey, periodEndKey);
+          const entries = getTeachingEntriesInRange((d.notes||{})[t.classId]||{}, periodDays, periodStartKey, periodEndKey);
           if(entries.length) activeTeachers.add(t.uid);
           entries.forEach(({entry})=>{
             entryCount += 1;
@@ -9884,7 +9914,7 @@ function AdminPanelInner({user}){
           Object.entries((d.notes||{})[c.id]||{}).forEach(([dk, arr])=>{
             if(!Array.isArray(arr)) return;
             arr.forEach(entry=>{
-              if(!entry) return;
+              if(!entry || !isTeachingActivityEntry(entry)) return;
               items.push({
                 id: safeAdminText(entry.id, `${t.uid}_${c.id}_${dk}`),
                 dateKey: safeAdminText(dk, ""),
@@ -9917,7 +9947,7 @@ function AdminPanelInner({user}){
           if(!d) return sum;
           return sum + activeAdminTeacherClasses(d)
             .filter(c=>sameInstituteName(c.institute,inst))
-            .reduce((classSum,c)=>classSum + Object.values((d.notes||{})[c.id]||{}).reduce((daySum,arr)=>daySum + (Array.isArray(arr)?arr.length:0),0),0);
+            .reduce((classSum,c)=>classSum + countTeachingEntriesInDateMap((d.notes||{})[c.id]||{}),0);
         },0);
         return { inst, teacherCount:stats.teacherCount, classCount:stats.classCount, entryCount };
       })
@@ -10879,7 +10909,7 @@ function AdminPanelInner({user}){
       if (startKey && dk < startKey) return;
       if (endKey && dk > endKey) return;
       if (!Array.isArray(arr)) return;
-      arr.forEach(e => { if (e) result.push({dateKey: dk, entry: e}); });
+      arr.forEach(e => { if (e && isTeachingActivityEntry(e)) result.push({dateKey: dk, entry: e}); });
     });
     // sort ascending: oldest first, within same date by timeStart asc
     result.sort((a, b) => {
@@ -10902,7 +10932,7 @@ function AdminPanelInner({user}){
         const d = fullData[t.uid];
         if (!d) return [];
         const teacherName = d.profile?.name || t.name || "Teacher";
-        return (d.classes || [])
+        return activeAdminTeacherClasses(d)
           .filter(c => sameInstituteName(c.institute, selInst))
           .flatMap(c =>
             rowsForTeacherClass(
@@ -12469,16 +12499,17 @@ function AdminPanelInner({user}){
     const summarizeClassNotes = classNotes => {
       let weekMinutes = 0;
       let weekEntries = 0;
-      let lastTs = lastEntryTs(classNotes) || 0;
+      let lastTs = lastEntryTs(classNotes, isTeachingActivityEntry) || 0;
       Object.entries(classNotes || {}).forEach(([dateKey, entries])=>{
         if(!Array.isArray(entries)) return;
         if(dateKey >= weekStartKey && dateKey <= weekEndKey){
           entries.forEach(entry=>{
+            if(!isTeachingActivityEntry(entry)) return;
             weekEntries += 1;
             weekMinutes += entryDurationMinutes(entry);
           });
         }
-        if(entries.length) lastTs = Math.max(lastTs, dateKeyToTime(dateKey));
+        if(entries.some(isTeachingActivityEntry)) lastTs = Math.max(lastTs, dateKeyToTime(dateKey));
       });
       return { weekMinutes, weekEntries, lastTs };
     };
