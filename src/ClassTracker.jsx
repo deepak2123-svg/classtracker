@@ -488,6 +488,7 @@ const TEACHER_ALLOWED_VIEWS = new Set([
   "classTimeline",
   "trash",
   "classDetail",
+  "classHistory",
   "addClass",
   "addNote",
   "editNote",
@@ -501,7 +502,7 @@ function sanitizeTeacherView(view) {
 function resolveTeacherView(view, { activeClass = null, editNote = null, statsClassId = null } = {}) {
   const safeView = sanitizeTeacherView(view);
   if (safeView === "classTimeline" && !statsClassId) return "stats";
-  if ((safeView === "classDetail" || safeView === "addNote") && !activeClass) return "home";
+  if ((safeView === "classDetail" || safeView === "classHistory" || safeView === "addNote") && !activeClass) return "home";
   if (safeView === "editNote") {
     if (activeClass && editNote) return "editNote";
     return activeClass ? "classDetail" : "home";
@@ -2971,6 +2972,302 @@ function HistoryModal({cls,classNotes={},selectedDate,onSelectDate,onClose}){
   );
 }
 
+function TeacherClassHistoryView({
+  user,
+  data,
+  teacherName,
+  teacherClass,
+  classNotes = {},
+  trashedEntries = [],
+  metrics = null,
+  initialDateKey = "",
+  historyBackView = "classDetail",
+  isMobile = false,
+  isDarkTeacherTheme = false,
+  teacherThemeShell = {},
+  notificationCount = 0,
+  onHome,
+  onBack,
+  onSignOut,
+  onViewSyllabus,
+  onViewNotifications,
+  onAddEntry,
+  onEditEntry,
+  onDeleteEntry,
+  onRestoreEntry,
+}){
+  const [query,setQuery] = React.useState("");
+  const [statusFilter,setStatusFilter] = React.useState("");
+  const tone = getSectionTone(teacherClass?.section || "");
+  const surfaceTheme = getTeacherSectionSurfaceStyles(tone, isDarkTeacherTheme);
+
+  const allEntries = React.useMemo(() => {
+    return Object.entries(classNotes || {})
+      .flatMap(([dateKey, entries]) => (
+        teacherTeachingEntries(entries).map(entry => ({...entry,dateKey}))
+      ))
+      .sort((a,b) => {
+        const dateCompare = String(b.dateKey || "").localeCompare(String(a.dateKey || ""));
+        if(dateCompare) return dateCompare;
+        const timeCompare = String(b.timeStart || "").localeCompare(String(a.timeStart || ""));
+        if(timeCompare) return timeCompare;
+        return (Number(b.created || 0) || 0) - (Number(a.created || 0) || 0);
+      });
+  }, [classNotes]);
+
+  const noteDates = React.useMemo(() => {
+    return allEntries.reduce((acc,entry) => {
+      if(entry.dateKey) acc[entry.dateKey] = (acc[entry.dateKey] || 0) + 1;
+      return acc;
+    }, {});
+  }, [allEntries]);
+
+  const latestDateKey = allEntries[0]?.dateKey || todayKey();
+  const [historyDateKey,setHistoryDateKey] = React.useState(() => initialDateKey || latestDateKey);
+  const selectedDateLabel = formatDateLabel(historyDateKey);
+  const historyFilterActive = Boolean(query.trim() || statusFilter);
+  const displayMetrics = metrics || buildClassEntryMetrics(classNotes);
+  const canEditSelectedDate = isDateAllowed(historyDateKey);
+
+  const filteredEntries = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return allEntries.filter(entry => {
+      if(statusFilter && String(entry?.status || "") !== statusFilter) return false;
+      if(!q) return true;
+      const searchText = [
+        entry.dateKey,
+        formatDateLabel(entry.dateKey),
+        entry.title,
+        entry.body,
+        entry.timeStart,
+        entry.timeEnd,
+        entry.status,
+        entry.tag,
+      ].join(" ").toLowerCase();
+      return searchText.includes(q);
+    });
+  }, [allEntries, query, statusFilter]);
+
+  const selectedDateEntries = React.useMemo(
+    () => filteredEntries.filter(entry => entry.dateKey === historyDateKey),
+    [filteredEntries, historyDateKey]
+  );
+
+  const classSubtitle = [
+    teacherClass?.institute,
+    teacherClass?.subject,
+  ].filter(Boolean).join(" · ");
+
+  const backLabel = historyBackView === "addNote" || historyBackView === "editNote" ? "Entry" : "Back";
+  const statusButtonStyle = (selected, style = {}) => ({
+    background:selected ? (style.bg || G.forest) : G.surface,
+    color:selected ? (style.text || "#fff") : G.textM,
+    border:`1.5px solid ${selected ? (style.dot || G.forest) : G.border}`,
+    borderRadius:20,
+    padding:"8px 18px",
+    fontSize:14,
+    cursor:"pointer",
+    fontFamily:G.sans,
+    fontWeight:selected ? 700 : 500,
+    transition:"all 0.15s",
+    WebkitTapHighlightColor:"transparent",
+  });
+
+  const renderEntryCard = entry => {
+    const tag = (entry?.tag && TAG_STYLES[entry.tag]) || TAG_STYLES.note;
+    const statusTone = entry?.status && STATUS_STYLES[entry.status] ? STATUS_STYLES[entry.status] : null;
+    const canMutateEntry = canEditSelectedDate;
+    return (
+      <div key={`${entry.dateKey}-${entry.id}`} className="ledgr-card" style={{background:surfaceTheme.noteBg,borderRadius:16,border:`1px solid ${surfaceTheme.noteBorder}`,overflow:"hidden",boxShadow:G.shadowMd}}>
+        <div style={{height:4,background:tag.bg}}/>
+        <div style={{padding:"14px 15px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:entry.title?8:0}}>
+                <span style={{background:tag.bg,color:tag.text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.mono,fontWeight:600}}>{tag.label}</span>
+                {entry.timeStart&&<span style={{fontSize:13,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}><AppIcon icon={IconClockHour4} size={13} color={G.textS} />{formatPeriod(entry.timeStart,entry.timeEnd)}</span>}
+                {statusTone&&<span style={{background:statusTone.bg,color:statusTone.text,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.sans,fontWeight:600}}>{statusTone.label}</span>}
+              </div>
+              {entry.title&&<div style={{fontWeight:700,fontSize:17,color:G.text,fontFamily:G.display,lineHeight:1.3,marginBottom:4}}>{entry.title}</div>}
+              {entry.body&&<p style={{margin:0,fontSize:15,color:G.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{entry.body}</p>}
+            </div>
+            {canMutateEntry&&(
+              <OverflowMenu items={[
+                { icon:IconEdit, label:"Edit entry", onClick:()=>onEditEntry?.(entry) },
+                { icon:IconTrash, label:"Delete entry", danger:true, onClick:()=>onDeleteEntry?.(entry) },
+              ]}/>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTrashCard = entry => {
+    const tag = (entry?.tag && TAG_STYLES[entry.tag]) || TAG_STYLES.note;
+    return (
+      <div key={`trash-${entry.id}-${entry.deletedAt || 0}`} className="ledgr-card" style={{background:G.surface,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:G.shadowSm}}>
+        <div style={{height:4,background:tag.bg,opacity:0.45}}/>
+        <div style={{padding:"14px 15px",display:"flex",alignItems:"flex-start",gap:12}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:7}}>
+              <span style={{background:G.surfaceAlt,color:G.textM,fontSize:12,borderRadius:10,padding:"3px 10px",fontFamily:G.mono,fontWeight:700}}>{entry.dateKey ? formatDateLabel(entry.dateKey) : "Deleted entry"}</span>
+              {entry.timeStart&&<span style={{fontSize:12,color:G.textS,fontFamily:G.mono,background:G.bg,borderRadius:10,padding:"3px 10px",border:`1px solid ${G.borderM}`,fontWeight:600}}>{formatPeriod(entry.timeStart,entry.timeEnd)}</span>}
+            </div>
+            <div style={{fontWeight:700,fontSize:16,color:G.text,fontFamily:G.display,lineHeight:1.3}}>{entry.title || "Untitled entry"}</div>
+            {entry.body&&<p style={{margin:"5px 0 0",fontSize:14,color:G.textM,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{entry.body}</p>}
+          </div>
+          <button type="button" onClick={()=>onRestoreEntry?.(entry)} style={{background:G.greenL,border:`1px solid rgba(27,138,76,0.2)`,color:G.green,borderRadius:10,padding:"8px 12px",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6,flexShrink:0,WebkitTapHighlightColor:"transparent"}}>
+            <AppIcon icon={IconRestore} size={14} color={G.green} />Restore
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return(
+    <div style={{...teacherThemeShell,height:"100dvh",minHeight:"100vh",width:"100%",display:"flex",flexDirection:"column",background:G.pageBg,fontFamily:G.sans}}>
+      <TopNav user={user} teacherName={teacherName} data={data} onLogoClick={onHome} onSignOut={onSignOut} onViewSyllabus={onViewSyllabus} onViewNotifications={onViewNotifications} notificationCount={notificationCount} showProfileMenu={!isMobile}
+        right={<GhostBtn onClick={onBack} style={{color:"rgba(255,255,255,0.8)",borderColor:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowLeft} size={16} color="currentColor" />{backLabel}</GhostBtn>}
+      />
+
+      {teacherClass&&(
+        <div style={{flexShrink:0,background:G.forest,padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:"#34D077",flexShrink:0}}/>
+          <span style={{fontSize:16,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:0}}>{teacherClass.section}</span>
+          <span style={{fontSize:13,color:"rgba(255,255,255,0.45)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:260}}>· {classSubtitle}</span>
+        </div>
+      )}
+
+      <div style={{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch"}}>
+        <div style={{background:G.surface,borderBottom:`1px solid ${G.border}`,padding:"12px 16px"}}>
+          <div style={{maxWidth:660,margin:"0 auto"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+                <div style={{width:42,height:42,borderRadius:14,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <AppIcon icon={IconCalendar} size={20} color={G.textM} />
+                </div>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.7,marginBottom:2}}>Entry date</div>
+                  <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:0,lineHeight:1.05}}>{selectedDateLabel}</div>
+                </div>
+              </div>
+              {canEditSelectedDate&&(
+                <button type="button" onClick={()=>onAddEntry?.(historyDateKey)} onPointerDown={e=>rpl(e,true)}
+                  style={{background:surfaceTheme.primaryButtonBg,color:surfaceTheme.primaryButtonText,border:"none",borderRadius:12,padding:isMobile?"9px 12px":"10px 16px",fontSize:13,cursor:"pointer",fontFamily:G.sans,fontWeight:800,display:"inline-flex",alignItems:"center",gap:6,minHeight:40,whiteSpace:"nowrap",WebkitTapHighlightColor:"transparent"}}>
+                  <AppIcon icon={IconPlus} size={15} color="currentColor" />Add Entry
+                </button>
+              )}
+            </div>
+            <div style={{marginTop:12}}>
+              <DateStrip selectedDate={historyDateKey} onSelectDate={setHistoryDateKey} noteDates={noteDates}/>
+            </div>
+          </div>
+        </div>
+
+        <div className="mobile-pad" style={{maxWidth:660,width:"100%",margin:"0 auto",padding:"16px 16px calc(72px + env(safe-area-inset-bottom, 0px))",boxSizing:"border-box"}}>
+          <div className="form-card" style={{...card,padding:isMobile?"18px":"24px",marginBottom:16}}>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",gap:8,marginBottom:18}}>
+              {[
+                { label:"Today", value:displayMetrics?.todayEntries ?? 0, color:surfaceTheme.primaryAccent },
+                { label:displayMetrics?.monthLabel || "This month", value:displayMetrics?.monthEntries ?? 0, color:G.textS },
+                { label:"Total", value:displayMetrics?.totalCount ?? allEntries.length, color:G.text },
+                { label:"Logged days", value:displayMetrics?.activeDays ?? Object.keys(noteDates).length, color:G.textS },
+              ].map(item=>(
+                <div key={item.label} style={{background:surfaceTheme.statBg,border:`1px solid ${surfaceTheme.statBorder}`,borderRadius:14,padding:"11px 10px 10px",textAlign:"center",minWidth:0}}>
+                  <div style={{fontSize:22,fontWeight:800,color:item.color,fontFamily:G.display,lineHeight:1}}>{item.value}</div>
+                  <div style={{fontSize:10.5,color:G.textL,marginTop:5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{display:"grid",gap:14}}>
+              <div>
+                <label style={lbl}>Search entries</label>
+                <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by date, title, notes, or time" style={{...inp,fontSize:16,marginBottom:0,background:isDarkTeacherTheme ? G.surface : "#FFFFFFF7"}}/>
+              </div>
+              <div>
+                <label style={lbl}>Topic Status</label>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  <button type="button" onClick={()=>setStatusFilter("")} style={statusButtonStyle(!statusFilter)}>
+                    All
+                  </button>
+                  {Object.entries(STATUS_STYLES).map(([key,val])=>(
+                    <button key={key} type="button" onClick={()=>setStatusFilter(statusFilter===key?"":key)} style={statusButtonStyle(statusFilter===key,val)}>
+                      {val.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{fontSize:12,color:G.textL,marginTop:5}}>Tap again to clear a status filter</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-card" style={{...card,padding:isMobile?"18px":"24px",marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:16}}>
+              <div>
+                <div style={{fontSize:isMobile?24:26,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:0,lineHeight:1.05}}>Past entries</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:6,lineHeight:1.45}}>
+                  {historyFilterActive ? `${selectedDateEntries.length} shown for ${selectedDateLabel}` : `${selectedDateEntries.length} ${selectedDateEntries.length===1?"entry":"entries"} on ${selectedDateLabel}`}
+                </div>
+              </div>
+              <span style={{background:G.surfaceAlt,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 10px",fontSize:11,fontWeight:800,color:G.textS,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                {filteredEntries.length}/{allEntries.length}
+              </span>
+            </div>
+
+            {allEntries.length===0 ? (
+              <div style={{background:surfaceTheme.emptyBg,borderRadius:18,border:`2px dashed ${G.border}`,padding:"42px 20px",textAlign:"center"}}>
+                <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconHistory} size={28} color={G.textM} /></div>
+                <div style={{fontSize:17,color:G.text,fontWeight:800,fontFamily:G.display}}>No history yet</div>
+                <div style={{fontSize:14,color:G.textM,marginTop:6}}>Teaching entries for this class will appear here.</div>
+              </div>
+            ) : filteredEntries.length===0 ? (
+              <div style={{background:surfaceTheme.emptyBg,borderRadius:18,border:`2px dashed ${G.border}`,padding:"42px 20px",textAlign:"center"}}>
+                <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconSearch} size={28} color={G.textM} /></div>
+                <div style={{fontSize:17,color:G.text,fontWeight:800,fontFamily:G.display}}>No matching entries</div>
+                <div style={{fontSize:14,color:G.textM,marginTop:6}}>Try another search or status.</div>
+              </div>
+            ) : selectedDateEntries.length===0 ? (
+              <div style={{background:surfaceTheme.emptyBg,borderRadius:18,border:`2px dashed ${G.border}`,padding:"42px 20px",textAlign:"center"}}>
+                <div style={{width:60,height:60,borderRadius:18,background:G.surfaceSoft,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><AppIcon icon={IconHistory} size={28} color={G.textM} /></div>
+                <div style={{fontSize:17,color:G.text,fontWeight:800,fontFamily:G.display}}>Nothing on this day</div>
+                <div style={{fontSize:14,color:G.textM,marginTop:6}}>Pick another date from the calendar to see past entries.</div>
+              </div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {!canEditSelectedDate&&(
+                  <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#9A3412",fontWeight:600}}>
+                    Viewing past entries only. Dates older than the past week cannot be edited.
+                  </div>
+                )}
+                {selectedDateEntries.map(renderEntryCard)}
+              </div>
+            )}
+          </div>
+
+          <div className="form-card" style={{...card,padding:isMobile?"18px":"24px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:trashedEntries.length?14:0}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.15}}>Recycle bin</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:5}}>
+                  {trashedEntries.length ? `${trashedEntries.length} deleted ${trashedEntries.length===1?"entry":"entries"} for this class` : "Deleted entries from this class will appear here."}
+                </div>
+              </div>
+              <AppIcon icon={IconTrash} size={20} color={trashedEntries.length?G.textM:G.textL} />
+            </div>
+            {trashedEntries.length>0&&(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {trashedEntries.map(renderTrashCard)}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Trash badge ───────────────────────────────────────────────────────────────
 function TrashBadge({count,onClick}){
   if(count===0)return null;
@@ -4316,12 +4613,13 @@ function ClassTrackerInner({user}){
     if (!activeInsts.has(statsInstituteName)) setStatsInstituteName("");
   }, [data.classes, statsInstituteName]);
   const [leaveModal,setLeaveModal]     = useState(null);
-  const [historyClassId,setHistoryClassId] = useState(null);
   const [statsClassId,setStatsClassId] = useState(null);
   const [mobileClassSheetId,setMobileClassSheetId] = useState(null);
   const [signOutPrompt,setSignOutPrompt] = useState(false);
   const [exportOpen,setExportOpen]       = useState(false);
   const [teacherBackView,setTeacherBackView] = useState("home");
+  const [historyBackView,setHistoryBackView] = useState("classDetail");
+  const [historyInitialDateKey,setHistoryInitialDateKey] = useState("");
   const [isOffline,setIsOffline]         = useState(!navigator.onLine);
   const [inlineToast,setInlineToast]     = useState(null);
   const inlineToastTimer                 = useRef(null);
@@ -4544,7 +4842,7 @@ function ClassTrackerInner({user}){
     return sanitizeTeacherView(match?.[1] || "home");
   }, []);
   const renderTeacherBottomBar = currentView => {
-    if(!isMobile || ["addClass","addNote","editNote"].includes(currentView)) return null;
+    if(!isMobile || ["addClass","addNote","editNote","classHistory"].includes(currentView)) return null;
     const statsOrigin = ["profile","notifications","trash"].includes(currentView) ? "profile" : "home";
     return (
       <TeacherBottomBar
@@ -5150,16 +5448,17 @@ function ClassTrackerInner({user}){
   useEffect(() => {
     const onPop = (e) => {
       const target = sanitizeTeacherView(e.state?.view || getTeacherHashView());
-      // addNote/editNote have no meaningful back target in history — go to classDetail
-      if (target === "addNote" || target === "editNote") {
-        _setView("classDetail");
+      if (target === "addNote") {
+        _setView(activeClass ? "addNote" : "home");
+      } else if (target === "editNote") {
+        _setView(activeClass && editNote ? "editNote" : activeClass ? "classDetail" : "home");
       } else {
         _setView(target);
       }
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [getTeacherHashView]);
+  }, [activeClass, editNote, getTeacherHashView]);
 
   function safeNav(destination, action){
     action ? action() : setView(destination);
@@ -5182,14 +5481,13 @@ function ClassTrackerInner({user}){
   }
   const closeTeacherOverlay = React.useCallback(() => {
     if(mobileClassSheetId){ setMobileClassSheetId(null); return true; }
-    if(historyClassId){ setHistoryClassId(null); return true; }
     if(exportOpen){ setExportOpen(false); return true; }
     if(signOutPrompt){ setSignOutPrompt(false); return true; }
     if(confirmModal){ setConfirmModal(null); return true; }
     if(leaveModal){ setLeaveModal(null); return true; }
     if(teacherNoticePrompt){ setTeacherNoticePrompt(null); return true; }
     return false;
-  }, [confirmModal, exportOpen, historyClassId, leaveModal, mobileClassSheetId, signOutPrompt, teacherNoticePrompt]);
+  }, [confirmModal, exportOpen, leaveModal, mobileClassSheetId, signOutPrompt, teacherNoticePrompt]);
   useEffect(() => {
     if(!Capacitor.isNativePlatform()) return undefined;
     const listenerPromise = CapacitorApp.addListener("backButton", () => {
@@ -5318,8 +5616,10 @@ function ClassTrackerInner({user}){
     setActiveClass(cls);
     setSelectedDate(item?.lastDateKey || todayKey());
     if(history && item?.entryCount > 0){
-      setHistoryClassId(cls.id);
-      safeNav(isMobile ? "classDetail" : "home");
+      openClassHistory(cls, {
+        preferredDateKey:item?.lastDateKey || "",
+        backView:isMobile ? "classDetail" : "home",
+      });
       return;
     }
     safeNav(isMobile ? "classDetail" : "home");
@@ -5847,13 +6147,16 @@ function ClassTrackerInner({user}){
     setDraftSaving(false);
     setEditNote(null);setView("classDetail");
   };
-  const deleteNote=(noteId)=>setDataWithPendingDraft(d=>{
-    const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];
+  const deleteNoteForClassDate=(targetClass,dateKey,noteId)=>setDataWithPendingDraft(d=>{
+    const classId=targetClass?.id;
+    if(!classId||!dateKey)return d;
+    const cn=d.notes[classId]||{};const dn=cn[dateKey]||[];
     const note=dn.find(n=>n.id===noteId);if(!note)return d;
-    const tn={...note,classId:activeClass.id,className:activeClass.section,institute:activeClass.institute,dateKey:selectedDate,deletedAt:Date.now()};
-    return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.filter(n=>n.id!==noteId)}},trash:{...d.trash,notes:[...(d.trash?.notes||[]),tn]}};
+    const tn={...note,classId,className:targetClass.section,institute:targetClass.institute,subject:targetClass.subject||"",dateKey,deletedAt:Date.now()};
+    return{...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:dn.filter(n=>n.id!==noteId)}},trash:{...d.trash,notes:[...(d.trash?.notes||[]),tn]}};
   },"entry-delete");
-  const restoreNote=(tn)=>{setDataWithPendingDraft(d=>{const{classId,dateKey,deletedAt,className,institute,...note}=tn;const cn=d.notes[classId]||{};const dn=cn[dateKey]||[];return{...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:[note,...dn]}},trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==note.id)}};},"entry-restore");};
+  const deleteNote=(noteId)=>deleteNoteForClassDate(activeClass,selectedDate,noteId);
+  const restoreNote=(tn)=>{setDataWithPendingDraft(d=>{const{classId,dateKey,deletedAt,className,institute,subject,...note}=tn;const cn=d.notes[classId]||{};const dn=cn[dateKey]||[];return{...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:[note,...dn]}},trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==note.id)}};},"entry-restore");};
   const permDeleteNote=(id)=>setDataWithPendingDraft(d=>({...d,trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==id)}}),"entry-perm-delete");
 
   const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>a+teacherTeachingEntries(arr).length,0);},0);
@@ -5880,6 +6183,23 @@ function ClassTrackerInner({user}){
         : {title:"",body:"",tag:"note",status:"",...(slots ? {} : (getSuggestedTime(data.notes, targetClass.id, nextDate) || {_dur:targetClass?.duration || 60}))}
     );
     safeNav("addNote");
+  };
+  const getLatestTeachingDateForClass = targetClass => {
+    const classId = targetClass?.id;
+    if(!classId) return "";
+    return Object.entries(data.notes?.[classId] || {})
+      .filter(([,entries]) => teacherTeachingEntries(entries).length > 0)
+      .map(([dateKey]) => dateKey)
+      .sort((a,b) => b.localeCompare(a))[0] || "";
+  };
+  const openClassHistory = (targetClass, options = {}) => {
+    if(!targetClass) return;
+    const latestDate = getLatestTeachingDateForClass(targetClass);
+    const preferredDate = options.preferredDateKey || "";
+    setActiveClass(targetClass);
+    setHistoryBackView(options.backView || (isMobile ? "classDetail" : "home"));
+    setHistoryInitialDateKey(preferredDate || latestDate || todayKey());
+    safeNav("classHistory");
   };
 
   // Build a noteDates map across ALL classes for the date strip dots
@@ -5954,8 +6274,7 @@ function ClassTrackerInner({user}){
       {confirmModal && <ConfirmModal message={confirmModal.message} confirmLabel={confirmModal.label||"Delete"} onConfirm={confirmModal.onConfirm} onClose={()=>setConfirmModal(null)}/>}
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
-      {historyClassId && (()=>{const cls=data.classes.find(c=>c.id===historyClassId);return cls?<HistoryModal cls={cls} classNotes={data.notes[historyClassId]||{}} selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={()=>setHistoryClassId(null)}/>:null;})()}
-      {mobileClassSheetId && (()=>{const cls=data.classes.find(c=>c.id===mobileClassSheetId);const entryCount=cls?Object.values(data.notes?.[mobileClassSheetId]||{}).reduce((sum,arr)=>sum+teacherTeachingEntries(arr).length,0):0;return cls?<TeacherClassQuickSheet cls={cls} entryCount={entryCount} onOpenHistory={()=>{setMobileClassSheetId(null);setHistoryClassId(cls.id);}} onDelete={()=>{setMobileClassSheetId(null);setLeaveModal(cls.id);}} onClose={()=>setMobileClassSheetId(null)}/>:null;})()}
+      {mobileClassSheetId && (()=>{const cls=data.classes.find(c=>c.id===mobileClassSheetId);const entryCount=cls?Object.values(data.notes?.[mobileClassSheetId]||{}).reduce((sum,arr)=>sum+teacherTeachingEntries(arr).length,0):0;return cls?<TeacherClassQuickSheet cls={cls} entryCount={entryCount} onOpenHistory={()=>{setMobileClassSheetId(null);openClassHistory(cls,{backView:isMobile?"classDetail":"home"});}} onDelete={()=>{setMobileClassSheetId(null);setLeaveModal(cls.id);}} onClose={()=>setMobileClassSheetId(null)}/>:null;})()}
       {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} instituteSections={instituteSections} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal && (()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);setActiveClass(null);setView("home");}} onClose={()=>setLeaveModal(null)}/>:null;})()}
     </>
@@ -6201,6 +6520,65 @@ function ClassTrackerInner({user}){
           renderBottomBar={renderTeacherBottomBar}
         />
       </div>
+    );
+  }
+
+  if(view==="classHistory"){
+    if(!activeClass){
+      return (
+        <TeacherStateFallback
+          themeShell={teacherThemeShell}
+          view={view}
+          resolvedView={resolvedView}
+          activeClassId={activeClass?.id}
+          classCount={(data.classes || []).length}
+          notificationCount={notificationCount}
+          onResetHome={()=>safeNav("home")}
+        />
+      );
+    }
+    const historyClassNotes = data.notes?.[activeClass.id] || {};
+    const historyMetrics = teacherClassMetricsMap[activeClass.id] || buildClassEntryMetrics(historyClassNotes);
+    const historyTrashedEntries = (Array.isArray(data.trash?.notes) ? data.trash.notes : [])
+      .filter(entry => String(entry?.classId || "") === String(activeClass.id || ""))
+      .filter(entry => isTeacherTeachingActivityEntry(entry))
+      .sort((a,b)=>(Number(b?.deletedAt || 0) || 0) - (Number(a?.deletedAt || 0) || 0));
+    const openHistoryEditEntry = entry => {
+      const dateKey = entry?.dateKey || todayKey();
+      const {dateKey: _dateKey, ...noteForEdit} = entry || {};
+      setSelectedDate(dateKey);
+      setEditNote({...noteForEdit});
+      safeNav("editNote");
+    };
+    const deleteHistoryEntry = entry => {
+      deleteNoteForClassDate(activeClass, entry?.dateKey || selectedDate, entry?.id);
+    };
+    return (
+      <TeacherClassHistoryView
+        key={`${activeClass.id}-${historyInitialDateKey || "latest"}`}
+        user={user}
+        data={data}
+        teacherName={teacherName}
+        teacherClass={activeClass}
+        classNotes={historyClassNotes}
+        trashedEntries={historyTrashedEntries}
+        metrics={historyMetrics}
+        initialDateKey={historyInitialDateKey}
+        historyBackView={historyBackView}
+        isMobile={isMobile}
+        isDarkTeacherTheme={isDarkTeacherTheme}
+        teacherThemeShell={teacherThemeShell}
+        notificationCount={notificationCount}
+        onHome={()=>safeNav("home")}
+        onBack={()=>safeNav(historyBackView || (isMobile ? "classDetail" : "home"))}
+        onSignOut={()=>setSignOutPrompt(true)}
+        onViewSyllabus={()=>safeNav("syllabus")}
+        onViewNotifications={()=>safeNav("notifications")}
+        onAddEntry={dateKey=>startEntryForClass(activeClass,dateKey)}
+        onEditEntry={openHistoryEditEntry}
+        onDeleteEntry={deleteHistoryEntry}
+        onRestoreEntry={restoreNote}
+      />
     );
   }
 
@@ -6698,7 +7076,7 @@ function ClassTrackerInner({user}){
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
                   <button
-                    onClick={()=>setHistoryClassId(selCls.id)}
+                    onClick={()=>openClassHistory(selCls,{backView:"home"})}
                     disabled={(selMetrics?.totalCount || 0)===0}
                     style={{
                       background:(selMetrics?.totalCount || 0)===0?G.bg:G.surface,
@@ -6973,7 +7351,7 @@ function ClassTrackerInner({user}){
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
               <button
-                onClick={()=>{setActiveClass(surfaceCls);setHistoryClassId(surfaceCls.id);}}
+                onClick={()=>openClassHistory(surfaceCls,{backView:"classDetail"})}
                 disabled={surfaceMetrics.totalCount===0}
                 style={{
                   background:surfaceMetrics.totalCount===0?G.bg:G.surface,
@@ -8134,16 +8512,28 @@ function ClassTrackerInner({user}){
                         </div>
                       </div>
                       <div>
-                        <button onClick={()=>setView("classDetail")}
-                          style={{background:"none",border:"none",padding:0,fontSize:13,color:G.green,fontFamily:G.sans,fontWeight:700,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:2,whiteSpace:"nowrap"}}>
-                          Change date
-                        </button>
+                        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:7}}>
+                          <button onClick={()=>openClassHistory(activeClass,{backView:view,preferredDateKey:selectedDate})}
+                            style={{background:"none",border:"none",padding:0,fontSize:13,color:G.green,fontFamily:G.sans,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
+                            <AppIcon icon={IconHistory} size={14} color="currentColor" />History
+                          </button>
+                          <button onClick={()=>setView("classDetail")}
+                            style={{background:"none",border:"none",padding:0,fontSize:13,color:G.green,fontFamily:G.sans,fontWeight:700,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:2,whiteSpace:"nowrap"}}>
+                            Change date
+                          </button>
+                        </div>
                       </div>
                     </div>
                   : <>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                        <AppIcon icon={IconCalendar} size={15} color={G.green} />
-                        <span style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                          <AppIcon icon={IconCalendar} size={15} color={G.green} />
+                          <span style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
+                        </div>
+                        <button onClick={()=>openClassHistory(activeClass,{backView:view,preferredDateKey:selectedDate})}
+                          style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"7px 12px",fontSize:13,color:G.textS,fontFamily:G.sans,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+                          <AppIcon icon={IconHistory} size={14} color="currentColor" />History
+                        </button>
                       </div>
                       <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={{}}/>
                     </>
@@ -8158,6 +8548,10 @@ function ClassTrackerInner({user}){
                   <p style={{fontSize:12,color:G.textM,fontFamily:G.sans,marginBottom:2,textTransform:"uppercase",fontWeight:600,letterSpacing:0.4}}>Editing Entry</p>
                   <div style={{fontSize:15,fontWeight:700,color:G.text,fontFamily:G.display}}>{formatDateLabel(selectedDate)}</div>
                 </div>
+                <button onClick={()=>openClassHistory(activeClass,{backView:view,preferredDateKey:selectedDate})}
+                  style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"8px 12px",fontSize:13,color:G.textS,fontFamily:G.sans,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+                  <AppIcon icon={IconHistory} size={14} color="currentColor" />History
+                </button>
               </div>
             ):null}
           <div className="form-card" style={{...card,padding:"24px"}}>
