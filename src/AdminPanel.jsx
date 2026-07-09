@@ -61,6 +61,8 @@ import { DailyCentreSummary } from "./admin/dashboard/DailyCentreSummary.jsx";
 import { SubjectSplitDonut } from "./admin/dashboard/SubjectSplitDonut.jsx";
 import { adminV5InstituteSummaryKey, normaliseAdminV5DailySummary } from "./admin/dashboard/adminV5Summary.js";
 import { FeedbackInboxModal } from "./admin/feedback/FeedbackInboxModal.jsx";
+import { TeacherProfilePanel } from "./admin/teachers/TeacherProfilePanel.jsx";
+import { buildTeacherProfileModel } from "./admin/teachers/teacherProfileModel.js";
 import { AdminExportModal } from "./admin/reports/AdminExportModal.jsx";
 import {
   drawCanvasPill,
@@ -5492,6 +5494,9 @@ function AdminPanelInner({user}){
   const [manageTeacherInstituteFilter, setManageTeacherInstituteFilter] = useState("");
   const [manageTeacherSubjectFilter, setManageTeacherSubjectFilter] = useState("");
   const [manageTeacherBreakdownUid, setManageTeacherBreakdownUid] = useState(null);
+  const [teacherProfileUid, setTeacherProfileUid] = useState(null);
+  const [teacherProfileSectionKey, setTeacherProfileSectionKey] = useState("");
+  const [teacherProfileTimelineLimit, setTeacherProfileTimelineLimit] = useState(30);
   const [teacherDetailsRefreshing, setTeacherDetailsRefreshing] = useState(false);
   const [manageAdminSearch, setManageAdminSearch] = useState("");
   const [manageSectionSearch, setManageSectionSearch] = useState("");
@@ -5508,7 +5513,6 @@ function AdminPanelInner({user}){
   const [feedbackMessages, setFeedbackMessages] = useState([]);
   const [feedbackReply, setFeedbackReply] = useState("");
   const [feedbackBusy, setFeedbackBusy] = useState(false);
-  const [selTeacher,   setSelTeacher]   = useState(null); // uid of teacher in detail modal
   const [newInstName,  setNewInstName]  = useState(""); // new institute input
   const [renamingInst,  setRenamingInst]  = useState(null);
   const [renameInstVal, setRenameInstVal] = useState("");
@@ -6076,6 +6080,13 @@ function AdminPanelInner({user}){
     if(!uid) return false;
     return roles[uid] !== "admin" || isAdminTeacherAccount(uid);
   }, [isAdminTeacherAccount, roles]);
+
+  React.useEffect(()=>{
+    if(view==="manage" && manageTab==="teachers") return;
+    setTeacherProfileUid(null);
+    setTeacherProfileSectionKey("");
+    setTeacherProfileTimelineLimit(30);
+  },[view, manageTab]);
 
   React.useEffect(()=>{
     if(view!=="manage" || manageTab!=="teachers") return;
@@ -13262,88 +13273,6 @@ function AdminPanelInner({user}){
         </div>
       );
     };
-    const renderTeacherManagePanel = row => {
-      const t = row.teacher;
-      const data = fullData[t.uid] || {};
-      const classes = activeAdminTeacherClasses(data);
-      const branchGroups = row.allInstituteGroups?.length ? row.allInstituteGroups : row.instituteGroups || [];
-      const primaryBranchGroup = branchGroups.find(group=>sameInstituteName(group.institute, row.primaryInstitute)) || branchGroups[0] || null;
-      const canMoveBranch = !!primaryBranchGroup?.institute && !isPlaceholderInstitute(primaryBranchGroup.institute);
-      const sortedClasses = [...classes].sort((a,b)=>
-        exportTextSorter.compare(a?.institute || "", b?.institute || "")
-        || exportTextSorter.compare(classDisplayName(a), classDisplayName(b))
-        || exportTextSorter.compare(classSubjectName(t, a), classSubjectName(t, b))
-      );
-      return (
-        <div style={{borderTop:`1px solid ${G.border}`,background:"#FBFCFE",padding:isMobile ? "14px 12px" : "16px"}}>
-          <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:13,padding:"12px 14px",minWidth:0}}>
-            <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Account summary</div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",minWidth:0}}>
-              {teacherChip(row.primaryInstitute, "blue", {maxWidth:260,overflow:"hidden",textOverflow:"ellipsis"})}
-              {teacherChip(`${row.classCount} classes`, "slate")}
-              {teacherChip(`${row.subjectCount} subject${row.subjectCount===1?"":"s"}`, "slate")}
-              {teacherChip(`${row.sectionCount} section${row.sectionCount===1?"":"s"}`, "slate")}
-              {row.isAdminTeacher && teacherChip("Admin account", "blue")}
-              {row.hasLeftWorkspace ? teacherChip(row.departedLabel, "red") : teacherChip("Ready to teach", "green")}
-            </div>
-            {row.extraInstitutes.length>0&&<AlsoAtInstitutes institutes={row.extraInstitutes} maxVisible={3} />}
-          </div>
-
-          <div style={{marginTop:16}}>
-            <div style={{fontSize:12,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,fontFamily:G.sans}}>Classes</div>
-            {sortedClasses.length>0 ? (
-              <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                {sortedClasses.map(cls=>(
-                  <div key={cls.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#FFFFFF",borderRadius:10,padding:"10px 12px",border:`1px solid ${G.border}`,gap:8,minWidth:0}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:800,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{classDisplayName(cls)}</div>
-                      <div style={{fontSize:12,color:G.textM,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cls.institute || row.primaryInstitute} - {classSubjectName(t, cls)}</div>
-                    </div>
-                    <button onClick={()=>handleRemoveFromClass(t.uid,cls.id,classDisplayName(cls))} style={workspaceActionButtonStyle("danger")}>
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{fontSize:13,color:G.textM,lineHeight:1.55}}>
-                {row.detailsReady ? "No classes linked yet." : "Details are being prepared."}
-              </div>
-            )}
-          </div>
-
-          <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:16}}>
-            {renamingTeacher?.uid===t.uid ? null : (
-              <button onClick={()=>{
-                const nextName = row.rawName || row.name || "";
-                setRenamingTeacher({uid:t.uid,currentName:nextName});
-                setRenameVal(nextName);
-              }} style={workspaceActionButtonStyle("neutral")}>Rename</button>
-            )}
-            {canMoveBranch&&(
-              <button
-                onClick={()=>openArchiveTeacherInstituteModal(row, primaryBranchGroup)}
-                style={{...workspaceActionButtonStyle("blue"),background:"#EEF4FF",borderColor:"#BFDBFE",color:G.blue}}>
-                Move branch
-              </button>
-            )}
-            {!row.isMe && !row.isAdminTeacher && (
-              <button onClick={()=>handlePromote(t.uid)} style={workspaceActionButtonStyle("blue")}>Make Admin</button>
-            )}
-            <button onClick={()=>{setView("main");setSelP2(t.uid);setTab("teacher");setMobileStep(2);}} style={workspaceActionButtonStyle("neutral")}>View Entries</button>
-            <button
-              onClick={()=>handleRepairTeacherIndex(t.uid)}
-              disabled={repairingTeacherUid===t.uid}
-              style={{...workspaceActionButtonStyle("blue"),opacity:repairingTeacherUid===t.uid?0.7:1,cursor:repairingTeacherUid===t.uid?"not-allowed":"pointer"}}>
-              {repairingTeacherUid===t.uid ? "Repairing..." : "Repair Index"}
-            </button>
-            {!row.isMe&&(
-              <button onClick={()=>handleRemoveTeacher(t.uid,row.name)} style={workspaceActionButtonStyle("danger")}>Remove Teacher</button>
-            )}
-          </div>
-        </div>
-      );
-    };
     const renderTeacherActions = row => (
       <div style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap",minWidth:0,maxWidth:"100%"}}>
         {renamingTeacher?.uid===row.teacher.uid ? (
@@ -13364,10 +13293,13 @@ function AdminPanelInner({user}){
             <button
               onClick={event=>stopTeacherAction(event, ()=>{
                 ensureFullData(row.teacher.uid);
-                setSelTeacher(selTeacher===row.teacher.uid ? null : row.teacher.uid);
+                setTeacherProfileUid(row.teacher.uid);
+                setTeacherProfileSectionKey("");
+                setTeacherProfileTimelineLimit(30);
+                setManageTeacherBreakdownUid(null);
               })}
-              style={workspaceActionButtonStyle(selTeacher===row.teacher.uid ? "blue" : "neutral")}>
-              {selTeacher===row.teacher.uid ? "Done" : "Manage"}
+              style={workspaceActionButtonStyle("blue")}>
+              Profile
             </button>
             <button onClick={event=>stopTeacherAction(event, ()=>openTeacherEntriesForInstitute(row, row.primaryInstitute))} style={workspaceActionButtonStyle("neutral")}>Entries</button>
           </>
@@ -13377,7 +13309,6 @@ function AdminPanelInner({user}){
     const renderExpandedTeacherRow = row => (
       <>
         {manageTeacherBreakdownUid===row.teacher.uid && renderTeacherBreakdown(row)}
-        {selTeacher===row.teacher.uid && renderTeacherManagePanel(row)}
       </>
     );
     const renderTeacherCard = row => (
@@ -13441,6 +13372,60 @@ function AdminPanelInner({user}){
         {renderExpandedTeacherRow(row)}
       </div>
     );
+
+    const profileRow = teacherProfileUid
+      ? teacherRowsBase.find(row=>row.teacher?.uid===teacherProfileUid)
+      : null;
+    if(profileRow){
+      const profileTeacher = profileRow.teacher;
+      const profileModel = buildTeacherProfileModel({
+        teacher:profileTeacher,
+        teacherData:fullData[profileTeacher.uid] || null,
+        row:profileRow,
+        resolveSectionName:cls=>classDisplayName(cls),
+        resolveClassSubject:(teacherArg, cls)=>classSubjectName(teacherArg || profileTeacher, cls),
+        isInstituteActionable:institute=>!isPlaceholderInstitute(institute),
+      });
+      const startProfileRename = () => {
+        const nextName = profileRow.rawName || profileRow.name || "";
+        setRenamingTeacher({uid:profileTeacher.uid,currentName:nextName});
+        setRenameVal(nextName);
+      };
+      const closeTeacherProfile = () => {
+        setTeacherProfileUid(null);
+        setTeacherProfileSectionKey("");
+        setTeacherProfileTimelineLimit(30);
+      };
+      return (
+        <TeacherProfilePanel
+          model={profileModel}
+          selectedSectionKey={teacherProfileSectionKey}
+          timelineLimit={teacherProfileTimelineLimit}
+          isMobile={isMobile}
+          reduceEffects={reduceEffects}
+          renameState={renamingTeacher}
+          renameValue={renameVal}
+          repairing={repairingTeacherUid===profileTeacher.uid}
+          onRenameValueChange={setRenameVal}
+          onBack={closeTeacherProfile}
+          onSelectSection={key=>{
+            setTeacherProfileSectionKey(key);
+            setTeacherProfileTimelineLimit(30);
+          }}
+          onShowMore={()=>setTeacherProfileTimelineLimit(limit=>limit + 30)}
+          onViewEntries={()=>openTeacherEntriesForInstitute(profileRow, profileRow.primaryInstitute)}
+          onViewInstituteEntries={institute=>openTeacherEntriesForInstitute(profileRow, institute || profileRow.primaryInstitute)}
+          onRenameStart={startProfileRename}
+          onRenameSave={()=>handleRenameTeacher(profileTeacher.uid, renameVal)}
+          onRenameCancel={clearTeacherRename}
+          onRepairIndex={()=>handleRepairTeacherIndex(profileTeacher.uid)}
+          onPromote={()=>handlePromote(profileTeacher.uid)}
+          onRemoveTeacher={()=>handleRemoveTeacher(profileTeacher.uid, profileRow.name || "this teacher")}
+          onRemoveClass={section=>handleRemoveFromClass(profileTeacher.uid, section.classId, section.label)}
+          onMoveBranch={group=>openArchiveTeacherInstituteModal(profileRow, group)}
+        />
+      );
+    }
 
     return(
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:isMobile ? "14px" : "18px",boxShadow:reduceEffects ? "none" : G.shadowSm}}>
