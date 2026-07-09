@@ -76,13 +76,13 @@ function InfoChip({ label, tone = "slate", color = "" }) {
     <span style={{
       display: "inline-flex",
       alignItems: "center",
-      minHeight: 25,
+      minHeight: 22,
       borderRadius: 999,
-      padding: "0 9px",
+      padding: "0 8px",
       border: `1px solid ${picked.border}`,
       background: picked.bg,
       color: color || picked.text,
-      fontSize: 11,
+      fontSize: 10.5,
       fontWeight: 850,
       maxWidth: "100%",
       whiteSpace: "nowrap",
@@ -91,6 +91,30 @@ function InfoChip({ label, tone = "slate", color = "" }) {
     }}>
       {label}
     </span>
+  );
+}
+
+function SplitModeButton({ active, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        minHeight: 30,
+        border: `1px solid ${active ? G.navy : G.border}`,
+        borderRadius: 999,
+        background: active ? G.navy : "#FFFFFF",
+        color: active ? "#FFFFFF" : G.textM,
+        padding: "0 11px",
+        fontFamily: G.sans,
+        fontSize: 11.5,
+        fontWeight: 900,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -151,6 +175,39 @@ function dateGroupLabel(dateKey) {
   return formatAdminDateKey(dateKey, { weekday: "short", month: "short", day: "numeric", year: "numeric" }) || dateKey;
 }
 
+function clockSortValue(timeStart) {
+  if (!/^\d{1,2}:\d{2}$/.test(String(timeStart || ""))) return 99999;
+  const [hours, minutes] = String(timeStart).split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return 99999;
+  return hours * 60 + minutes;
+}
+
+function buildTimeSegments(entries = []) {
+  const map = new Map();
+  entries.forEach(entry => {
+    const label = formatExportPdfTime(entry.timeStart, entry.timeEnd) || "Untimed";
+    const key = `${entry.timeStart || ""}_${entry.timeEnd || ""}_${label}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        label,
+        minutes: 0,
+        entries: 0,
+        color: subjectColor(`time ${label}`),
+        sortValue: clockSortValue(entry.timeStart),
+      });
+    }
+    const segment = map.get(key);
+    segment.minutes += entry.minutes || 0;
+    segment.entries += 1;
+  });
+  return Array.from(map.values()).sort((a, b) => (
+    a.sortValue - b.sortValue
+    || (b.minutes || 0) - (a.minutes || 0)
+    || a.label.localeCompare(b.label)
+  ));
+}
+
 function SectionCard({ section, selected, onClick, color }) {
   return (
     <button
@@ -160,8 +217,8 @@ function SectionCard({ section, selected, onClick, color }) {
       style={{
         border: `1px solid ${selected ? color : G.border}`,
         background: selected ? alphaHex(color, 0.075) : "#FFFFFF",
-        borderRadius: 13,
-        padding: "12px 13px",
+        borderRadius: 12,
+        padding: "10px 11px",
         textAlign: "left",
         cursor: "pointer",
         minWidth: 0,
@@ -170,16 +227,16 @@ function SectionCard({ section, selected, onClick, color }) {
     >
       <div style={{display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10}}>
         <div style={{minWidth: 0}}>
-          <div style={{fontSize: 14.5, fontWeight: 950, color: G.text, fontFamily: G.display, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
+          <div style={{fontSize: 14, fontWeight: 950, color: G.text, fontFamily: G.display, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
             {section.label}
           </div>
-          <div style={{fontSize: 12, fontWeight: 750, color: G.textM, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
+          <div style={{fontSize: 11.5, fontWeight: 750, color: G.textM, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
             {section.institute}
           </div>
         </div>
-        <span style={{width: 10, height: 10, borderRadius: 999, background: color, flexShrink: 0, marginTop: 4}} />
+        <span style={{width: 9, height: 9, borderRadius: 999, background: color, flexShrink: 0, marginTop: 4}} />
       </div>
-      <div style={{display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 10}}>
+      <div style={{display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", marginTop: 8}}>
         <InfoChip label={section.subject} color={color} />
         <InfoChip label={formatDurationShort(section.minutes || 0)} tone={section.minutes ? "green" : "amber"} />
         <InfoChip label={`${section.entries || 0} entries`} tone="slate" />
@@ -198,28 +255,28 @@ function TimelineEntry({ entry }) {
     <div className="teacher-profile-timeline-entry">
       <span className="teacher-profile-timeline-dot" style={{background: statusTone.dot || subjectColor(entry.subject)}} />
       <div className="teacher-profile-timeline-card">
-        <div style={{display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10}}>
+        <div style={{display: "grid", gridTemplateColumns: "minmax(104px,0.22fr) minmax(0,1fr) auto", alignItems: "start", gap: 10}}>
+          <div style={{fontSize: 12, fontWeight: 900, color: G.textS, fontFamily: G.mono, whiteSpace: "nowrap", paddingTop: 2}}>
+            {timeLabel}
+          </div>
           <div style={{minWidth: 0}}>
-            <div style={{fontSize: 12.5, fontWeight: 900, color: G.textS, fontFamily: G.mono}}>{timeLabel}</div>
-            <div style={{fontSize: 16, fontWeight: 950, color: G.text, fontFamily: G.display, marginTop: 7, lineHeight: 1.18}}>
+            <div style={{fontSize: 14.5, fontWeight: 950, color: G.text, fontFamily: G.display, lineHeight: 1.15}}>
               {entry.title}
             </div>
-            <div style={{fontSize: 12.5, color: G.textM, marginTop: 5, lineHeight: 1.4}}>
-              {entry.sectionLabel} - {entry.subject} - {entry.institute}
+            <div style={{display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 5}}>
+              <span style={{fontSize: 11.5, color: G.textM, lineHeight: 1.35}}>
+                {entry.sectionLabel} - {entry.subject} - {entry.institute}
+              </span>
+              {status ? <InfoChip label={status} color={statusTone.text} /> : null}
+              {tag ? <InfoChip label={tag} color={tagTone.text} /> : null}
             </div>
           </div>
-          <div style={{fontSize: 13.5, fontWeight: 950, color: G.text, whiteSpace: "nowrap", flexShrink: 0}}>
+          <div style={{fontSize: 13, fontWeight: 950, color: G.text, whiteSpace: "nowrap", flexShrink: 0, paddingTop: 2}}>
             {entry.minutes ? formatDurationShort(entry.minutes) : "Untimed"}
           </div>
         </div>
-        {(status || tag) ? (
-          <div style={{display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10}}>
-            {status ? <InfoChip label={status} color={statusTone.text} /> : null}
-            {tag ? <InfoChip label={tag} color={tagTone.text} /> : null}
-          </div>
-        ) : null}
         {entry.body ? (
-          <div style={{fontSize: 12.5, color: G.textM, lineHeight: 1.55, marginTop: 10, whiteSpace: "pre-wrap"}}>
+          <div style={{fontSize: 12, color: G.textM, lineHeight: 1.42, marginTop: 7, whiteSpace: "pre-wrap"}}>
             {entry.body}
           </div>
         ) : null}
@@ -256,17 +313,22 @@ export function TeacherProfilePanel({
 
   const identity = model.identity || {};
   const summary = model.summary || {};
+  const [splitMode, setSplitMode] = React.useState("section");
   const activeTimeline = selectTeacherProfileTimeline(model, selectedSectionKey, timelineLimit);
   const selectedSection = activeTimeline.selectedSection || model.allSectionsOption;
   const activeSectionKey = selectedSection?.key || TEACHER_PROFILE_ALL_SECTIONS_KEY;
   const sectionCards = [model.allSectionsOption, ...(model.sections || [])];
-  const segments = (model.sections || []).map(section => ({
+  const sectionSegments = (model.sections || []).map(section => ({
     key: section.key,
     label: section.label,
     minutes: section.minutes || 0,
     entries: section.entries || 0,
     color: subjectColor(`${section.label} ${section.institute}`),
   }));
+  const timeSegments = buildTimeSegments(model.timelineEntries || []);
+  const segments = splitMode === "time" ? timeSegments : sectionSegments;
+  const splitLabel = splitMode === "time" ? "slots" : "classes";
+  const splitEmptyText = splitMode === "time" ? "No timed teaching entries yet." : "No teaching entries yet.";
   const detailsReady = !!model.detailsReady;
   const isRenaming = renameState?.uid === identity.uid;
   const statusChip = identity.hasLeftWorkspace
@@ -308,13 +370,13 @@ export function TeacherProfilePanel({
         }
         .teacher-profile-timeline-group {
           position: relative;
-          padding-left: 28px;
+          padding-left: 24px;
         }
         .teacher-profile-timeline-group::before {
           content: "";
           position: absolute;
           left: 8px;
-          top: 46px;
+          top: 34px;
           bottom: 0;
           width: 2px;
           background: #DDE7F4;
@@ -322,23 +384,23 @@ export function TeacherProfilePanel({
         }
         .teacher-profile-timeline-entry {
           position: relative;
-          padding: 0 0 12px 0;
+          padding: 0 0 8px 0;
         }
         .teacher-profile-timeline-dot {
           position: absolute;
-          left: -24px;
-          top: 18px;
-          width: 12px;
-          height: 12px;
+          left: -20px;
+          top: 14px;
+          width: 10px;
+          height: 10px;
           border-radius: 999px;
-          border: 3px solid #FFFFFF;
+          border: 2px solid #FFFFFF;
           box-shadow: 0 0 0 1px #CBD5E1;
         }
         .teacher-profile-timeline-card {
           background: #FFFFFF;
           border: 1px solid ${G.border};
-          border-radius: 13px;
-          padding: 13px 14px;
+          border-radius: 11px;
+          padding: 9px 11px;
           min-width: 0;
         }
         @media (max-width: 820px) {
@@ -347,6 +409,12 @@ export function TeacherProfilePanel({
           }
           .teacher-profile-timeline-dot {
             left: -20px;
+          }
+          .teacher-profile-timeline-card > div:first-child {
+            grid-template-columns: 1fr auto !important;
+          }
+          .teacher-profile-timeline-card > div:first-child > div:first-child {
+            grid-column: 1 / -1;
           }
         }
       `}</style>
@@ -436,8 +504,8 @@ export function TeacherProfilePanel({
         <MetricCard label="Last entry" value={detailsReady ? lastEntryLabel(summary.lastEntryTimestamp) : "--"} caption={summary.lastEntryTimestamp ? new Date(summary.lastEntryTimestamp).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""} icon={IconChartBar} />
       </div>
 
-      <div style={{...panelCardStyle, padding: isMobile ? "13px" : "15px", marginBottom: 14}}>
-        <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 11}}>
+      <div style={{...panelCardStyle, padding: isMobile ? "12px" : "13px", marginBottom: 12}}>
+        <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 9}}>
           <div>
             <div style={{fontSize: 11, fontWeight: 900, color: G.textL, textTransform: "uppercase", letterSpacing: 0.75}}>Sections</div>
             <div style={{fontSize: 16, fontWeight: 950, color: G.text, fontFamily: G.display, marginTop: 3}}>Class breakdown</div>
@@ -445,7 +513,7 @@ export function TeacherProfilePanel({
           <InfoChip label={`${model.sections.length || 0} active`} tone="blue" />
         </div>
         {detailsReady && sectionCards.length > 1 ? (
-          <div style={{display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit,minmax(210px,1fr))", gap: 10}}>
+          <div style={{display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit,minmax(190px,1fr))", gap: 9}}>
             {sectionCards.map(section => {
               const color = section.key === TEACHER_PROFILE_ALL_SECTIONS_KEY ? G.blue : subjectColor(`${section.label} ${section.institute}`);
               return (
@@ -466,23 +534,29 @@ export function TeacherProfilePanel({
         )}
       </div>
 
-      <div style={{display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(280px,0.85fr) minmax(0,1.45fr)", gap: 14, alignItems: "start"}}>
+      <div style={{display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(270px,0.72fr) minmax(0,1.68fr)", gap: 12, alignItems: "start"}}>
         <div style={{display: "flex", flexDirection: "column", gap: 14, minWidth: 0}}>
-          <div style={{...panelCardStyle, padding: "15px", minWidth: 0}}>
-            <div style={{fontSize: 11, fontWeight: 900, color: G.textL, textTransform: "uppercase", letterSpacing: 0.75}}>Section split</div>
-            <div style={{display: "grid", gridTemplateColumns: isMobile ? "1fr" : "160px minmax(0,1fr)", gap: 14, alignItems: "center", marginTop: 12}}>
-              <div style={{display: "flex", justifyContent: "center"}}>
-                <SectionSplitDonut segments={segments} totalMinutes={summary.totalMinutes || 0} label="classes" />
+          <div style={{...panelCardStyle, padding: "12px", minWidth: 0}}>
+            <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap"}}>
+              <div style={{fontSize: 11, fontWeight: 900, color: G.textL, textTransform: "uppercase", letterSpacing: 0.75}}>Section split</div>
+              <div style={{display: "flex", alignItems: "center", gap: 6}}>
+                <SplitModeButton active={splitMode === "section"} label="Section" onClick={() => setSplitMode("section")} />
+                <SplitModeButton active={splitMode === "time"} label="Time" onClick={() => setSplitMode("time")} />
               </div>
-              <div style={{display: "flex", flexDirection: "column", gap: 8, minWidth: 0}}>
+            </div>
+            <div style={{display: "grid", gridTemplateColumns: isMobile ? "1fr" : "132px minmax(0,1fr)", gap: 12, alignItems: "center", marginTop: 10}}>
+              <div style={{display: "flex", justifyContent: "center"}}>
+                <SectionSplitDonut segments={segments} totalMinutes={summary.totalMinutes || 0} label={splitLabel} size={124} strokeWidth={16} />
+              </div>
+              <div style={{display: "flex", flexDirection: "column", gap: 7, minWidth: 0}}>
                 {segments.length ? segments.slice(0, 8).map(segment => (
                   <div key={segment.key} style={{display: "grid", gridTemplateColumns: "12px minmax(0,1fr) auto", gap: 8, alignItems: "center", minWidth: 0}}>
-                    <span style={{width: 10, height: 10, borderRadius: 999, background: segment.color}} />
-                    <span style={{fontSize: 12.5, fontWeight: 800, color: G.textS, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>{segment.label}</span>
-                    <span style={{fontSize: 12.5, fontWeight: 900, color: G.text}}>{formatDurationShort(segment.minutes || 0)}</span>
+                    <span style={{width: 9, height: 9, borderRadius: 999, background: segment.color}} />
+                    <span style={{fontSize: 12, fontWeight: 800, color: G.textS, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>{segment.label}</span>
+                    <span style={{fontSize: 12, fontWeight: 900, color: G.text, whiteSpace: "nowrap"}}>{formatDurationShort(segment.minutes || 0)}</span>
                   </div>
                 )) : (
-                  <div style={{fontSize: 13, color: G.textM}}>No teaching entries yet.</div>
+                  <div style={{fontSize: 13, color: G.textM}}>{splitEmptyText}</div>
                 )}
                 {summary.untimedEntries ? <InfoChip label={`${summary.untimedEntries} untimed entries`} tone="amber" /> : null}
               </div>
@@ -524,14 +598,14 @@ export function TeacherProfilePanel({
           </div>
         </div>
 
-        <div style={{...panelCardStyle, padding: isMobile ? "13px" : "15px", minWidth: 0}}>
-          <div style={{display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", borderBottom: `1px solid ${G.border}`, paddingBottom: 12, marginBottom: 14}}>
+        <div style={{...panelCardStyle, padding: isMobile ? "11px" : "12px", minWidth: 0}}>
+          <div style={{display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", borderBottom: `1px solid ${G.border}`, paddingBottom: 9, marginBottom: 10}}>
             <div style={{minWidth: 0}}>
               <div style={{fontSize: 11, fontWeight: 900, color: G.textL, textTransform: "uppercase", letterSpacing: 0.75}}>Timeline</div>
-              <div style={{fontSize: 19, fontWeight: 950, color: G.text, fontFamily: G.display, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
+              <div style={{fontSize: 17, fontWeight: 950, color: G.text, fontFamily: G.display, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
                 {selectedSection?.label || "Timeline"}
               </div>
-              <div style={{fontSize: 12.5, color: G.textM, marginTop: 5, lineHeight: 1.45}}>
+              <div style={{fontSize: 12, color: G.textM, marginTop: 3, lineHeight: 1.35}}>
                 {selectedSection?.institute || ""} - {selectedSection?.subject || ""} - {formatDurationShort(selectedSection?.minutes || 0)} - {selectedSection?.entries || 0} entries
               </div>
             </div>
@@ -539,12 +613,12 @@ export function TeacherProfilePanel({
           </div>
 
           {activeTimeline.groups.length ? (
-            <div style={{display: "flex", flexDirection: "column", gap: 16}}>
+            <div style={{display: "flex", flexDirection: "column", gap: 10}}>
               {activeTimeline.groups.map(group => (
                 <div key={`timeline_group_${group.dateKey}`} className="teacher-profile-timeline-group">
-                  <div style={{display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 10}}>
-                    <div style={{fontSize: 15.5, fontWeight: 950, color: G.text, fontFamily: G.display}}>{dateGroupLabel(group.dateKey)}</div>
-                    <div style={{fontSize: 12.5, fontWeight: 850, color: G.textM, whiteSpace: "nowrap"}}>
+                  <div style={{display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 6}}>
+                    <div style={{fontSize: 14.5, fontWeight: 950, color: G.text, fontFamily: G.display}}>{dateGroupLabel(group.dateKey)}</div>
+                    <div style={{fontSize: 12, fontWeight: 850, color: G.textM, whiteSpace: "nowrap"}}>
                       {group.entries.length} {group.entries.length === 1 ? "entry" : "entries"} - {formatDurationShort(group.minutes || 0)}
                     </div>
                   </div>

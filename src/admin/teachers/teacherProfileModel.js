@@ -107,7 +107,7 @@ function makeInstituteGroups(sectionRows, fallbackGroups = [], fallbackInstitute
       map.set(key, {
         key,
         institute,
-      classCount: 0,
+        classCount: 0,
         minutes: 0,
         entries: 0,
         sections: [],
