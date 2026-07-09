@@ -245,41 +245,35 @@ function SectionCard({ section, selected, onClick, color }) {
   );
 }
 
-function TimelineEntry({ entry }) {
+function EntryLogRow({ entry }) {
   const status = statusLabel(entry.status);
   const tag = tagLabel(entry.tag);
   const statusTone = entryStatusTone(entry.status);
   const tagTone = entryTagTone(entry.tag);
   const timeLabel = formatExportPdfTime(entry.timeStart, entry.timeEnd) || "Untimed";
   return (
-    <div className="teacher-profile-timeline-entry">
-      <span className="teacher-profile-timeline-dot" style={{background: statusTone.dot || subjectColor(entry.subject)}} />
-      <div className="teacher-profile-timeline-card">
-        <div style={{display: "grid", gridTemplateColumns: "minmax(104px,0.22fr) minmax(0,1fr) auto", alignItems: "start", gap: 10}}>
-          <div style={{fontSize: 12, fontWeight: 900, color: G.textS, fontFamily: G.mono, whiteSpace: "nowrap", paddingTop: 2}}>
-            {timeLabel}
-          </div>
-          <div style={{minWidth: 0}}>
-            <div style={{fontSize: 14.5, fontWeight: 950, color: G.text, fontFamily: G.display, lineHeight: 1.15}}>
-              {entry.title}
-            </div>
-            <div style={{display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 5}}>
-              <span style={{fontSize: 11.5, color: G.textM, lineHeight: 1.35}}>
-                {entry.sectionLabel} - {entry.subject} - {entry.institute}
-              </span>
-              {status ? <InfoChip label={status} color={statusTone.text} /> : null}
-              {tag ? <InfoChip label={tag} color={tagTone.text} /> : null}
-            </div>
-          </div>
-          <div style={{fontSize: 13, fontWeight: 950, color: G.text, whiteSpace: "nowrap", flexShrink: 0, paddingTop: 2}}>
-            {entry.minutes ? formatDurationShort(entry.minutes) : "Untimed"}
-          </div>
+    <div className="teacher-profile-entry-row">
+      <div className="teacher-profile-entry-time">
+        <span style={{width: 7, height: 7, borderRadius: 999, background: statusTone.dot || subjectColor(entry.subject), flexShrink: 0}} />
+        <span>{timeLabel}</span>
+      </div>
+      <div style={{minWidth: 0}}>
+        <div className="teacher-profile-entry-title">{entry.title}</div>
+        <div style={{display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4}}>
+          <span style={{fontSize: 11.5, color: G.textM, lineHeight: 1.35}}>
+            {entry.sectionLabel} - {entry.subject} - {entry.institute}
+          </span>
+          {status ? <InfoChip label={status} color={statusTone.text} /> : null}
+          {tag ? <InfoChip label={tag} color={tagTone.text} /> : null}
         </div>
         {entry.body ? (
-          <div style={{fontSize: 12, color: G.textM, lineHeight: 1.42, marginTop: 7, whiteSpace: "pre-wrap"}}>
+          <div className="teacher-profile-entry-body">
             {entry.body}
           </div>
         ) : null}
+      </div>
+      <div className="teacher-profile-entry-duration">
+        {entry.minutes ? formatDurationShort(entry.minutes) : "Untimed"}
       </div>
     </div>
   );
@@ -368,53 +362,77 @@ export function TeacherProfilePanel({
           border-color: ${G.borderM} !important;
           transform: translateY(-1px);
         }
-        .teacher-profile-timeline-group {
-          position: relative;
-          padding-left: 24px;
-        }
-        .teacher-profile-timeline-group::before {
-          content: "";
-          position: absolute;
-          left: 8px;
-          top: 34px;
-          bottom: 0;
-          width: 2px;
-          background: #DDE7F4;
-          border-radius: 999px;
-        }
-        .teacher-profile-timeline-entry {
-          position: relative;
-          padding: 0 0 8px 0;
-        }
-        .teacher-profile-timeline-dot {
-          position: absolute;
-          left: -20px;
-          top: 14px;
-          width: 10px;
-          height: 10px;
-          border-radius: 999px;
-          border: 2px solid #FFFFFF;
-          box-shadow: 0 0 0 1px #CBD5E1;
-        }
-        .teacher-profile-timeline-card {
+        .teacher-profile-entry-group {
           background: #FFFFFF;
           border: 1px solid ${G.border};
-          border-radius: 11px;
-          padding: 9px 11px;
+          border-radius: 12px;
+          overflow: hidden;
           min-width: 0;
         }
+        .teacher-profile-entry-group-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          background: #F8FAFC;
+          border-bottom: 1px solid ${G.border};
+          padding: 8px 10px;
+        }
+        .teacher-profile-entry-row {
+          display: grid;
+          grid-template-columns: 128px minmax(0, 1fr) 74px;
+          align-items: start;
+          gap: 10px;
+          padding: 9px 10px;
+          border-bottom: 1px solid #EEF2F7;
+          min-width: 0;
+        }
+        .teacher-profile-entry-row:last-child {
+          border-bottom: none;
+        }
+        .teacher-profile-entry-time {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          color: ${G.textS};
+          font-family: ${G.mono};
+          font-size: 11.5px;
+          font-weight: 900;
+          white-space: nowrap;
+          padding-top: 2px;
+        }
+        .teacher-profile-entry-title {
+          color: ${G.text};
+          font-family: ${G.display};
+          font-size: 14px;
+          font-weight: 950;
+          line-height: 1.15;
+        }
+        .teacher-profile-entry-body {
+          color: ${G.textM};
+          font-size: 12px;
+          line-height: 1.38;
+          margin-top: 5px;
+          white-space: pre-wrap;
+        }
+        .teacher-profile-entry-duration {
+          color: ${G.text};
+          font-size: 12.5px;
+          font-weight: 950;
+          text-align: right;
+          white-space: nowrap;
+          padding-top: 2px;
+        }
         @media (max-width: 820px) {
-          .teacher-profile-timeline-group {
-            padding-left: 24px;
+          .teacher-profile-entry-row {
+            grid-template-columns: 1fr auto;
           }
-          .teacher-profile-timeline-dot {
-            left: -20px;
-          }
-          .teacher-profile-timeline-card > div:first-child {
-            grid-template-columns: 1fr auto !important;
-          }
-          .teacher-profile-timeline-card > div:first-child > div:first-child {
+          .teacher-profile-entry-time {
             grid-column: 1 / -1;
+            padding-top: 0;
+          }
+          .teacher-profile-entry-duration {
+            text-align: right;
           }
         }
       `}</style>
@@ -601,9 +619,9 @@ export function TeacherProfilePanel({
         <div style={{...panelCardStyle, padding: isMobile ? "11px" : "12px", minWidth: 0}}>
           <div style={{display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", borderBottom: `1px solid ${G.border}`, paddingBottom: 9, marginBottom: 10}}>
             <div style={{minWidth: 0}}>
-              <div style={{fontSize: 11, fontWeight: 900, color: G.textL, textTransform: "uppercase", letterSpacing: 0.75}}>Timeline</div>
+              <div style={{fontSize: 11, fontWeight: 900, color: G.textL, textTransform: "uppercase", letterSpacing: 0.75}}>Entry log</div>
               <div style={{fontSize: 17, fontWeight: 950, color: G.text, fontFamily: G.display, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
-                {selectedSection?.label || "Timeline"}
+                {selectedSection?.label || "Entries"}
               </div>
               <div style={{fontSize: 12, color: G.textM, marginTop: 3, lineHeight: 1.35}}>
                 {selectedSection?.institute || ""} - {selectedSection?.subject || ""} - {formatDurationShort(selectedSection?.minutes || 0)} - {selectedSection?.entries || 0} entries
@@ -613,16 +631,16 @@ export function TeacherProfilePanel({
           </div>
 
           {activeTimeline.groups.length ? (
-            <div style={{display: "flex", flexDirection: "column", gap: 10}}>
+            <div style={{display: "flex", flexDirection: "column", gap: 9}}>
               {activeTimeline.groups.map(group => (
-                <div key={`timeline_group_${group.dateKey}`} className="teacher-profile-timeline-group">
-                  <div style={{display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 6}}>
-                    <div style={{fontSize: 14.5, fontWeight: 950, color: G.text, fontFamily: G.display}}>{dateGroupLabel(group.dateKey)}</div>
+                <div key={`entry_group_${group.dateKey}`} className="teacher-profile-entry-group">
+                  <div className="teacher-profile-entry-group-header">
+                    <div style={{fontSize: 14, fontWeight: 950, color: G.text, fontFamily: G.display}}>{dateGroupLabel(group.dateKey)}</div>
                     <div style={{fontSize: 12, fontWeight: 850, color: G.textM, whiteSpace: "nowrap"}}>
                       {group.entries.length} {group.entries.length === 1 ? "entry" : "entries"} - {formatDurationShort(group.minutes || 0)}
                     </div>
                   </div>
-                  {group.entries.map(entry => <TimelineEntry key={entry.id} entry={entry} />)}
+                  {group.entries.map(entry => <EntryLogRow key={entry.id} entry={entry} />)}
                 </div>
               ))}
               {activeTimeline.hasMore ? (
@@ -636,7 +654,7 @@ export function TeacherProfilePanel({
             <div style={{minHeight: 190, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", border: `1px dashed ${G.borderM}`, borderRadius: 14, background: "#F8FAFC", padding: 18}}>
               <div>
                 <AppIcon icon={IconUsersGroup} size={22} color={G.textL} />
-                <div style={{fontSize: 16, fontWeight: 950, color: G.text, fontFamily: G.display, marginTop: 8}}>No timeline entries</div>
+                <div style={{fontSize: 16, fontWeight: 950, color: G.text, fontFamily: G.display, marginTop: 8}}>No entries</div>
                 <div style={{fontSize: 13, color: G.textM, marginTop: 5}}>{detailsReady ? "This selection has no teaching activity entries." : "Teacher details are loading."}</div>
               </div>
             </div>
