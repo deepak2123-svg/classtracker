@@ -19,14 +19,16 @@ export function FeedbackInboxModal({
     ? new Intl.DateTimeFormat("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(value))
     : "";
   return (
-    <div style={{position:"fixed",inset:0,zIndex:750,background:"rgba(5,12,27,0.72)",display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(5px)"}}>
+    <div className="feedback-inbox-overlay" style={{position:"fixed",inset:0,zIndex:750,background:"rgba(5,12,27,0.72)",display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(5px)"}}>
       <style>{`
         @media (max-width: 700px) {
+          .feedback-inbox-overlay { padding: 0 !important; align-items: stretch !important; justify-content: stretch !important; }
+          .feedback-inbox-panel { width: 100% !important; height: 100dvh !important; max-height: 100dvh !important; border-radius: 0 !important; border: 0 !important; }
           .feedback-inbox-grid { grid-template-columns: 1fr !important; grid-template-rows: minmax(150px, 34%) minmax(0, 66%); }
           .feedback-thread-list { border-right: 0 !important; border-bottom: 1px solid ${G.border}; }
         }
       `}</style>
-      <div style={{width:"min(980px,100%)",height:"min(720px,calc(100vh - 32px))",background:G.surface,borderRadius:20,border:`1px solid ${G.border}`,boxShadow:"0 28px 80px rgba(0,0,0,0.34)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div className="feedback-inbox-panel" style={{width:"min(980px,100%)",height:"min(720px,calc(100vh - 32px))",background:G.surface,borderRadius:20,border:`1px solid ${G.border}`,boxShadow:"0 28px 80px rgba(0,0,0,0.34)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"16px 18px",borderBottom:`1px solid ${G.border}`}}>
           <div>
             <div style={{fontFamily:G.display,fontSize:20,fontWeight:800,color:G.text}}>Teacher feedback</div>

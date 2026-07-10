@@ -241,6 +241,107 @@ export function AdminMobileCard({ children, style = {}, onClick = null }) {
   );
 }
 
+export function AdminMobileEmptyState({
+  title,
+  body,
+  action = null,
+  icon = null,
+}) {
+  return (
+    <AdminMobileCard style={{
+      minHeight: 150,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      textAlign: "center",
+      padding: "22px 16px",
+      boxShadow: "none",
+    }}>
+      <div style={{ maxWidth: 280 }}>
+        {icon&&(
+          <div style={{
+            width: 42,
+            height: 42,
+            borderRadius: 14,
+            background: "#EEF4FF",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 10,
+          }}>
+            <AppIcon icon={icon} size={19} color={G.blue} />
+          </div>
+        )}
+        <div style={{
+          fontSize: 17,
+          fontWeight: 950,
+          color: G.text,
+          fontFamily: G.display,
+          lineHeight: 1.12,
+        }}>
+          {title}
+        </div>
+        {body&&(
+          <div style={{
+            fontSize: 12.5,
+            color: G.textM,
+            lineHeight: 1.5,
+            marginTop: 7,
+          }}>
+            {body}
+          </div>
+        )}
+        {action&&(
+          <div style={{ marginTop: 13 }}>
+            {action}
+          </div>
+        )}
+      </div>
+    </AdminMobileCard>
+  );
+}
+
+export function AdminMobileFilterChips({ items, activeKey, onChange }) {
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 7,
+      overflowX: "auto",
+      WebkitOverflowScrolling: "touch",
+      scrollbarWidth: "none",
+      padding: "2px 1px",
+    }}>
+      {items.map(item => {
+        const active = activeKey === item.key;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            className="admin-mobile-touch"
+            onClick={() => onChange?.(item.key)}
+            style={{
+              minHeight: 34,
+              borderRadius: 999,
+              border: `1px solid ${active ? G.navy : G.border}`,
+              background: active ? G.navy : "#FFFFFF",
+              color: active ? "#FFFFFF" : G.textM,
+              padding: "0 12px",
+              fontSize: 12,
+              fontWeight: 900,
+              fontFamily: G.sans,
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+              flex: "0 0 auto",
+            }}>
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function AdminMobileMetricGrid({ items, columns = 2 }) {
   return (
     <div style={{
@@ -280,6 +381,121 @@ export function AdminMobileMetricGrid({ items, columns = 2 }) {
           )}
         </AdminMobileCard>
       ))}
+    </div>
+  );
+}
+
+export function AdminMobileActionSheet({
+  open,
+  title,
+  subtitle = "",
+  actions = [],
+  onClose,
+}) {
+  if(!open) return null;
+  return (
+    <div
+      role="presentation"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 10050,
+        background: "rgba(7,18,37,0.42)",
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        padding: "12px",
+        boxSizing: "border-box",
+      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={event => event.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 460,
+          background: "#FFFFFF",
+          border: `1px solid ${G.border}`,
+          borderRadius: 22,
+          boxShadow: "0 24px 64px rgba(7,18,37,0.24)",
+          padding: "15px 14px max(14px, env(safe-area-inset-bottom, 0px))",
+        }}>
+        <div style={{ padding: "0 3px 11px" }}>
+          <div style={{
+            fontSize: 18,
+            fontWeight: 950,
+            color: G.text,
+            fontFamily: G.display,
+            lineHeight: 1.1,
+          }}>
+            {title}
+          </div>
+          {subtitle&&(
+            <div style={{
+              fontSize: 12.5,
+              color: G.textM,
+              lineHeight: 1.45,
+              marginTop: 5,
+            }}>
+              {subtitle}
+            </div>
+          )}
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {actions.filter(Boolean).map(action => {
+            const danger = action.tone === "danger";
+            return (
+              <button
+                key={action.key || action.label}
+                type="button"
+                className="admin-mobile-touch"
+                disabled={action.disabled}
+                onClick={() => {
+                  onClose?.();
+                  action.onClick?.();
+                }}
+                style={{
+                  minHeight: 48,
+                  borderRadius: 14,
+                  border: `1px solid ${danger ? "#FECACA" : G.border}`,
+                  background: danger ? "#FFF1F2" : "#F8FAFC",
+                  color: danger ? G.red : G.text,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "0 12px",
+                  textAlign: "left",
+                  fontSize: 13.5,
+                  fontWeight: 900,
+                  fontFamily: G.sans,
+                  cursor: action.disabled ? "not-allowed" : "pointer",
+                  opacity: action.disabled ? 0.58 : 1,
+                }}>
+                {action.icon&&<AppIcon icon={action.icon} size={17} color={danger ? G.red : G.textS} />}
+                <span style={{ flex: 1, minWidth: 0 }}>{action.label}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            className="admin-mobile-touch"
+            onClick={onClose}
+            style={{
+              minHeight: 46,
+              borderRadius: 14,
+              border: `1px solid ${G.border}`,
+              background: "#FFFFFF",
+              color: G.textM,
+              fontSize: 13,
+              fontWeight: 900,
+              fontFamily: G.sans,
+              cursor: "pointer",
+            }}>
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

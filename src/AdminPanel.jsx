@@ -1593,6 +1593,83 @@ function LedgrTelegramDashboardModal({
     );
   };
 
+  const renderMessengerMobileCard = (row, options = {}) => {
+    const isFullReport = options.kind === "full_report";
+    const rowKey = isFullReport ? "__full_report__" : row.institute;
+    const expanded = expandedRow === rowKey;
+    const activeCount = isFullReport ? activeFullReportRecipients.length : row.activeRecipients.length;
+    const recipientList = isFullReport ? fullReportRecipients : row.recipients;
+    const ready = activeCount > 0;
+    const sendDisabled = actionBusy
+      || !!sendBusy
+      || !enabled
+      || !onDemandEnabled
+      || routeIssue
+      || tokenMissingOnServer
+      || !manualRouteReady
+      || !ready;
+    const title = isFullReport ? "Complete Ledgr report" : row.institute;
+    const description = isFullReport
+      ? "Full daily report PDF for selected recipients."
+      : ready
+        ? `${activeCount} active Telegram user${activeCount === 1 ? "" : "s"}`
+        : "Waiting for first Telegram user";
+    const editorRow = isFullReport
+      ? { kind:"full_report", recipients:fullReportRecipients }
+      : { ...row, kind:"route" };
+    return (
+      <div key={`mobile_${rowKey}`} style={{background:"#FFFFFF",border:`1px solid ${ready ? "#BBF7D0" : G.border}`,borderRadius:16,overflow:"hidden",boxShadow:"0 8px 20px rgba(15,23,42,0.05)"}}>
+        <div style={{padding:14}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:16,fontWeight:950,color:G.text,fontFamily:G.display,lineHeight:1.15}}>{title}</div>
+              <div style={{fontSize:12,color:G.textM,lineHeight:1.45,marginTop:5}}>{description}</div>
+            </div>
+            <span style={pillStyle(ready ? "#DCFCE7" : "#FEF3C7", ready ? "#166534" : "#B45309")}>
+              {ready ? "Ready" : "Setup"}
+            </span>
+          </div>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:11}}>
+            {recipientList.filter(item => normaliseTelegramChatId(item?.chatId)).slice(0,4).map(renderRecipientChip)}
+            {recipientList.filter(item => normaliseTelegramChatId(item?.chatId)).length>4&&(
+              <span style={pillStyle("#F8FAFC", G.textM)}>
+                +{recipientList.filter(item => normaliseTelegramChatId(item?.chatId)).length - 4}
+              </span>
+            )}
+            {!recipientList.some(item => normaliseTelegramChatId(item?.chatId))&&(
+              <span style={{fontSize:12.5,color:G.textM}}>No mapped users yet.</span>
+            )}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:13}}>
+            <button
+              type="button"
+              className="admin-mobile-touch"
+              onClick={()=>{ isFullReport ? void saveAndSendFullReport() : void saveAndSendInstitute(row.institute); }}
+              disabled={sendDisabled}
+              style={{...actionButtonStyle(true, sendDisabled),height:42}}>
+              <AppIcon icon={IconSend} size={14} color="#FFFFFF" />
+              Send
+            </button>
+            <button
+              type="button"
+              className="admin-mobile-touch"
+              onClick={()=>setExpandedRow(current => current === rowKey ? "" : rowKey)}
+              disabled={actionBusy}
+              style={{...actionButtonStyle(false, actionBusy),height:42}}>
+              <AppIcon icon={expanded ? IconArrowUp : IconChevronRight} size={14} color={G.blue} />
+              {expanded ? "Done" : ready ? "Edit" : "Connect"}
+            </button>
+          </div>
+        </div>
+        {expanded&&(
+          <div style={{borderTop:`1px solid ${G.border}`}}>
+            {renderRowEditor(editorRow)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={embedded
       ? {width:"100%"}
@@ -1607,8 +1684,19 @@ function LedgrTelegramDashboardModal({
           }
         }
         @media (max-width: 760px) {
+          .ledgr-telegram-table-scroll {
+            display: none !important;
+          }
+          .ledgr-telegram-mobile-list {
+            display: grid !important;
+          }
           .ledgr-telegram-row-actions {
             flex-wrap: wrap;
+          }
+        }
+        @media (min-width: 761px) {
+          .ledgr-telegram-mobile-list {
+            display: none !important;
           }
         }
       `}</style>
@@ -1708,7 +1796,17 @@ function LedgrTelegramDashboardModal({
                 </div>
               </div>
 
-              <div style={{overflowX:"auto"}}>
+              <div className="ledgr-telegram-mobile-list" style={{display:"none",gap:10,padding:12}}>
+                {filteredInstituteRows.map(row => renderMessengerMobileCard(row))}
+                {fullReportVisible&&renderMessengerMobileCard({ institute:"__full_report__" }, { kind:"full_report" })}
+                {!filteredInstituteRows.length && !fullReportVisible&&(
+                  <div style={{padding:"18px 12px",fontSize:13,color:G.textM,lineHeight:1.55,textAlign:"center"}}>
+                    No messenger rows match this view.
+                  </div>
+                )}
+              </div>
+
+              <div className="ledgr-telegram-table-scroll" style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",minWidth:1120}}>
                   <thead>
                     <tr style={{background:"#F8FAFC"}}>
@@ -12141,8 +12239,15 @@ function AdminPanelInner({user}){
     const bySection = adminBin.filter(x=>x.type==="section");
     const daysLeft = ts => Math.max(0, 30-Math.floor((Date.now()-ts)/(1000*60*60*24)));
     return(
-      <div style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(4px)"}}>
-        <div style={{background:G.surface,borderRadius:20,width:"100%",maxWidth:560,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+      <div className="admin-bin-overlay" style={{position:"fixed",inset:0,background:"rgba(14,31,24,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(4px)"}}>
+        <style>{`
+          @media (max-width: 700px) {
+            .admin-bin-overlay { padding: 0 !important; align-items: stretch !important; justify-content: stretch !important; }
+            .admin-bin-panel { width: 100% !important; max-width: none !important; max-height: 100dvh !important; height: 100dvh !important; border-radius: 0 !important; }
+            .admin-bin-body { padding: 14px 14px calc(94px + env(safe-area-inset-bottom, 0px)) !important; }
+          }
+        `}</style>
+        <div className="admin-bin-panel" style={{background:G.surface,borderRadius:20,width:"100%",maxWidth:560,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
           {/* header */}
           <div style={{padding:"18px 22px",borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div>
@@ -12151,7 +12256,7 @@ function AdminPanelInner({user}){
             </div>
             <button onClick={()=>setBinView(false)} style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:8,padding:"6px 14px",fontSize:14,cursor:"pointer",color:G.textM,fontFamily:G.sans}}>Close</button>
           </div>
-          <div style={{overflowY:"auto",padding:"16px 22px 24px",flex:1}}>
+          <div className="admin-bin-body" style={{overflowY:"auto",padding:"16px 22px 24px",flex:1}}>
             {adminBin.length===0&&(
               <div style={{textAlign:"center",padding:"48px 20px"}}>
                 <div style={{fontSize:40,marginBottom:12}}>✅</div>
@@ -12419,6 +12524,7 @@ function AdminPanelInner({user}){
     minWidth = 980,
     emptyMessage,
     renderDesktopCells,
+    renderMobileCard = null,
     renderExpandedRow = null,
     getRowProps = null,
   }) => {
@@ -12426,6 +12532,17 @@ function AdminPanelInner({user}){
       return (
         <div style={{fontSize:15,color:G.textM,padding:"22px 8px 10px",textAlign:"center"}}>
           {emptyMessage}
+        </div>
+      );
+    }
+    if(isMobile && typeof renderMobileCard === "function"){
+      return (
+        <div style={{display:"grid",gap:10,minWidth:0}}>
+          {rows.map((row,index)=>(
+            <React.Fragment key={rowKey(row,index)}>
+              {renderMobileCard(row,index)}
+            </React.Fragment>
+          ))}
         </div>
       );
     }
@@ -13624,6 +13741,7 @@ function AdminPanelInner({user}){
           rows:teacherRows,
           rowKey:row=>`teacher_${row.teacher.uid}`,
           emptyMessage:emptyTeacherMessage,
+          renderMobileCard:renderTeacherCard,
           getRowProps:row=>row.instituteCount > 1 ? {
             className:"admin-teacher-data-row",
             onClick:()=>toggleTeacherBreakdown(row),
@@ -15464,52 +15582,91 @@ function AdminPanelInner({user}){
         cursor:"pointer",
         boxShadow:"none",
       });
-      const renderWorkspaceTab = () => (
-        <>
-          <AdminMobileTopBar
-            title={selectedInstituteName || "Home"}
-            subtitle={selectedInstituteName ? "Classes, teachers, timeline" : "All institutes"}
-            action={mobileHeaderAction}
-          />
-          <div style={adminMobileContentStyle}>
-            <AdminMobileCard style={{padding:9,marginBottom:10,position:"sticky",top:67,zIndex:20,backdropFilter:"blur(10px)"}}>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:5}}>
-                {mobilePanes.map(item=>{
-                  const active = adminV5MobilePane === item.key;
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      className="admin-mobile-touch"
-                      onClick={()=>openMobileWorkspaceRoot(item.key)}
-                      style={{
-                        minHeight:40,
-                        borderRadius:11,
-                        border:"none",
-                        background:active ? G.navy : "#F8FAFC",
-                        color:active ? "#FFFFFF" : G.textM,
-                        display:"flex",
-                        alignItems:"center",
-                        justifyContent:"center",
-                        gap:5,
-                        fontSize:11.5,
-                        fontWeight:900,
-                        fontFamily:G.sans,
-                        cursor:"pointer",
-                      }}>
-                      <AppIcon icon={item.icon} size={14} color={active ? "#FFFFFF" : G.textL} />
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </AdminMobileCard>
-            {adminV5MobilePane === "institutes"&&renderInstituteDrawer()}
-            {adminV5MobilePane === "classes"&&renderClassPanel()}
-            {adminV5MobilePane === "timeline"&&renderTimelinePanel()}
-          </div>
-        </>
-      );
+      const renderWorkspaceTab = () => {
+        const workspaceSubPage = adminV5MobilePane === "timeline"
+          ? "timeline"
+          : adminV5BrowseMode === "teacher"
+            ? "teachers"
+            : "classes";
+        const workspaceModeItems = [
+          {
+            key:"classes",
+            label:"Classes",
+            icon:IconSchool,
+            onClick:()=>{
+              setAdminV5BrowseMode("class");
+              openMobileWorkspaceRoot("classes");
+            },
+          },
+          {
+            key:"teachers",
+            label:"Teachers",
+            icon:IconUsersGroup,
+            onClick:()=>{
+              setAdminV5BrowseMode("teacher");
+              openMobileWorkspaceRoot("classes");
+            },
+          },
+          {
+            key:"timeline",
+            label:"Entries",
+            icon:IconClock,
+            onClick:()=>openMobileWorkspaceRoot("timeline"),
+          },
+        ];
+        return (
+          <>
+            <AdminMobileTopBar
+              title={selectedInstituteName || "Home"}
+              subtitle={selectedInstituteName ? "Classes, teachers, entries" : "All institutes"}
+              secondaryAction={selectedInstituteName ? { icon:IconChevronLeft, onClick:openMobileInstituteHome, title:"All institutes" } : null}
+              action={mobileHeaderAction}
+            />
+            <div style={adminMobileContentStyle}>
+              {!selectedInstituteName ? (
+                renderInstituteDrawer()
+              ) : (
+                <>
+                  <AdminMobileCard style={{padding:9,marginBottom:10,position:"sticky",top:67,zIndex:20,backdropFilter:"blur(10px)"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:5}}>
+                      {workspaceModeItems.map(item=>{
+                        const active = workspaceSubPage === item.key;
+                        return (
+                          <button
+                            key={item.key}
+                            type="button"
+                            className="admin-mobile-touch"
+                            onClick={item.onClick}
+                            style={{
+                              minHeight:40,
+                              borderRadius:11,
+                              border:"none",
+                              background:active ? G.navy : "#F8FAFC",
+                              color:active ? "#FFFFFF" : G.textM,
+                              display:"flex",
+                              alignItems:"center",
+                              justifyContent:"center",
+                              gap:5,
+                              fontSize:11.5,
+                              fontWeight:900,
+                              fontFamily:G.sans,
+                              cursor:"pointer",
+                            }}>
+                            <AppIcon icon={item.icon} size={14} color={active ? "#FFFFFF" : G.textL} />
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </AdminMobileCard>
+                  {adminV5MobilePane === "classes"&&renderClassPanel()}
+                  {adminV5MobilePane === "timeline"&&renderTimelinePanel()}
+                </>
+              )}
+            </div>
+          </>
+        );
+      };
       const renderReportTab = () => (
         <>
           <AdminMobileTopBar
@@ -15725,6 +15882,17 @@ function AdminPanelInner({user}){
       setProfileOpen(false);
     };
     const mobileManageOuterPad = "10px 12px calc(92px + env(safe-area-inset-bottom, 0px))";
+    const mobileManageBottomNavItems = [
+      { key:"workspace", label:"Home", icon:IconBuilding, onClick:openMobileInstituteHome },
+      { key:"teachers", label:"Teachers", icon:IconUsersGroup, onClick:()=>openMobileManageArea("teachers") },
+      { key:"report", label:"Report", icon:IconFileText, onClick:openDailyLedgrReport },
+      { key:"tools", label:"Tools", icon:IconSettings, onClick:openMobileTools },
+    ];
+    const mobileManageBottomKey = manageTab === "teachers"
+      ? "teachers"
+      : manageTab === "report"
+        ? "report"
+        : "tools";
     const mobileManageSections = (() => {
       const searchKey = manageSectionSearch.trim().toLowerCase();
       return institutes
@@ -16395,6 +16563,39 @@ function AdminPanelInner({user}){
                 rows:sectionRows,
                 rowKey:row=>`sections_${row.inst}`,
                 emptyMessage:"No institutes match your search.",
+                renderMobileCard:row=>(
+                  <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:15,padding:13,boxShadow:reduceEffects ? "none" : G.shadowSm,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{fontSize:16,fontWeight:950,color:G.text,fontFamily:G.display,lineHeight:1.15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.inst}</div>
+                        <div style={{fontSize:12,color:G.textM,lineHeight:1.45,marginTop:5}}>
+                          {row.groupPreview.length
+                            ? `${row.groupPreview.join(" · ")}${row.groupCount>row.groupPreview.length ? ` +${row.groupCount-row.groupPreview.length} more` : ""}`
+                            : "No timetable groups yet"}
+                        </div>
+                      </div>
+                      {row.pendingCount>0
+                        ? renderWorkspacePill(`${row.pendingCount} pending`, "amber")
+                        : renderWorkspacePill("Ready", "green")}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
+                      {[
+                        ["Groups", row.groupCount],
+                        ["Sections", row.totalCount],
+                        ["Loose", row.standaloneCount],
+                      ].map(([label,value])=>(
+                        <div key={label} style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:11,padding:"9px 8px",textAlign:"center",minWidth:0}}>
+                          <div style={{fontSize:17,fontWeight:950,color:G.text,lineHeight:1}}>{value}</div>
+                          <div style={{fontSize:10,color:G.textL,fontWeight:900,textTransform:"uppercase",letterSpacing:0.55,marginTop:5}}>{label}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+                      <button type="button" onClick={()=>setInstDetailView(row.inst)} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("blue"),minHeight:40}}>Open</button>
+                      <button type="button" onClick={()=>openLegacySectionRepairForInstitute(row.inst)} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>Legacy repair</button>
+                    </div>
+                  </div>
+                ),
                 renderDesktopCells:row=>[
                   <div key="institute" style={{minWidth:0}}>
                     <div style={{fontSize:15.5,fontWeight:800,color:G.text,fontFamily:G.display,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.inst}</div>
@@ -16493,6 +16694,69 @@ function AdminPanelInner({user}){
                 rows:visibleInstitutes,
                 rowKey:row=>`institute_${row.inst}`,
                 emptyMessage:manageScopeInstitute ? "This institute could not be found." : "No institutes match your search yet.",
+                renderMobileCard:row=>(
+                  <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:15,padding:13,boxShadow:reduceEffects ? "none" : G.shadowSm,minWidth:0}}>
+                    {renamingInst===row.inst ? (
+                      <div style={{display:"grid",gap:10}}>
+                        <input
+                          value={renameInstVal}
+                          onChange={e=>setRenameInstVal(e.target.value)}
+                          onKeyDown={e=>{
+                            if(e.key==="Enter") handleRenameInstitute(row.inst,renameInstVal);
+                            if(e.key==="Escape") setRenamingInst(null);
+                          }}
+                          autoFocus
+                          style={{width:"100%",boxSizing:"border-box",padding:"11px 12px",borderRadius:12,border:`1.5px solid ${G.blue}`,fontSize:15,fontFamily:G.sans,outline:"none"}}
+                        />
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                          <button type="button" onClick={()=>handleRenameInstitute(row.inst,renameInstVal)} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("primary"),minHeight:40}}>Save</button>
+                          <button type="button" onClick={()=>setRenamingInst(null)} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                          <div style={{minWidth:0,flex:1}}>
+                            <div style={{fontSize:16,fontWeight:950,color:G.text,fontFamily:G.display,lineHeight:1.15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.inst}</div>
+                            <div style={{fontSize:12,color:G.textM,lineHeight:1.45,marginTop:5}}>
+                              {row.classCount} class{row.classCount!==1?"es":""} connected
+                            </div>
+                          </div>
+                          {renderWorkspacePill(`${row.teacherCount} teachers`, "blue")}
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:12}}>
+                          {[
+                            ["Classes", row.classCount],
+                            ["Sections", row.sectionCount],
+                            ["Groups", row.groupCount],
+                          ].map(([label,value])=>(
+                            <div key={label} style={{background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:11,padding:"9px 8px",textAlign:"center",minWidth:0}}>
+                              <div style={{fontSize:17,fontWeight:950,color:G.text,lineHeight:1}}>{value}</div>
+                              <div style={{fontSize:10,color:G.textL,fontWeight:900,textTransform:"uppercase",letterSpacing:0.55,marginTop:5}}>{label}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:12}}>
+                          <button
+                            type="button"
+                            onClick={()=>{
+                              setManageTab("teachers");
+                              setManageScopeInstitute(row.inst);
+                              setManageTeacherSearch("");
+                              setSelTeacher(null);
+                            }}
+                            className="admin-mobile-touch"
+                            style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>
+                            Teachers
+                          </button>
+                          <button type="button" onClick={()=>openManageTab("sections",{ detailInstitute: row.inst })} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("blue"),minHeight:40}}>Sections</button>
+                          <button type="button" onClick={()=>{setRenamingInst(row.inst);setRenameInstVal(row.inst);}} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>Rename</button>
+                          <button type="button" onClick={()=>handleDeleteInstitute(row.inst)} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("danger"),minHeight:40}}>Delete</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ),
                 renderDesktopCells:row=>[
                   <div key="institute" style={{minWidth:0}}>
                     {renamingInst===row.inst ? (
@@ -16635,6 +16899,91 @@ function AdminPanelInner({user}){
                     rows:adminRows,
                     rowKey:row=>`admin_${row.teacher.uid}`,
                     emptyMessage:"No admins match your search.",
+                    renderMobileCard:row=>(
+                      <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:15,padding:13,boxShadow:reduceEffects ? "none" : G.shadowSm,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"flex-start",gap:11,minWidth:0}}>
+                          <div style={{width:40,height:40,borderRadius:12,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
+                            {(row.name[0]||"?").toUpperCase()}
+                          </div>
+                          <div style={{minWidth:0,flex:1}}>
+                            {renamingTeacher?.uid===row.teacher.uid ? (
+                              <input
+                                value={renameVal}
+                                onChange={e=>setRenameVal(e.target.value)}
+                                onKeyDown={e=>{
+                                  if(e.key==="Enter") handleRenameTeacher(row.teacher.uid,renameVal);
+                                  if(e.key==="Escape") clearTeacherRename();
+                                }}
+                                placeholder="Admin name"
+                                autoFocus
+                                style={{width:"100%",boxSizing:"border-box",padding:"10px 11px",borderRadius:11,border:`1.5px solid ${G.blue}`,fontSize:14,fontFamily:G.sans,outline:"none"}}
+                              />
+                            ) : (
+                              <>
+                                <div style={{fontSize:16,fontWeight:950,color:G.text,fontFamily:G.display,lineHeight:1.15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.name}</div>
+                                <div style={{fontSize:12,color:G.textM,marginTop:4,wordBreak:"break-all"}}>{row.email}</div>
+                              </>
+                            )}
+                          </div>
+                          {renderWorkspacePill(row.isMe ? "This account" : "Full access", row.isMe ? "slate" : "blue")}
+                        </div>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:11}}>
+                          {[row.primaryInstitute, ...row.otherInstitutes].filter(Boolean).slice(0,3).map(inst=>(
+                            <React.Fragment key={`${row.teacher.uid}_mobile_${inst}`}>
+                              {renderWorkspacePill(inst, "slate", { maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis" })}
+                            </React.Fragment>
+                          ))}
+                          {row.otherInstitutes.length>2&&renderWorkspacePill(`+${row.otherInstitutes.length-2} more`, "blue")}
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+                          {[
+                            { key:"admin_only", label:"Admin only" },
+                            { key:"admin_teacher", label:"Admin + teacher" },
+                          ].map(option=>(
+                            <button
+                              key={`${row.teacher.uid}_mobile_${option.key}`}
+                              type="button"
+                              onClick={()=>handleSetAdminMode(row.teacher.uid, option.key)}
+                              className="admin-mobile-touch"
+                              style={{
+                                border:`1px solid ${row.adminMode===option.key ? G.navy : G.border}`,
+                                borderRadius:12,
+                                minHeight:38,
+                                padding:"0 10px",
+                                background:row.adminMode===option.key ? G.navy : "#FFFFFF",
+                                color:row.adminMode===option.key ? "#FFFFFF" : G.textM,
+                                fontSize:12,
+                                fontWeight:900,
+                                fontFamily:G.sans,
+                                cursor:"pointer",
+                              }}>
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+                          {renamingTeacher?.uid===row.teacher.uid ? (
+                            <>
+                              <button type="button" onClick={()=>handleRenameTeacher(row.teacher.uid,renameVal)} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("primary"),minHeight:40}}>Save</button>
+                              <button type="button" onClick={clearTeacherRename} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              <button type="button" onClick={()=>{
+                                const nextName = row.rawName || row.name || "";
+                                setRenamingTeacher({uid:row.teacher.uid,currentName:nextName});
+                                setRenameVal(nextName);
+                              }} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>Rename</button>
+                              {!row.isMe ? (
+                                <button type="button" onClick={()=>handleRemoveAdmin(row.teacher.uid)} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("danger"),minHeight:40}}>Remove</button>
+                              ) : (
+                                <span style={{fontSize:12.5,color:G.textL,fontWeight:800,alignSelf:"center",textAlign:"center"}}>Current account</span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ),
                     renderDesktopCells:row=>[
                       <div key="admin" style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
                         <div style={{width:38,height:38,borderRadius:11,background:G.blueL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:G.blue,fontFamily:G.mono,flexShrink:0}}>
@@ -16736,6 +17085,13 @@ function AdminPanelInner({user}){
       </>)}
       </main>
       </div>
+      {isMobile&&(
+        <AdminMobileBottomNav
+          items={mobileManageBottomNavItems}
+          activeKey={mobileManageBottomKey}
+          reduceEffects={reduceEffects}
+        />
+      )}
     </div>
   );
   }

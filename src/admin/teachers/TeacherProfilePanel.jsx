@@ -17,6 +17,7 @@ import {
 } from "@tabler/icons-react";
 import { STATUS_STYLES, TAG_STYLES } from "../../shared.jsx";
 import { AppIcon } from "../components/common/AppIcon.jsx";
+import { AdminMobileActionSheet } from "../mobile/MobileAdminShell.jsx";
 import { alphaHex, G, subjectColor } from "../styles/adminTheme.js";
 import { daysAgo, formatAdminDateKey, formatDurationShort } from "../utils/adminDates.js";
 import { formatExportPdfTime, safeAdminText } from "../utils/adminText.js";
@@ -308,6 +309,7 @@ export function TeacherProfilePanel({
   const identity = model.identity || {};
   const summary = model.summary || {};
   const [splitMode, setSplitMode] = React.useState("section");
+  const [mobileManageOpen, setMobileManageOpen] = React.useState(false);
   const activeTimeline = selectTeacherProfileTimeline(model, selectedSectionKey, timelineLimit);
   const selectedSection = activeTimeline.selectedSection || model.allSectionsOption;
   const activeSectionKey = selectedSection?.key || TEACHER_PROFILE_ALL_SECTIONS_KEY;
@@ -480,7 +482,7 @@ export function TeacherProfilePanel({
             </div>
           </div>
 
-          <div style={{display: "flex", gap: 8, flexWrap: "wrap", justifyContent: isMobile ? "flex-start" : "flex-end"}}>
+          <div style={{display: "flex", gap: 8, flexWrap: "wrap", justifyContent: isMobile ? "flex-start" : "flex-end", width: isMobile ? "100%" : "auto"}}>
             {isRenaming ? (
               <>
                 <input
@@ -502,17 +504,36 @@ export function TeacherProfilePanel({
                 <ActionButton icon={IconX} label="Cancel" onClick={onRenameCancel} />
               </>
             ) : (
-              <>
-                <ActionButton icon={IconFileText} label="View Entries" onClick={onViewEntries} />
-                <ActionButton icon={IconUser} label="Rename" onClick={onRenameStart} />
-                <ActionButton icon={IconRefresh} label={repairing ? "Repairing" : "Repair Index"} tone="blue" disabled={repairing} onClick={onRepairIndex} />
-                {!identity.isMe && !identity.isAdminTeacher ? <ActionButton icon={IconCheck} label="Make Admin" tone="blue" onClick={onPromote} /> : null}
-                {!identity.isMe ? <ActionButton icon={IconTrash} label="Remove" tone="danger" onClick={onRemoveTeacher} /> : null}
-              </>
+              isMobile ? (
+                <>
+                  <ActionButton icon={IconFileText} label="View Entries" onClick={onViewEntries} />
+                  <ActionButton icon={IconUser} label="Manage" tone="blue" onClick={() => setMobileManageOpen(true)} />
+                </>
+              ) : (
+                <>
+                  <ActionButton icon={IconFileText} label="View Entries" onClick={onViewEntries} />
+                  <ActionButton icon={IconUser} label="Rename" onClick={onRenameStart} />
+                  <ActionButton icon={IconRefresh} label={repairing ? "Repairing" : "Repair Index"} tone="blue" disabled={repairing} onClick={onRepairIndex} />
+                  {!identity.isMe && !identity.isAdminTeacher ? <ActionButton icon={IconCheck} label="Make Admin" tone="blue" onClick={onPromote} /> : null}
+                  {!identity.isMe ? <ActionButton icon={IconTrash} label="Remove" tone="danger" onClick={onRemoveTeacher} /> : null}
+                </>
+              )
             )}
           </div>
         </div>
       </div>
+      <AdminMobileActionSheet
+        open={isMobile && mobileManageOpen}
+        title="Manage teacher"
+        subtitle={identity.name}
+        onClose={() => setMobileManageOpen(false)}
+        actions={[
+          { key:"rename", label:"Rename", icon:IconUser, onClick:onRenameStart },
+          { key:"repair", label:repairing ? "Repairing index" : "Repair Index", icon:IconRefresh, disabled:repairing, onClick:onRepairIndex },
+          !identity.isMe && !identity.isAdminTeacher ? { key:"promote", label:"Make Admin", icon:IconCheck, onClick:onPromote } : null,
+          !identity.isMe ? { key:"remove", label:"Remove teacher", icon:IconTrash, tone:"danger", onClick:onRemoveTeacher } : null,
+        ]}
+      />
 
       <div style={{display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5,minmax(0,1fr))", gap: 10, marginBottom: 14}}>
         <MetricCard label="Teaching hours" value={detailsReady ? formatDurationShort(summary.totalMinutes || 0) : "--"} caption={summary.untimedEntries ? `${summary.untimedEntries} untimed` : ""} icon={IconClock} />
