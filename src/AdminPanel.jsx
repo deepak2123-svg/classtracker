@@ -102,8 +102,11 @@ import { LedgrReportOptionsModal } from "./admin/reports/LedgrReportOptionsModal
 import { downloadTeacherStatusShareImage } from "./admin/reports/teacherStatusShareImage.js";
 import { buildTeacherEntryStatusItem, sortTeacherStatusForShare } from "./admin/reports/teacherStatusUtils.js";
 import {
+  AdminMobileActionSheet,
   AdminMobileBottomNav,
   AdminMobileCard,
+  AdminMobileEmptyState,
+  AdminMobileMetricGrid,
   AdminMobileMotionStyles,
   AdminMobileToolGrid,
   AdminMobileTopBar,
@@ -5601,6 +5604,7 @@ function AdminPanelInner({user}){
   const [manageTeacherInstituteFilter, setManageTeacherInstituteFilter] = useState("");
   const [manageTeacherSubjectFilter, setManageTeacherSubjectFilter] = useState("");
   const [manageTeacherBreakdownUid, setManageTeacherBreakdownUid] = useState(null);
+  const [mobileToolActionSheet, setMobileToolActionSheet] = useState(null);
   const [teacherProfileUid, setTeacherProfileUid] = useState(null);
   const [teacherProfileSectionKey, setTeacherProfileSectionKey] = useState("");
   const [teacherProfileTimelineLimit, setTeacherProfileTimelineLimit] = useState(30);
@@ -12529,6 +12533,14 @@ function AdminPanelInner({user}){
     getRowProps = null,
   }) => {
     if(!rows.length){
+      if(isMobile){
+        return (
+          <AdminMobileEmptyState
+            title="No results"
+            body={emptyMessage}
+          />
+        );
+      }
       return (
         <div style={{fontSize:15,color:G.textM,padding:"22px 8px 10px",textAlign:"center"}}>
           {emptyMessage}
@@ -15721,6 +15733,8 @@ function AdminPanelInner({user}){
           { key:"admins", title:"Admins", subtitle:"Roles and permissions", icon:IconSettings, count:adminCount, onClick:()=>openMobileManageArea("admins") },
           { key:"report", title:"Ledgr Report", subtitle:"Export and schedule", icon:IconFileText, count:instituteGlanceReport.ready ? "Ready" : "Open", onClick:openDailyLedgrReport },
           { key:"messenger", title:"Messenger", subtitle:"Routes and daily batch", icon:IconSend, count:ledgrTelegramLoading ? "..." : (ledgrTelegramRecipientStats.active || "setup"), onClick:()=>openMobileManageArea("messenger") },
+          { key:"feedback", title:"Feedback", subtitle:"Inbox and replies", icon:IconMessageCircle, count:feedbackUnreadCount || null, onClick:openFeedbackInbox },
+          { key:"recycle", title:"Recycle Bin", subtitle:"Restore deleted records", icon:IconTrash, count:adminBin.length || null, tone:"danger", onClick:()=>setBinView(true) },
         ];
         return (
           <>
@@ -15738,25 +15752,6 @@ function AdminPanelInner({user}){
                 </div>
               </AdminMobileCard>
               <AdminMobileToolGrid items={toolGridItems} />
-              <AdminMobileCard style={{marginTop:10}}>
-                <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Utilities</div>
-                <div style={{display:"grid",gap:8,marginTop:10}}>
-                  <button type="button" className="admin-mobile-touch" onClick={openFeedbackInbox} style={{...compactActionButton("light"),width:"100%",justifyContent:"space-between"}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
-                      <AppIcon icon={IconMessageCircle} size={15} color={G.textS} />
-                      Teacher Feedback
-                    </span>
-                    {feedbackUnreadCount>0&&<span style={{fontSize:11,fontWeight:900,color:G.blue,fontFamily:G.mono}}>{feedbackUnreadCount}</span>}
-                  </button>
-                  <button type="button" className="admin-mobile-touch" onClick={()=>setBinView(true)} style={{...compactActionButton("light"),width:"100%",justifyContent:"space-between"}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
-                      <AppIcon icon={IconTrash} size={15} color={G.textS} />
-                      Recycle Bin
-                    </span>
-                    {adminBin.length>0&&<span style={{fontSize:11,fontWeight:900,color:G.red,fontFamily:G.mono}}>{adminBin.length}</span>}
-                  </button>
-                </div>
-              </AdminMobileCard>
             </div>
           </>
         );
@@ -15951,6 +15946,15 @@ function AdminPanelInner({user}){
       {binView&&<AdminBinModal/>}
       {instDeleteModal&&<InstDeleteModal/>}{deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
       {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
+      {isMobile&&mobileToolActionSheet&&(
+        <AdminMobileActionSheet
+          open
+          title={mobileToolActionSheet.title}
+          subtitle={mobileToolActionSheet.subtitle}
+          actions={mobileToolActionSheet.actions}
+          onClose={()=>setMobileToolActionSheet(null)}
+        />
+      )}
       <AdminToastBanner message={adminToast} />
       {/* nav */}
       <div style={isMobile
@@ -16544,10 +16548,28 @@ function AdminPanelInner({user}){
               .filter(Boolean)
               .slice(0, 2),
           }));
+          const sectionSummary = sectionRows.reduce((summary,row)=>({
+            groups: summary.groups + row.groupCount,
+            pending: summary.pending + row.pendingCount,
+            loose: summary.loose + row.standaloneCount,
+          }), { groups:0, pending:0, loose:0 });
           return (
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:isMobile?"14px 14px 12px":"16px 18px",marginBottom:24}}>
               <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>Sections</div>
               <div style={{fontSize:14,color:G.textM,marginBottom:10,lineHeight:1.6}}>Review every institute at once, then open the one that needs timetable, rename, or repair work.</div>
+              {isMobile&&(
+                <div style={{marginBottom:12}}>
+                  <AdminMobileMetricGrid
+                    columns={2}
+                    items={[
+                      { label:"Institutes", value:sectionRows.length },
+                      { label:"Groups", value:sectionSummary.groups },
+                      { label:"Pending", value:sectionSummary.pending, color:sectionSummary.pending ? G.amber : G.textL },
+                      { label:"Loose", value:sectionSummary.loose },
+                    ]}
+                  />
+                </div>
+              )}
               {manageSearchInput(manageSectionSearch,setManageSectionSearch,"Search institutes for section setup")}
               {renderWorkspaceTable({
                 columns:[
@@ -16671,6 +16693,12 @@ function AdminPanelInner({user}){
               groupCount,
             };
           });
+          const instituteSummary = visibleInstitutes.reduce((summary,row)=>({
+            teachers: summary.teachers + row.teacherCount,
+            classes: summary.classes + row.classCount,
+            sections: summary.sections + row.sectionCount,
+            groups: summary.groups + row.groupCount,
+          }), { teachers:0, classes:0, sections:0, groups:0 });
           return (
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:24}}>
               <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{manageScopeInstitute ? manageScopeInstitute : "Institutes"}</div>
@@ -16679,6 +16707,19 @@ function AdminPanelInner({user}){
                   ? "Rename this institute, open its sections, or jump straight to the connected teachers."
                   : "One line per institute, with teachers, classes, sections, and the next action visible immediately."}
               </div>
+              {isMobile&&(
+                <div style={{marginBottom:12}}>
+                  <AdminMobileMetricGrid
+                    columns={2}
+                    items={[
+                      { label:"Institutes", value:visibleInstitutes.length },
+                      { label:"Teachers", value:instituteSummary.teachers },
+                      { label:"Classes", value:instituteSummary.classes },
+                      { label:"Groups", value:instituteSummary.groups },
+                    ]}
+                  />
+                </div>
+              )}
               {!manageScopeInstitute&&manageSearchInput(manageInstituteFilter,setManageInstituteFilter,"Search institutes by name")}
               {renderWorkspaceTable({
                 columns:[
@@ -16751,7 +16792,25 @@ function AdminPanelInner({user}){
                           </button>
                           <button type="button" onClick={()=>openManageTab("sections",{ detailInstitute: row.inst })} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("blue"),minHeight:40}}>Sections</button>
                           <button type="button" onClick={()=>{setRenamingInst(row.inst);setRenameInstVal(row.inst);}} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>Rename</button>
-                          <button type="button" onClick={()=>handleDeleteInstitute(row.inst)} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("danger"),minHeight:40}}>Delete</button>
+                          <button
+                            type="button"
+                            onClick={()=>setMobileToolActionSheet({
+                              title: row.inst,
+                              subtitle: "Institute actions",
+                              actions: [
+                                {
+                                  key: "delete",
+                                  label: "Delete or migrate institute",
+                                  icon: IconTrash,
+                                  tone: "danger",
+                                  onClick: () => handleDeleteInstitute(row.inst),
+                                },
+                              ],
+                            })}
+                            className="admin-mobile-touch"
+                            style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>
+                            More
+                          </button>
                         </div>
                       </>
                     )}
@@ -16881,6 +16940,19 @@ function AdminPanelInner({user}){
                   Admins ({adminList.length})
                 </div>
                 <div style={{fontSize:14,color:G.textM,marginBottom:10}}>Every admin has an explicit type: {adminOnlyCount} admin only · {adminTeacherCount} admin + teacher.</div>
+                {isMobile&&(
+                  <div style={{marginBottom:12}}>
+                    <AdminMobileMetricGrid
+                      columns={2}
+                      items={[
+                        { label:"Admins", value:adminList.length },
+                        { label:"Matching", value:adminRows.length },
+                        { label:"Admin only", value:adminOnlyCount },
+                        { label:"Admin + teacher", value:adminTeacherCount },
+                      ]}
+                    />
+                  </div>
+                )}
                 {manageSearchInput(manageAdminSearch,setManageAdminSearch,"Search admins by name, email, or institute")}
                 {adminList.length===0
                   ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No admins yet. Generate an invite link above.</div>
@@ -16975,7 +17047,25 @@ function AdminPanelInner({user}){
                                 setRenameVal(nextName);
                               }} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>Rename</button>
                               {!row.isMe ? (
-                                <button type="button" onClick={()=>handleRemoveAdmin(row.teacher.uid)} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("danger"),minHeight:40}}>Remove</button>
+                                <button
+                                  type="button"
+                                  onClick={()=>setMobileToolActionSheet({
+                                    title: row.name,
+                                    subtitle: row.email,
+                                    actions: [
+                                      {
+                                        key: "remove_admin",
+                                        label: "Remove admin access",
+                                        icon: IconTrash,
+                                        tone: "danger",
+                                        onClick: () => handleRemoveAdmin(row.teacher.uid),
+                                      },
+                                    ],
+                                  })}
+                                  className="admin-mobile-touch"
+                                  style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>
+                                  More
+                                </button>
                               ) : (
                                 <span style={{fontSize:12.5,color:G.textL,fontWeight:800,alignSelf:"center",textAlign:"center"}}>Current account</span>
                               )}
