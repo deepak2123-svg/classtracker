@@ -101,6 +101,16 @@ import {
 import { LedgrReportOptionsModal } from "./admin/reports/LedgrReportOptionsModal.jsx";
 import { downloadTeacherStatusShareImage } from "./admin/reports/teacherStatusShareImage.js";
 import { buildTeacherEntryStatusItem, sortTeacherStatusForShare } from "./admin/reports/teacherStatusUtils.js";
+import {
+  AdminMobileBottomNav,
+  AdminMobileCard,
+  AdminMobileMetricGrid,
+  AdminMobileMotionStyles,
+  AdminMobileToolGrid,
+  AdminMobileTopBar,
+  adminMobileContentStyle,
+  adminMobileShellStyle,
+} from "./admin/mobile/MobileAdminShell.jsx";
 import { CopyGroupToInstitutesModal, DurStepper, InstTypePicker } from "./admin/sections/InstituteGroupModals.jsx";
 import { LegacySectionRepairModal, SectionQuickRenameModal, SectionRenameReviewModal } from "./admin/sections/SectionAdminModals.jsx";
 import {
@@ -5425,7 +5435,7 @@ function AdminPanelInner({user}){
     return { start:`${today.slice(0,7)}-01`, end:today };
   });
   const [mobileStep,  setMobileStep]  = useState(0);
-  const [mobileSurface, setMobileSurface] = useState("workspace"); // workspace | profile | centreSummary
+  const [mobileSurface, setMobileSurface] = useState("home"); // home | workspace | centreSummary | tools | profile
   const [adminV5MobilePane, setAdminV5MobilePane] = useState("institutes"); // institutes | classes | timeline
   const [adminV5TeacherUid, setAdminV5TeacherUid] = useState("");
   const [adminV5ClassKey, setAdminV5ClassKey] = useState("");
@@ -5924,10 +5934,14 @@ function AdminPanelInner({user}){
       setView(restoredNavState.view ?? "main");
       setMobileSurface(
         restoredNavState.mobileSurface === "profile"
-          ? "profile"
-          : restoredNavState.mobileSurface === "centreSummary"
-            ? "centreSummary"
-            : "workspace"
+          ? "tools"
+          : restoredNavState.mobileSurface === "tools"
+            ? "tools"
+            : restoredNavState.mobileSurface === "centreSummary"
+              ? "centreSummary"
+              : restoredNavState.mobileSurface === "home"
+                ? "home"
+                : "workspace"
       );
       setMobileStep(typeof restoredNavState.mobileStep === "number" ? restoredNavState.mobileStep : 0);
       setInstDetailView(restoredNavState.instDetailView ?? null);
@@ -10585,13 +10599,31 @@ function AdminPanelInner({user}){
     warmInstitute(inst);
   };
 
+  const openMobileHome = React.useCallback(() => {
+    setProfileOpen(false);
+    setInstituteGlanceOpen(false);
+    setTelegramDashboardOpen(false);
+    setView("main");
+    setMobileSurface("home");
+  }, []);
+
   const openMobileProfile = () => {
     setProfileOpen(false);
-    setMobileSurface("profile");
+    setView("main");
+    setMobileSurface("tools");
   };
+
+  const openMobileTools = React.useCallback(() => {
+    setProfileOpen(false);
+    setInstituteGlanceOpen(false);
+    setTelegramDashboardOpen(false);
+    setView("main");
+    setMobileSurface("tools");
+  }, []);
 
   const openMobileInstituteHome = () => {
     setProfileOpen(false);
+    setView("main");
     setMobileSurface("workspace");
     setSelInst(null);
     clearDrilldown();
@@ -10614,7 +10646,7 @@ function AdminPanelInner({user}){
 
   const openMobileManageArea = React.useCallback((target) => {
     setProfileOpen(false);
-    setMobileSurface("workspace");
+    setMobileSurface("tools");
     setTelegramDashboardOpen(false);
     if(target === "teachers"){
       setManageTab("teachers");
@@ -15403,44 +15435,298 @@ function AdminPanelInner({user}){
         }} />
       </div>
     );
-    const renderMobileDashboard = () => (
-      <div style={{minHeight:"100svh",background:shellBg,fontFamily:G.sans,display:"flex",flexDirection:"column"}}>
-        {renderOverlays()}
-        <div style={{background:"#101B34",color:"#FFFFFF",padding:"12px 12px 10px",position:"sticky",top:0,zIndex:80}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-              <div style={{width:38,height:38,borderRadius:8,background:G.blueV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,fontWeight:900,fontFamily:G.display}}>L</div>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:19,fontWeight:900,fontFamily:G.display,lineHeight:1}}>Ledgr Admin</div>
-                <div style={{fontSize:10.5,fontWeight:800,fontFamily:G.mono,letterSpacing:1.1,textTransform:"uppercase",color:"rgba(255,255,255,0.55)"}}>V5 dashboard</div>
+    const renderMobileDashboard = () => {
+      const mobileRootTab = mobileSurface === "centreSummary"
+        ? "report"
+        : mobileSurface === "tools" || mobileSurface === "profile"
+          ? "tools"
+          : mobileSurface === "workspace"
+            ? "workspace"
+            : "home";
+      const openMobileWorkspaceRoot = (pane = adminV5MobilePane || "institutes") => {
+        setProfileOpen(false);
+        setInstituteGlanceOpen(false);
+        setTelegramDashboardOpen(false);
+        setMobileSurface("workspace");
+        setAdminV5MobilePane(pane);
+      };
+      const mobileBottomNavItems = [
+        { key:"home", label:"Home", icon:IconChartBar, onClick:openMobileHome },
+        { key:"workspace", label:"Workspace", icon:IconBuilding, onClick:()=>openMobileWorkspaceRoot() },
+        { key:"report", label:"Report", icon:IconFileText, onClick:openDailyLedgrReport },
+        { key:"tools", label:"Tools", icon:IconSettings, onClick:openMobileTools },
+      ];
+      const renderRootBottomNav = () => (
+        <AdminMobileBottomNav items={mobileBottomNavItems} activeKey={mobileRootTab} reduceEffects={reduceEffects} />
+      );
+      const attentionRows = instituteReadyRows
+        .filter(item => item.activeCount > 0 && item.status?.pct < 70)
+        .sort((a,b)=>(a.status?.pct || 0) - (b.status?.pct || 0))
+        .slice(0, 4);
+      const totalPending = adminV5Model.institutes.reduce((sum, item) => {
+        if(!item || item.activeCount === 0) return sum;
+        return sum + Math.max(0, (item.activeCount || 0) - (item.loggedCount || 0));
+      }, 0);
+      const mobileHeaderAction = { icon:IconLogout, onClick:logout, title:"Sign out" };
+      const compactActionButton = (tone = "light") => ({
+        minHeight:38,
+        borderRadius:12,
+        border:tone === "dark" ? "1px solid transparent" : `1px solid ${G.border}`,
+        background:tone === "dark" ? G.navy : tone === "blue" ? "#EEF4FF" : "#FFFFFF",
+        color:tone === "dark" ? "#FFFFFF" : tone === "blue" ? G.blue : G.text,
+        padding:"0 12px",
+        display:"inline-flex",
+        alignItems:"center",
+        justifyContent:"center",
+        gap:7,
+        fontSize:12.5,
+        fontWeight:900,
+        fontFamily:G.sans,
+        cursor:"pointer",
+        boxShadow:"none",
+      });
+      const renderHomeTab = () => (
+        <>
+          <AdminMobileTopBar
+            title="Today"
+            subtitle={`${currentSession()} session`}
+            action={mobileHeaderAction}
+          />
+          <div style={adminMobileContentStyle}>
+            <AdminMobileCard style={{marginBottom:10,background:"linear-gradient(135deg,#FFFFFF 0%,#EEF4FF 100%)"}}>
+              <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Admin dashboard</div>
+              <div style={{fontSize:28,fontWeight:950,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>
+                {adminV5DailySummariesLoading ? "Syncing today" : `${summary.loggedToday || 0}/${summary.activeTeachers || 0} updated`}
               </div>
-            </div>
-            <button type="button" onClick={logout} style={{...actionButton("light"),height:36,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",color:"#FFFFFF",boxShadow:"none"}}>
-              <AppIcon icon={IconLogout} size={15} color="#FFFFFF" />
-            </button>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:7,marginTop:12}}>
-            {mobilePanes.map(item=>{
-              const active = adminV5MobilePane === item.key;
-              return (
-                <button key={item.key} type="button" onClick={()=>setAdminV5MobilePane(item.key)} style={{height:44,borderRadius:8,border:"1px solid rgba(255,255,255,0.12)",background:active ? "#FFFFFF" : "rgba(255,255,255,0.06)",color:active ? G.navy : "#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:11.5,fontWeight:900,fontFamily:G.sans,cursor:"pointer"}}>
-                  <AppIcon icon={item.icon} size={15} color={active ? G.navy : "#FFFFFF"} />
-                  {item.label}
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:9}}>
+                {adminV5Model.institutes.length} institutes · {totalPending} pending · {overviewLoadedTeacherCount} records loaded
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+                <button type="button" className="admin-mobile-touch" onClick={()=>openMobileWorkspaceRoot("institutes")} style={compactActionButton("dark")}>
+                  <AppIcon icon={IconBuilding} size={15} color="#FFFFFF" />
+                  Workspace
                 </button>
-              );
-            })}
+                <button type="button" className="admin-mobile-touch" onClick={openDailyLedgrReport} style={compactActionButton("blue")}>
+                  <AppIcon icon={IconFileText} size={15} color={G.blue} />
+                  Report
+                </button>
+              </div>
+            </AdminMobileCard>
+
+            <AdminMobileMetricGrid
+              items={[
+                { label:"Institutes", value:adminV5Model.institutes.length },
+                { label:"Teachers", value:summary.activeTeachers || teachers.filter(isTeachingSurfaceAccount).length },
+                { label:"Updated", value:summary.loggedToday || 0 },
+                { label:"Pending", value:totalPending },
+              ]}
+            />
+
+            <AdminMobileCard style={{marginTop:10}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:9}}>
+                <div>
+                  <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Needs follow-up</div>
+                  <div style={{fontSize:19,fontWeight:950,color:G.text,fontFamily:G.display,marginTop:4}}>Low update centres</div>
+                </div>
+                <span style={{background:"#FFF7ED",border:"1px solid #FED7AA",color:"#B45309",borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                  {attentionRows.length || "None"}
+                </span>
+              </div>
+              <div style={{display:"grid",gap:8}}>
+                {attentionRows.length ? attentionRows.map(row => (
+                  <button
+                    key={row.institute}
+                    type="button"
+                    className="admin-mobile-touch admin-mobile-card-press"
+                    onClick={()=>{
+                      setMobileSurface("workspace");
+                      selectAdminV5Institute(row.institute, "classes");
+                    }}
+                    style={{
+                      width:"100%",
+                      border:`1px solid ${G.border}`,
+                      borderRadius:13,
+                      background:"#FFFFFF",
+                      padding:"10px 11px",
+                      textAlign:"left",
+                      display:"flex",
+                      alignItems:"center",
+                      gap:10,
+                      fontFamily:G.sans,
+                      cursor:"pointer",
+                    }}>
+                    <span style={{width:8,height:8,borderRadius:999,background:row.status?.accent || G.amber,flexShrink:0}} />
+                    <span style={{minWidth:0,flex:1}}>
+                      <span style={{display:"block",fontSize:13.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.institute}</span>
+                      <span style={{display:"block",fontSize:11.5,color:G.textM,marginTop:3}}>{row.loggedCount}/{row.activeCount} updated today</span>
+                    </span>
+                    <span style={{background:"#FFF7ED",color:"#B45309",borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                      {row.status?.pct || 0}%
+                    </span>
+                  </button>
+                )) : (
+                  <div style={{border:`1px dashed ${G.borderM}`,borderRadius:13,padding:"14px",textAlign:"center",fontSize:12.5,color:G.textM,lineHeight:1.5}}>
+                    No low-update centre is loaded right now.
+                  </div>
+                )}
+              </div>
+            </AdminMobileCard>
           </div>
-          <div style={{margin:"10px -12px -4px"}}>
-            {renderRail(true, false)}
+        </>
+      );
+      const renderWorkspaceTab = () => (
+        <>
+          <AdminMobileTopBar
+            title="Workspace"
+            subtitle={selectedInstituteName || "Institutes, classes, teachers"}
+            action={mobileHeaderAction}
+          />
+          <div style={adminMobileContentStyle}>
+            <AdminMobileCard style={{padding:9,marginBottom:10,position:"sticky",top:67,zIndex:20,backdropFilter:"blur(10px)"}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:5}}>
+                {mobilePanes.map(item=>{
+                  const active = adminV5MobilePane === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className="admin-mobile-touch"
+                      onClick={()=>openMobileWorkspaceRoot(item.key)}
+                      style={{
+                        minHeight:40,
+                        borderRadius:11,
+                        border:"none",
+                        background:active ? G.navy : "#F8FAFC",
+                        color:active ? "#FFFFFF" : G.textM,
+                        display:"flex",
+                        alignItems:"center",
+                        justifyContent:"center",
+                        gap:5,
+                        fontSize:11.5,
+                        fontWeight:900,
+                        fontFamily:G.sans,
+                        cursor:"pointer",
+                      }}>
+                      <AppIcon icon={item.icon} size={14} color={active ? "#FFFFFF" : G.textL} />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </AdminMobileCard>
+            {adminV5MobilePane === "institutes"&&renderInstituteDrawer()}
+            {adminV5MobilePane === "classes"&&renderClassPanel()}
+            {adminV5MobilePane === "timeline"&&renderTimelinePanel()}
           </div>
+        </>
+      );
+      const renderReportTab = () => (
+        <>
+          <AdminMobileTopBar
+            title="Ledgr Report"
+            subtitle="Exports and schedules"
+            action={mobileHeaderAction}
+          />
+          <div style={adminMobileContentStyle}>
+            <AdminMobileCard style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>All institutes</div>
+              <div style={{fontSize:24,fontWeight:950,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:6}}>Daily report</div>
+              <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5,marginTop:7}}>
+                Submissions, pending teachers, sections, hours, and export actions.
+              </div>
+              {renderInstituteGlanceProgressBlock(true)}
+              {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:10}}>
+                <button type="button" className="admin-mobile-touch" onClick={()=>openInstituteGlanceOptions("export", "report")} disabled={!!instituteGlanceAnyExportBusy || !!ledgrReportScheduleSaving} style={{...compactActionButton("blue"),opacity:instituteGlanceAnyExportBusy || ledgrReportScheduleSaving ? 0.65 : 1}}>
+                  <AppIcon icon={IconDownload} size={15} color={G.blue} />
+                  Export
+                </button>
+                <button type="button" className="admin-mobile-touch" onClick={()=>openInstituteGlanceOptions("schedule", "report")} disabled={!!ledgrReportScheduleSaving} style={{...compactActionButton("light"),opacity:ledgrReportScheduleSaving ? 0.65 : 1}}>
+                  <AppIcon icon={IconCalendar} size={15} color={G.textS} />
+                  Schedule
+                </button>
+                <button type="button" className="admin-mobile-touch" onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)} style={compactActionButton("light")}>
+                  <AppIcon icon={IconRefresh} size={15} color={G.textS} />
+                  Refresh
+                </button>
+              </div>
+              {!!instituteGlanceReport.error&&(
+                <div style={{marginTop:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:14,padding:"12px 13px"}}>
+                  <div style={{fontSize:12.5,fontWeight:850,color:"#9A3412"}}>Could not load the report</div>
+                  <div style={{fontSize:12,color:"#9A3412",lineHeight:1.5,marginTop:5}}>{instituteGlanceReport.error}</div>
+                </div>
+              )}
+            </AdminMobileCard>
+            {instituteGlanceReport.loading && !instituteGlanceReport.rows.length
+              ? renderInstituteGlanceLoadingDeck(true)
+              : renderSharedInstituteGlanceList({ interactive:true })}
+          </div>
+        </>
+      );
+      const renderToolsTab = () => {
+        const teacherCount = teachers.filter(isTeachingSurfaceAccount).length;
+        const adminCount = teachers.filter(t=>roles[t.uid]==="admin").length;
+        const toolGridItems = [
+          { key:"teachers", title:"Teachers", subtitle:"Profiles, classes, access", icon:IconUsersGroup, count:teacherCount, onClick:()=>openMobileManageArea("teachers") },
+          { key:"institutes", title:"Institutes", subtitle:"Centres and structure", icon:IconBuilding, count:institutes.length, onClick:()=>openMobileManageArea("institutes") },
+          { key:"subjects", title:"Syllabus", subtitle:"Chapters and topics", icon:IconBooks, count:syllabusTemplates.length, onClick:()=>openMobileManageArea("subjects") },
+          { key:"sections", title:"Sections", subtitle:"Groups and timetables", icon:IconSchool, count:institutes.length, onClick:()=>openMobileManageArea("sections") },
+          { key:"admins", title:"Admins", subtitle:"Roles and permissions", icon:IconSettings, count:adminCount, onClick:()=>openMobileManageArea("admins") },
+          { key:"report", title:"Ledgr Report", subtitle:"Export and schedule", icon:IconFileText, count:instituteGlanceReport.ready ? "Ready" : "Open", onClick:openDailyLedgrReport },
+          { key:"messenger", title:"Messenger", subtitle:"Routes and daily batch", icon:IconSend, count:ledgrTelegramLoading ? "..." : (ledgrTelegramRecipientStats.active || "setup"), onClick:()=>openMobileManageArea("messenger") },
+        ];
+        return (
+          <>
+            <AdminMobileTopBar
+              title="Tools"
+              subtitle="Control Centre"
+              action={mobileHeaderAction}
+            />
+            <div style={adminMobileContentStyle}>
+              <AdminMobileCard style={{marginBottom:10}}>
+                <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Control Centre</div>
+                <div style={{fontSize:24,fontWeight:950,color:G.text,fontFamily:G.display,lineHeight:1.05,marginTop:6}}>Admin tools</div>
+                <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5,marginTop:7}}>
+                  Open one focused tool page at a time. Back returns here.
+                </div>
+              </AdminMobileCard>
+              <AdminMobileToolGrid items={toolGridItems} />
+              <AdminMobileCard style={{marginTop:10}}>
+                <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Utilities</div>
+                <div style={{display:"grid",gap:8,marginTop:10}}>
+                  <button type="button" className="admin-mobile-touch" onClick={openFeedbackInbox} style={{...compactActionButton("light"),width:"100%",justifyContent:"space-between"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                      <AppIcon icon={IconMessageCircle} size={15} color={G.textS} />
+                      Teacher Feedback
+                    </span>
+                    {feedbackUnreadCount>0&&<span style={{fontSize:11,fontWeight:900,color:G.blue,fontFamily:G.mono}}>{feedbackUnreadCount}</span>}
+                  </button>
+                  <button type="button" className="admin-mobile-touch" onClick={()=>setBinView(true)} style={{...compactActionButton("light"),width:"100%",justifyContent:"space-between"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                      <AppIcon icon={IconTrash} size={15} color={G.textS} />
+                      Recycle Bin
+                    </span>
+                    {adminBin.length>0&&<span style={{fontSize:11,fontWeight:900,color:G.red,fontFamily:G.mono}}>{adminBin.length}</span>}
+                  </button>
+                </div>
+              </AdminMobileCard>
+            </div>
+          </>
+        );
+      };
+
+      return (
+        <div style={adminMobileShellStyle}>
+          <AdminMobileMotionStyles />
+          {renderOverlays()}
+          {mobileRootTab === "home"&&renderHomeTab()}
+          {mobileRootTab === "workspace"&&renderWorkspaceTab()}
+          {mobileRootTab === "report"&&renderReportTab()}
+          {mobileRootTab === "tools"&&renderToolsTab()}
+          {renderRootBottomNav()}
         </div>
-        <div style={{padding:"12px",flex:1,minHeight:0}}>
-          {adminV5MobilePane === "institutes"&&renderInstituteDrawer()}
-          {adminV5MobilePane === "classes"&&renderClassPanel()}
-          {adminV5MobilePane === "timeline"&&renderTimelinePanel()}
-        </div>
-      </div>
-    );
+      );
+    };
 
     if(adminV5StackedLayout) return renderMobileDashboard();
 
@@ -15513,16 +15799,6 @@ function AdminPanelInner({user}){
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
       { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
     ];
-    const mobileManageTabItems = [
-      ...manageTabItems,
-      {
-        key:"messenger",
-        label:"Messenger",
-        icon:IconSend,
-        count:ledgrTelegramLoading ? "..." : (ledgrTelegramRecipientStats.active || "setup"),
-        hint:"Telegram routing",
-      },
-    ];
     const manageTitle = manageTabItems.find(item=>item.key===manageTab)?.label
       || (manageTab === "report" ? "Ledgr Report" : manageTab === "messenger" ? "Messenger" : "Control Centre");
     const getSyllabusAffectedSummary = (scope,subjectOverride) => {
@@ -15556,7 +15832,7 @@ function AdminPanelInner({user}){
         return;
       }
       setView("main");
-      setMobileSurface("profile");
+      setMobileSurface("tools");
       setProfileOpen(false);
     };
     const mobileManageOuterPad = "10px 12px calc(92px + env(safe-area-inset-bottom, 0px))";
@@ -16075,47 +16351,6 @@ function AdminPanelInner({user}){
               Manage this institute's {manageTab==="subjects"?"syllabus":manageTab}.
             </div>
           )}
-        </div>}
-
-        {/* Tab switcher */}
-        {isMobile&&<div style={{position:"sticky",top:61,zIndex:65,margin:"-10px -12px 14px",padding:"9px 12px 10px",background:"rgba(245,247,250,0.96)",borderBottom:`1px solid ${G.border}`,backdropFilter:"blur(12px)",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
-          <div style={{display:"flex",gap:8,width:"max-content",minWidth:"100%"}}>
-          {mobileManageTabItems.map(item=>(
-            <button key={item.key} onClick={()=>openMobileManageArea(item.key)}
-              className={isMobile?"admin-mobile-touch":undefined}
-              style={isMobile
-                ? {
-                    minHeight:44,
-                    background:manageTab===item.key ? G.navy : "#FFFFFF",
-                    border:`1px solid ${manageTab===item.key ? G.navy : G.border}`,
-                    borderRadius:13,
-                    padding:"0 11px",
-                    cursor:"pointer",
-                    boxShadow:reduceEffects ? "none" : G.shadowSm,
-                    WebkitTapHighlightColor:"transparent",
-                    display:"inline-flex",
-                    alignItems:"center",
-                    gap:7,
-                    whiteSpace:"nowrap",
-                  }
-                : {
-                    flex:1,padding:"10px 0",borderRadius:9,border:"none",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:G.sans,transition:"all 0.15s",
-                    background:manageTab===item.key?G.navy:"none",color:manageTab===item.key?"#fff":G.textM
-                  }}>
-              {isMobile ? (
-                <>
-                  <AppIcon icon={item.icon} size={16} color={manageTab===item.key ? "#FFFFFF" : G.blue} />
-                  <span style={{fontSize:12.5,fontWeight:800,color:manageTab===item.key ? "#FFFFFF" : G.text,fontFamily:G.sans}}>{item.label}</span>
-                  <span style={{minWidth:21,height:21,borderRadius:999,background:manageTab===item.key?"rgba(255,255,255,0.16)":G.bg,border:`1px solid ${manageTab===item.key?"rgba(255,255,255,0.16)":G.border}`,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 5px",fontSize:9.5,fontFamily:G.mono,fontWeight:800,color:manageTab===item.key?"#FFFFFF":G.textL}}>
-                    {item.count}
-                  </span>
-                </>
-              ) : (
-                item.label
-              )}
-            </button>
-          ))}
-          </div>
         </div>}
 
         {manageTab==="report"&&renderDesktopCentreSummaryPage({ embedded:true })}
