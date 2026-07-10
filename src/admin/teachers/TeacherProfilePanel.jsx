@@ -246,12 +246,40 @@ function SectionCard({ section, selected, onClick, color }) {
   );
 }
 
-function EntryLogRow({ entry }) {
+function EntryLogRow({ entry, compact = false }) {
   const status = statusLabel(entry.status);
   const tag = tagLabel(entry.tag);
   const statusTone = entryStatusTone(entry.status);
   const tagTone = entryTagTone(entry.tag);
   const timeLabel = formatExportPdfTime(entry.timeStart, entry.timeEnd) || "Untimed";
+  if (compact) {
+    return (
+      <div className="teacher-profile-entry-compact">
+        <div className="teacher-profile-entry-compact-top">
+          <div className="teacher-profile-entry-time">
+            <span style={{width: 7, height: 7, borderRadius: 999, background: statusTone.dot || subjectColor(entry.subject), flexShrink: 0}} />
+            <span>{timeLabel}</span>
+          </div>
+          <div className="teacher-profile-entry-duration">
+            {entry.minutes ? formatDurationShort(entry.minutes) : "Untimed"}
+          </div>
+        </div>
+        <div className="teacher-profile-entry-title">{entry.title}</div>
+        <div style={{display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 5}}>
+          <span style={{fontSize: 11.5, color: G.textM, lineHeight: 1.35}}>
+            {entry.sectionLabel} - {entry.subject}
+          </span>
+          {status ? <InfoChip label={status} color={statusTone.text} /> : null}
+          {tag ? <InfoChip label={tag} color={tagTone.text} /> : null}
+        </div>
+        {entry.body ? (
+          <div className="teacher-profile-entry-body teacher-profile-entry-body-compact">
+            {entry.body}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
   return (
     <div className="teacher-profile-entry-row">
       <div className="teacher-profile-entry-time">
@@ -392,6 +420,21 @@ export function TeacherProfilePanel({
         .teacher-profile-entry-row:last-child {
           border-bottom: none;
         }
+        .teacher-profile-entry-compact {
+          padding: 10px 10px;
+          border-bottom: 1px solid #EEF2F7;
+          min-width: 0;
+        }
+        .teacher-profile-entry-compact:last-child {
+          border-bottom: none;
+        }
+        .teacher-profile-entry-compact-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 6px;
+        }
         .teacher-profile-entry-time {
           display: inline-flex;
           align-items: center;
@@ -416,6 +459,12 @@ export function TeacherProfilePanel({
           line-height: 1.38;
           margin-top: 5px;
           white-space: pre-wrap;
+        }
+        .teacher-profile-entry-body-compact {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
         .teacher-profile-entry-duration {
           color: ${G.text};
@@ -661,7 +710,7 @@ export function TeacherProfilePanel({
                       {group.entries.length} {group.entries.length === 1 ? "entry" : "entries"} - {formatDurationShort(group.minutes || 0)}
                     </div>
                   </div>
-                  {group.entries.map(entry => <EntryLogRow key={entry.id} entry={entry} />)}
+                  {group.entries.map(entry => <EntryLogRow key={entry.id} entry={entry} compact={isMobile} />)}
                 </div>
               ))}
               {activeTimeline.hasMore ? (

@@ -3917,6 +3917,18 @@ function SyllabusBuilder({
     cursor:"default",
     fontWeight:800,
   });
+  const renderMobileBuilderActionBar = () => !isMobile ? null : (
+    <div style={{position:"sticky",bottom:"calc(92px + env(safe-area-inset-bottom, 0px))",zIndex:40,marginTop:14}}>
+      <div style={{background:"rgba(255,255,255,0.97)",border:`1px solid ${G.border}`,borderRadius:16,padding:9,boxShadow:"0 18px 36px rgba(15,23,42,0.14)",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,backdropFilter:"blur(12px)"}}>
+        <button onClick={save} disabled={busy} className="admin-mobile-touch" style={{...pill("#FFFFFF",G.navy,G.borderM),minHeight:42,justifyContent:"center",fontWeight:900,opacity:busy?0.68:1}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconDeviceFloppy} size={15}/>{busy?"Saving":"Save"}</span>
+        </button>
+        <button onClick={publish} disabled={busy||!draft.chapters.length} className="admin-mobile-touch" style={{...pill(draft.chapters.length?"#16845B":G.bg,"#FFFFFF",draft.chapters.length?"#16845B":G.border),minHeight:42,justifyContent:"center",fontWeight:900,opacity:busy||!draft.chapters.length?0.65:1}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconCheck} size={15}/> Publish</span>
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",marginBottom:24}}>
@@ -4383,7 +4395,7 @@ function SyllabusBuilder({
                   <div style={{padding:"16px 18px",background:"#FBFDFF",display:"grid",gap:14}}>
                     {activeInspectorTab==="topics"&&(
                       <>
-                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}}>
+                        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(0,1fr))",gap:10}}>
                           <div style={{...cardStyle,padding:"12px"}}>
                             <div style={labelStyle}>Topics</div>
                             <div style={{fontSize:22,fontWeight:850,color:G.text}}>{selectedChapterStatus?.topicCount || 0}</div>
@@ -4462,7 +4474,7 @@ function SyllabusBuilder({
                         <div style={{...cardStyle,padding:"12px 14px"}}>
                           <div style={{fontSize:14,fontWeight:850,color:G.text}}>Template details</div>
                           <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Keep the metadata close to the chapter editor so the page does not sprawl.</div>
-                          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginTop:12}}>
+                          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(0,1fr))",gap:10,marginTop:12}}>
                             <div>
                               <div style={labelStyle}>Academic year</div>
                               <input value={draft.academicYear} onChange={event=>updateDraft({academicYear:event.target.value})} placeholder="2026-27" style={fieldStyle}/>
@@ -4511,7 +4523,7 @@ function SyllabusBuilder({
                         ) : (
                           <div style={{...cardStyle,padding:"12px 14px"}}>
                             <div style={{fontSize:14,fontWeight:850,color:G.text}}>Reach</div>
-                            <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginTop:10}}>
+                            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(0,1fr))",gap:10,marginTop:10}}>
                               <div style={{...softCardStyle,padding:"12px"}}><div style={labelStyle}>Classes</div><div style={{fontSize:22,fontWeight:850,color:G.text}}>{affectedSummary.classCount}</div></div>
                               <div style={{...softCardStyle,padding:"12px"}}><div style={labelStyle}>Institutes</div><div style={{fontSize:22,fontWeight:850,color:G.text}}>{affectedSummary.instituteCount}</div></div>
                               <div style={{...softCardStyle,padding:"12px"}}><div style={labelStyle}>Teachers</div><div style={{fontSize:22,fontWeight:850,color:G.text}}>{affectedSummary.teacherCount}</div></div>
@@ -4595,6 +4607,8 @@ function SyllabusBuilder({
             </div>
           </div>
         )}
+
+        {scopeReady&&renderMobileBuilderActionBar()}
       </div>
     </div>
   );
@@ -5069,6 +5083,7 @@ function ClassBoundSyllabusFlow({
   const [selectedInstitutes,setSelectedInstitutes] = useState(()=>defaultInstitute?[defaultInstitute]:[]);
   const [selectedSections,setSelectedSections] = useState({});
   const [selectedSubject,setSelectedSubject] = useState(null);
+  const [mobileSyllabusStep,setMobileSyllabusStep] = useState("institutes");
   const [instituteSearch,setInstituteSearch] = useState("");
   const [expandedSectionGroups,setExpandedSectionGroups] = useState({});
   const visibleInstitutes=institutes.filter(institute=>
@@ -5176,6 +5191,21 @@ function ClassBoundSyllabusFlow({
   },[selectedInstitutes,onScopeChange]);
 
   useEffect(()=>{
+    if(!isMobile) return;
+    if(mobileSyllabusStep==="sections" && !selectedInstitutes.length){
+      setMobileSyllabusStep("institutes");
+      return;
+    }
+    if(mobileSyllabusStep==="subject" && !selectedPairs.length){
+      setMobileSyllabusStep(selectedInstitutes.length ? "sections" : "institutes");
+      return;
+    }
+    if(mobileSyllabusStep==="build" && (!selectedSubject || !selectedPairs.length)){
+      setMobileSyllabusStep(selectedPairs.length ? "subject" : selectedInstitutes.length ? "sections" : "institutes");
+    }
+  },[isMobile,mobileSyllabusStep,selectedInstitutes.length,selectedPairs.length,selectedSubject]);
+
+  useEffect(()=>{
     if(!selectedSubject) return;
     const current=availableSubjects.find(item=>item.id===selectedSubject.id);
     if(!current) setSelectedSubject(null);
@@ -5211,6 +5241,134 @@ function ClassBoundSyllabusFlow({
   const toggleSectionGroup=(instituteName,groupId)=>{
     const key=`${instituteName}::${groupId}`;
     setExpandedSectionGroups(current=>({...current,[key]:!current[key]}));
+  };
+  const chooseSubjectForMobile = subject => {
+    setSelectedSubject(subject);
+    if(isMobile) setMobileSyllabusStep("build");
+  };
+  const mobileStepItems = [
+    {
+      key:"institutes",
+      label:"Institutes",
+      count:selectedInstitutes.length,
+      enabled:true,
+    },
+    {
+      key:"sections",
+      label:"Sections",
+      count:selectedSectionsCount,
+      enabled:selectedInstitutes.length > 0,
+    },
+    {
+      key:"subject",
+      label:"Subject",
+      count:selectedSubject ? 1 : 0,
+      enabled:selectedPairs.length > 0,
+    },
+    {
+      key:"build",
+      label:"Build",
+      count:selectedSubject ? "Go" : 0,
+      enabled:!!selectedSubject && selectedPairs.length > 0,
+    },
+  ];
+  const mobileStepIndex = Math.max(0, mobileStepItems.findIndex(item=>item.key===mobileSyllabusStep));
+  const mobileStepCanContinue = mobileSyllabusStep==="institutes"
+    ? selectedInstitutes.length > 0
+    : mobileSyllabusStep==="sections"
+      ? selectedPairs.length > 0
+      : mobileSyllabusStep==="subject"
+        ? !!selectedSubject
+        : false;
+  const goToNextMobileSyllabusStep = () => {
+    if(mobileSyllabusStep==="institutes" && selectedInstitutes.length){
+      setMobileSyllabusStep("sections");
+    } else if(mobileSyllabusStep==="sections" && selectedPairs.length){
+      setMobileSyllabusStep("subject");
+    } else if(mobileSyllabusStep==="subject" && selectedSubject){
+      setMobileSyllabusStep("build");
+    }
+  };
+  const goToPreviousMobileSyllabusStep = () => {
+    if(mobileSyllabusStep==="build") setMobileSyllabusStep("subject");
+    else if(mobileSyllabusStep==="subject") setMobileSyllabusStep("sections");
+    else if(mobileSyllabusStep==="sections") setMobileSyllabusStep("institutes");
+  };
+  const renderMobileSyllabusStepper = () => !isMobile ? null : (
+    <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:15,padding:12,boxShadow:"0 10px 22px rgba(15,23,42,0.04)"}}>
+      <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase"}}>Syllabus setup</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginTop:10}}>
+        {mobileStepItems.map((item,index)=>{
+          const active = item.key===mobileSyllabusStep;
+          const complete = index < mobileStepIndex || item.count > 0;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              disabled={!item.enabled}
+              onClick={()=>item.enabled&&setMobileSyllabusStep(item.key)}
+              className="admin-mobile-touch"
+              style={{
+                minHeight:58,
+                borderRadius:13,
+                border:`1px solid ${active ? G.navy : complete ? "#BFD1F4" : G.border}`,
+                background:active ? G.navy : complete ? "#EEF4FF" : "#F8FAFC",
+                color:active ? "#FFFFFF" : complete ? G.blue : G.textL,
+                padding:"7px 5px",
+                display:"flex",
+                flexDirection:"column",
+                alignItems:"center",
+                justifyContent:"center",
+                gap:4,
+                fontFamily:G.sans,
+                fontSize:10.8,
+                fontWeight:900,
+                opacity:item.enabled ? 1 : 0.48,
+                cursor:item.enabled ? "pointer" : "not-allowed",
+              }}>
+              <span style={{lineHeight:1.05,textAlign:"center"}}>{item.label}</span>
+              <span style={{
+                minWidth:20,
+                height:20,
+                borderRadius:999,
+                display:"inline-flex",
+                alignItems:"center",
+                justifyContent:"center",
+                background:active ? "rgba(255,255,255,0.16)" : "#FFFFFF",
+                border:`1px solid ${active ? "rgba(255,255,255,0.24)" : G.border}`,
+                fontSize:10,
+                fontFamily:G.mono,
+              }}>
+                {item.count || "-"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+  const renderMobileSyllabusFooter = () => {
+    if(!isMobile || mobileSyllabusStep==="build") return null;
+    return (
+    <div style={{position:"sticky",bottom:"calc(92px + env(safe-area-inset-bottom, 0px))",zIndex:35,marginTop:10}}>
+      <div style={{background:"rgba(255,255,255,0.96)",border:`1px solid ${G.border}`,borderRadius:16,padding:9,boxShadow:"0 18px 36px rgba(15,23,42,0.13)",display:"grid",gridTemplateColumns:mobileSyllabusStep==="institutes"?"1fr":"auto 1fr",gap:8,backdropFilter:"blur(12px)"}}>
+        {mobileSyllabusStep!=="institutes"&&(
+          <button type="button" onClick={goToPreviousMobileSyllabusStep} className="admin-mobile-touch" style={{...pill("#FFFFFF",G.textS,G.borderM),minHeight:42,justifyContent:"center",fontWeight:900}}>
+            Back
+          </button>
+        )}
+        {mobileSyllabusStep==="build" ? (
+          <button type="button" onClick={()=>setMobileSyllabusStep("subject")} className="admin-mobile-touch" style={{...pill("#EEF4FF",G.blue,"#BFD1F4"),minHeight:42,justifyContent:"center",fontWeight:900}}>
+            Change subject
+          </button>
+        ) : (
+          <button type="button" disabled={!mobileStepCanContinue} onClick={goToNextMobileSyllabusStep} className="admin-mobile-touch" style={{...pill(mobileStepCanContinue?G.navy:G.bg,"#FFFFFF",mobileStepCanContinue?G.navy:G.border),minHeight:42,justifyContent:"center",fontWeight:900,opacity:mobileStepCanContinue?1:0.62,cursor:mobileStepCanContinue?"pointer":"not-allowed"}}>
+            {mobileSyllabusStep==="institutes" ? "Select sections" : mobileSyllabusStep==="sections" ? "Choose subject" : "Build syllabus"}
+          </button>
+        )}
+      </div>
+    </div>
+    );
   };
   const selectionCard=selected=>({
     width:"100%",
@@ -5298,6 +5456,9 @@ function ClassBoundSyllabusFlow({
         Choose existing classes first, then pick only the sections that should receive the same syllabus.
       </div>
 
+      {renderMobileSyllabusStepper()}
+
+      {(!isMobile || mobileSyllabusStep==="institutes")&&(
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden"}}>
         <div style={{padding:isMobile?"15px":"18px 20px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
           <div>
@@ -5325,7 +5486,9 @@ function ClassBoundSyllabusFlow({
           </div>
         </div>
       </div>
+      )}
 
+      {(!isMobile || mobileSyllabusStep==="sections")&&(
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden",opacity:selectedInstitutes.length?1:0.65}}>
         <div style={{padding:isMobile?"15px":"18px 20px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
           <div>
@@ -5424,7 +5587,9 @@ function ClassBoundSyllabusFlow({
           })}
         </div>
       </div>
+      )}
 
+      {(!isMobile || mobileSyllabusStep==="subject")&&(
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden",opacity:selectedPairs.length?1:0.65}}>
         <div style={{padding:isMobile?"15px":"18px 20px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD"}}>
           <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>3. Select an existing subject</div>
@@ -5455,7 +5620,7 @@ function ClassBoundSyllabusFlow({
                 const published=matching.some(item=>item.currentVersion>0);
                 return (
                   <div key={subject.id} style={{display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2fr) 108px 108px 104px",gap:12,alignItems:"center",padding:isMobile?"12px":"12px 14px",borderTop:`1px solid ${G.border}`,background:selected?"#F8FBFF":"#FFFFFF"}}>
-                    <button onClick={()=>setSelectedSubject(subject)} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:11,cursor:"pointer",textAlign:"left",minWidth:0}}>
+                    <button onClick={()=>chooseSubjectForMobile(subject)} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:11,cursor:"pointer",textAlign:"left",minWidth:0}}>
                       <span style={{width:34,height:34,borderRadius:10,background:selected?G.navy:G.blueL,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <AppIcon icon={IconBooks} size={17} color={selected?"#FFFFFF":G.blue}/>
                       </span>
@@ -5469,7 +5634,7 @@ function ClassBoundSyllabusFlow({
                     {!isMobile&&<div style={{fontSize:13.5,fontWeight:800,color:G.text}}>{subject.teacherCount}</div>}
                     {!isMobile&&<div style={{fontSize:13.5,fontWeight:800,color:G.text}}>{subject.targets.length}</div>}
                     <div style={{display:"flex",justifyContent:"flex-end"}}>
-                      <button onClick={()=>setSelectedSubject(subject)} style={{...pill(selected?G.blue:"#FFFFFF",selected?"#FFFFFF":G.textS,selected?G.blue:G.borderM),padding:"7px 11px",fontSize:12,fontWeight:800,minWidth:82,justifyContent:"center"}}>
+                      <button onClick={()=>chooseSubjectForMobile(subject)} style={{...pill(selected?G.blue:"#FFFFFF",selected?"#FFFFFF":G.textS,selected?G.blue:G.borderM),padding:"7px 11px",fontSize:12,fontWeight:800,minWidth:82,justifyContent:"center"}}>
                         {selected ? "Chosen" : "Use"}
                       </button>
                     </div>
@@ -5480,8 +5645,9 @@ function ClassBoundSyllabusFlow({
           )}
         </div>
       </div>
+      )}
 
-      {selectedSubject&&selectedPairs.length>0&&(
+      {selectedSubject&&selectedPairs.length>0&&(!isMobile || mobileSyllabusStep==="build")&&(
         <SyllabusBuilder
           key={`${selectedSubject.id}::${syllabusScopeKey(selectedScope)}`}
           subject={selectedSubject}
@@ -5500,6 +5666,8 @@ function ClassBoundSyllabusFlow({
           onDelete={onDelete}
         />
       )}
+
+      {renderMobileSyllabusFooter()}
     </div>
   );
 }
