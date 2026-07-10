@@ -104,7 +104,6 @@ import { buildTeacherEntryStatusItem, sortTeacherStatusForShare } from "./admin/
 import {
   AdminMobileBottomNav,
   AdminMobileCard,
-  AdminMobileMetricGrid,
   AdminMobileMotionStyles,
   AdminMobileToolGrid,
   AdminMobileTopBar,
@@ -5435,7 +5434,7 @@ function AdminPanelInner({user}){
     return { start:`${today.slice(0,7)}-01`, end:today };
   });
   const [mobileStep,  setMobileStep]  = useState(0);
-  const [mobileSurface, setMobileSurface] = useState("home"); // home | workspace | centreSummary | tools | profile
+  const [mobileSurface, setMobileSurface] = useState("workspace"); // workspace | centreSummary | tools | profile
   const [adminV5MobilePane, setAdminV5MobilePane] = useState("institutes"); // institutes | classes | timeline
   const [adminV5TeacherUid, setAdminV5TeacherUid] = useState("");
   const [adminV5ClassKey, setAdminV5ClassKey] = useState("");
@@ -5939,9 +5938,7 @@ function AdminPanelInner({user}){
             ? "tools"
             : restoredNavState.mobileSurface === "centreSummary"
               ? "centreSummary"
-              : restoredNavState.mobileSurface === "home"
-                ? "home"
-                : "workspace"
+              : "workspace"
       );
       setMobileStep(typeof restoredNavState.mobileStep === "number" ? restoredNavState.mobileStep : 0);
       setInstDetailView(restoredNavState.instDetailView ?? null);
@@ -10598,14 +10595,6 @@ function AdminPanelInner({user}){
     setMobileStep(1);
     warmInstitute(inst);
   };
-
-  const openMobileHome = React.useCallback(() => {
-    setProfileOpen(false);
-    setInstituteGlanceOpen(false);
-    setTelegramDashboardOpen(false);
-    setView("main");
-    setMobileSurface("home");
-  }, []);
 
   const openMobileProfile = () => {
     setProfileOpen(false);
@@ -15440,9 +15429,7 @@ function AdminPanelInner({user}){
         ? "report"
         : mobileSurface === "tools" || mobileSurface === "profile"
           ? "tools"
-          : mobileSurface === "workspace"
-            ? "workspace"
-            : "home";
+          : "workspace";
       const openMobileWorkspaceRoot = (pane = adminV5MobilePane || "institutes") => {
         setProfileOpen(false);
         setInstituteGlanceOpen(false);
@@ -15451,22 +15438,14 @@ function AdminPanelInner({user}){
         setAdminV5MobilePane(pane);
       };
       const mobileBottomNavItems = [
-        { key:"home", label:"Home", icon:IconChartBar, onClick:openMobileHome },
-        { key:"workspace", label:"Workspace", icon:IconBuilding, onClick:()=>openMobileWorkspaceRoot() },
+        { key:"workspace", label:"Home", icon:IconBuilding, onClick:openMobileInstituteHome },
+        { key:"teachers", label:"Teachers", icon:IconUsersGroup, onClick:()=>openMobileManageArea("teachers") },
         { key:"report", label:"Report", icon:IconFileText, onClick:openDailyLedgrReport },
         { key:"tools", label:"Tools", icon:IconSettings, onClick:openMobileTools },
       ];
       const renderRootBottomNav = () => (
         <AdminMobileBottomNav items={mobileBottomNavItems} activeKey={mobileRootTab} reduceEffects={reduceEffects} />
       );
-      const attentionRows = instituteReadyRows
-        .filter(item => item.activeCount > 0 && item.status?.pct < 70)
-        .sort((a,b)=>(a.status?.pct || 0) - (b.status?.pct || 0))
-        .slice(0, 4);
-      const totalPending = adminV5Model.institutes.reduce((sum, item) => {
-        if(!item || item.activeCount === 0) return sum;
-        return sum + Math.max(0, (item.activeCount || 0) - (item.loggedCount || 0));
-      }, 0);
       const mobileHeaderAction = { icon:IconLogout, onClick:logout, title:"Sign out" };
       const compactActionButton = (tone = "light") => ({
         minHeight:38,
@@ -15485,100 +15464,11 @@ function AdminPanelInner({user}){
         cursor:"pointer",
         boxShadow:"none",
       });
-      const renderHomeTab = () => (
-        <>
-          <AdminMobileTopBar
-            title="Today"
-            subtitle={`${currentSession()} session`}
-            action={mobileHeaderAction}
-          />
-          <div style={adminMobileContentStyle}>
-            <AdminMobileCard style={{marginBottom:10,background:"linear-gradient(135deg,#FFFFFF 0%,#EEF4FF 100%)"}}>
-              <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Admin dashboard</div>
-              <div style={{fontSize:28,fontWeight:950,color:G.text,fontFamily:G.display,lineHeight:1,marginTop:8}}>
-                {adminV5DailySummariesLoading ? "Syncing today" : `${summary.loggedToday || 0}/${summary.activeTeachers || 0} updated`}
-              </div>
-              <div style={{fontSize:13,color:G.textM,lineHeight:1.55,marginTop:9}}>
-                {adminV5Model.institutes.length} institutes · {totalPending} pending · {overviewLoadedTeacherCount} records loaded
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
-                <button type="button" className="admin-mobile-touch" onClick={()=>openMobileWorkspaceRoot("institutes")} style={compactActionButton("dark")}>
-                  <AppIcon icon={IconBuilding} size={15} color="#FFFFFF" />
-                  Workspace
-                </button>
-                <button type="button" className="admin-mobile-touch" onClick={openDailyLedgrReport} style={compactActionButton("blue")}>
-                  <AppIcon icon={IconFileText} size={15} color={G.blue} />
-                  Report
-                </button>
-              </div>
-            </AdminMobileCard>
-
-            <AdminMobileMetricGrid
-              items={[
-                { label:"Institutes", value:adminV5Model.institutes.length },
-                { label:"Teachers", value:summary.activeTeachers || teachers.filter(isTeachingSurfaceAccount).length },
-                { label:"Updated", value:summary.loggedToday || 0 },
-                { label:"Pending", value:totalPending },
-              ]}
-            />
-
-            <AdminMobileCard style={{marginTop:10}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:9}}>
-                <div>
-                  <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:1,textTransform:"uppercase"}}>Needs follow-up</div>
-                  <div style={{fontSize:19,fontWeight:950,color:G.text,fontFamily:G.display,marginTop:4}}>Low update centres</div>
-                </div>
-                <span style={{background:"#FFF7ED",border:"1px solid #FED7AA",color:"#B45309",borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
-                  {attentionRows.length || "None"}
-                </span>
-              </div>
-              <div style={{display:"grid",gap:8}}>
-                {attentionRows.length ? attentionRows.map(row => (
-                  <button
-                    key={row.institute}
-                    type="button"
-                    className="admin-mobile-touch admin-mobile-card-press"
-                    onClick={()=>{
-                      setMobileSurface("workspace");
-                      selectAdminV5Institute(row.institute, "classes");
-                    }}
-                    style={{
-                      width:"100%",
-                      border:`1px solid ${G.border}`,
-                      borderRadius:13,
-                      background:"#FFFFFF",
-                      padding:"10px 11px",
-                      textAlign:"left",
-                      display:"flex",
-                      alignItems:"center",
-                      gap:10,
-                      fontFamily:G.sans,
-                      cursor:"pointer",
-                    }}>
-                    <span style={{width:8,height:8,borderRadius:999,background:row.status?.accent || G.amber,flexShrink:0}} />
-                    <span style={{minWidth:0,flex:1}}>
-                      <span style={{display:"block",fontSize:13.5,fontWeight:900,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{row.institute}</span>
-                      <span style={{display:"block",fontSize:11.5,color:G.textM,marginTop:3}}>{row.loggedCount}/{row.activeCount} updated today</span>
-                    </span>
-                    <span style={{background:"#FFF7ED",color:"#B45309",borderRadius:999,padding:"5px 8px",fontSize:10.5,fontWeight:900,fontFamily:G.mono,whiteSpace:"nowrap"}}>
-                      {row.status?.pct || 0}%
-                    </span>
-                  </button>
-                )) : (
-                  <div style={{border:`1px dashed ${G.borderM}`,borderRadius:13,padding:"14px",textAlign:"center",fontSize:12.5,color:G.textM,lineHeight:1.5}}>
-                    No low-update centre is loaded right now.
-                  </div>
-                )}
-              </div>
-            </AdminMobileCard>
-          </div>
-        </>
-      );
       const renderWorkspaceTab = () => (
         <>
           <AdminMobileTopBar
-            title="Workspace"
-            subtitle={selectedInstituteName || "Institutes, classes, teachers"}
+            title={selectedInstituteName || "Home"}
+            subtitle={selectedInstituteName ? "Classes, teachers, timeline" : "All institutes"}
             action={mobileHeaderAction}
           />
           <div style={adminMobileContentStyle}>
@@ -15719,7 +15609,6 @@ function AdminPanelInner({user}){
         <div style={adminMobileShellStyle}>
           <AdminMobileMotionStyles />
           {renderOverlays()}
-          {mobileRootTab === "home"&&renderHomeTab()}
           {mobileRootTab === "workspace"&&renderWorkspaceTab()}
           {mobileRootTab === "report"&&renderReportTab()}
           {mobileRootTab === "tools"&&renderToolsTab()}
