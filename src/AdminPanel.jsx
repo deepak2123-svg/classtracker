@@ -3472,6 +3472,9 @@ function SyllabusBuilder({
   getAffectedSummary,
   busy,
   isMobile,
+  setupStep = "chapters",
+  onRequestReview,
+  onRequestChapters,
   onClose,
   onSave,
   onPublish,
@@ -3551,6 +3554,9 @@ function SyllabusBuilder({
   const scopeReady = draftScope.length>0;
   const affectedSummary = getAffectedSummary(draftScope,subject);
   const totalTopics = draft.chapters.reduce((sum,chapter)=>sum+(chapter.topics||[]).filter(topic=>String(topic?.title||"").trim()).length,0);
+  const hasChapters = draft.chapters.length > 0;
+  const isReviewStep = isMobile && setupStep==="review";
+  const canPublish = scopeReady && hasChapters;
 
   const fieldStyle = {
     width:"100%",
@@ -3738,6 +3744,7 @@ function SyllabusBuilder({
   };
 
   const removeTopic = (chapter,topicId) => {
+    if(!window.confirm("Remove this topic?")) return;
     updateChapter(chapter.id,{
       topics:(chapter.topics||[]).filter(topic=>topic.id!==topicId),
     });
@@ -3775,6 +3782,16 @@ function SyllabusBuilder({
     setChapterQuery("");
     setChapterFilter("all");
     setActiveInspectorTab("topics");
+  };
+
+  const openReviewStep = () => {
+    if(!canPublish) return;
+    if(onRequestReview){
+      onRequestReview();
+      return;
+    }
+    setActiveInspectorTab("publish");
+    inspectorRef.current?.scrollIntoView({behavior:"smooth",block:isMobile?"start":"nearest"});
   };
 
   const describeChapter = (chapter,maxTopics) => {
@@ -3917,18 +3934,22 @@ function SyllabusBuilder({
     cursor:"default",
     fontWeight:800,
   });
-  const renderMobileBuilderActionBar = () => !isMobile ? null : (
-    <div style={{position:"sticky",bottom:"calc(92px + env(safe-area-inset-bottom, 0px))",zIndex:40,marginTop:14}}>
-      <div style={{background:"rgba(255,255,255,0.97)",border:`1px solid ${G.border}`,borderRadius:16,padding:9,boxShadow:"0 18px 36px rgba(15,23,42,0.14)",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,backdropFilter:"blur(12px)"}}>
-        <button onClick={save} disabled={busy} className="admin-mobile-touch" style={{...pill("#FFFFFF",G.navy,G.borderM),minHeight:42,justifyContent:"center",fontWeight:900,opacity:busy?0.68:1}}>
-          <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconDeviceFloppy} size={15}/>{busy?"Saving":"Save"}</span>
-        </button>
-        <button onClick={publish} disabled={busy||!draft.chapters.length} className="admin-mobile-touch" style={{...pill(draft.chapters.length?"#16845B":G.bg,"#FFFFFF",draft.chapters.length?"#16845B":G.border),minHeight:42,justifyContent:"center",fontWeight:900,opacity:busy||!draft.chapters.length?0.65:1}}>
-          <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconCheck} size={15}/> Publish</span>
-        </button>
+  const renderMobileBuilderActionBar = () => {
+    if(!isMobile) return null;
+    const mainDisabled = busy || !canPublish;
+    return (
+      <div style={{position:"sticky",bottom:"calc(92px + env(safe-area-inset-bottom, 0px))",zIndex:40,marginTop:14}}>
+        <div style={{background:"rgba(255,255,255,0.97)",border:`1px solid ${G.border}`,borderRadius:16,padding:9,boxShadow:"0 18px 36px rgba(15,23,42,0.14)",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,backdropFilter:"blur(12px)"}}>
+          <button onClick={save} disabled={busy} className="admin-mobile-touch" style={{...pill("#FFFFFF",G.navy,G.borderM),minHeight:42,justifyContent:"center",fontWeight:900,opacity:busy?0.68:1}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconDeviceFloppy} size={15}/>{busy?"Saving":"Save Draft"}</span>
+          </button>
+          <button onClick={isReviewStep ? publish : openReviewStep} disabled={mainDisabled} className="admin-mobile-touch" style={{...pill(canPublish?(isReviewStep?"#16845B":G.navy):G.bg,"#FFFFFF",canPublish?(isReviewStep?"#16845B":G.navy):G.border),minHeight:42,justifyContent:"center",fontWeight:900,opacity:mainDisabled?0.65:1,cursor:mainDisabled?"not-allowed":"pointer"}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={isReviewStep?IconCheck:IconChevronRight} size={15}/> {isReviewStep ? "Publish" : "Review"}</span>
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,overflow:"hidden",marginBottom:24}}>
@@ -3938,10 +3959,10 @@ function SyllabusBuilder({
             <button onClick={onClose} style={{...pill("#FFFFFF",G.textS,G.border),padding:"7px 11px",marginBottom:13}}>
               <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconChevronLeft} size={15}/> Subjects</span>
             </button>
-            <div style={{fontSize:isMobile?23:30,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.1}}>Syllabus studio</div>
+            <div style={{fontSize:isMobile?23:30,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.1}}>Syllabus Builder</div>
             <div style={{fontSize:16,fontWeight:750,color:G.blue,marginTop:5}}>{subject.name}</div>
             <div style={{...mutedCopyStyle,marginTop:8,maxWidth:760}}>
-              Scan all chapters in one calm overview, then edit the selected chapter in the inspector without turning the whole page into a long form.
+              Add chapters and topics, then review before publishing.
             </div>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:isMobile?"flex-start":"flex-end"}}>
@@ -3967,9 +3988,9 @@ function SyllabusBuilder({
         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(260px,360px) minmax(220px,1fr) auto",gap:12,alignItems:"end"}}>
           {subjectTemplates.length>0&&(
             <div>
-              <div style={labelStyle}>Saved syllabus</div>
+              <div style={labelStyle}>Open draft</div>
               <select value={selectedId} onChange={event=>chooseTemplate(event.target.value)} style={fieldStyle}>
-                <option value="__new">Create a fresh syllabus</option>
+                <option value="__new">New syllabus</option>
                 {subjectTemplates.map(item=>(
                   <option key={item.id} value={item.id}>
                     {item.draft.name || item.name || `${subject.name} syllabus`}
@@ -3987,18 +4008,30 @@ function SyllabusBuilder({
             </div>
           </div>
 
-          {working.id&&(
-            <button onClick={removeSyllabus} disabled={busy} style={{...pill(G.redL,G.red,"#F5CACA"),padding:"10px 13px",fontWeight:800,justifyContent:"center"}}>
-              <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconTrash} size={16}/> Delete syllabus</span>
-            </button>
+          {working.id&&(!isMobile ? (
+              <button onClick={removeSyllabus} disabled={busy} style={{...pill(G.redL,G.red,"#F5CACA"),padding:"10px 13px",fontWeight:800,justifyContent:"center"}}>
+                <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconTrash} size={16}/> Delete syllabus</span>
+              </button>
+            ) : (
+              <details style={{position:"relative"}}>
+                <summary style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"10px 13px",fontWeight:800,justifyContent:"center",listStyle:"none",cursor:"pointer"}}>
+                  More
+                </summary>
+                <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",zIndex:5,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:12,padding:8,boxShadow:"0 18px 36px rgba(15,23,42,0.16)",minWidth:170}}>
+                  <button onClick={removeSyllabus} disabled={busy} style={{...pill(G.redL,G.red,"#F5CACA"),width:"100%",padding:"9px 11px",fontWeight:800,justifyContent:"center"}}>
+                    Delete syllabus
+                  </button>
+                </div>
+              </details>
+            )
           )}
         </div>
 
         {!simpleScope && (
           <div style={{...softCardStyle,marginTop:16,padding:isMobile?"14px":"16px"}}>
-            <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display}}>Choose where this syllabus applies</div>
+            <div style={{fontSize:17,fontWeight:850,color:G.text,fontFamily:G.display}}>Classes</div>
             <div style={{...mutedCopyStyle,marginTop:4,marginBottom:13}}>
-              Select an existing institute first, then one of its admin-defined sections.
+              Choose one institute and section.
             </div>
             <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(220px,1fr))",gap:12}}>
               <div>
@@ -4048,8 +4081,67 @@ function SyllabusBuilder({
 
         {!scopeReady ? (
           <div style={{marginTop:16,border:`2px dashed ${G.borderM}`,borderRadius:14,padding:"28px 18px",textAlign:"center"}}>
-            <div style={{fontSize:16,fontWeight:800,color:G.text}}>Select at least one institute and section.</div>
-            <div style={{fontSize:13,color:G.textM,marginTop:5}}>The chapter workspace will appear after the syllabus scope is selected.</div>
+            <div style={{fontSize:16,fontWeight:800,color:G.text}}>Choose classes first.</div>
+            <div style={{fontSize:13,color:G.textM,marginTop:5}}>Select classes and a subject to start.</div>
+          </div>
+        ) : isReviewStep ? (
+          <div style={{display:"grid",gridTemplateColumns:"1fr",gap:14,marginTop:18}}>
+            <div style={{...cardStyle,padding:isMobile?"16px":"18px",background:"#FFFFFF"}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                <div>
+                  <div style={labelStyle}>Review</div>
+                  <div style={{fontSize:isMobile?24:28,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.1}}>Ready to publish?</div>
+                  <div style={{fontSize:13,color:G.textM,lineHeight:1.45,marginTop:6}}>
+                    Check subject, classes, chapters, and topics before publishing.
+                  </div>
+                </div>
+                <button type="button" onClick={onRequestChapters || (()=>setActiveInspectorTab("topics"))} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:850}}>
+                  Edit chapters
+                </button>
+              </div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(5,minmax(0,1fr))",gap:10}}>
+              <div style={chapterMetricCardStyle}><div style={labelStyle}>Subject</div><div style={{fontSize:18,fontWeight:850,color:G.text,lineHeight:1.2}}>{subject.name}</div></div>
+              <div style={chapterMetricCardStyle}><div style={labelStyle}>Classes</div><div style={{fontSize:26,fontWeight:850,color:G.text,lineHeight:1}}>{simpleScope ? initialTargets.length : affectedSummary.classCount}</div></div>
+              <div style={chapterMetricCardStyle}><div style={labelStyle}>Chapters</div><div style={{fontSize:26,fontWeight:850,color:G.text,lineHeight:1}}>{draft.chapters.length}</div></div>
+              <div style={chapterMetricCardStyle}><div style={labelStyle}>Topics</div><div style={{fontSize:26,fontWeight:850,color:G.text,lineHeight:1}}>{totalTopics}</div></div>
+              <div style={chapterMetricCardStyle}><div style={labelStyle}>Status</div><div style={{fontSize:17,fontWeight:850,color:G.text,lineHeight:1.2}}>{working.currentVersion ? "Published" : "Draft"}</div></div>
+            </div>
+
+            <div style={{...softCardStyle,padding:isMobile?"14px":"16px"}}>
+              <div style={{fontSize:14,fontWeight:850,color:G.text}}>Classes</div>
+              <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
+                {draftScope.map(item=>(
+                  <span key={item.instituteName} title={item.sectionNames.join(", ")} style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:750}}>
+                    {item.instituteName} · {item.sectionNames.join(", ")}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div style={{...softCardStyle,padding:isMobile?"14px":"16px"}}>
+              <div style={{fontSize:14,fontWeight:850,color:G.text}}>Chapters</div>
+              {!draft.chapters.length ? (
+                <div style={{fontSize:13,color:G.textM,marginTop:8}}>Add the first chapter to start this syllabus.</div>
+              ) : (
+                <div style={{display:"grid",gap:8,marginTop:10}}>
+                  {draft.chapters.map((chapter,index)=>{
+                    const status = describeChapter(chapter,chapterMetrics.maxTopics);
+                    return (
+                      <div key={chapter.id} style={{display:"grid",gridTemplateColumns:"34px minmax(0,1fr) auto",gap:10,alignItems:"center",padding:"10px 11px",border:`1px solid ${G.border}`,borderRadius:12,background:"#FFFFFF"}}>
+                        <span style={{width:34,height:34,borderRadius:10,background:"#E6EDF9",color:G.textS,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:850}}>{index+1}</span>
+                        <span style={{minWidth:0}}>
+                          <span style={{display:"block",fontSize:13.5,fontWeight:850,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{chapter.title || "Untitled chapter"}</span>
+                          <span style={{display:"block",fontSize:12,color:G.textM,marginTop:3}}>{status.topicCount} topic{status.topicCount===1?"":"s"}</span>
+                        </span>
+                        <span style={chapterStatusPillStyle(status)}>{status.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"280px minmax(0,1fr) 360px",gap:16,alignItems:"start",marginTop:18}}>
@@ -4082,7 +4174,7 @@ function SyllabusBuilder({
               <div style={{padding:"12px 14px",borderBottom:`1px solid ${G.border}`,background:"#FFFFFF"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
                   <div>
-                    <div style={{fontSize:13.5,fontWeight:850,color:G.text}}>Chapter rail</div>
+                    <div style={{fontSize:13.5,fontWeight:850,color:G.text}}>Chapters</div>
                     <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
                       {visibleChapters.length} visible chapter{visibleChapters.length===1?"":"s"}
                     </div>
@@ -4096,7 +4188,7 @@ function SyllabusBuilder({
               <div style={chapterWorkspaceBodyStyle}>
                 {!visibleChapters.length ? (
                   <div style={{padding:"28px 20px",textAlign:"center",color:G.textM}}>
-                    No chapters match the current search or filter.
+                    {draft.chapters.length ? "No chapters match the current search or filter." : "Add the first chapter to start this syllabus."}
                   </div>
                 ) : (
                   visibleChapters.map(chapter=>{
@@ -4207,7 +4299,7 @@ function SyllabusBuilder({
             <div style={{...chapterWorkspacePanelStyle,background:"#F8FAFD"}}>
               {!selectedChapter ? (
                 <div style={{padding:"34px 22px",textAlign:"center",color:G.textM}}>
-                  Pick a chapter from the rail to review it before editing.
+                  Select a chapter to edit topics.
                 </div>
               ) : (
                 <>
@@ -4223,10 +4315,10 @@ function SyllabusBuilder({
                         {selectedChapterStatus&&<span style={chapterStatusPillStyle(selectedChapterStatus)}>{selectedChapterStatus.label}</span>}
                       </div>
                       <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:10,maxWidth:720}}>
-                        {selectedChapterStatus?.note || "Open the inspector when you want to edit topics, scope, or publish settings."}
+                        {selectedChapterStatus?.note || "Edit topics, details, or publish settings."}
                       </div>
                     </div>
-                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <div style={{display:isMobile?"none":"flex",gap:8,flexWrap:"wrap"}}>
                       <button onClick={()=>moveChapter(selectedChapterIndex,-1)} disabled={selectedChapterIndex<=0} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"10px 12px",fontWeight:800,opacity:selectedChapterIndex<=0?0.5:1}}>
                         <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconArrowUp} size={15}/> Up</span>
                       </button>
@@ -4270,12 +4362,12 @@ function SyllabusBuilder({
                       <div style={{...cardStyle,overflow:"hidden"}}>
                         <div style={{padding:"14px 16px",borderBottom:`1px solid ${G.border}`}}>
                           <div style={{fontSize:15,fontWeight:850,color:G.text}}>Topic preview</div>
-                          <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>The rail stays compact. The selected chapter is easier to scan here before you edit it.</div>
+                          <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>Quick scan before editing.</div>
                         </div>
                         <div style={{padding:"12px 14px",display:"grid",gap:8}}>
                           {selectedChapterPreviewTopics.length===0 ? (
                             <div style={{padding:"18px 14px",border:`1px dashed ${G.borderM}`,borderRadius:12,background:"#FFFFFF",fontSize:13,color:G.textM,lineHeight:1.55}}>
-                              No topics yet. Open the inspector to add the first one.
+                              No topics yet. Add the first topic below.
                             </div>
                           ) : (
                             selectedChapterPreviewTopics.map((topicTitle,index)=>(
@@ -4300,12 +4392,12 @@ function SyllabusBuilder({
                       <div style={{...cardStyle,overflow:"hidden"}}>
                         <div style={{padding:"14px 16px",borderBottom:`1px solid ${G.border}`}}>
                           <div style={{fontSize:15,fontWeight:850,color:G.text}}>
-                            {simpleScope&&initialTargets.length>0 ? "Matching teachers and classes" : "Publishing reach"}
+                            {simpleScope&&initialTargets.length>0 ? "Classes" : "Reach"}
                           </div>
                           <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
                             {simpleScope&&initialTargets.length>0
-                              ? "Publishing binds this syllabus to the current live class records."
-                              : "This syllabus currently targets these institute-section combinations."}
+                              ? "Bound to current class records."
+                              : "Target classes for this syllabus."}
                           </div>
                         </div>
                         <div style={{padding:"12px 14px",display:"grid",gap:8}}>
@@ -4388,7 +4480,7 @@ function SyllabusBuilder({
 
               {!selectedChapter ? (
                 <div style={{padding:"30px 20px",textAlign:"center",color:G.textM}}>
-                  Select a chapter from the overview to edit its topics and publish context here.
+                  Select a chapter to edit topics.
                 </div>
               ) : (
                 <>
@@ -4415,8 +4507,8 @@ function SyllabusBuilder({
 
                         <div style={{...cardStyle,overflow:"hidden"}}>
                           <div style={{padding:"12px 14px",borderBottom:`1px solid ${G.border}`}}>
-                            <div style={{fontSize:14,fontWeight:850,color:G.text}}>Topic editor</div>
-                            <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>The overview stays clean. All topic editing happens here.</div>
+                            <div style={{fontSize:14,fontWeight:850,color:G.text}}>Topics</div>
+                            <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Add, edit, and reorder topics.</div>
                           </div>
                           <div style={{padding:"12px",display:"grid",gap:8}}>
                             {(selectedChapter.topics||[]).length===0 ? (
@@ -4472,8 +4564,8 @@ function SyllabusBuilder({
                     {activeInspectorTab==="scope"&&(
                       <>
                         <div style={{...cardStyle,padding:"12px 14px"}}>
-                          <div style={{fontSize:14,fontWeight:850,color:G.text}}>Template details</div>
-                          <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Keep the metadata close to the chapter editor so the page does not sprawl.</div>
+                          <div style={{fontSize:14,fontWeight:850,color:G.text}}>Details</div>
+                          <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Optional syllabus metadata.</div>
                           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,minmax(0,1fr))",gap:10,marginTop:12}}>
                             <div>
                               <div style={labelStyle}>Academic year</div>
@@ -4492,7 +4584,7 @@ function SyllabusBuilder({
 
                         <div style={{...softCardStyle,padding:"12px 14px"}}>
                           <div style={{fontSize:14,fontWeight:850,color:G.text}}>Applies to</div>
-                          <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>This syllabus currently targets these institute-section combinations.</div>
+                          <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Selected classes for this syllabus.</div>
                           <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:10}}>
                             {draftScope.map(item=>(
                               <span key={item.instituteName} title={item.sectionNames.join(", ")} style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:750}}>
@@ -4506,8 +4598,8 @@ function SyllabusBuilder({
                           <div style={{...cardStyle,padding:"12px 14px"}}>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
                               <div>
-                                <div style={{fontSize:14,fontWeight:850,color:G.text}}>Matching teachers and classes</div>
-                                <div style={{fontSize:12,color:G.textM,marginTop:4}}>Publishing binds this syllabus to these existing class records.</div>
+                                <div style={{fontSize:14,fontWeight:850,color:G.text}}>Classes</div>
+                                <div style={{fontSize:12,color:G.textM,marginTop:4}}>Bound to existing class records.</div>
                               </div>
                               <span style={{...pill("#E8F7EF","#137A45","#B9E5CA"),cursor:"default",fontWeight:800}}>{initialTargets.length} class{initialTargets.length===1?"":"es"}</span>
                             </div>
@@ -4538,8 +4630,8 @@ function SyllabusBuilder({
                         <div style={{...softCardStyle,padding:"12px 14px"}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
                             <div>
-                              <div style={{fontSize:14,fontWeight:850,color:G.text}}>Publishing effect</div>
-                              <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Teachers see this same structure and chapter order in the beta app.</div>
+                              <div style={{fontSize:14,fontWeight:850,color:G.text}}>Review</div>
+                              <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Teachers see this structure after publish.</div>
                             </div>
                             <AppIcon icon={IconClock} size={18} color={G.blue}/>
                           </div>
@@ -4548,9 +4640,9 @@ function SyllabusBuilder({
                         <div style={{display:"grid",gap:10}}>
                           <div style={{...cardStyle,padding:"12px 14px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                             <div>
-                              <div style={{fontSize:13,fontWeight:850,color:G.text}}>Version posture</div>
+                              <div style={{fontSize:13,fontWeight:850,color:G.text}}>Status</div>
                               <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>
-                                {working.currentVersion ? `Published version ${working.currentVersion} is live. Draft changes remain local until you publish again.` : "This syllabus has not been published yet."}
+                                {working.currentVersion ? `Published v${working.currentVersion}. New edits need publishing again.` : "Draft saved. Not visible to teachers until published."}
                               </div>
                             </div>
                             <span style={{...pill(working.currentVersion?"#E8F7EF":"#FFF7E6",working.currentVersion?"#137A45":"#9A5A00",working.currentVersion?"#B9E5CA":"#F1D49A"),cursor:"default",fontWeight:800}}>
@@ -4560,13 +4652,13 @@ function SyllabusBuilder({
 
                           <div style={{...cardStyle,padding:"12px 14px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                             <div>
-                              <div style={{fontSize:13,fontWeight:850,color:G.text}}>Current chapter risk</div>
+                              <div style={{fontSize:13,fontWeight:850,color:G.text}}>Current chapter</div>
                               <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>
                                 {selectedChapterStatus?.label==="Ready"
-                                  ? "Low. This chapter is already structured and unlikely to confuse the live class."
+                                  ? "Ready to publish."
                                   : selectedChapterStatus?.label==="Building"
-                                    ? "Medium. Publishing now is okay, but the class will still see a partially built structure."
-                                    : "High. This chapter is still empty or unnamed."}
+                                    ? "Partially filled."
+                                    : "Add a title and topics before publishing."}
                               </div>
                             </div>
                             {selectedChapterStatus&&(
@@ -4598,7 +4690,7 @@ function SyllabusBuilder({
                         <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconDeviceFloppy} size={15}/>{busy?"Saving...":"Save draft"}</span>
                       </button>
                       <button onClick={publish} disabled={busy||!draft.chapters.length} style={{...pill(draft.chapters.length?"#16845B":G.bg,"#FFFFFF",draft.chapters.length?"#16845B":G.border),padding:"10px 12px",fontWeight:800,opacity:busy||!draft.chapters.length?0.65:1}}>
-                        <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconCheck} size={15}/> Publish version</span>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:7}}><AppIcon icon={IconCheck} size={15}/> Publish</span>
                       </button>
                     </div>
                   </div>
@@ -5083,7 +5175,7 @@ function ClassBoundSyllabusFlow({
   const [selectedInstitutes,setSelectedInstitutes] = useState(()=>defaultInstitute?[defaultInstitute]:[]);
   const [selectedSections,setSelectedSections] = useState({});
   const [selectedSubject,setSelectedSubject] = useState(null);
-  const [mobileSyllabusStep,setMobileSyllabusStep] = useState("institutes");
+  const [mobileSyllabusStep,setMobileSyllabusStep] = useState("classes");
   const [instituteSearch,setInstituteSearch] = useState("");
   const [expandedSectionGroups,setExpandedSectionGroups] = useState({});
   const visibleInstitutes=institutes.filter(institute=>
@@ -5192,16 +5284,12 @@ function ClassBoundSyllabusFlow({
 
   useEffect(()=>{
     if(!isMobile) return;
-    if(mobileSyllabusStep==="sections" && !selectedInstitutes.length){
-      setMobileSyllabusStep("institutes");
-      return;
-    }
     if(mobileSyllabusStep==="subject" && !selectedPairs.length){
-      setMobileSyllabusStep(selectedInstitutes.length ? "sections" : "institutes");
+      setMobileSyllabusStep("classes");
       return;
     }
-    if(mobileSyllabusStep==="build" && (!selectedSubject || !selectedPairs.length)){
-      setMobileSyllabusStep(selectedPairs.length ? "subject" : selectedInstitutes.length ? "sections" : "institutes");
+    if((mobileSyllabusStep==="chapters" || mobileSyllabusStep==="review") && (!selectedSubject || !selectedPairs.length)){
+      setMobileSyllabusStep(selectedPairs.length ? "subject" : "classes");
     }
   },[isMobile,mobileSyllabusStep,selectedInstitutes.length,selectedPairs.length,selectedSubject]);
 
@@ -5244,20 +5332,14 @@ function ClassBoundSyllabusFlow({
   };
   const chooseSubjectForMobile = subject => {
     setSelectedSubject(subject);
-    if(isMobile) setMobileSyllabusStep("build");
+    if(isMobile) setMobileSyllabusStep("chapters");
   };
   const mobileStepItems = [
     {
-      key:"institutes",
-      label:"Institutes",
-      count:selectedInstitutes.length,
-      enabled:true,
-    },
-    {
-      key:"sections",
-      label:"Sections",
+      key:"classes",
+      label:"Classes",
       count:selectedSectionsCount,
-      enabled:selectedInstitutes.length > 0,
+      enabled:true,
     },
     {
       key:"subject",
@@ -5266,37 +5348,39 @@ function ClassBoundSyllabusFlow({
       enabled:selectedPairs.length > 0,
     },
     {
-      key:"build",
-      label:"Build",
+      key:"chapters",
+      label:"Chapters",
+      count:selectedSubject ? "Edit" : 0,
+      enabled:!!selectedSubject && selectedPairs.length > 0,
+    },
+    {
+      key:"review",
+      label:"Review",
       count:selectedSubject ? "Go" : 0,
       enabled:!!selectedSubject && selectedPairs.length > 0,
     },
   ];
   const mobileStepIndex = Math.max(0, mobileStepItems.findIndex(item=>item.key===mobileSyllabusStep));
-  const mobileStepCanContinue = mobileSyllabusStep==="institutes"
-    ? selectedInstitutes.length > 0
-    : mobileSyllabusStep==="sections"
-      ? selectedPairs.length > 0
-      : mobileSyllabusStep==="subject"
-        ? !!selectedSubject
-        : false;
+  const mobileStepCanContinue = mobileSyllabusStep==="classes"
+    ? selectedPairs.length > 0
+    : mobileSyllabusStep==="subject"
+      ? !!selectedSubject
+      : false;
   const goToNextMobileSyllabusStep = () => {
-    if(mobileSyllabusStep==="institutes" && selectedInstitutes.length){
-      setMobileSyllabusStep("sections");
-    } else if(mobileSyllabusStep==="sections" && selectedPairs.length){
+    if(mobileSyllabusStep==="classes" && selectedPairs.length){
       setMobileSyllabusStep("subject");
     } else if(mobileSyllabusStep==="subject" && selectedSubject){
-      setMobileSyllabusStep("build");
+      setMobileSyllabusStep("chapters");
     }
   };
   const goToPreviousMobileSyllabusStep = () => {
-    if(mobileSyllabusStep==="build") setMobileSyllabusStep("subject");
-    else if(mobileSyllabusStep==="subject") setMobileSyllabusStep("sections");
-    else if(mobileSyllabusStep==="sections") setMobileSyllabusStep("institutes");
+    if(mobileSyllabusStep==="review") setMobileSyllabusStep("chapters");
+    else if(mobileSyllabusStep==="chapters") setMobileSyllabusStep("subject");
+    else if(mobileSyllabusStep==="subject") setMobileSyllabusStep("classes");
   };
   const renderMobileSyllabusStepper = () => !isMobile ? null : (
     <div style={{background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:15,padding:12,boxShadow:"0 10px 22px rgba(15,23,42,0.04)"}}>
-      <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase"}}>Syllabus setup</div>
+      <div style={{fontSize:11,fontWeight:900,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase"}}>Syllabus Builder</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginTop:10}}>
         {mobileStepItems.map((item,index)=>{
           const active = item.key===mobileSyllabusStep;
@@ -5348,24 +5432,18 @@ function ClassBoundSyllabusFlow({
     </div>
   );
   const renderMobileSyllabusFooter = () => {
-    if(!isMobile || mobileSyllabusStep==="build") return null;
+    if(!isMobile || mobileSyllabusStep==="chapters" || mobileSyllabusStep==="review") return null;
     return (
     <div style={{position:"sticky",bottom:"calc(92px + env(safe-area-inset-bottom, 0px))",zIndex:35,marginTop:10}}>
-      <div style={{background:"rgba(255,255,255,0.96)",border:`1px solid ${G.border}`,borderRadius:16,padding:9,boxShadow:"0 18px 36px rgba(15,23,42,0.13)",display:"grid",gridTemplateColumns:mobileSyllabusStep==="institutes"?"1fr":"auto 1fr",gap:8,backdropFilter:"blur(12px)"}}>
-        {mobileSyllabusStep!=="institutes"&&(
+      <div style={{background:"rgba(255,255,255,0.96)",border:`1px solid ${G.border}`,borderRadius:16,padding:9,boxShadow:"0 18px 36px rgba(15,23,42,0.13)",display:"grid",gridTemplateColumns:mobileSyllabusStep==="classes"?"1fr":"auto 1fr",gap:8,backdropFilter:"blur(12px)"}}>
+        {mobileSyllabusStep!=="classes"&&(
           <button type="button" onClick={goToPreviousMobileSyllabusStep} className="admin-mobile-touch" style={{...pill("#FFFFFF",G.textS,G.borderM),minHeight:42,justifyContent:"center",fontWeight:900}}>
             Back
           </button>
         )}
-        {mobileSyllabusStep==="build" ? (
-          <button type="button" onClick={()=>setMobileSyllabusStep("subject")} className="admin-mobile-touch" style={{...pill("#EEF4FF",G.blue,"#BFD1F4"),minHeight:42,justifyContent:"center",fontWeight:900}}>
-            Change subject
-          </button>
-        ) : (
-          <button type="button" disabled={!mobileStepCanContinue} onClick={goToNextMobileSyllabusStep} className="admin-mobile-touch" style={{...pill(mobileStepCanContinue?G.navy:G.bg,"#FFFFFF",mobileStepCanContinue?G.navy:G.border),minHeight:42,justifyContent:"center",fontWeight:900,opacity:mobileStepCanContinue?1:0.62,cursor:mobileStepCanContinue?"pointer":"not-allowed"}}>
-            {mobileSyllabusStep==="institutes" ? "Select sections" : mobileSyllabusStep==="sections" ? "Choose subject" : "Build syllabus"}
-          </button>
-        )}
+        <button type="button" disabled={!mobileStepCanContinue} onClick={goToNextMobileSyllabusStep} className="admin-mobile-touch" style={{...pill(mobileStepCanContinue?G.navy:G.bg,"#FFFFFF",mobileStepCanContinue?G.navy:G.border),minHeight:42,justifyContent:"center",fontWeight:900,opacity:mobileStepCanContinue?1:0.62,cursor:mobileStepCanContinue?"pointer":"not-allowed"}}>
+          {mobileSyllabusStep==="classes" ? "Next: Subject" : "Next: Chapters"}
+        </button>
       </div>
     </div>
     );
@@ -5453,17 +5531,17 @@ function ClassBoundSyllabusFlow({
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
       <div style={{fontSize:13.5,color:G.textM,lineHeight:1.55,marginTop:-2}}>
-        Choose existing classes first, then pick only the sections that should receive the same syllabus.
+        Choose classes, pick a subject, add chapters, then review.
       </div>
 
       {renderMobileSyllabusStepper()}
 
-      {(!isMobile || mobileSyllabusStep==="institutes")&&(
+      {(!isMobile || mobileSyllabusStep==="classes")&&(
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden"}}>
         <div style={{padding:isMobile?"15px":"18px 20px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>1. Select institutes</div>
-            <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Start with the institutes that should share this syllabus.</div>
+            <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>Classes</div>
+            <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Choose institutes first.</div>
           </div>
           <span style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:800}}>{selectedInstitutes.length} selected</span>
         </div>
@@ -5488,17 +5566,17 @@ function ClassBoundSyllabusFlow({
       </div>
       )}
 
-      {(!isMobile || mobileSyllabusStep==="sections")&&(
+      {(!isMobile || mobileSyllabusStep==="classes")&&(
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden",opacity:selectedInstitutes.length?1:0.65}}>
         <div style={{padding:isMobile?"15px":"18px 20px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>2. Select sections</div>
-            <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Pick only the sections that should receive the same syllabus.</div>
+            <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>Sections</div>
+            <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Pick the sections that share this syllabus.</div>
           </div>
           <span style={{...pill("#FFFFFF",G.navy,G.borderM),cursor:"default",fontWeight:800}}>{selectedSectionsCount} selected</span>
         </div>
         <div style={{padding:isMobile?14:18,display:"flex",flexDirection:"column",gap:15}}>
-          {!selectedInstitutes.length&&<div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM}}>Select an institute first.</div>}
+          {!selectedInstitutes.length&&<div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM}}>Choose an institute first.</div>}
           {selectedInstitutes.map((instituteName,index)=>{
             const sections=sectionOptionsByInstitute[instituteName]||[];
             const sectionGroups=sectionGroupsByInstitute[instituteName]||[];
@@ -5580,7 +5658,7 @@ function ClassBoundSyllabusFlow({
                     })}
                   </div>
                 ):(
-                  <div style={{padding:"12px 14px",border:`1px dashed ${G.borderM}`,borderRadius:10,fontSize:12.5,color:G.textM}}>No configured sections. Add them from this institute's Sections area.</div>
+                  <div style={{padding:"12px 14px",border:`1px dashed ${G.borderM}`,borderRadius:10,fontSize:12.5,color:G.textM}}>No sections configured. Add sections first.</div>
                 )}
               </div>
             );
@@ -5592,22 +5670,16 @@ function ClassBoundSyllabusFlow({
       {(!isMobile || mobileSyllabusStep==="subject")&&(
       <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:14,overflow:"hidden",opacity:selectedPairs.length?1:0.65}}>
         <div style={{padding:isMobile?"15px":"18px 20px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD"}}>
-          <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>3. Select an existing subject</div>
-          <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>These names come directly from teacher-created classes, so you do not need to type the subject again.</div>
+          <div style={{fontSize:18,fontWeight:850,color:G.text,fontFamily:G.display}}>Subject</div>
+          <div style={{fontSize:12.5,color:G.textM,marginTop:3}}>Choose a subject found in these classes.</div>
         </div>
         <div style={{padding:isMobile?14:18}}>
           {!selectedPairs.length?(
-            <div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM}}>Select at least one section first.</div>
+            <div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM}}>Choose classes first.</div>
           ):availableSubjects.length===0?(
-            <div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM,lineHeight:1.55}}>No teacher class with a subject was found in the selected sections.</div>
+            <div style={{padding:"20px 10px",textAlign:"center",fontSize:13,color:G.textM,lineHeight:1.55}}>No subjects found in these sections. Check teacher classes first.</div>
           ):(
-            <div style={compactTableWrapStyle}>
-              <div style={{...compactTableHeadStyle,gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2fr) 108px 108px 104px"}}>
-                <span>Subject</span>
-                {!isMobile&&<span>Teachers</span>}
-                {!isMobile&&<span>Classes</span>}
-                <span style={{textAlign:"right"}}>Use</span>
-              </div>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
               {availableSubjects.map(subject=>{
                 const selected=selectedSubject?.id===subject.id;
                 const matching=templates.filter(item=>
@@ -5618,27 +5690,26 @@ function ClassBoundSyllabusFlow({
                   )
                 );
                 const published=matching.some(item=>item.currentVersion>0);
+                const statusLabel=published?"Published":matching.length?"Draft":"New";
                 return (
-                  <div key={subject.id} style={{display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr) auto":"minmax(0,2fr) 108px 108px 104px",gap:12,alignItems:"center",padding:isMobile?"12px":"12px 14px",borderTop:`1px solid ${G.border}`,background:selected?"#F8FBFF":"#FFFFFF"}}>
-                    <button onClick={()=>chooseSubjectForMobile(subject)} style={{border:"none",background:"transparent",padding:0,display:"flex",alignItems:"center",gap:11,cursor:"pointer",textAlign:"left",minWidth:0}}>
+                  <button key={subject.id} onClick={()=>chooseSubjectForMobile(subject)} style={{border:`1px solid ${selected?"#8FB1F3":G.border}`,borderLeft:`4px solid ${selected?G.blue:G.border}`,borderRadius:14,background:selected?"#EEF4FF":"#FFFFFF",padding:13,display:"grid",gap:11,cursor:"pointer",textAlign:"left",boxShadow:selected?G.shadowSm:"none",fontFamily:G.sans,color:G.text}}>
+                    <span style={{display:"flex",alignItems:"center",gap:11,minWidth:0}}>
                       <span style={{width:34,height:34,borderRadius:10,background:selected?G.navy:G.blueL,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <AppIcon icon={IconBooks} size={17} color={selected?"#FFFFFF":G.blue}/>
                       </span>
                       <span style={{minWidth:0,flex:1}}>
                         <span style={{display:"block",fontSize:13.5,fontWeight:850,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:G.text}}>{subject.name}</span>
                         <span style={{display:"block",fontSize:11.5,color:published?"#137A45":G.textM,fontWeight:700,marginTop:3}}>
-                          {published ? "Published syllabus ready" : "Ready to build"}
+                          {statusLabel}
                         </span>
                       </span>
-                    </button>
-                    {!isMobile&&<div style={{fontSize:13.5,fontWeight:800,color:G.text}}>{subject.teacherCount}</div>}
-                    {!isMobile&&<div style={{fontSize:13.5,fontWeight:800,color:G.text}}>{subject.targets.length}</div>}
-                    <div style={{display:"flex",justifyContent:"flex-end"}}>
-                      <button onClick={()=>chooseSubjectForMobile(subject)} style={{...pill(selected?G.blue:"#FFFFFF",selected?"#FFFFFF":G.textS,selected?G.blue:G.borderM),padding:"7px 11px",fontSize:12,fontWeight:800,minWidth:82,justifyContent:"center"}}>
-                        {selected ? "Chosen" : "Use"}
-                      </button>
-                    </div>
-                  </div>
+                    </span>
+                    <span style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),fontSize:11.5,fontWeight:800}}>{subject.teacherCount} teacher{subject.teacherCount===1?"":"s"}</span>
+                      <span style={{...pill("#FFFFFF",G.textS,G.borderM),fontSize:11.5,fontWeight:800}}>{subject.targets.length} class{subject.targets.length===1?"":"es"}</span>
+                      <span style={{...pill(published?"#E8F7EF":matching.length?"#FFF7E6":"#EEF4FF",published?"#137A45":matching.length?"#9A5A00":G.blue,published?"#B9E5CA":matching.length?"#F1D49A":"#C7D7F5"),fontSize:11.5,fontWeight:800}}>{statusLabel}</span>
+                    </span>
+                  </button>
                 );
               })}
             </div>
@@ -5647,7 +5718,7 @@ function ClassBoundSyllabusFlow({
       </div>
       )}
 
-      {selectedSubject&&selectedPairs.length>0&&(!isMobile || mobileSyllabusStep==="build")&&(
+      {selectedSubject&&selectedPairs.length>0&&(!isMobile || mobileSyllabusStep==="chapters" || mobileSyllabusStep==="review")&&(
         <SyllabusBuilder
           key={`${selectedSubject.id}::${syllabusScopeKey(selectedScope)}`}
           subject={selectedSubject}
@@ -5660,6 +5731,9 @@ function ClassBoundSyllabusFlow({
           getAffectedSummary={getAffectedSummary}
           busy={busy}
           isMobile={isMobile}
+          setupStep={isMobile ? mobileSyllabusStep : "chapters"}
+          onRequestReview={()=>setMobileSyllabusStep("review")}
+          onRequestChapters={()=>setMobileSyllabusStep("chapters")}
           onClose={()=>setSelectedSubject(null)}
           onSave={onSave}
           onPublish={onPublish}
