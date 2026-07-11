@@ -4336,6 +4336,7 @@ function ClassTrackerInner({user}){
   const [inlineToast,setInlineToast]     = useState(null);
   const inlineToastTimer                 = useRef(null);
   const [confirmModal,setConfirmModal]   = useState(null);
+  const [jointClassPromptOpen,setJointClassPromptOpen] = useState(false);
   const [isMobile,setIsMobile]           = useState(window.innerWidth < 768);
   const [isWeakDevice,setIsWeakDevice]   = useState(false);
   const [reduceEffects,setReduceEffects] = useState(false);
@@ -4393,6 +4394,9 @@ function ClassTrackerInner({user}){
     () => hasLiveEntryDraft(activeEntryDraftForm),
     [activeEntryDraftForm]
   );
+  useEffect(() => {
+    if(!isEntryComposerView && jointClassPromptOpen) setJointClassPromptOpen(false);
+  }, [isEntryComposerView, jointClassPromptOpen]);
   const teacherThemeVars = useMemo(() => getTeacherThemeVars(teacherTheme), [teacherTheme]);
   const teacherThemeShell = useMemo(() => ({
     ...teacherThemeVars,
@@ -5196,10 +5200,11 @@ function ClassTrackerInner({user}){
     if(exportOpen){ setExportOpen(false); return true; }
     if(signOutPrompt){ setSignOutPrompt(false); return true; }
     if(confirmModal){ setConfirmModal(null); return true; }
+    if(jointClassPromptOpen){ setJointClassPromptOpen(false); return true; }
     if(leaveModal){ setLeaveModal(null); return true; }
     if(teacherNoticePrompt){ setTeacherNoticePrompt(null); return true; }
     return false;
-  }, [confirmModal, exportOpen, historyClassId, leaveModal, mobileClassSheetId, signOutPrompt, teacherNoticePrompt]);
+  }, [confirmModal, exportOpen, historyClassId, jointClassPromptOpen, leaveModal, mobileClassSheetId, signOutPrompt, teacherNoticePrompt]);
   useEffect(() => {
     if(!Capacitor.isNativePlatform()) return undefined;
     const listenerPromise = CapacitorApp.addListener("backButton", () => {
@@ -8121,6 +8126,11 @@ function ClassTrackerInner({user}){
     const setForm=isEdit?setEditNote:setNewNote;
     const save=isEdit?saveEdit:addNote;
     const color=activeClass?getSectionTone(activeClass.section):getSectionTone("");
+    const entryHeroTheme=getTeacherSectionSurfaceStyles(color, isDarkTeacherTheme);
+    const entryClassMetrics=activeClass
+      ? (teacherClassMetricsMap[activeClass.id] || buildClassEntryMetrics(buildEffectiveClassNotes(data.notes, activeClass.id, isTeacherTeachingActivityEntry)))
+      : buildClassEntryMetrics({});
+    const entryStatusTone=getTodayEntryStatusStyles(entryClassMetrics.todayEntries);
     const detailTitle=String(form.title||"").trim();
     const detailBody=String(form.body||"").trim();
     const detailsStarted=Boolean(detailTitle||detailBody);
@@ -8128,6 +8138,9 @@ function ClassTrackerInner({user}){
     const canSave=Boolean(form.timeStart&&detailsComplete);
     const saveLabel=isEdit?"Save Changes":"Save Entry";
     const selectedJointTargetIds=getJointTargetClassIds(form, activeClass?.id);
+    const selectedJointClasses=selectedJointTargetIds
+      .map(id=>getClassById(id))
+      .filter(Boolean);
     const jointCandidates=(data.classes||[])
       .filter(cls=>cls&&!cls.left&&!cls.archived&&String(cls.id||"")!==String(activeClass?.id||""))
       .sort((a,b)=>{
@@ -8139,73 +8152,103 @@ function ClassTrackerInner({user}){
         };
         return score(b)-score(a) || String(a.section||"").localeCompare(String(b.section||""));
       });
-    const jointPanel=jointCandidates.length>0?(
-      <div style={{margin:"0 0 18px",padding:"14px 14px 12px",borderRadius:16,border:`1px solid ${selectedJointTargetIds.length?`${G.green}44`:G.border}`,background:selectedJointTargetIds.length?G.greenL:G.surfaceSoft}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
-          <div>
-            <label style={{...lbl,marginBottom:3}}>Joint class</label>
-            <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45}}>Select other sections covered in the same session.</div>
-          </div>
-          {selectedJointTargetIds.length>0&&(
+    const jointPanel=jointClassPromptOpen&&jointCandidates.length>0&&typeof document!=="undefined"?createPortal(
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Joint class"
+        onMouseDown={()=>setJointClassPromptOpen(false)}
+        style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(15,23,42,0.42)",display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",padding:isMobile?"16px":"24px",boxSizing:"border-box",backdropFilter:"blur(6px)"}}>
+        <div
+          onMouseDown={e=>e.stopPropagation()}
+          style={{width:"100%",maxWidth:520,maxHeight:isMobile?"82dvh":"min(78vh,620px)",background:G.surface,border:`1px solid ${G.border}`,borderRadius:isMobile?"24px 24px 18px 18px":24,boxShadow:"0 28px 70px rgba(15,23,42,0.28)",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"18px 18px 14px",borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,fontWeight:800,marginBottom:5}}>Joint class</div>
+              <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:0,lineHeight:1.05}}>Select sections</div>
+              <div style={{fontSize:13,color:G.textM,lineHeight:1.45,marginTop:6}}>Covered together with {activeClass?.section || "this class"}</div>
+            </div>
             <button
               type="button"
+              onClick={()=>setJointClassPromptOpen(false)}
+              style={{width:38,height:38,borderRadius:999,border:`1px solid ${G.border}`,background:G.surfaceSoft,color:G.textM,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <AppIcon icon={IconX} size={18} color="currentColor" />
+            </button>
+          </div>
+          <div style={{padding:18,overflowY:"auto",display:"grid",gap:10}}>
+            {jointCandidates.map(candidate=>{
+              const id=String(candidate.id||"");
+              const selected=selectedJointTargetIds.includes(id);
+              const sameContext=String(candidate?.institute||"").trim().toLowerCase()===String(activeClass?.institute||"").trim().toLowerCase()
+                && String(candidate?.subject||"").trim().toLowerCase()===String(activeClass?.subject||"").trim().toLowerCase();
+              return(
+                <button
+                  key={id}
+                  type="button"
+                  onClick={()=>{
+                    const next=selected
+                      ? selectedJointTargetIds.filter(item=>item!==id)
+                      : [...selectedJointTargetIds,id];
+                    setForm(withJointTargetClassIds(form, next));
+                  }}
+                  style={{
+                    width:"100%",
+                    textAlign:"left",
+                    border:`1.5px solid ${selected?G.green:G.border}`,
+                    background:selected?G.greenL:G.surface,
+                    color:G.text,
+                    borderRadius:16,
+                    padding:"12px 13px",
+                    cursor:"pointer",
+                    display:"flex",
+                    alignItems:"center",
+                    gap:12,
+                    minHeight:62,
+                    WebkitTapHighlightColor:"transparent",
+                    boxShadow:selected?"0 10px 22px rgba(15,107,120,0.10)":"none",
+                  }}>
+                  <span style={{width:24,height:24,borderRadius:999,border:`2px solid ${selected?G.green:(sameContext?G.borderM:G.border)}`,background:selected?G.green:G.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {selected&&<AppIcon icon={IconCheck} size={14} color="#fff" />}
+                  </span>
+                  <span style={{minWidth:0,flex:1}}>
+                    <span style={{display:"block",fontSize:15,fontWeight:800,color:selected?G.green:G.text,fontFamily:G.display,letterSpacing:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{candidate.section}</span>
+                    <span style={{display:"block",fontSize:12.5,color:G.textM,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {candidate.institute || "No institute"}{candidate.subject?` - ${candidate.subject}`:""}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+            {selectedJointTargetIds.some(id=>{
+              const cls=getClassById(id);
+              return cls && (
+                String(cls?.institute||"").trim().toLowerCase()!==String(activeClass?.institute||"").trim().toLowerCase()
+                || String(cls?.subject||"").trim().toLowerCase()!==String(activeClass?.subject||"").trim().toLowerCase()
+              );
+            })&&(
+              <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5,background:G.surfaceSoft,border:`1px solid ${G.border}`,borderRadius:14,padding:"10px 12px"}}>
+                Different institute or subject selected. The entry will cover those classes, but syllabus progress remains separate.
+              </div>
+            )}
+          </div>
+          <div style={{padding:"14px 18px 18px",borderTop:`1px solid ${G.border}`,display:"flex",gap:10,justifyContent:"space-between",alignItems:"center"}}>
+            <button
+              type="button"
+              disabled={!selectedJointTargetIds.length}
               onClick={()=>setForm(withJointTargetClassIds(form, []))}
-              style={{border:`1px solid ${G.borderM}`,background:G.surface,borderRadius:999,padding:"7px 10px",fontSize:12,fontFamily:G.sans,fontWeight:700,color:G.textS,cursor:"pointer",whiteSpace:"nowrap"}}>
+              style={{border:`1px solid ${G.borderM}`,background:G.surface,color:selectedJointTargetIds.length?G.textS:G.textL,borderRadius:12,padding:"10px 14px",fontSize:13,fontFamily:G.sans,fontWeight:800,cursor:selectedJointTargetIds.length?"pointer":"not-allowed",opacity:selectedJointTargetIds.length?1:0.55}}>
               Clear
             </button>
-          )}
-        </div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-          {jointCandidates.map(candidate=>{
-            const id=String(candidate.id||"");
-            const selected=selectedJointTargetIds.includes(id);
-            const sameContext=String(candidate?.institute||"").trim().toLowerCase()===String(activeClass?.institute||"").trim().toLowerCase()
-              && String(candidate?.subject||"").trim().toLowerCase()===String(activeClass?.subject||"").trim().toLowerCase();
-            return(
-              <button
-                key={id}
-                type="button"
-                onClick={()=>{
-                  const next=selected
-                    ? selectedJointTargetIds.filter(item=>item!==id)
-                    : [...selectedJointTargetIds,id];
-                  setForm(withJointTargetClassIds(form, next));
-                }}
-                style={{
-                  border:`1.5px solid ${selected?G.green:G.border}`,
-                  background:selected?G.surface:G.surface,
-                  color:selected?G.green:G.textS,
-                  borderRadius:999,
-                  padding:"8px 11px",
-                  fontSize:12.5,
-                  fontFamily:G.sans,
-                  fontWeight:800,
-                  cursor:"pointer",
-                  display:"inline-flex",
-                  alignItems:"center",
-                  gap:7,
-                  minHeight:38,
-                  maxWidth:"100%",
-                  WebkitTapHighlightColor:"transparent",
-                }}>
-                <span style={{width:9,height:9,borderRadius:999,background:selected?G.green:(sameContext?G.textL:G.borderM),flexShrink:0}}/>
-                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{candidate.section}</span>
-              </button>
-            );
-          })}
-        </div>
-        {selectedJointTargetIds.some(id=>{
-          const cls=getClassById(id);
-          return cls && (
-            String(cls?.institute||"").trim().toLowerCase()!==String(activeClass?.institute||"").trim().toLowerCase()
-            || String(cls?.subject||"").trim().toLowerCase()!==String(activeClass?.subject||"").trim().toLowerCase()
-          );
-        })&&(
-          <div style={{marginTop:10,fontSize:12.5,color:G.textM,lineHeight:1.5}}>
-            Different institute or subject selected. The entry will cover those classes, but syllabus progress remains separate.
+            <button
+              type="button"
+              onClick={()=>setJointClassPromptOpen(false)}
+              style={{border:"none",background:G.green,color:"#fff",borderRadius:12,padding:"11px 18px",fontSize:14,fontFamily:G.sans,fontWeight:800,cursor:"pointer",boxShadow:"0 10px 22px rgba(15,107,120,0.18)"}}>
+              Done{selectedJointTargetIds.length?` (${selectedJointTargetIds.length})`:""}
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      </div>,
+      document.body
     ):null;
     const lastTopicSuggestion=form.status==="inprogress" ? (getClassUrgencyMeta(activeClass).lastTopic||"").trim() : "";
     const topicSuggestionApplied=form.status==="inprogress"&&!!lastTopicSuggestion&&String(form.title||"").trim()===lastTopicSuggestion;
@@ -8304,12 +8347,100 @@ function ClassTrackerInner({user}){
           </>}
         />
 
-        {/* Class name bar — static in flow, always visible above scrollable content */}
+        {/* Class hero card - static in flow, always visible above scrollable content */}
         {activeClass&&(
-          <div style={{flexShrink:0,background:G.forest,padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
-            <div style={{width:8,height:8,borderRadius:"50%",background:"#34D077",flexShrink:0}}/>
-            <span style={{fontSize:16,fontWeight:800,color:"#fff",fontFamily:G.display,letterSpacing:-0.2}}>{activeClass.section}</span>
-            <span style={{fontSize:13,color:"rgba(255,255,255,0.45)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:260}}>· {activeClass.institute}{activeClass.subject?` · ${activeClass.subject}`:""}</span>
+          <div style={{flexShrink:0,background:G.pageBg,padding:"12px 16px 0"}}>
+            <div style={{maxWidth:660,margin:"0 auto"}}>
+              <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${isDarkTeacherTheme ? G.borderM : "rgba(15,23,42,0.92)"}`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd}}>
+                <div style={{background:entryHeroTheme.headerBg,padding:isMobile?"16px 16px 14px":"18px 18px 15px",borderBottom:`1px solid ${entryHeroTheme.headerBorder}`}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:isMobile?30:32,fontWeight:800,color:entryHeroTheme.titleColor,fontFamily:G.display,letterSpacing:0,lineHeight:1.02,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {activeClass.section}
+                      </div>
+                      <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:11}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:7,background:entryHeroTheme.chipBg,border:`1px solid ${entryHeroTheme.chipBorder}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:800,color:entryHeroTheme.chipText,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          <span style={{width:8,height:8,borderRadius:999,background:color.bg,flexShrink:0}}/>
+                          {activeClass.institute || "No institute"}
+                        </span>
+                        {activeClass.subject&&(
+                          <span style={{display:"inline-flex",alignItems:"center",background:entryHeroTheme.chipBg,border:`1px solid ${entryHeroTheme.chipBorder}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:800,color:entryHeroTheme.chipText,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
+                            {activeClass.subject}
+                          </span>
+                        )}
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6,background:entryStatusTone.background,border:`1px solid ${entryStatusTone.border}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:800,color:entryStatusTone.color,whiteSpace:"nowrap"}}>
+                          <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
+                          {entryStatusTone.label}
+                        </span>
+                      </div>
+                    </div>
+                    {jointCandidates.length>0&&(
+                      <button
+                        type="button"
+                        onClick={()=>setJointClassPromptOpen(true)}
+                        onPointerDown={e=>rpl(e,true)}
+                        aria-label="Add joint class"
+                        title="Joint class"
+                        style={{
+                          width:44,
+                          height:44,
+                          borderRadius:999,
+                          border:`1px solid ${selectedJointTargetIds.length?`${G.green}55`:entryHeroTheme.chipBorder}`,
+                          background:selectedJointTargetIds.length?G.greenL:entryHeroTheme.chipBg,
+                          color:selectedJointTargetIds.length?G.green:entryHeroTheme.chipText,
+                          display:"flex",
+                          alignItems:"center",
+                          justifyContent:"center",
+                          cursor:"pointer",
+                          fontSize:selectedJointTargetIds.length?14:25,
+                          fontWeight:900,
+                          fontFamily:G.display,
+                          lineHeight:1,
+                          flexShrink:0,
+                          boxShadow:selectedJointTargetIds.length?"0 10px 20px rgba(15,107,120,0.14)":"none",
+                          WebkitTapHighlightColor:"transparent",
+                        }}>
+                        {selectedJointTargetIds.length?`+${selectedJointTargetIds.length}`:"+"}
+                      </button>
+                    )}
+                  </div>
+                  {selectedJointClasses.length>0&&(
+                    <div style={{marginTop:13,display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
+                      <span style={{fontSize:11,color:entryHeroTheme.eyebrowColor,fontFamily:G.mono,textTransform:"uppercase",fontWeight:800,letterSpacing:0.4,marginRight:2}}>Joint with</span>
+                      {selectedJointClasses.map(cls=>(
+                        <button
+                          key={cls.id}
+                          type="button"
+                          onClick={()=>setJointClassPromptOpen(true)}
+                          style={{display:"inline-flex",alignItems:"center",gap:7,background:selectedJointTargetIds.includes(String(cls.id||""))?G.greenL:entryHeroTheme.chipBg,border:`1px solid ${selectedJointTargetIds.includes(String(cls.id||""))?`${G.green}44`:entryHeroTheme.chipBorder}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:800,color:selectedJointTargetIds.includes(String(cls.id||""))?G.green:entryHeroTheme.chipText,cursor:"pointer",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            <span style={{width:7,height:7,borderRadius:999,background:selectedJointTargetIds.includes(String(cls.id||""))?G.green:G.textL,flexShrink:0}}/>
+                            {cls.section}
+                          </button>
+                        ))}
+                      <button
+                        type="button"
+                        onClick={()=>setForm(withJointTargetClassIds(form, []))}
+                        style={{border:"none",background:"transparent",color:entryHeroTheme.eyebrowColor,fontSize:11.5,fontFamily:G.sans,fontWeight:800,cursor:"pointer",padding:"6px 4px"}}>
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,padding:"12px 14px"}}>
+                  {[
+                    { label:"Today", value:entryClassMetrics.todayEntries, color:entryHeroTheme.primaryAccent },
+                    { label:entryClassMetrics.monthLabel, value:entryClassMetrics.monthEntries, color:G.textS },
+                    { label:"Total", value:entryClassMetrics.totalCount, color:G.text },
+                    { label:"Days", value:entryClassMetrics.activeDays, color:G.textS },
+                  ].map(item=>(
+                    <div key={item.label} style={{background:entryHeroTheme.statBg,border:`1px solid ${entryHeroTheme.statBorder}`,borderRadius:14,padding:"10px 7px",textAlign:"center",minWidth:0}}>
+                      <div style={{fontSize:20,fontWeight:800,color:item.color,fontFamily:G.display,lineHeight:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.value}</div>
+                      <div style={{fontSize:10.5,color:G.textL,marginTop:5,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
