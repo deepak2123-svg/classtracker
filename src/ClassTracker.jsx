@@ -8158,7 +8158,7 @@ function ClassTrackerInner({user}){
         aria-modal="true"
         aria-label="Joint class"
         onMouseDown={()=>setJointClassPromptOpen(false)}
-        style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(15,23,42,0.42)",display:"flex",alignItems:"center",justifyContent:"center",padding:isMobile?"22px":"24px",boxSizing:"border-box"}}>
+        style={{...teacherThemeVars,colorScheme:teacherTheme,position:"fixed",inset:0,zIndex:9999,background:"rgba(15,23,42,0.42)",display:"flex",alignItems:"center",justifyContent:"center",padding:isMobile?"22px":"24px",boxSizing:"border-box",fontFamily:G.sans,color:G.text}}>
         <div
           onMouseDown={e=>e.stopPropagation()}
           style={{width:"100%",maxWidth:500,maxHeight:"min(84dvh, 560px)",background:G.surface,border:`1px solid ${G.border}`,borderRadius:24,boxShadow:"0 28px 70px rgba(15,23,42,0.28)",overflow:"hidden",display:"flex",flexDirection:"column"}}>
