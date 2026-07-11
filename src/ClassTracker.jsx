@@ -8337,13 +8337,13 @@ function ClassTrackerInner({user}){
           <div style={{flexShrink:0,background:G.pageBg,padding:"8px 16px 0"}}>
             <div style={{maxWidth:660,margin:"0 auto"}}>
               <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${isDarkTeacherTheme ? G.borderM : "rgba(15,23,42,0.92)"}`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd}}>
-                <div style={{background:entryHeroTheme.headerBg,padding:isMobile?"16px 16px 15px":"18px 18px 17px"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-                    <div style={{fontSize:isMobile?30:34,fontWeight:800,color:entryHeroTheme.titleColor,fontFamily:G.display,letterSpacing:0,lineHeight:1.02,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:"1 1 auto",minWidth:0,paddingTop:1}}>
+                <div style={{background:entryHeroTheme.headerBg,padding:isMobile?"12px 14px":"14px 16px"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+                    <div style={{fontSize:isMobile?26:30,fontWeight:800,color:entryHeroTheme.titleColor,fontFamily:G.display,letterSpacing:0,lineHeight:1.02,overflow:"visible",whiteSpace:"normal",overflowWrap:"anywhere",flex:"1 1 auto",minWidth:0,paddingTop:2}}>
                       {activeClass.section}
                     </div>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:10,flexShrink:0,maxWidth:isMobile?"66%":"58%"}}>
-                      <span style={{display:"inline-flex",alignItems:"center",gap:7,background:entryStatusTone.background,border:`1px solid ${entryStatusTone.border}`,borderRadius:999,padding:"8px 12px",fontSize:isMobile?12.5:13,fontWeight:800,color:entryStatusTone.color,whiteSpace:"nowrap",maxWidth:isMobile?170:220,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8,flexShrink:0,maxWidth:isMobile?"58%":"52%"}}>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:6,background:entryStatusTone.background,border:`1px solid ${entryStatusTone.border}`,borderRadius:999,padding:"7px 10px",fontSize:isMobile?11.5:12.5,fontWeight:800,color:entryStatusTone.color,whiteSpace:"nowrap",maxWidth:isMobile?138:190,minWidth:0}}>
                         <span style={{width:8,height:8,borderRadius:999,background:"currentColor",flexShrink:0}}/>
                         <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entryStatusTone.label}</span>
                       </span>
@@ -8355,8 +8355,8 @@ function ClassTrackerInner({user}){
                           aria-label="Add joint class"
                           title="Joint class"
                           style={{
-                            width:44,
-                            height:44,
+                            width:40,
+                            height:40,
                             borderRadius:999,
                             border:`2px solid ${selectedJointTargetIds.length?`${G.green}55`:"rgba(255,255,255,0.22)"}`,
                             background:selectedJointTargetIds.length?G.greenL:"rgba(255,255,255,0.16)",
@@ -8365,7 +8365,7 @@ function ClassTrackerInner({user}){
                             alignItems:"center",
                             justifyContent:"center",
                             cursor:"pointer",
-                            fontSize:selectedJointTargetIds.length?14:24,
+                            fontSize:selectedJointTargetIds.length?13:23,
                             fontWeight:900,
                             fontFamily:G.display,
                             lineHeight:1,
@@ -8378,20 +8378,20 @@ function ClassTrackerInner({user}){
                     </div>
                   </div>
 
-                  <div style={{display:"grid",gridTemplateColumns:activeClass.subject?"repeat(2,minmax(0,1fr))":"minmax(0,max-content)",gap:9,alignItems:"center",marginTop:13,maxWidth:"100%"}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.17)",border:"1px solid rgba(255,255,255,0.13)",borderRadius:999,padding:"7px 10px",fontSize:12.5,fontWeight:800,color:"#fff",minWidth:0,overflow:"hidden",whiteSpace:"nowrap"}}>
+                  <div style={{display:"grid",gridTemplateColumns:activeClass.subject?"repeat(2,minmax(0,1fr))":"minmax(0,max-content)",gap:8,alignItems:"center",marginTop:10,maxWidth:"100%"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.17)",border:"1px solid rgba(255,255,255,0.13)",borderRadius:999,padding:"6px 9px",fontSize:12,fontWeight:800,color:"#fff",minWidth:0,overflow:"hidden",whiteSpace:"nowrap"}}>
                       <span style={{width:8,height:8,borderRadius:999,background:"#34D077",flexShrink:0}}/>
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeClass.institute || "No institute"}</span>
                     </span>
                     {activeClass.subject&&(
-                      <span style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.17)",border:"1px solid rgba(255,255,255,0.13)",borderRadius:999,padding:"7px 10px",fontSize:12.5,fontWeight:800,color:"#fff",minWidth:0,overflow:"hidden",whiteSpace:"nowrap"}}>
+                      <span style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.17)",border:"1px solid rgba(255,255,255,0.13)",borderRadius:999,padding:"6px 9px",fontSize:12,fontWeight:800,color:"#fff",minWidth:0,overflow:"hidden",whiteSpace:"nowrap"}}>
                         <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeClass.subject}</span>
                       </span>
                     )}
                   </div>
 
                   {selectedJointClasses.length>0&&(
-                    <div style={{marginTop:12,display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
+                    <div style={{marginTop:9,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                       <span style={{fontSize:11,color:entryHeroTheme.eyebrowColor,fontFamily:G.mono,textTransform:"uppercase",fontWeight:800,letterSpacing:0.4,marginRight:2}}>Joint with</span>
                       {selectedJointClasses.map(cls=>(
                         <button
@@ -8412,16 +8412,16 @@ function ClassTrackerInner({user}){
                     </div>
                   )}
 
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginTop:16}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,marginTop:10}}>
                     {[
                       { label:"Today", value:entryClassMetrics.todayEntries },
                       { label:entryHeroMonthLabel, value:entryClassMetrics.monthEntries },
                       { label:"Total", value:entryClassMetrics.totalCount },
                       { label:"Days", value:entryClassMetrics.activeDays },
                     ].map(item=>(
-                      <div key={item.label} style={{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,padding:isMobile?"11px 6px":"13px 8px",textAlign:"center",minWidth:0}}>
-                        <div style={{fontSize:isMobile?22:25,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.value}</div>
-                        <div style={{fontSize:isMobile?11:12,color:"rgba(255,255,255,0.72)",marginTop:6,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
+                      <div key={item.label} style={{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:isMobile?"8px 4px":"10px 6px",textAlign:"center",minWidth:0}}>
+                        <div style={{fontSize:isMobile?20:23,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.value}</div>
+                        <div style={{fontSize:isMobile?10.5:11.5,color:"rgba(255,255,255,0.72)",marginTop:5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
                       </div>
                     ))}
                   </div>
@@ -8477,7 +8477,7 @@ function ClassTrackerInner({user}){
           <div className="form-card" style={{...card,padding:"24px"}}>
             <div style={{marginBottom:18}}>
               <label style={lbl}>Topic Status</label>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gridAutoRows:52,gap:10}}>
                 {Object.entries(STATUS_STYLES).map(([key,val])=>{
                   const selected=form.status===key;
                   const statusLabel=String(val.label||"").replace(/[🔵🟡🟢🟠]/g,"").trim();
@@ -8486,12 +8486,12 @@ function ClassTrackerInner({user}){
                     const nextStatus=form.status===key?"":key;
                     setForm({...form,status:nextStatus});
                   }}
-                    style={{width:"100%",minHeight:48,background:selected?val.bg:G.surface,color:selected?val.text:G.textM,
+                    style={{width:"100%",height:"100%",background:selected?val.bg:G.surface,color:selected?val.text:G.textM,
                       border:`1.5px solid ${selected?val.dot:G.border}`,
-                      borderRadius:999,padding:"8px 10px",fontSize:14,cursor:"pointer",fontFamily:G.sans,
+                      borderRadius:999,padding:"0 14px",fontSize:13.5,cursor:"pointer",fontFamily:G.sans,
                       fontWeight:selected?800:700,transition:"all 0.15s",
-                      WebkitTapHighlightColor:"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:9,overflow:"hidden"}}>
-                    <span style={{width:18,height:18,borderRadius:999,background:val.dot,boxShadow:`inset 0 0 0 2px ${selected?"rgba(255,255,255,0.20)":"rgba(255,255,255,0.35)"}`,flexShrink:0}}/>
+                      WebkitTapHighlightColor:"transparent",display:"grid",gridTemplateColumns:"18px minmax(0,1fr)",alignItems:"center",columnGap:9,overflow:"hidden",textAlign:"left"}}>
+                    <span style={{width:18,height:18,borderRadius:999,background:val.dot,boxShadow:`inset 0 0 0 2px ${selected?"rgba(255,255,255,0.20)":"rgba(255,255,255,0.35)"}`}}/>
                     <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{statusLabel}</span>
                   </button>
                   );
