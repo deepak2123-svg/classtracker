@@ -15,6 +15,7 @@ import {
   IconDeviceFloppy,
   IconDownload,
   IconFileText,
+  IconLink,
   IconLogout,
   IconMessageCircle,
   IconBooks,
@@ -17211,36 +17212,36 @@ function AdminPanelInner({user}){
             );
           return(
             <>
-              {/* Invite link */}
-              <div style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:13,padding:"14px 16px",marginBottom:20}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-                  <div>
-                    <div style={{fontSize:16,fontWeight:700,color:G.navy,fontFamily:G.display}}>Generate Admin Invite Link</div>
-                    <div style={{fontSize:14,color:"#1D4ED8",marginTop:3}}>Single-use · expires in 7 days</div>
+              {/* Admin list */}
+              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:10}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
+                      Admins ({adminList.length})
+                    </div>
+                    <div style={{fontSize:14,color:G.textM}}>Every admin has an explicit type: {adminOnlyCount} admin only · {adminTeacherCount} admin + teacher.</div>
                   </div>
                   <button onClick={handleGenerateInvite} disabled={inviteLoading}
-                    style={{...pill(G.navy,"#fff","transparent"),padding:"8px 18px",fontSize:15,flexShrink:0}}>
-                    {inviteLoading?"Generating…":"🔗 Generate Link"}
+                    title="Single-use admin invite link. Expires in 7 days."
+                    style={{...pill(G.navy,"#fff","transparent"),padding:"8px 13px",fontSize:13.5,flexShrink:0,alignSelf:"flex-start",fontWeight:850}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
+                      <AppIcon icon={IconLink} size={15}/>
+                      {inviteLoading?"Generating...":"Generate Link"}
+                    </span>
                   </button>
                 </div>
                 {inviteLink&&(
-                  <div style={{marginTop:14}}>
-                    <div style={{background:"#fff",border:"1px solid #BFDBFE",borderRadius:9,padding:"10px 14px",fontSize:14,fontFamily:G.mono,color:"#1A2F5A",wordBreak:"break-all",marginBottom:10}}>{inviteLink}</div>
-                    <div style={{display:"flex",gap:8}}>
-                      <button onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>showAdminToast("Link copied!"))} style={{...pill("#1D4ED8","#fff","transparent"),fontSize:14,padding:"6px 16px"}}>Copy Link</button>
-                      <button onClick={()=>setInviteLink(null)} style={{...pill("none",G.textM,G.border),fontSize:14,padding:"6px 16px"}}>Dismiss</button>
+                  <div style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
+                    <div style={{background:"#fff",border:"1px solid #BFDBFE",borderRadius:9,padding:"9px 11px",fontSize:13,fontFamily:G.mono,color:"#1A2F5A",wordBreak:"break-all",marginBottom:8}}>{inviteLink}</div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+                      <div style={{fontSize:12.5,color:"#1D4ED8",fontWeight:750}}>Single-use · expires in 7 days · share privately</div>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        <button onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>showAdminToast("Link copied!"))} style={{...pill("#1D4ED8","#fff","transparent"),fontSize:12.5,padding:"6px 12px",fontWeight:850}}>Copy Link</button>
+                        <button onClick={()=>setInviteLink(null)} style={{...pill("#FFFFFF",G.textM,G.border),fontSize:12.5,padding:"6px 12px",fontWeight:850}}>Dismiss</button>
+                      </div>
                     </div>
-                    <div style={{fontSize:13,color:"#1D4ED8",marginTop:10}}>⚠ Share privately. Grants full admin access, single-use.</div>
                   </div>
                 )}
-              </div>
-
-              {/* Admin list */}
-              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
-                <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
-                  Admins ({adminList.length})
-                </div>
-                <div style={{fontSize:14,color:G.textM,marginBottom:10}}>Every admin has an explicit type: {adminOnlyCount} admin only · {adminTeacherCount} admin + teacher.</div>
                 {isMobile&&(
                   <div style={{marginBottom:12}}>
                     <AdminMobileMetricGrid
@@ -17256,7 +17257,7 @@ function AdminPanelInner({user}){
                 )}
                 {manageSearchInput(manageAdminSearch,setManageAdminSearch,"Search admins by name, email, or institute")}
                 {adminList.length===0
-                  ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No admins yet. Generate an invite link above.</div>
+                  ?<div style={{fontSize:15,color:G.textM,padding:"20px 0",textAlign:"center"}}>No admins yet. Use Generate Link to add one.</div>
                   :renderWorkspaceTable({
                     columns:[
                       { key:"admin", label:"Admin" },
