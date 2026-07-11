@@ -17216,10 +17216,9 @@ function AdminPanelInner({user}){
               <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px"}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:10}}>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>
+                    <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:0}}>
                       Admins ({adminList.length})
                     </div>
-                    <div style={{fontSize:14,color:G.textM}}>Every admin has an explicit type: {adminOnlyCount} admin only · {adminTeacherCount} admin + teacher.</div>
                   </div>
                   <button onClick={handleGenerateInvite} disabled={inviteLoading}
                     title="Single-use admin invite link. Expires in 7 days."
