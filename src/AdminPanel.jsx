@@ -5836,6 +5836,7 @@ function AdminPanelInner({user}){
   const [adminV5ClassSort, setAdminV5ClassSort] = useState("recent"); // recent | alpha
   const [adminV5ExpandedClassKeys, setAdminV5ExpandedClassKeys] = useState({});
   const [adminV5ExpandedGroupKeys, setAdminV5ExpandedGroupKeys] = useState({});
+  const [adminV5RefreshingInstitute, setAdminV5RefreshingInstitute] = useState("");
   const [adminV5DailySummaries, setAdminV5DailySummaries] = useState({});
   const [adminV5DailySummariesLoading, setAdminV5DailySummariesLoading] = useState(false);
   const [adminV5PanelW, setAdminV5PanelW] = useState(()=>({
@@ -6716,6 +6717,33 @@ function AdminPanelInner({user}){
   const warmInstitute = React.useCallback((inst) => {
     warmTeacherUids(getInstituteTeacherUids(inst), inst);
   }, [getInstituteTeacherUids, warmTeacherUids]);
+
+  const refreshAdminV5Institute = React.useCallback(async (inst) => {
+    const instituteName = String(inst || "").trim();
+    if(!instituteName) return;
+    const uids = [...new Set(getInstituteTeacherUids(instituteName).filter(Boolean))];
+    if(!uids.length) return;
+    const requestId = ++warmupJobRef.current;
+    const batchSize = (isWeakDevice || mobileLiteMode) ? 2 : 4;
+    setAdminV5RefreshingInstitute(instituteName);
+    setInstWarmup({ inst:instituteName, total:uids.length, loaded:0 });
+    try{
+      for(let i = 0; i < uids.length; i += batchSize){
+        if(requestId !== warmupJobRef.current) return;
+        const batch = uids.slice(i, i + batchSize);
+        await Promise.all(batch.map(uid => ensureFullData(uid, { force:true }).catch(()=>null)));
+        if(requestId !== warmupJobRef.current) return;
+        const loaded = Math.min(i + batch.length, uids.length);
+        setInstWarmup(prev => sameInstituteName(prev.inst, instituteName) ? { ...prev, loaded } : prev);
+        if((isWeakDevice || mobileLiteMode) && i + batchSize < uids.length){
+          await new Promise(resolve => window.setTimeout(resolve, 16));
+        }
+      }
+      showAdminToast(`${instituteName} refreshed.`);
+    } finally {
+      setAdminV5RefreshingInstitute(current => sameInstituteName(current, instituteName) ? "" : current);
+    }
+  }, [ensureFullData, getInstituteTeacherUids, isWeakDevice, mobileLiteMode, showAdminToast]);
 
   React.useEffect(()=>{
     if(instDetailView){
@@ -15478,13 +15506,50 @@ function AdminPanelInner({user}){
           </div>
         );
       };
+      const selectedInstituteRefreshing = selectedInstituteName && sameInstituteName(adminV5RefreshingInstitute, selectedInstituteName);
+      const selectedInstituteBadgeLabel = selectedInstitute?.activeCount
+        ? `${selectedInstitute.loggedCount}/${selectedInstitute.activeCount}`
+        : "—";
+      const selectedInstituteBadgeTone = selectedInstitute?.status || { bg:"#F8FAFC", accent:G.textL, border:G.border };
       return (
         <section style={{background:"#F8FAFD",borderRight:panelBorder,minWidth:0,display:"flex",flexDirection:"column",height:adminV5StackedLayout?"auto":"100%",overflow:adminV5StackedLayout?"visible":"hidden"}}>
           <div style={{padding:"18px 16px 14px",borderBottom:panelBorder,background:"#FFFFFF"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-            <div style={{minWidth:0}}>
+            <div style={{minWidth:0,flex:1}}>
               <div style={{fontSize:11,fontFamily:G.mono,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase",color:G.textL}}>Institute</div>
-              <div style={{fontSize:22,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.05,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedInstituteName || "No institute"}</div>
+              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,marginTop:7}}>
+                <div style={{fontSize:22,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0}}>
+                  {selectedInstituteName || "No institute"}
+                </div>
+                {!!selectedInstitute&&(
+                  <button
+                    type="button"
+                    title="Refresh this institute"
+                    onClick={()=>refreshAdminV5Institute(selectedInstituteName)}
+                    disabled={!!selectedInstituteRefreshing}
+                    style={{
+                      height:30,
+                      minWidth:62,
+                      borderRadius:999,
+                      border:`1px solid ${selectedInstituteBadgeTone.border || G.border}`,
+                      background:selectedInstituteBadgeTone.bg || "#F8FAFC",
+                      color:selectedInstituteBadgeTone.accent || G.textL,
+                      display:"inline-flex",
+                      alignItems:"center",
+                      justifyContent:"center",
+                      padding:"0 12px",
+                      fontSize:12.5,
+                      fontWeight:950,
+                      fontFamily:G.mono,
+                      whiteSpace:"nowrap",
+                      flexShrink:0,
+                      cursor:selectedInstituteRefreshing ? "wait" : "pointer",
+                      opacity:selectedInstituteRefreshing ? 0.72 : 1,
+                    }}>
+                    {selectedInstituteBadgeLabel}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           {renderWarmupBanner(false)}
