@@ -44,6 +44,12 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { db, loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
+import {
+  buildEffectiveClassNotes,
+  buildJointClassesSnapshot,
+  collectCanonicalTeachingEntryRecords,
+  getJointClassIds,
+} from "./jointEntries.js";
 import { TAG_STYLES, STATUS_STYLES, Avatar, todayKey, toDateKey, formatDateLabel, fmt, formatPeriod, getSectionTone } from "./shared.jsx";
 
 const TEACHER_THEME_STORAGE_KEY = "classlog_teacher_theme";
@@ -722,20 +728,24 @@ function buildTeacherQuickHomeSummary(activeClasses = [], notes = {}){
   const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   const monthLoggedDaySet = new Set();
   const institutes = [...new Set(activeClasses.map(c=>c.institute||""))].filter(Boolean);
+  const today = todayKey();
   let loggedToday = 0;
-  let monthEntries = 0;
+  const monthRecords = collectCanonicalTeachingEntryRecords(notes, isTeacherTeachingActivityEntry, {
+    startKey:`${monthKey}-01`,
+    endKey:`${monthKey}-31`,
+  });
+  const monthEntries = monthRecords.length;
+  monthRecords.forEach(record => {
+    if(record?.dateKey) monthLoggedDaySet.add(record.dateKey);
+  });
 
   activeClasses.forEach(cls=>{
-    const classNotes = notes?.[cls.id] || {};
-    const todayEntries = teacherTeachingEntries(classNotes[todayKey()]).length;
-    if(todayEntries > 0) loggedToday += 1;
-    Object.entries(classNotes).forEach(([dk, arr])=>{
-      if(!Array.isArray(arr) || !arr.length || !dk.startsWith(monthKey)) return;
-      const teachingEntries = teacherTeachingEntries(arr);
-      if(!teachingEntries.length) return;
-      monthEntries += teachingEntries.length;
-      monthLoggedDaySet.add(dk);
+    const classNotes = buildEffectiveClassNotes(notes, cls.id, isTeacherTeachingActivityEntry, {
+      startKey:today,
+      endKey:today,
     });
+    const todayEntries = teacherTeachingEntries(classNotes[today]).length;
+    if(todayEntries > 0) loggedToday += 1;
   });
 
   const workingDaysElapsed = countWorkingDaysElapsed(now);
@@ -3098,30 +3108,30 @@ function ExportModal({data, teacherName, onClose}){
     const pad=n=>String(n).padStart(2,"0");
     const toKey=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 
-    // Iterate each day in range
-    const cur=new Date(from);
-    while(cur<=to){
-      const dk=toKey(cur);
-      (data.classes||[]).filter(c=>!c.left).forEach(cls=>{
-        const dayNotes=(data.notes[cls.id]||{})[dk]||[];
-        teacherTeachingEntries(dayNotes).forEach(note=>{
-          rows.push({
-            date:dk,
-            class:cls.section,
-            institute:cls.institute,
-            subject:cls.subject,
-            type:note.tag||"note",
-            time:note.timeStart?(note.timeEnd?`${note.timeStart} - ${note.timeEnd}`:note.timeStart):"",
-            timeStart:note.timeStart||"",
-            timeEnd:note.timeEnd||"",
-            status:note.status&&STATUS_STYLES[note.status]?STATUS_STYLES[note.status].label.replace(/[🔵🟡🟢🟠]/g,'').trim():"",
-            title:note.title||"",
-            notes:note.body||"",
-          });
-        });
+    const fromKey=toKey(from);
+    const toKeyValue=toKey(to);
+    const classMap=new Map((data.classes||[]).map(cls=>[String(cls?.id||""),cls]));
+    collectCanonicalTeachingEntryRecords(data.notes, isTeacherTeachingActivityEntry, {startKey:fromKey,endKey:toKeyValue}).forEach(({dateKey,entry,sourceClassId})=>{
+      const cls=classMap.get(String(sourceClassId||""));
+      if(!cls || cls.left) return;
+      const jointLabels=getJointClassIds(entry, cls.id)
+        .filter(id=>String(id)!==String(cls.id))
+        .map(id=>classMap.get(String(id))?.section)
+        .filter(Boolean);
+      rows.push({
+        date:dateKey,
+        class:jointLabels.length?`${cls.section} + ${jointLabels.join(", ")}`:cls.section,
+        institute:cls.institute,
+        subject:cls.subject,
+        type:entry.tag||"note",
+        time:entry.timeStart?(entry.timeEnd?`${entry.timeStart} - ${entry.timeEnd}`:entry.timeStart):"",
+        timeStart:entry.timeStart||"",
+        timeEnd:entry.timeEnd||"",
+        status:entry.status&&STATUS_STYLES[entry.status]?STATUS_STYLES[entry.status].label.replace(/[🔵🟡🟢🟠]/g,'').trim():"",
+        title:entry.title||"",
+        notes:entry.body||"",
       });
-      cur.setDate(cur.getDate()+1);
-    }
+    });
     return rows.sort(exportRowCompare);
   }
 
@@ -4435,7 +4445,7 @@ function ClassTrackerInner({user}){
     const classMetricsMap = {};
     (data.classes || []).forEach(cls => {
       if(!cls?.id) return;
-      classMetricsMap[cls.id] = buildClassEntryMetrics(data.notes?.[cls.id] || {});
+      classMetricsMap[cls.id] = buildClassEntryMetrics(buildEffectiveClassNotes(data.notes, cls.id, isTeacherTeachingActivityEntry));
     });
     const quickHomeSummary = buildTeacherQuickHomeSummary(activeClasses, data.notes);
     const knownInstituteNames = [...new Set([
@@ -4509,7 +4519,7 @@ function ClassTrackerInner({user}){
         const trashedClass = (data.trash?.classes || []).find(cls => String(cls?.id || "") === String(item?.classId || "")) || null;
         const record = isInstituteAction ? (item || {}) : (activeClass || trashedClass || item || {});
         const noteMap = !isInstituteAction && activeClass
-          ? (data.notes?.[record.id] || {})
+          ? buildEffectiveClassNotes(data.notes, record.id, isTeacherTeachingActivityEntry)
           : !isInstituteAction && trashedClass
             ? (trashedClass?.savedNotes || {})
             : {};
@@ -5461,12 +5471,8 @@ function ClassTrackerInner({user}){
   const allNoteDates = useMemo(()=>{
     const map={};
     try {
-      data.classes.forEach(cls=>{
-        const cn=data.notes[cls.id]||{};
-        Object.entries(cn).forEach(([dk,arr])=>{
-          const count=teacherTeachingEntries(arr).length;
-          if(count>0) map[dk]=(map[dk]||0)+count;
-        });
+      collectCanonicalTeachingEntryRecords(data.notes, isTeacherTeachingActivityEntry).forEach(record=>{
+        if(record?.dateKey) map[record.dateKey]=(map[record.dateKey]||0)+1;
       });
     } catch(e){}
     return map;
@@ -5475,7 +5481,7 @@ function ClassTrackerInner({user}){
   const classInsights = useMemo(()=>{
     const map={};
     (data.classes||[]).forEach(cls=>{
-      const classNotes=data.notes?.[cls.id]||{};
+      const classNotes=buildEffectiveClassNotes(data.notes, cls.id, isTeacherTeachingActivityEntry);
       const recentEntries=Object.entries(classNotes)
         .sort(([a],[b])=>b.localeCompare(a))
         .flatMap(([,entries])=>teacherTeachingEntries(entries).sort((a,b)=>(b.created||0)-(a.created||0)));
@@ -5740,12 +5746,86 @@ function ClassTrackerInner({user}){
     });
   };
 
-  const getClassNotes=(cid)=>data.notes[cid]||{};
-  const getDateNotes=(cid,dk)=>{ const arr=(data.notes[cid]||{})[dk]; return Array.isArray(arr)?arr:[]; };
-  const getAllNoteDates=(cid)=>new Set(Object.keys(data.notes[cid]||{}).filter(dk=>(data.notes[cid][dk]||[]).length>0));
+  const getClassNotes=(cid)=>buildEffectiveClassNotes(data.notes, cid, isTeacherTeachingActivityEntry);
+  const getDateNotes=(cid,dk)=>{
+    const arr=buildEffectiveClassNotes(data.notes, cid, isTeacherTeachingActivityEntry, {startKey:dk,endKey:dk})[dk];
+    return Array.isArray(arr)?arr:[];
+  };
+  const getAllNoteDates=(cid)=>new Set(Object.keys(buildEffectiveClassNotes(data.notes, cid, isTeacherTeachingActivityEntry)).filter(dk=>(buildEffectiveClassNotes(data.notes, cid, isTeacherTeachingActivityEntry)[dk]||[]).length>0));
   const getEntryDetailsValidationMessage=(entry)=>!String(entry?.title||"").trim()
     ? "Please add the topic before saving."
     : "";
+  const getClassById=(classId)=>data.classes.find(cls=>String(cls?.id||"")===String(classId||"")) || null;
+  const cleanEntryDraftForSave=(entry={})=>{
+    const {
+      _dur,
+      _kisSlot,
+      _manualTime,
+      _suggested,
+      _suggestedEnd,
+      _jointSourceClassId,
+      _jointCoverageClassId,
+      _jointCoverage,
+      ...clean
+    } = entry || {};
+    return clean;
+  };
+  const getJointTargetClassIds=(entry={}, primaryClassId=activeClass?.id)=>{
+    const primaryId=String(primaryClassId||"");
+    return getJointClassIds(entry, primaryId)
+      .filter(id=>id&&id!==primaryId)
+      .filter((id,index,arr)=>arr.indexOf(id)===index);
+  };
+  const withJointTargetClassIds=(entry={}, targetIds=[])=>{
+    const primaryId=String(activeClass?.id||"");
+    const cleanTargets=[...(targetIds||[])]
+      .map(id=>String(id||"").trim())
+      .filter(id=>id&&id!==primaryId)
+      .filter((id,index,arr)=>arr.indexOf(id)===index);
+    if(!primaryId || !cleanTargets.length){
+      const {
+        jointClass,
+        jointSessionId,
+        jointPrimaryClassId,
+        jointClassIds,
+        jointClassesSnapshot,
+        ...rest
+      } = entry || {};
+      return rest;
+    }
+    return {
+      ...(entry || {}),
+      jointClass:true,
+      jointPrimaryClassId:primaryId,
+      jointClassIds:[primaryId,...cleanTargets],
+    };
+  };
+  const buildJointEntryForSave=(draftEntry={}, primaryClass=null, entryId="")=>{
+    const primaryId=String(primaryClass?.id||"");
+    const base=cleanEntryDraftForSave(draftEntry);
+    const targetIds=getJointTargetClassIds(draftEntry, primaryId);
+    if(!primaryId || !targetIds.length){
+      const {
+        jointClass,
+        jointSessionId,
+        jointPrimaryClassId,
+        jointClassIds,
+        jointClassesSnapshot,
+        ...rest
+      } = base;
+      return rest;
+    }
+    const allClassIds=[primaryId,...targetIds];
+    const classes=allClassIds.map(getClassById).filter(Boolean);
+    return {
+      ...base,
+      jointClass:true,
+      jointSessionId:base.jointSessionId || `joint_${entryId || base.id || Date.now()}`,
+      jointPrimaryClassId:primaryId,
+      jointClassIds:allClassIds,
+      jointClassesSnapshot:buildJointClassesSnapshot(classes),
+    };
+  };
   const findEntryTimeClash=(entry, existingEntries=[], ignoreId="")=>{
     if(!entry?.timeStart) return null;
     const toMins=t=>{
@@ -5771,20 +5851,44 @@ function ClassTrackerInner({user}){
       return false;
     }) || null;
   };
+  const findEntryTimeClashForClassIds=(entry, classIds=[], ignoreId="")=>{
+    const uniqueClassIds=[...(classIds||[])]
+      .map(id=>String(id||"").trim())
+      .filter(Boolean)
+      .filter((id,index,arr)=>arr.indexOf(id)===index);
+    for(const classId of uniqueClassIds){
+      const effectiveNotes=buildEffectiveClassNotes(data.notes, classId, isTeacherTeachingActivityEntry, {startKey:selectedDate,endKey:selectedDate});
+      const existing=effectiveNotes[selectedDate]||[];
+      const clash=findEntryTimeClash(entry, existing, ignoreId);
+      if(clash){
+        return {
+          classId,
+          classRef:getClassById(classId),
+          clash,
+        };
+      }
+    }
+    return null;
+  };
+  const formatClassClashLabel=(clashResult)=>{
+    const cls=clashResult?.classRef;
+    return cls?.section || "selected class";
+  };
 
   const addNote=()=>{
     if(!newNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     const detailValidationMessage=getEntryDetailsValidationMessage(newNote);
     if(detailValidationMessage){showInlineToast(detailValidationMessage);return;}
 
-    const existing=(data.notes?.[activeClass.id]||{})[selectedDate]||[];
-    const clash=findEntryTimeClash(newNote, existing);
-    if(clash){
-      showInlineToast(`Entry at ${clash.timeStart} already exists for this class on this date`);
+    const jointTargetIds=getJointTargetClassIds(newNote, activeClass.id);
+    const clashResult=findEntryTimeClashForClassIds(newNote, [activeClass.id,...jointTargetIds]);
+    if(clashResult){
+      showInlineToast(`Entry at ${clashResult.clash.timeStart} already exists for ${formatClassClashLabel(clashResult)} on this date`);
       return;
     }
 
-    const note={id:Date.now().toString(),...newNote,status:newNote.status||"",teacherName,created:Date.now()};
+    const entryId=Date.now().toString();
+    const note=buildJointEntryForSave({id:entryId,...newNote,status:newNote.status||"",teacherName,created:Date.now()}, activeClass, entryId);
     setDataWithPendingDraft(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:[note,...dn]}}};},"entry-add");
     void triggerAppHaptic("entry");
     clearEntryDraft();
@@ -5836,27 +5940,37 @@ function ClassTrackerInner({user}){
     if(!editNote.timeStart){showInlineToast("Please enter a start time before saving.");return;}
     const detailValidationMessage=getEntryDetailsValidationMessage(editNote);
     if(detailValidationMessage){showInlineToast(detailValidationMessage);return;}
-    const existing=(data.notes?.[activeClass.id]||{})[selectedDate]||[];
-    const clash=findEntryTimeClash(editNote, existing, editNote.id);
-    if(clash){
-      showInlineToast(`Entry at ${clash.timeStart} already exists for this class on this date`);
+    const jointTargetIds=getJointTargetClassIds(editNote, activeClass.id);
+    const clashResult=findEntryTimeClashForClassIds(editNote, [activeClass.id,...jointTargetIds], editNote.id);
+    if(clashResult){
+      showInlineToast(`Entry at ${clashResult.clash.timeStart} already exists for ${formatClassClashLabel(clashResult)} on this date`);
       return;
     }
-    setDataWithPendingDraft(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...editNote}:n)}}};},"entry-edit");
+    const savedEdit=buildJointEntryForSave(editNote, activeClass, editNote.id);
+    setDataWithPendingDraft(d=>{const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.map(n=>n.id===editNote.id?{...n,...savedEdit}:n)}}};},"entry-edit");
     clearEntryDraft();
     setDraftSaving(false);
     setEditNote(null);setView("classDetail");
   };
-  const deleteNote=(noteId)=>setDataWithPendingDraft(d=>{
-    const cn=d.notes[activeClass.id]||{};const dn=cn[selectedDate]||[];
+  const deleteNote=(noteId, sourceClassId=activeClass?.id)=>setDataWithPendingDraft(d=>{
+    const sourceId=String(sourceClassId||activeClass?.id||"");
+    const sourceClass=getClassById(sourceId)||activeClass;
+    const cn=d.notes[sourceId]||{};const dn=cn[selectedDate]||[];
     const note=dn.find(n=>n.id===noteId);if(!note)return d;
-    const tn={...note,classId:activeClass.id,className:activeClass.section,institute:activeClass.institute,dateKey:selectedDate,deletedAt:Date.now()};
-    return{...d,notes:{...d.notes,[activeClass.id]:{...cn,[selectedDate]:dn.filter(n=>n.id!==noteId)}},trash:{...d.trash,notes:[...(d.trash?.notes||[]),tn]}};
+    const tn={...note,classId:sourceId,className:sourceClass?.section,institute:sourceClass?.institute,dateKey:selectedDate,deletedAt:Date.now()};
+    return{...d,notes:{...d.notes,[sourceId]:{...cn,[selectedDate]:dn.filter(n=>n.id!==noteId)}},trash:{...d.trash,notes:[...(d.trash?.notes||[]),tn]}};
   },"entry-delete");
+  const openEditForDisplayedNote=(surfaceCls, note)=>{
+    const sourceId=String(note?._jointSourceClassId || note?.jointPrimaryClassId || surfaceCls?.id || activeClass?.id || "");
+    const sourceClass=getClassById(sourceId) || surfaceCls || activeClass;
+    setActiveClass(sourceClass);
+    setEditNote(cleanEntryDraftForSave(note));
+    setView("editNote");
+  };
   const restoreNote=(tn)=>{setDataWithPendingDraft(d=>{const{classId,dateKey,deletedAt,className,institute,...note}=tn;const cn=d.notes[classId]||{};const dn=cn[dateKey]||[];return{...d,notes:{...d.notes,[classId]:{...cn,[dateKey]:[note,...dn]}},trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==note.id)}};},"entry-restore");};
   const permDeleteNote=(id)=>setDataWithPendingDraft(d=>({...d,trash:{...d.trash,notes:(d.trash?.notes||[]).filter(n=>n.id!==id)}}),"entry-perm-delete");
 
-  const totalNotes=data.classes.reduce((s,c)=>{const cn=data.notes[c.id]||{};return s+Object.values(cn).reduce((a,arr)=>a+teacherTeachingEntries(arr).length,0);},0);
+  const totalNotes=collectCanonicalTeachingEntryRecords(data.notes, isTeacherTeachingActivityEntry).length;
   const canAdd=isDateAllowed(selectedDate);
   const isReadOnlyDate=!canAdd;
   const dates=buildDateWindow();
@@ -5872,7 +5986,7 @@ function ClassTrackerInner({user}){
       return;
     }
     const slots = getSlotsForSection(targetClass, instituteSections);
-    const usedStarts = new Set((((data.notes?.[targetClass.id] || {})[nextDate]) || []).map(entry => entry.timeStart).filter(Boolean));
+    const usedStarts = new Set(((buildEffectiveClassNotes(data.notes, targetClass.id, isTeacherTeachingActivityEntry, {startKey:nextDate,endKey:nextDate})[nextDate]) || []).map(entry => entry.timeStart).filter(Boolean));
     const defaultSlot = slots ? getDefaultKisSlot(data.notes, targetClass.id, slots, usedStarts) : null;
     setNewNote(
       defaultSlot && !usedStarts.has(defaultSlot.start)
@@ -5954,8 +6068,8 @@ function ClassTrackerInner({user}){
       {confirmModal && <ConfirmModal message={confirmModal.message} confirmLabel={confirmModal.label||"Delete"} onConfirm={confirmModal.onConfirm} onClose={()=>setConfirmModal(null)}/>}
       {signOutPrompt && <SignOutModal onConfirm={()=>{setSignOutPrompt(false);logout();}} onClose={()=>setSignOutPrompt(false)}/>}
       {exportOpen && <ExportModal data={data} teacherName={teacherName} onClose={()=>setExportOpen(false)}/>}
-      {historyClassId && (()=>{const cls=data.classes.find(c=>c.id===historyClassId);return cls?<HistoryModal cls={cls} classNotes={data.notes[historyClassId]||{}} selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={()=>setHistoryClassId(null)}/>:null;})()}
-      {mobileClassSheetId && (()=>{const cls=data.classes.find(c=>c.id===mobileClassSheetId);const entryCount=cls?Object.values(data.notes?.[mobileClassSheetId]||{}).reduce((sum,arr)=>sum+teacherTeachingEntries(arr).length,0):0;return cls?<TeacherClassQuickSheet cls={cls} entryCount={entryCount} onOpenHistory={()=>{setMobileClassSheetId(null);setHistoryClassId(cls.id);}} onDelete={()=>{setMobileClassSheetId(null);setLeaveModal(cls.id);}} onClose={()=>setMobileClassSheetId(null)}/>:null;})()}
+      {historyClassId && (()=>{const cls=data.classes.find(c=>c.id===historyClassId);const historyNotes=buildEffectiveClassNotes(data.notes, historyClassId, isTeacherTeachingActivityEntry);return cls?<HistoryModal cls={cls} classNotes={historyNotes} selectedDate={selectedDate} onSelectDate={setSelectedDate} onClose={()=>setHistoryClassId(null)}/>:null;})()}
+      {mobileClassSheetId && (()=>{const cls=data.classes.find(c=>c.id===mobileClassSheetId);const sheetNotes=cls?buildEffectiveClassNotes(data.notes, mobileClassSheetId, isTeacherTeachingActivityEntry):{};const entryCount=cls?Object.values(sheetNotes).reduce((sum,arr)=>sum+teacherTeachingEntries(arr).length,0):0;return cls?<TeacherClassQuickSheet cls={cls} entryCount={entryCount} onOpenHistory={()=>{setMobileClassSheetId(null);setHistoryClassId(cls.id);}} onDelete={()=>{setMobileClassSheetId(null);setLeaveModal(cls.id);}} onClose={()=>setMobileClassSheetId(null)}/>:null;})()}
       {editingClass && <EditClassModal cls={editingClass} data={data} onSave={u=>updateClass(editingClass.id,u)} onClose={()=>setEditingClass(null)} sortedByUsage={sortedByUsage} globalInstitutes={globalInstitutes} instituteSections={instituteSections} addSectionName={addSectionName} addSubjectName={addSubjectName}/>}
       {leaveModal && (()=>{const cls=data.classes.find(c=>c.id===leaveModal);return cls?<LeaveClassModal cls={cls} onConfirm={(reason,label)=>{deleteClass(leaveModal,reason,label);setLeaveModal(null);setActiveClass(null);setView("home");}} onClose={()=>setLeaveModal(null)}/>:null;})()}
     </>
@@ -6239,7 +6353,7 @@ function ClassTrackerInner({user}){
     // Shared class card — click goes to class detail page (mobile) or selects (desktop)
     const ClassCard = ({cls, onClick, compact = false, dense = false, onDelete = null, onHold = null}) => {
       const ic=getSectionTone(cls.section);
-      const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(data.notes?.[cls.id]||{});
+      const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(buildEffectiveClassNotes(data.notes, cls.id, isTeacherTeachingActivityEntry));
       const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
       const holdTimerRef = React.useRef(null);
       const holdStartRef = React.useRef(null);
@@ -6576,7 +6690,7 @@ function ClassTrackerInner({user}){
             {filtered.map(cls=>{
               const ic=getSectionTone(cls.section);
               const isSel=selCls?.id===cls.id;
-              const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(data.notes?.[cls.id]||{});
+              const metrics=teacherClassMetricsMap[cls.id] || buildClassEntryMetrics(buildEffectiveClassNotes(data.notes, cls.id, isTeacherTeachingActivityEntry));
               const todayDotStyle=getSectionCardTodayDotStyles(metrics.todayEntries);
               const instFull=cls.institute||"";
               const sectionSurface=isDarkTeacherTheme ? hexToRgba(ic.bg, 0.16) : (ic.surface || ic.light || "#EEF3F8");
@@ -6721,7 +6835,7 @@ function ClassTrackerInner({user}){
                   {canAdd&&<button onClick={()=>{
     setActiveClass(selCls);
     const _ks=getSlotsForSection(selCls,instituteSections);
-    const _used=new Set(((data.notes?.[selCls.id]||{})[selectedDate]||[]).map(e=>e.timeStart).filter(Boolean));
+    const _used=new Set(((buildEffectiveClassNotes(data.notes, selCls.id, isTeacherTeachingActivityEntry, {startKey:selectedDate,endKey:selectedDate})[selectedDate])||[]).map(e=>e.timeStart).filter(Boolean));
     const _def=_ks?getDefaultKisSlot(data.notes,selCls.id,_ks,_used):null;
     setNewNote(_def&&!_used.has(_def.start)
       ?{title:"",body:"",tag:"note",status:"",timeStart:_def.start,timeEnd:_def.end,_dur:_def.durMins,_kisSlot:true,_suggestedEnd:_def.end}
@@ -6757,8 +6871,8 @@ function ClassTrackerInner({user}){
                           </div>
                           {canAdd&&(
                             <OverflowMenu items={[
-                              { icon:IconEdit, label:"Edit entry", onClick:()=>{setEditNote({...note});setView("editNote");} },
-                              { icon:IconTrash, label:"Delete entry", danger:true, onClick:()=>deleteNote(note.id) },
+                              { icon:IconEdit, label:"Edit entry", onClick:()=>openEditForDisplayedNote(selCls, note) },
+                              { icon:IconTrash, label:"Delete entry", danger:true, onClick:()=>deleteNote(note.id, note?._jointSourceClassId || selCls.id) },
                             ]}/>
                           )}
                         </div>
@@ -6884,7 +6998,7 @@ function ClassTrackerInner({user}){
     const detailSurfaceTransition = detailSwipeTransitionMs ? `transform ${detailSwipeTransitionMs}ms cubic-bezier(.22,.8,.24,1)` : "none";
     const openAddEntryForClass = surfaceCls => {
       const _ks = getSlotsForSection(surfaceCls, instituteSections);
-      const _used = new Set((((data.notes?.[surfaceCls.id] || {})[selectedDate]) || []).map(entry => entry.timeStart).filter(Boolean));
+      const _used = new Set(((buildEffectiveClassNotes(data.notes, surfaceCls.id, isTeacherTeachingActivityEntry, {startKey:selectedDate,endKey:selectedDate})[selectedDate]) || []).map(entry => entry.timeStart).filter(Boolean));
       const _def = _ks ? getDefaultKisSlot(data.notes, surfaceCls.id, _ks, _used) : null;
       setActiveClass(surfaceCls);
       setNewNote(
@@ -6896,18 +7010,20 @@ function ClassTrackerInner({user}){
     };
     const openEditNoteForClass = (surfaceCls, note) => {
       setActiveClass(surfaceCls);
-      setEditNote({...note});
-      setView("editNote");
+      openEditForDisplayedNote(surfaceCls, note);
     };
-    const deleteNoteFromClass = (surfaceCls, noteId) => setDataWithPendingDraft(d => {
-      const cn = d.notes[surfaceCls.id] || {};
+    const deleteNoteFromClass = (surfaceCls, displayedNote) => setDataWithPendingDraft(d => {
+      const noteId = typeof displayedNote === "object" ? displayedNote?.id : displayedNote;
+      const sourceId = String(displayedNote?._jointSourceClassId || displayedNote?.jointPrimaryClassId || surfaceCls?.id || "");
+      const sourceCls = getClassById(sourceId) || surfaceCls;
+      const cn = d.notes[sourceId] || {};
       const dn = cn[selectedDate] || [];
-      const note = dn.find(entry => entry.id === noteId);
-      if(!note) return d;
-      const tn = {...note,classId:surfaceCls.id,className:surfaceCls.section,institute:surfaceCls.institute,dateKey:selectedDate,deletedAt:Date.now()};
+      const sourceNote = dn.find(entry => entry.id === noteId);
+      if(!sourceNote) return d;
+      const tn = {...sourceNote,classId:sourceId,className:sourceCls?.section,institute:sourceCls?.institute,dateKey:selectedDate,deletedAt:Date.now()};
       return {
         ...d,
-        notes:{...d.notes,[surfaceCls.id]:{...cn,[selectedDate]:dn.filter(entry => entry.id !== noteId)}},
+        notes:{...d.notes,[sourceId]:{...cn,[selectedDate]:dn.filter(entry => entry.id !== noteId)}},
         trash:{...d.trash,notes:[...(d.trash?.notes || []),tn]}
       };
     },"entry-delete");
@@ -7033,7 +7149,7 @@ function ClassTrackerInner({user}){
                         {canAdd&&(
                           <OverflowMenu items={[
                             { icon:IconEdit, label:"Edit entry", onClick:()=>openEditNoteForClass(surfaceCls, note) },
-                            { icon:IconTrash, label:"Delete entry", danger:true, onClick:()=>deleteNoteFromClass(surfaceCls, note.id) },
+                            { icon:IconTrash, label:"Delete entry", danger:true, onClick:()=>deleteNoteFromClass(surfaceCls, note) },
                           ]}/>
                         )}
                       </div>
@@ -7267,7 +7383,7 @@ function ClassTrackerInner({user}){
     }
 
     const timelineColor = getSectionTone(timelineClass.section);
-    const timelineNotes = data.notes?.[timelineClass.id] || {};
+    const timelineNotes = buildEffectiveClassNotes(data.notes, timelineClass.id, isTeacherTeachingActivityEntry);
     const timelineTheme = getTeacherAnalyticsSurfaceStyles(timelineColor.bg, isDarkTeacherTheme);
     const timelineRangeKeys = buildTimelineRangeKeys();
     const timelineSnapshot = buildTimelineSnapshotFromEntries(collectClassTimelineEntries(timelineNotes), timelineRangeKeys);
@@ -7581,7 +7697,7 @@ function ClassTrackerInner({user}){
     const activeClasses = data.classes.filter(c=>!c.left);
     const classStats = activeClasses.map(cls => {
       const tone = getSectionTone(cls.section);
-      const snapshot = buildTimelineSnapshotFromEntries(collectClassTimelineEntries(data.notes?.[cls.id] || {}), statsRangeKeys);
+      const snapshot = buildTimelineSnapshotFromEntries(collectClassTimelineEntries(buildEffectiveClassNotes(data.notes, cls.id, isTeacherTeachingActivityEntry)), statsRangeKeys);
       const featuredTopic = snapshot.total.ongoingTopic || snapshot.total.latestTopic || null;
       return {
         cls,
@@ -8011,6 +8127,86 @@ function ClassTrackerInner({user}){
     const detailsComplete=Boolean(detailTitle);
     const canSave=Boolean(form.timeStart&&detailsComplete);
     const saveLabel=isEdit?"Save Changes":"Save Entry";
+    const selectedJointTargetIds=getJointTargetClassIds(form, activeClass?.id);
+    const jointCandidates=(data.classes||[])
+      .filter(cls=>cls&&!cls.left&&!cls.archived&&String(cls.id||"")!==String(activeClass?.id||""))
+      .sort((a,b)=>{
+        const score=cls=>{
+          let value=0;
+          if(String(cls?.institute||"").trim().toLowerCase()===String(activeClass?.institute||"").trim().toLowerCase()) value+=4;
+          if(String(cls?.subject||"").trim().toLowerCase()===String(activeClass?.subject||"").trim().toLowerCase()) value+=3;
+          return value;
+        };
+        return score(b)-score(a) || String(a.section||"").localeCompare(String(b.section||""));
+      });
+    const jointPanel=jointCandidates.length>0?(
+      <div style={{margin:"0 0 18px",padding:"14px 14px 12px",borderRadius:16,border:`1px solid ${selectedJointTargetIds.length?`${G.green}44`:G.border}`,background:selectedJointTargetIds.length?G.greenL:G.surfaceSoft}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+          <div>
+            <label style={{...lbl,marginBottom:3}}>Joint class</label>
+            <div style={{fontSize:12.5,color:G.textM,lineHeight:1.45}}>Select other sections covered in the same session.</div>
+          </div>
+          {selectedJointTargetIds.length>0&&(
+            <button
+              type="button"
+              onClick={()=>setForm(withJointTargetClassIds(form, []))}
+              style={{border:`1px solid ${G.borderM}`,background:G.surface,borderRadius:999,padding:"7px 10px",fontSize:12,fontFamily:G.sans,fontWeight:700,color:G.textS,cursor:"pointer",whiteSpace:"nowrap"}}>
+              Clear
+            </button>
+          )}
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+          {jointCandidates.map(candidate=>{
+            const id=String(candidate.id||"");
+            const selected=selectedJointTargetIds.includes(id);
+            const sameContext=String(candidate?.institute||"").trim().toLowerCase()===String(activeClass?.institute||"").trim().toLowerCase()
+              && String(candidate?.subject||"").trim().toLowerCase()===String(activeClass?.subject||"").trim().toLowerCase();
+            return(
+              <button
+                key={id}
+                type="button"
+                onClick={()=>{
+                  const next=selected
+                    ? selectedJointTargetIds.filter(item=>item!==id)
+                    : [...selectedJointTargetIds,id];
+                  setForm(withJointTargetClassIds(form, next));
+                }}
+                style={{
+                  border:`1.5px solid ${selected?G.green:G.border}`,
+                  background:selected?G.surface:G.surface,
+                  color:selected?G.green:G.textS,
+                  borderRadius:999,
+                  padding:"8px 11px",
+                  fontSize:12.5,
+                  fontFamily:G.sans,
+                  fontWeight:800,
+                  cursor:"pointer",
+                  display:"inline-flex",
+                  alignItems:"center",
+                  gap:7,
+                  minHeight:38,
+                  maxWidth:"100%",
+                  WebkitTapHighlightColor:"transparent",
+                }}>
+                <span style={{width:9,height:9,borderRadius:999,background:selected?G.green:(sameContext?G.textL:G.borderM),flexShrink:0}}/>
+                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{candidate.section}</span>
+              </button>
+            );
+          })}
+        </div>
+        {selectedJointTargetIds.some(id=>{
+          const cls=getClassById(id);
+          return cls && (
+            String(cls?.institute||"").trim().toLowerCase()!==String(activeClass?.institute||"").trim().toLowerCase()
+            || String(cls?.subject||"").trim().toLowerCase()!==String(activeClass?.subject||"").trim().toLowerCase()
+          );
+        })&&(
+          <div style={{marginTop:10,fontSize:12.5,color:G.textM,lineHeight:1.5}}>
+            Different institute or subject selected. The entry will cover those classes, but syllabus progress remains separate.
+          </div>
+        )}
+      </div>
+    ):null;
     const lastTopicSuggestion=form.status==="inprogress" ? (getClassUrgencyMeta(activeClass).lastTopic||"").trim() : "";
     const topicSuggestionApplied=form.status==="inprogress"&&!!lastTopicSuggestion&&String(form.title||"").trim()===lastTopicSuggestion;
     const suggestedTopicTone = isDarkTeacherTheme
@@ -8206,7 +8402,7 @@ function ClassTrackerInner({user}){
 
                 // ── MODE A: KIS timetable ──────────────────────────────────
                 if(kisSlots){
-                  const dayEntries=(data.notes?.[activeClass?.id]||{})[selectedDate]||[];
+                  const dayEntries=(buildEffectiveClassNotes(data.notes, activeClass?.id, isTeacherTeachingActivityEntry, {startKey:selectedDate,endKey:selectedDate})[selectedDate])||[];
                   const usedStarts=new Set(
                     dayEntries.filter(e=>!isEdit||e.id!==form.id).map(e=>e.timeStart).filter(Boolean)
                   );
@@ -8420,6 +8616,7 @@ function ClassTrackerInner({user}){
                 );
               })()}
             </div>
+            {jointPanel}
             {detailsPanel}
             <PrimaryBtn onClick={save} disabled={!canSave} onPointerDown={e=>rpl(e,true)} style={{marginTop:20,padding:"13px 28px",fontSize:16,opacity:canSave?1:0.45,cursor:canSave?"pointer":"not-allowed",width:"100%"}}>
               {saveLabel}

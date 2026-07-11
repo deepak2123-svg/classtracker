@@ -2,6 +2,7 @@ import { isTeachingActivityEntry } from "../syllabus/syllabusReportUtils.js";
 import { activeAdminTeacherClasses } from "../utils/adminTeachers.js";
 import { entryDurationMinutes } from "../utils/adminDates.js";
 import { exportTextSorter, normaliseName, safeAdminText, sameInstituteName } from "../utils/adminText.js";
+import { buildEffectiveClassNotes, collectCanonicalTeachingEntryRecords } from "../../jointEntries.js";
 
 export const TEACHER_PROFILE_ALL_SECTIONS_KEY = "__all_sections__";
 
@@ -169,6 +170,7 @@ export function buildTeacherProfileModel({
   ]);
   const detailsReady = !!row?.detailsReady || !!teacherData;
   const classes = teacherData ? activeAdminTeacherClasses(teacherData) : [];
+  const classById = new Map(classes.map(cls => [String(cls?.id || cls?.classId || "").trim(), cls]));
   const sectionRows = [];
   const allTimelineEntries = [];
   let totalMinutes = 0;
@@ -183,7 +185,7 @@ export function buildTeacherProfileModel({
     const subject = resolveSubject(resolveClassSubject, teacher, cls);
     const institute = safeAdminText(cls?.institute || row?.primaryInstitute, PLACEHOLDER_INSTITUTE);
     const key = stableClassKey(cls, section, subject, institute);
-    const classNotes = classId ? (teacherData?.notes || {})[classId] || {} : {};
+    const classNotes = classId ? buildEffectiveClassNotes(teacherData?.notes || {}, classId, isTeachingActivityEntry) : {};
     const sectionTimelineEntries = [];
     let minutes = 0;
     let entries = 0;
@@ -247,6 +249,47 @@ export function buildTeacherProfileModel({
       classRef: cls,
       timelineEntries: sectionTimelineEntries,
       isActionableInstitute: typeof isInstituteActionable === "function" ? isInstituteActionable(institute) : true,
+    });
+  });
+
+  totalMinutes = 0;
+  totalEntries = 0;
+  untimedEntries = 0;
+  lastEntryTimestamp = 0;
+  activeDays.clear();
+  allTimelineEntries.length = 0;
+
+  collectCanonicalTeachingEntryRecords(teacherData?.notes || {}, isTeachingActivityEntry).forEach((record, recordIndex) => {
+    const entry = record?.entry;
+    if (!entry) return;
+    const sourceClass = classById.get(String(record?.sourceClassId || ""));
+    const section = sourceClass ? resolveSection(resolveSectionName, sourceClass) : "Class";
+    const subject = sourceClass ? resolveSubject(resolveClassSubject, teacher, sourceClass) : "No subject";
+    const institute = safeAdminText(sourceClass?.institute || row?.primaryInstitute, PLACEHOLDER_INSTITUTE);
+    const key = stableClassKey(sourceClass || {}, section, subject, institute);
+    const duration = entryDurationMinutes(entry);
+    const sortTs = entryTimestamp(record.dateKey, entry);
+    totalEntries += 1;
+    totalMinutes += duration;
+    if (!duration) untimedEntries += 1;
+    if (record.dateKey) activeDays.add(record.dateKey);
+    lastEntryTimestamp = Math.max(lastEntryTimestamp, sortTs);
+    allTimelineEntries.push({
+      id: safeAdminText(entry?.id || entry?.entryId || `${key}_${record.dateKey}_${recordIndex}`, `${key}_${record.dateKey}_${recordIndex}`),
+      dateKey: record.dateKey,
+      sortTs,
+      timeStart: safeAdminText(entry?.timeStart, ""),
+      timeEnd: safeAdminText(entry?.timeEnd, ""),
+      minutes: duration,
+      title: timelineTitle(entry, subject),
+      body: timelineBody(entry),
+      status: safeAdminText(entry?.status, ""),
+      tag: safeAdminText(entry?.tag, ""),
+      sectionKey: key,
+      sectionLabel: section,
+      classId: String(sourceClass?.id || record?.sourceClassId || ""),
+      subject,
+      institute,
     });
   });
 

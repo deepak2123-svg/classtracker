@@ -4,8 +4,6 @@ import {
   daysAgo,
   entryDurationMinutes,
   formatDurationShort,
-  getEntriesInRange,
-  lastEntryTs,
   longDateLabel,
   shortDateLabel,
 } from "../utils/adminDates.js";
@@ -17,13 +15,17 @@ import {
 import { exportTextSorter, normaliseName, sameInstituteName } from "../utils/adminText.js";
 import {
   buildSyllabusReportRowsForClass,
-  countTeachingEntriesForMonth,
   getPublishedSyllabusPayload,
   getSyllabusProgressChapterTitle,
   isSyllabusProgressEntry,
   isTeachingActivityEntry,
 } from "../syllabus/syllabusReportUtils.js";
 import { getInstituteGlancePeriodMeta } from "./instituteGlanceReportUtils.js";
+import {
+  collectCanonicalTeachingEntryRecords,
+  collectEffectiveTeachingEntryRecords,
+  getEntryCoverageClassIds,
+} from "../../jointEntries.js";
 
 export const EMPTY_INSTITUTE_GLANCE_SUMMARY = {
   totalInstitutes: 0,
@@ -88,6 +90,21 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     : [];
   const periodMeta = getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey);
   const monthKey = currentMonthKey();
+  const classIdsHere = new Set(classesHere.map(cls => String(cls?.id || "")).filter(Boolean));
+  const recordTouchesInstitute = record => getEntryCoverageClassIds(record?.entry, record?.sourceClassId)
+    .some(classId => classIdsHere.has(String(classId || "")));
+  const canonicalRecords = data
+    ? collectCanonicalTeachingEntryRecords(data.notes || {}, isTeachingActivityEntry, {
+        startKey:periodMeta.startKey,
+        endKey:periodMeta.endKey,
+      }).filter(recordTouchesInstitute)
+    : [];
+  const monthRecords = data
+    ? collectCanonicalTeachingEntryRecords(data.notes || {}, isTeachingActivityEntry, {
+        startKey:`${monthKey}-01`,
+        endKey:`${monthKey}-31`,
+      }).filter(recordTouchesInstitute)
+    : [];
   const sectionMap = new Map();
   const syllabusCoverageMap = new Map();
   const syllabusDeclaredMap = new Map();
@@ -95,15 +112,22 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     .map(getPublishedSyllabusPayload)
     .filter(Boolean);
   const todayDetails = [];
-  let todayEntries = 0;
-  let monthEntries = 0;
+  const todayEntries = canonicalRecords.length;
+  const monthEntries = monthRecords.length;
   let totalMinutes = 0;
   let untimedEntries = 0;
+  canonicalRecords.forEach(record => {
+    const mins = entryDurationMinutes(record?.entry);
+    totalMinutes += mins;
+    if (mins <= 0) untimedEntries += 1;
+  });
 
   classesHere.forEach(cls => {
     const classNotes = (data.notes || {})[cls.id] || {};
-    const notesToday = getEntriesInRange(classNotes, periodMeta.days, periodMeta.startKey, periodMeta.endKey);
-    monthEntries += countTeachingEntriesForMonth(classNotes, monthKey);
+    const notesToday = collectEffectiveTeachingEntryRecords(data.notes || {}, cls.id, isTeachingActivityEntry, {
+      startKey:periodMeta.startKey,
+      endKey:periodMeta.endKey,
+    });
 
     const resolvedSection = typeof resolveSectionName === "function"
       ? resolveSectionName(cls?.section, cls?.institute || instituteName)
@@ -154,13 +178,9 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
     }
 
     notesToday.forEach(({ dateKey, entry }) => {
-      if (!isTeachingActivityEntry(entry)) return;
       const mins = entryDurationMinutes(entry);
-      todayEntries += 1;
-      totalMinutes += mins;
       currentSection.entryCount += 1;
       currentSection.totalMinutes += mins;
-      if (mins <= 0) untimedEntries += 1;
       todayDetails.push({
         teacherName: getTeacherDisplayNameFromMap(teacher, fullDataMap),
         dateKey,
@@ -182,7 +202,9 @@ function buildInstituteGlanceTeacherActivity({ teacher, instituteName, fullDataM
   });
 
   const lastEntry = data
-    ? classesHere.reduce((latest, cls) => Math.max(latest, lastEntryTs((data.notes || {})[cls.id] || {}, isTeachingActivityEntry) || 0), 0)
+    ? collectCanonicalTeachingEntryRecords(data.notes || {}, isTeachingActivityEntry)
+        .filter(recordTouchesInstitute)
+        .reduce((latest, record) => Math.max(latest, Number(record?.entry?.created || record?.entry?.createdAt || 0) || 0), 0)
     : Number(teacher?.lastActive || 0) || 0;
   const joinedAtTs = classesHere.length
     ? firstClassCreatedTs(classesHere)

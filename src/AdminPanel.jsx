@@ -50,6 +50,13 @@ import {
   auth,
 } from "./firebase";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
+import {
+  buildEffectiveClassNotes,
+  collectCanonicalTeachingEntryRecords,
+  collectEffectiveTeachingEntryRecords,
+  getEntryCoverageClassIds,
+  getJointClassIds,
+} from "./jointEntries.js";
 import { readAdminTeacherDetailsCache, writeAdminTeacherDetailsCache } from "./admin/cache/adminTeacherDetailsCache.js";
 import { ALL_CLASSES_KEY, ALL_TEACHERS_KEY, DELETE_SECTION_ACTION, KEEP_SECTION_ACTION } from "./admin/constants/adminKeys.js";
 import { AdminConfirmModal, ConfirmDeleteModal } from "./admin/components/common/AdminConfirmModals.jsx";
@@ -595,15 +602,53 @@ async function downloadInstituteGlanceSummaryPng({ rows, summary, generatedOnLab
 }
 function groupByDate(flatEntries){
   const map={};
-  flatEntries.forEach(({dateKey,entry})=>{
+  flatEntries.forEach(({dateKey,entry,sourceClassId})=>{
     if(!map[dateKey]) map[dateKey]=[];
-    map[dateKey].push(entry);
+    map[dateKey].push({...entry,_sourceClassId:sourceClassId});
   });
   return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0]));
 }
 function getTeachingEntriesInRange(classNotes, days, startKey, endKey){
   return getEntriesInRange(classNotes, days, startKey, endKey)
     .filter(({ entry }) => isTeachingActivityEntry(entry));
+}
+function resolveTeachingEntryRange(days = null, startKey = null, endKey = null){
+  const dayCount = Number(days || 0);
+  const hasExplicitRange = !!(startKey || endKey);
+  const rangeEnd = endKey || (hasExplicitRange ? startKey : (dayCount ? todayKey() : null));
+  const rangeStart = startKey || (hasExplicitRange ? endKey : (dayCount ? addDaysToDateKey(rangeEnd, -(Math.max(1, dayCount) - 1)) : null));
+  if(rangeStart && rangeEnd && rangeStart > rangeEnd) return { startKey:rangeEnd, endKey:rangeStart };
+  return { startKey:rangeStart || "", endKey:rangeEnd || "" };
+}
+function getEffectiveTeachingEntriesForClass(data, classId, days = null, startKey = null, endKey = null){
+  const range = resolveTeachingEntryRange(days, startKey, endKey);
+  return collectEffectiveTeachingEntryRecords(data?.notes || {}, classId, isTeachingActivityEntry, range);
+}
+function classIdSetFromClasses(classes = []){
+  return new Set((classes || []).map(cls => String(cls?.id || "")).filter(Boolean));
+}
+function recordTouchesClassSet(record, classIds){
+  if(!classIds?.size) return false;
+  return getEntryCoverageClassIds(record?.entry, record?.sourceClassId)
+    .some(classId => classIds.has(String(classId || "")));
+}
+function getCanonicalTeachingEntriesForClasses(data, classes = [], days = null, startKey = null, endKey = null){
+  const range = resolveTeachingEntryRange(days, startKey, endKey);
+  const classIds = classIdSetFromClasses(classes);
+  return collectCanonicalTeachingEntryRecords(data?.notes || {}, isTeachingActivityEntry, range)
+    .filter(record => recordTouchesClassSet(record, classIds));
+}
+function dedupeTeachingEntriesBySession(entries = []){
+  const seen = new Set();
+  return (Array.isArray(entries) ? entries : []).filter((entry, index) => {
+    const owner = String(entry?.teacherUid || entry?.teacher || entry?.teacherName || "");
+    const key = entry?.jointSessionId
+      ? `${owner}:joint:${entry.jointSessionId}`
+      : `${owner}:entry:${entry?.id || `${entry?.dateKey || entry?.date || ""}:${entry?.timeStart || entry?.start_time || ""}:${entry?.title || ""}:${index}`}`;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 function countTeachingEntriesInDateMap(classNotes = {}){
   return Object.values(classNotes || {}).reduce((sum, entries) => (
@@ -9301,8 +9346,9 @@ function AdminPanelInner({user}){
         if(!map[key]) map[key]={raw:resolvedSection,display:normaliseName(resolvedSection),subjects:new Set(),teachers:[],lastActivityTs:0};
         const subjectLabel = resolveAdminTeacherClassSubjectLabel(t, d, c, globalSubjects, c.subject);
         if(subjectLabel) map[key].subjects.add(subjectLabel);
-        const entryCount=countTeachingEntriesInDateMap((d.notes||{})[c.id]||{});
-        const lastActive=lastEntryTs((d.notes||{})[c.id]||{}, isTeachingActivityEntry);
+        const effectiveNotes=buildEffectiveClassNotes(d.notes || {}, c.id, isTeachingActivityEntry);
+        const entryCount=countTeachingEntriesInDateMap(effectiveNotes);
+        const lastActive=lastEntryTs(effectiveNotes, isTeachingActivityEntry);
         const activityTs=Math.max(lastActive || 0, Number(c.created || 0) || 0);
         map[key].lastActivityTs=Math.max(map[key].lastActivityTs || 0, activityTs);
         map[key].teachers.push({uid:t.uid,name:d.profile?.name||t.name,entryCount,lastActive,classId:c.id,subject:subjectLabel,lastActivityTs:activityTs});
@@ -9329,9 +9375,9 @@ function AdminPanelInner({user}){
       const d = fullData[t.uid];
       let ts = 0;
       if(d){
-        ts = activeAdminTeacherClasses(d)
-          .filter(c=>sameInstituteName(c.institute, selInst))
-          .reduce((latest,c)=>Math.max(latest, lastEntryTs((d.notes||{})[c.id]||{}, isTeachingActivityEntry) || 0), 0);
+        const classesHere = activeAdminTeacherClasses(d).filter(c=>sameInstituteName(c.institute, selInst));
+        ts = getCanonicalTeachingEntriesForClasses(d, classesHere)
+          .reduce((latest,record)=>Math.max(latest, Number(record?.entry?.created || record?.entry?.createdAt || 0) || 0), 0);
       } else {
         ts = Number(t.lastActive || 0);
       }
@@ -9478,14 +9524,15 @@ function AdminPanelInner({user}){
         .filter(c=>(c.institute||"").trim().toLowerCase()===(selInst||"").trim().toLowerCase())
         .map(c=>{
           const resolvedSection = resolveAdminSectionName(c.section, c.institute, instSectionsAll) || c.section;
-          const activityTs = Math.max(lastEntryTs((d.notes||{})[c.id]||{}, isTeachingActivityEntry) || 0, Number(c.created || 0) || 0);
+          const effectiveNotes = buildEffectiveClassNotes(d.notes || {}, c.id, isTeachingActivityEntry);
+          const activityTs = Math.max(lastEntryTs(effectiveNotes, isTeachingActivityEntry) || 0, Number(c.created || 0) || 0);
           return ({
           display:normaliseName(resolvedSection),
           raw:resolvedSection,
           subject:resolveAdminTeacherClassSubjectLabel(teacher, d, c, globalSubjects, c.subject),
           institute:c.institute||"",
           classId:c.id,
-          entryCount:countTeachingEntriesInDateMap((d.notes||{})[c.id]||{}),
+          entryCount:countTeachingEntriesInDateMap(effectiveNotes),
           lastActivityTs:activityTs,
         });
         })
@@ -9569,8 +9616,7 @@ function AdminPanelInner({user}){
     const {teacherUid, classId}=selP3;
     const d=fullData[teacherUid];
     if(!d) return null;
-    const classNotes=(d.notes||{})[classId]||{};
-    const flat=getTeachingEntriesInRange(classNotes,periodDays,periodStartKey,periodEndKey);
+    const flat=getEffectiveTeachingEntriesForClass(d, classId, periodDays, periodStartKey, periodEndKey);
     return groupByDate(flat);
   },[selP3,fullData,period,periodDays,periodStartKey,periodEndKey]);
   const selectedClassMeta = useMemo(()=>{
@@ -9587,8 +9633,8 @@ function AdminPanelInner({user}){
   const selectedTimelineSummary = useMemo(()=>{
     if(!selP3) return null;
     const d = fullData[selP3.teacherUid];
-    const classNotes = (d?.notes||{})[selP3.classId] || {};
-    const flat = getTeachingEntriesInRange(classNotes, periodDays, periodStartKey, periodEndKey);
+    const classNotes = buildEffectiveClassNotes(d?.notes || {}, selP3.classId, isTeachingActivityEntry);
+    const flat = getEffectiveTeachingEntriesForClass(d, selP3.classId, periodDays, periodStartKey, periodEndKey);
     const statusMap = {};
     const daySet = new Set();
     let totalMinutes = 0;
@@ -9629,8 +9675,10 @@ function AdminPanelInner({user}){
     const d = fullData[teacherUid];
     if(!d) return [];
     const subjectLabel = safeAdminText(resolveAdminTeacherClassSubject(teacherUid, classId, subject), "No subject");
-    return getTeachingEntriesInRange((d.notes||{})[classId]||{}, days, sk, ek).map(({dateKey, entry})=>({
+    return getEffectiveTeachingEntriesForClass(d, classId, days, sk, ek).map(({dateKey, entry, sourceClassId, isJointCoverage})=>({
       id: safeAdminText(entry.id, `${teacherUid}_${classId}_${dateKey}`),
+      jointSessionId: safeAdminText(entry.jointSessionId, ""),
+      jointClassIds:getJointClassIds(entry, sourceClassId || classId),
       dateKey:safeAdminText(dateKey, ""),
       timeStart: safeAdminText(entry.timeStart, ""),
       timeEnd: safeAdminText(entry.timeEnd, ""),
@@ -9641,6 +9689,8 @@ function AdminPanelInner({user}){
       teacherUid,
       teacherName:safeAdminText(teacherName, "Teacher"),
       classId,
+      sourceClassId,
+      isJointCoverage:!!isJointCoverage,
       className:safeAdminText(className, "Class"),
       subject: subjectLabel,
       institute: safeAdminText(instituteName || selInst, ""),
@@ -9703,7 +9753,7 @@ function AdminPanelInner({user}){
           const classKey = normaliseSectionKey(resolvedSection || className);
           if(!classKey) return;
           const subjectLabel = resolveAdminTeacherClassSubject(uid, cls.id, cls.subject || "");
-          const classNotes = (data.notes || {})[cls.id] || {};
+          const classNotes = buildEffectiveClassNotes(data.notes || {}, cls.id, isTeachingActivityEntry);
           const classLastTs = lastEntryTs(classNotes, isTeachingActivityEntry) || 0;
           const classLastDateKey = Object.keys(classNotes || {})
             .filter(dateKey => /^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || ""))
@@ -9775,19 +9825,23 @@ function AdminPanelInner({user}){
           teacherRecentEntries.push(...recentEntries);
         });
 
+        const canonicalTeacherTodayEntries = dedupeTeachingEntriesBySession(teacherTodayEntries);
+        const canonicalTeacherYesterdayEntries = dedupeTeachingEntriesBySession(teacherYesterdayEntries);
+        const canonicalTeacherLastWeekEntries = dedupeTeachingEntriesBySession(teacherLastWeekEntries);
+        const canonicalTeacherRecentEntries = dedupeTeachingEntriesBySession(teacherRecentEntries);
         const lastDays = daysSinceTs(teacherLastTs || null);
         return {
           uid,
           name:teacherName,
           loaded:!!data,
           classCount:classesHere.length,
-          todayEntries:teacherTodayEntries,
-          yesterdayEntries:teacherYesterdayEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
-          lastWeekEntries:teacherLastWeekEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
-          recentEntries:teacherRecentEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
-          loggedToday:teacherTodayEntries.length > 0,
-          todayCount:teacherTodayEntries.length,
-          todayMinutes:teacherTodayEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0),
+          todayEntries:canonicalTeacherTodayEntries,
+          yesterdayEntries:canonicalTeacherYesterdayEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
+          lastWeekEntries:canonicalTeacherLastWeekEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
+          recentEntries:canonicalTeacherRecentEntries.sort((a,b)=>compareAdminPanelEntries(b,a)),
+          loggedToday:canonicalTeacherTodayEntries.length > 0,
+          todayCount:canonicalTeacherTodayEntries.length,
+          todayMinutes:canonicalTeacherTodayEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0),
           lastTs:teacherLastTs || null,
           lastDays,
           lastLabel:lastEntryCaption(teacherLastTs || null),
@@ -10135,9 +10189,8 @@ function AdminPanelInner({user}){
     return teachers.reduce((sum,t)=>{
       const d = fullData[t.uid];
       if(!d) return sum;
-      return sum + activeAdminTeacherClasses(d)
-        .filter(c=>sameInstituteName(c.institute, selInst))
-        .reduce((classSum,c)=>classSum + countTeachingEntriesInDateMap((d.notes||{})[c.id]||{}),0);
+      const classesHere = activeAdminTeacherClasses(d).filter(c=>sameInstituteName(c.institute, selInst));
+      return sum + getCanonicalTeachingEntriesForClasses(d, classesHere).length;
     },0);
   },[selInst,teacherBelongsToInstitute,teachers,fullData]);
 
@@ -10146,9 +10199,8 @@ function AdminPanelInner({user}){
     return teachers.reduce((sum,t)=>{
       const d = fullData[t.uid];
       if(!d) return sum;
-      return sum + activeAdminTeacherClasses(d)
-        .filter(c=>sameInstituteName(c.institute, selInst))
-        .reduce((classSum,c)=>classSum + getTeachingEntriesInRange((d.notes||{})[c.id]||{}, periodDays, periodStartKey, periodEndKey).length,0);
+      const classesHere = activeAdminTeacherClasses(d).filter(c=>sameInstituteName(c.institute, selInst));
+      return sum + getCanonicalTeachingEntriesForClasses(d, classesHere, periodDays, periodStartKey, periodEndKey).length;
     },0);
   },[selInst,teachers,fullData,periodDays,periodStartKey,periodEndKey]);
 
@@ -10224,7 +10276,7 @@ function AdminPanelInner({user}){
         (cls.teachers||[]).forEach(t=>{
           const d = fullData[t.uid];
           if(!d) return;
-          const entries = getTeachingEntriesInRange((d.notes||{})[t.classId]||{}, periodDays, periodStartKey, periodEndKey);
+          const entries = getEffectiveTeachingEntriesForClass(d, t.classId, periodDays, periodStartKey, periodEndKey);
           if(entries.length) activeTeachers.add(t.uid);
           entries.forEach(({entry})=>{
             entryCount += 1;
@@ -10257,14 +10309,21 @@ function AdminPanelInner({user}){
   },[selInst,instClasses,fullData,periodDays,periodStartKey,periodEndKey,resolveAdminTeacherClassSubject]);
 
   const classSubjectSummary = useMemo(()=>{
-    return classSubjectTime.reduce((acc,item)=>{
-      acc.classCount += 1;
-      acc.entryCount += item.entryCount;
-      acc.totalMinutes += item.totalMinutes;
-      acc.untimedEntries += item.untimedEntries;
-      return acc;
-    },{classCount:0,entryCount:0,totalMinutes:0,untimedEntries:0});
-  },[classSubjectTime]);
+    const summary = {classCount:classSubjectTime.length,entryCount:0,totalMinutes:0,untimedEntries:0};
+    if(!selInst) return summary;
+    teachers.forEach(t=>{
+      const d = fullData[t.uid];
+      if(!d) return;
+      const classesHere = activeAdminTeacherClasses(d).filter(c=>sameInstituteName(c.institute, selInst));
+      getCanonicalTeachingEntriesForClasses(d, classesHere, periodDays, periodStartKey, periodEndKey).forEach(({entry})=>{
+        summary.entryCount += 1;
+        const duration = entryDurationMinutes(entry);
+        if(duration>0) summary.totalMinutes += duration;
+        else summary.untimedEntries += 1;
+      });
+    });
+    return summary;
+  },[classSubjectTime.length,selInst,teachers,fullData,periodDays,periodStartKey,periodEndKey]);
 
   const overviewRecentEntries = useMemo(()=>{
     const items = [];
@@ -10277,12 +10336,10 @@ function AdminPanelInner({user}){
         .forEach(c=>{
           const className = normaliseName(resolveAdminSectionName(c.section, c.institute, instSectionsAll) || c.section);
           const subjectLabel = resolveAdminTeacherClassSubject(t.uid, c.id, c.subject);
-          Object.entries((d.notes||{})[c.id]||{}).forEach(([dk, arr])=>{
-            if(!Array.isArray(arr)) return;
-            arr.forEach(entry=>{
-              if(!entry || !isTeachingActivityEntry(entry)) return;
+          getCanonicalTeachingEntriesForClasses(d, [c], null, null, null).forEach(({dateKey:dk, entry, sourceClassId})=>{
               items.push({
                 id: safeAdminText(entry.id, `${t.uid}_${c.id}_${dk}`),
+                jointSessionId: safeAdminText(entry.jointSessionId, ""),
                 dateKey: safeAdminText(dk, ""),
                 timeStart: safeAdminText(entry.timeStart, ""),
                 title: safeAdminText(entry.title, "") || "Untitled entry",
@@ -10292,11 +10349,10 @@ function AdminPanelInner({user}){
                 institute: safeAdminText(c.institute, ""),
                 status: safeAdminText(entry.status, ""),
               });
-            });
           });
         });
     });
-    return items
+    return dedupeTeachingEntriesBySession(items)
       .sort((a,b)=>{
         if((b.dateKey||"") !== (a.dateKey||"")) return (b.dateKey||"").localeCompare(a.dateKey||"");
         return (b.timeStart||"").localeCompare(a.timeStart||"");
@@ -10311,9 +10367,8 @@ function AdminPanelInner({user}){
         const entryCount = teachers.reduce((sum,t)=>{
           const d = fullData[t.uid];
           if(!d) return sum;
-          return sum + activeAdminTeacherClasses(d)
-            .filter(c=>sameInstituteName(c.institute,inst))
-            .reduce((classSum,c)=>classSum + countTeachingEntriesInDateMap((d.notes||{})[c.id]||{}),0);
+          const classesHere = activeAdminTeacherClasses(d).filter(c=>sameInstituteName(c.institute,inst));
+          return sum + getCanonicalTeachingEntriesForClasses(d, classesHere).length;
         },0);
         return { inst, teacherCount:stats.teacherCount, classCount:stats.classCount, entryCount };
       })
@@ -11279,31 +11334,34 @@ function AdminPanelInner({user}){
     const d = fullData[teacherUid];
     if (!d) return [];
     const subjectLabel = resolveAdminTeacherClassSubject(teacherUid, classId, subject);
-    const classNotes = (d.notes || {})[classId] || {};
-    const result = [];
-    Object.entries(classNotes || {}).forEach(([dk, arr]) => {
-      if (startKey && dk < startKey) return;
-      if (endKey && dk > endKey) return;
-      if (!Array.isArray(arr)) return;
-      arr.forEach(e => { if (e && isTeachingActivityEntry(e)) result.push({dateKey: dk, entry: e}); });
-    });
+    const classMap = new Map((d.classes || []).map(cls => [String(cls?.id || ""), cls]));
+    const result = getEffectiveTeachingEntriesForClass(d, classId, null, startKey, endKey);
     // sort ascending: oldest first, within same date by timeStart asc
     result.sort((a, b) => {
       if (a.dateKey !== b.dateKey) return a.dateKey.localeCompare(b.dateKey);
       return (a.entry.timeStart || "").localeCompare(b.entry.timeStart || "");
     });
-    return result.map(({dateKey: dk, entry: e}) => ({
+    return result.map(({dateKey: dk, entry: e, sourceClassId}) => {
+      const jointLabels = getJointClassIds(e, sourceClassId || classId)
+        .filter(id => String(id) !== String(classId))
+        .map(id => classMap.get(String(id))?.section)
+        .filter(Boolean);
+      return {
       date: dk, start_time: e.timeStart||"", end_time: e.timeEnd||"",
       teacher: teacherName, institute: instituteName || selInst,
-      class: className, subject: subjectLabel,
+      class: jointLabels.length ? `${className} + ${jointLabels.join(", ")}` : className,
+      subject: subjectLabel,
       type: e.tag||"", title: e.title||"",
       notes: (e.body||"").replace(/\n/g," "),
-    })).sort(compareExportRows);
+      id:e.id || "",
+      jointSessionId:e.jointSessionId || "",
+    };
+    }).sort(compareExportRows);
   };
 
   const rowsForInstitute = (startKey, endKey) => {
     if (!selInst) return [];
-    return teachers
+    const rows = teachers
       .flatMap(t => {
         const d = fullData[t.uid];
         if (!d) return [];
@@ -11324,6 +11382,7 @@ function AdminPanelInner({user}){
           );
       })
       .sort(compareExportRows);
+    return dedupeTeachingEntriesBySession(rows);
   };
 
   const doExport = (rows, filename, title, meta) => {
@@ -11703,7 +11762,7 @@ function AdminPanelInner({user}){
                           </div>
                           {body&&<div style={{fontSize:mobile?13:14,color:G.textM,lineHeight:1.55,marginTop:6,whiteSpace:"pre-wrap"}}>{body}</div>}
                         </div>
-                        <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.classId, entry.dateKey, entry.id, entry.title)}
+                        <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.sourceClassId || entry.classId, entry.dateKey, entry.id, entry.title)}
                           style={{width:28,height:28,borderRadius:8,background:G.redL,border:"none",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
                           title="Delete entry">
                           🗑
@@ -11798,7 +11857,7 @@ function AdminPanelInner({user}){
                           </div>
                           {body&&<div style={{fontSize:mobile?13:14,color:G.textM,lineHeight:1.55,marginTop:6,whiteSpace:"pre-wrap"}}>{body}</div>}
                         </div>
-                        <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.classId, entry.dateKey, entry.id, entry.title)}
+                        <button onClick={()=>handleDeleteEntry(entry.teacherUid, entry.sourceClassId || entry.classId, entry.dateKey, entry.id, entry.title)}
                           style={{width:28,height:28,borderRadius:8,background:G.redL,border:"none",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
                           title="Delete entry">
                           🗑
@@ -11952,7 +12011,7 @@ function AdminPanelInner({user}){
                             </div>
                           )}
                         </div>
-                        <button onClick={()=>handleDeleteEntry(selP3.teacherUid,selP3.classId,dk,note.id,note.title)}
+                        <button onClick={()=>handleDeleteEntry(selP3.teacherUid,note._sourceClassId || selP3.classId,dk,note.id,note.title)}
                           style={{width:30,height:30,borderRadius:9,background:G.redL,border:"1px solid #F5CACA",cursor:"pointer",fontSize:13,color:G.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
                           title="Delete entry">
                           🗑
@@ -12940,7 +12999,7 @@ function AdminPanelInner({user}){
         const group = ensureGroup(cls?.institute || primaryInstitute);
         const subject = classSubjectName(teacher, cls);
         const section = classDisplayName(cls);
-        const stats = summarizeClassNotes((data?.notes || {})[cls?.id] || {});
+        const stats = summarizeClassNotes(buildEffectiveClassNotes(data?.notes || {}, cls?.id, isTeachingActivityEntry));
         group.subjects = uniqueLabels([...group.subjects, subject]);
         group.sections = uniqueLabels([...group.sections, section]);
         group.classes.push(cls);
