@@ -8158,29 +8158,21 @@ function ClassTrackerInner({user}){
         aria-modal="true"
         aria-label="Joint class"
         onMouseDown={()=>setJointClassPromptOpen(false)}
-        style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(15,23,42,0.42)",display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",padding:isMobile?"16px":"24px",boxSizing:"border-box",backdropFilter:"blur(6px)"}}>
+        style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(15,23,42,0.42)",display:"flex",alignItems:"center",justifyContent:"center",padding:isMobile?"22px":"24px",boxSizing:"border-box"}}>
         <div
           onMouseDown={e=>e.stopPropagation()}
-          style={{width:"100%",maxWidth:520,maxHeight:isMobile?"82dvh":"min(78vh,620px)",background:G.surface,border:`1px solid ${G.border}`,borderRadius:isMobile?"24px 24px 18px 18px":24,boxShadow:"0 28px 70px rgba(15,23,42,0.28)",overflow:"hidden",display:"flex",flexDirection:"column"}}>
-          <div style={{padding:"18px 18px 14px",borderBottom:`1px solid ${G.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:12,color:G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.55,fontWeight:800,marginBottom:5}}>Joint class</div>
-              <div style={{fontSize:24,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:0,lineHeight:1.05}}>Select sections</div>
-              <div style={{fontSize:13,color:G.textM,lineHeight:1.45,marginTop:6}}>Covered together with {activeClass?.section || "this class"}</div>
+          style={{width:"100%",maxWidth:500,maxHeight:"min(84dvh, 560px)",background:G.surface,border:`1px solid ${G.border}`,borderRadius:24,boxShadow:"0 28px 70px rgba(15,23,42,0.28)",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"22px 22px 10px"}}>
+            <div style={{fontSize:22,fontWeight:800,color:G.text,fontFamily:G.display,letterSpacing:0,lineHeight:1.15}}>Joint class</div>
+            <div style={{fontSize:14,color:G.textM,lineHeight:1.5,marginTop:10}}>
+              Select other sections that attended {activeClass?.section || "this class"} in the same period.
             </div>
-            <button
-              type="button"
-              onClick={()=>setJointClassPromptOpen(false)}
-              style={{width:38,height:38,borderRadius:999,border:`1px solid ${G.border}`,background:G.surfaceSoft,color:G.textM,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <AppIcon icon={IconX} size={18} color="currentColor" />
-            </button>
           </div>
-          <div style={{padding:18,overflowY:"auto",display:"grid",gap:10}}>
+          <div style={{padding:"10px 22px 8px",overflowY:"auto",display:"grid",gap:8}}>
             {jointCandidates.map(candidate=>{
               const id=String(candidate.id||"");
               const selected=selectedJointTargetIds.includes(id);
-              const sameContext=String(candidate?.institute||"").trim().toLowerCase()===String(activeClass?.institute||"").trim().toLowerCase()
-                && String(candidate?.subject||"").trim().toLowerCase()===String(activeClass?.subject||"").trim().toLowerCase();
+              const candidateSubtitle=[candidate.institute, candidate.subject].filter(Boolean).join(" • ");
               return(
                 <button
                   key={id}
@@ -8194,26 +8186,25 @@ function ClassTrackerInner({user}){
                   style={{
                     width:"100%",
                     textAlign:"left",
-                    border:`1.5px solid ${selected?G.green:G.border}`,
+                    border:`${selected?"2px":"1px"} solid ${selected?`${G.green}73`:G.border}`,
                     background:selected?G.greenL:G.surface,
                     color:G.text,
-                    borderRadius:16,
-                    padding:"12px 13px",
+                    borderRadius:12,
+                    padding:"9px 10px",
                     cursor:"pointer",
                     display:"flex",
                     alignItems:"center",
-                    gap:12,
-                    minHeight:62,
+                    gap:10,
+                    minHeight:58,
                     WebkitTapHighlightColor:"transparent",
-                    boxShadow:selected?"0 10px 22px rgba(15,107,120,0.10)":"none",
                   }}>
-                  <span style={{width:24,height:24,borderRadius:999,border:`2px solid ${selected?G.green:(sameContext?G.borderM:G.border)}`,background:selected?G.green:G.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{width:20,height:20,borderRadius:5,border:`2px solid ${selected?G.green:G.borderM}`,background:selected?G.green:G.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     {selected&&<AppIcon icon={IconCheck} size={14} color="#fff" />}
                   </span>
                   <span style={{minWidth:0,flex:1}}>
-                    <span style={{display:"block",fontSize:15,fontWeight:800,color:selected?G.green:G.text,fontFamily:G.display,letterSpacing:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{candidate.section}</span>
-                    <span style={{display:"block",fontSize:12.5,color:G.textM,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                      {candidate.institute || "No institute"}{candidate.subject?` - ${candidate.subject}`:""}
+                    <span style={{display:"block",fontSize:14.5,fontWeight:800,color:G.text,fontFamily:G.sans,letterSpacing:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{candidate.section}</span>
+                    <span style={{display:"block",fontSize:12.5,color:G.textM,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {candidateSubtitle || "No institute"}
                     </span>
                   </span>
                 </button>
@@ -8231,19 +8222,12 @@ function ClassTrackerInner({user}){
               </div>
             )}
           </div>
-          <div style={{padding:"14px 18px 18px",borderTop:`1px solid ${G.border}`,display:"flex",gap:10,justifyContent:"space-between",alignItems:"center"}}>
-            <button
-              type="button"
-              disabled={!selectedJointTargetIds.length}
-              onClick={()=>setForm(withJointTargetClassIds(form, []))}
-              style={{border:`1px solid ${G.borderM}`,background:G.surface,color:selectedJointTargetIds.length?G.textS:G.textL,borderRadius:12,padding:"10px 14px",fontSize:13,fontFamily:G.sans,fontWeight:800,cursor:selectedJointTargetIds.length?"pointer":"not-allowed",opacity:selectedJointTargetIds.length?1:0.55}}>
-              Clear
-            </button>
+          <div style={{padding:"8px 22px 18px",display:"flex",justifyContent:"flex-end",alignItems:"center"}}>
             <button
               type="button"
               onClick={()=>setJointClassPromptOpen(false)}
-              style={{border:"none",background:G.green,color:"#fff",borderRadius:12,padding:"11px 18px",fontSize:14,fontFamily:G.sans,fontWeight:800,cursor:"pointer",boxShadow:"0 10px 22px rgba(15,107,120,0.18)"}}>
-              Done{selectedJointTargetIds.length?` (${selectedJointTargetIds.length})`:""}
+              style={{border:"none",background:"transparent",color:G.green,borderRadius:10,padding:"10px 12px",fontSize:14,fontFamily:G.sans,fontWeight:800,cursor:"pointer"}}>
+              Done
             </button>
           </div>
         </div>
