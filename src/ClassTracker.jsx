@@ -8130,6 +8130,7 @@ function ClassTrackerInner({user}){
     const entryClassMetrics=activeClass
       ? (teacherClassMetricsMap[activeClass.id] || buildClassEntryMetrics(buildEffectiveClassNotes(data.notes, activeClass.id, isTeacherTeachingActivityEntry)))
       : buildClassEntryMetrics({});
+    const entryHeroMonthLabel=String(entryClassMetrics.monthLabel||"Month").split(" ")[0]||"Month";
     const entryStatusTone=getTodayEntryStatusStyles(entryClassMetrics.todayEntries);
     const detailTitle=String(form.title||"").trim();
     const detailBody=String(form.body||"").trim();
@@ -8336,58 +8337,59 @@ function ClassTrackerInner({user}){
           <div style={{flexShrink:0,background:G.pageBg,padding:"8px 16px 0"}}>
             <div style={{maxWidth:660,margin:"0 auto"}}>
               <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${isDarkTeacherTheme ? G.borderM : "rgba(15,23,42,0.92)"}`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd}}>
-                <div style={{background:entryHeroTheme.headerBg,padding:isMobile?"14px 16px 16px":"16px 18px 17px"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:isMobile?28:30,fontWeight:800,color:entryHeroTheme.titleColor,fontFamily:G.display,letterSpacing:0,lineHeight:1.02,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {activeClass.section}
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8,marginTop:10}}>
-                        <span style={{display:"inline-flex",alignItems:"center",gap:7,background:entryHeroTheme.chipBg,border:`1px solid ${entryHeroTheme.chipBorder}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:entryHeroTheme.chipText,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                          <span style={{width:8,height:8,borderRadius:999,background:color.bg,flexShrink:0}}/>
-                          {activeClass.institute || "No institute"}
-                        </span>
-                        {activeClass.subject&&(
-                          <span style={{display:"inline-flex",alignItems:"center",background:entryHeroTheme.chipBg,border:`1px solid ${entryHeroTheme.chipBorder}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:entryHeroTheme.chipText,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
-                            {activeClass.subject}
-                          </span>
-                        )}
-                        <span style={{display:"inline-flex",alignItems:"center",gap:6,background:entryStatusTone.background,border:`1px solid ${entryStatusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:entryStatusTone.color,whiteSpace:"nowrap"}}>
-                          <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
-                          {entryStatusTone.label}
-                        </span>
-                      </div>
+                <div style={{background:entryHeroTheme.headerBg,padding:isMobile?"16px 16px 15px":"18px 18px 17px"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+                    <div style={{fontSize:isMobile?30:34,fontWeight:800,color:entryHeroTheme.titleColor,fontFamily:G.display,letterSpacing:0,lineHeight:1.02,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:"1 1 auto",minWidth:0,paddingTop:1}}>
+                      {activeClass.section}
                     </div>
-                    {jointCandidates.length>0&&(
-                      <button
-                        type="button"
-                        onClick={()=>setJointClassPromptOpen(true)}
-                        onPointerDown={e=>rpl(e,true)}
-                        aria-label="Add joint class"
-                        title="Joint class"
-                        style={{
-                          width:42,
-                          height:42,
-                          borderRadius:999,
-                          border:`1px solid ${selectedJointTargetIds.length?`${G.green}55`:entryHeroTheme.chipBorder}`,
-                          background:selectedJointTargetIds.length?G.greenL:entryHeroTheme.chipBg,
-                          color:selectedJointTargetIds.length?G.green:entryHeroTheme.chipText,
-                          display:"flex",
-                          alignItems:"center",
-                          justifyContent:"center",
-                          cursor:"pointer",
-                          fontSize:selectedJointTargetIds.length?14:24,
-                          fontWeight:900,
-                          fontFamily:G.display,
-                          lineHeight:1,
-                          flexShrink:0,
-                          boxShadow:selectedJointTargetIds.length?"0 10px 20px rgba(15,107,120,0.14)":"none",
-                          WebkitTapHighlightColor:"transparent",
-                        }}>
-                        {selectedJointTargetIds.length?`+${selectedJointTargetIds.length}`:"+"}
-                      </button>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:10,flexShrink:0,maxWidth:isMobile?"66%":"58%"}}>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:7,background:entryStatusTone.background,border:`1px solid ${entryStatusTone.border}`,borderRadius:999,padding:"8px 12px",fontSize:isMobile?12.5:13,fontWeight:800,color:entryStatusTone.color,whiteSpace:"nowrap",maxWidth:isMobile?170:220,minWidth:0}}>
+                        <span style={{width:8,height:8,borderRadius:999,background:"currentColor",flexShrink:0}}/>
+                        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entryStatusTone.label}</span>
+                      </span>
+                      {jointCandidates.length>0&&(
+                        <button
+                          type="button"
+                          onClick={()=>setJointClassPromptOpen(true)}
+                          onPointerDown={e=>rpl(e,true)}
+                          aria-label="Add joint class"
+                          title="Joint class"
+                          style={{
+                            width:44,
+                            height:44,
+                            borderRadius:999,
+                            border:`2px solid ${selectedJointTargetIds.length?`${G.green}55`:"rgba(255,255,255,0.22)"}`,
+                            background:selectedJointTargetIds.length?G.greenL:"rgba(255,255,255,0.16)",
+                            color:selectedJointTargetIds.length?G.green:"#fff",
+                            display:"flex",
+                            alignItems:"center",
+                            justifyContent:"center",
+                            cursor:"pointer",
+                            fontSize:selectedJointTargetIds.length?14:24,
+                            fontWeight:900,
+                            fontFamily:G.display,
+                            lineHeight:1,
+                            flexShrink:0,
+                            WebkitTapHighlightColor:"transparent",
+                          }}>
+                          {selectedJointTargetIds.length?`+${selectedJointTargetIds.length}`:"+"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{display:"grid",gridTemplateColumns:activeClass.subject?"repeat(2,minmax(0,1fr))":"minmax(0,max-content)",gap:9,alignItems:"center",marginTop:13,maxWidth:"100%"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.17)",border:"1px solid rgba(255,255,255,0.13)",borderRadius:999,padding:"7px 10px",fontSize:12.5,fontWeight:800,color:"#fff",minWidth:0,overflow:"hidden",whiteSpace:"nowrap"}}>
+                      <span style={{width:8,height:8,borderRadius:999,background:"#34D077",flexShrink:0}}/>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeClass.institute || "No institute"}</span>
+                    </span>
+                    {activeClass.subject&&(
+                      <span style={{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.17)",border:"1px solid rgba(255,255,255,0.13)",borderRadius:999,padding:"7px 10px",fontSize:12.5,fontWeight:800,color:"#fff",minWidth:0,overflow:"hidden",whiteSpace:"nowrap"}}>
+                        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeClass.subject}</span>
+                      </span>
                     )}
                   </div>
+
                   {selectedJointClasses.length>0&&(
                     <div style={{marginTop:12,display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
                       <span style={{fontSize:11,color:entryHeroTheme.eyebrowColor,fontFamily:G.mono,textTransform:"uppercase",fontWeight:800,letterSpacing:0.4,marginRight:2}}>Joint with</span>
@@ -8409,6 +8411,20 @@ function ClassTrackerInner({user}){
                       </button>
                     </div>
                   )}
+
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginTop:16}}>
+                    {[
+                      { label:"Today", value:entryClassMetrics.todayEntries },
+                      { label:entryHeroMonthLabel, value:entryClassMetrics.monthEntries },
+                      { label:"Total", value:entryClassMetrics.totalCount },
+                      { label:"Days", value:entryClassMetrics.activeDays },
+                    ].map(item=>(
+                      <div key={item.label} style={{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,padding:isMobile?"11px 6px":"13px 8px",textAlign:"center",minWidth:0}}>
+                        <div style={{fontSize:isMobile?22:25,fontWeight:800,color:"#fff",fontFamily:G.display,lineHeight:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.value}</div>
+                        <div style={{fontSize:isMobile?11:12,color:"rgba(255,255,255,0.72)",marginTop:6,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -8461,20 +8477,25 @@ function ClassTrackerInner({user}){
           <div className="form-card" style={{...card,padding:"24px"}}>
             <div style={{marginBottom:18}}>
               <label style={lbl}>Topic Status</label>
-              <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                {Object.entries(STATUS_STYLES).map(([key,val])=>(
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
+                {Object.entries(STATUS_STYLES).map(([key,val])=>{
+                  const selected=form.status===key;
+                  const statusLabel=String(val.label||"").replace(/[🔵🟡🟢🟠]/g,"").trim();
+                  return(
                   <button key={key} onClick={()=>{
                     const nextStatus=form.status===key?"":key;
                     setForm({...form,status:nextStatus});
                   }}
-                    style={{background:form.status===key?val.bg:G.surface,color:form.status===key?val.text:G.textM,
-                      border:`1.5px solid ${form.status===key?val.dot:G.border}`,
-                      borderRadius:20,padding:"8px 18px",fontSize:14,cursor:"pointer",fontFamily:G.sans,
-                      fontWeight:form.status===key?700:500,transition:"all 0.15s",
-                      WebkitTapHighlightColor:"transparent"}}>
-                    {val.label}
+                    style={{width:"100%",minHeight:48,background:selected?val.bg:G.surface,color:selected?val.text:G.textM,
+                      border:`1.5px solid ${selected?val.dot:G.border}`,
+                      borderRadius:999,padding:"8px 10px",fontSize:14,cursor:"pointer",fontFamily:G.sans,
+                      fontWeight:selected?800:700,transition:"all 0.15s",
+                      WebkitTapHighlightColor:"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:9,overflow:"hidden"}}>
+                    <span style={{width:18,height:18,borderRadius:999,background:val.dot,boxShadow:`inset 0 0 0 2px ${selected?"rgba(255,255,255,0.20)":"rgba(255,255,255,0.35)"}`,flexShrink:0}}/>
+                    <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{statusLabel}</span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
               <div style={{fontSize:12,color:G.textL,marginTop:5}}>Tap again to deselect</div>
             </div>
