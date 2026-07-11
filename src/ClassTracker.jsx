@@ -8349,26 +8349,26 @@ function ClassTrackerInner({user}){
 
         {/* Class hero card - static in flow, always visible above scrollable content */}
         {activeClass&&(
-          <div style={{flexShrink:0,background:G.pageBg,padding:"12px 16px 0"}}>
+          <div style={{flexShrink:0,background:G.pageBg,padding:"8px 16px 0"}}>
             <div style={{maxWidth:660,margin:"0 auto"}}>
               <div className="ledgr-card" style={{background:G.surface,border:`1px solid ${isDarkTeacherTheme ? G.borderM : "rgba(15,23,42,0.92)"}`,borderRadius:24,overflow:"hidden",boxShadow:G.shadowMd}}>
-                <div style={{background:entryHeroTheme.headerBg,padding:isMobile?"16px 16px 14px":"18px 18px 15px",borderBottom:`1px solid ${entryHeroTheme.headerBorder}`}}>
+                <div style={{background:entryHeroTheme.headerBg,padding:isMobile?"14px 16px 16px":"16px 18px 17px"}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:isMobile?30:32,fontWeight:800,color:entryHeroTheme.titleColor,fontFamily:G.display,letterSpacing:0,lineHeight:1.02,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      <div style={{fontSize:isMobile?28:30,fontWeight:800,color:entryHeroTheme.titleColor,fontFamily:G.display,letterSpacing:0,lineHeight:1.02,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                         {activeClass.section}
                       </div>
-                      <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:11}}>
-                        <span style={{display:"inline-flex",alignItems:"center",gap:7,background:entryHeroTheme.chipBg,border:`1px solid ${entryHeroTheme.chipBorder}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:800,color:entryHeroTheme.chipText,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8,marginTop:10}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:7,background:entryHeroTheme.chipBg,border:`1px solid ${entryHeroTheme.chipBorder}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:entryHeroTheme.chipText,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                           <span style={{width:8,height:8,borderRadius:999,background:color.bg,flexShrink:0}}/>
                           {activeClass.institute || "No institute"}
                         </span>
                         {activeClass.subject&&(
-                          <span style={{display:"inline-flex",alignItems:"center",background:entryHeroTheme.chipBg,border:`1px solid ${entryHeroTheme.chipBorder}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:800,color:entryHeroTheme.chipText,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
+                          <span style={{display:"inline-flex",alignItems:"center",background:entryHeroTheme.chipBg,border:`1px solid ${entryHeroTheme.chipBorder}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:entryHeroTheme.chipText,whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
                             {activeClass.subject}
                           </span>
                         )}
-                        <span style={{display:"inline-flex",alignItems:"center",gap:6,background:entryStatusTone.background,border:`1px solid ${entryStatusTone.border}`,borderRadius:999,padding:"6px 10px",fontSize:11.5,fontWeight:800,color:entryStatusTone.color,whiteSpace:"nowrap"}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6,background:entryStatusTone.background,border:`1px solid ${entryStatusTone.border}`,borderRadius:999,padding:"5px 10px",fontSize:11.5,fontWeight:800,color:entryStatusTone.color,whiteSpace:"nowrap"}}>
                           <span style={{width:7,height:7,borderRadius:999,background:"currentColor",flexShrink:0}}/>
                           {entryStatusTone.label}
                         </span>
@@ -8382,8 +8382,8 @@ function ClassTrackerInner({user}){
                         aria-label="Add joint class"
                         title="Joint class"
                         style={{
-                          width:44,
-                          height:44,
+                          width:42,
+                          height:42,
                           borderRadius:999,
                           border:`1px solid ${selectedJointTargetIds.length?`${G.green}55`:entryHeroTheme.chipBorder}`,
                           background:selectedJointTargetIds.length?G.greenL:entryHeroTheme.chipBg,
@@ -8392,7 +8392,7 @@ function ClassTrackerInner({user}){
                           alignItems:"center",
                           justifyContent:"center",
                           cursor:"pointer",
-                          fontSize:selectedJointTargetIds.length?14:25,
+                          fontSize:selectedJointTargetIds.length?14:24,
                           fontWeight:900,
                           fontFamily:G.display,
                           lineHeight:1,
@@ -8405,7 +8405,7 @@ function ClassTrackerInner({user}){
                     )}
                   </div>
                   {selectedJointClasses.length>0&&(
-                    <div style={{marginTop:13,display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
+                    <div style={{marginTop:12,display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
                       <span style={{fontSize:11,color:entryHeroTheme.eyebrowColor,fontFamily:G.mono,textTransform:"uppercase",fontWeight:800,letterSpacing:0.4,marginRight:2}}>Joint with</span>
                       {selectedJointClasses.map(cls=>(
                         <button
@@ -8425,19 +8425,6 @@ function ClassTrackerInner({user}){
                       </button>
                     </div>
                   )}
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,padding:"12px 14px"}}>
-                  {[
-                    { label:"Today", value:entryClassMetrics.todayEntries, color:entryHeroTheme.primaryAccent },
-                    { label:entryClassMetrics.monthLabel, value:entryClassMetrics.monthEntries, color:G.textS },
-                    { label:"Total", value:entryClassMetrics.totalCount, color:G.text },
-                    { label:"Days", value:entryClassMetrics.activeDays, color:G.textS },
-                  ].map(item=>(
-                    <div key={item.label} style={{background:entryHeroTheme.statBg,border:`1px solid ${entryHeroTheme.statBorder}`,borderRadius:14,padding:"10px 7px",textAlign:"center",minWidth:0}}>
-                      <div style={{fontSize:20,fontWeight:800,color:item.color,fontFamily:G.display,lineHeight:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.value}</div>
-                      <div style={{fontSize:10.5,color:G.textL,marginTop:5,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.label}</div>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>
