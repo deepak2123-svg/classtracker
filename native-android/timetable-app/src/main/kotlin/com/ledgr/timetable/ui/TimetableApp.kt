@@ -2,6 +2,7 @@ package com.ledgr.timetable.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -65,7 +66,9 @@ import com.ledgr.timetable.data.TIME_SLOT_TYPE_CLASS
 import com.ledgr.timetable.data.Teacher
 import com.ledgr.timetable.domain.AssignmentConflict
 import com.ledgr.timetable.domain.AssignmentConflictType
+import com.ledgr.timetable.domain.AvailabilityWarning
 import com.ledgr.timetable.domain.DraftAssignment
+import com.ledgr.timetable.domain.DraftTeacherUnavailability
 import com.ledgr.timetable.domain.DraftTimeSlot
 import com.ledgr.timetable.ui.theme.TimetableTheme
 import kotlin.math.roundToInt
@@ -151,7 +154,12 @@ private fun TimetableNavHost(
             )
         }
         composable(TimetableRoute.WizardAvailability.route) {
-            WizardAvailabilityScreen(uiState = uiState, navController = navController)
+            WizardAvailabilityScreen(
+                uiState = uiState,
+                onStartDraft = viewModel::startTimeSlotDraft,
+                onToggleTeacherUnavailability = viewModel::toggleTeacherUnavailability,
+                navController = navController,
+            )
         }
         composable(TimetableRoute.WizardReviewSave.route) {
             WizardReviewSaveScreen(uiState = uiState, navController = navController)
@@ -676,6 +684,9 @@ private fun WizardAssignScreen(
     val conflictAssignmentIds = remember(uiState.assignmentConflicts) {
         uiState.assignmentConflicts.flatMap { it.assignmentIds }.toSet()
     }
+    val unavailableAssignmentIds = remember(uiState.availabilityWarnings) {
+        uiState.availabilityWarnings.map { it.assignmentId }.toSet()
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AppScaffold(
@@ -740,6 +751,7 @@ private fun WizardAssignScreen(
                         teachers = uiState.teachers,
                         assignments = uiState.draftAssignments,
                         conflictAssignmentIds = conflictAssignmentIds,
+                        unavailableAssignmentIds = unavailableAssignmentIds,
                         onTargetBoundsChanged = { key, bounds ->
                             targetBounds[key] = bounds
                         },
@@ -955,6 +967,7 @@ private fun TimeSlotAssignmentGroup(
     teachers: List<Teacher>,
     assignments: List<DraftAssignment>,
     conflictAssignmentIds: Set<String>,
+    unavailableAssignmentIds: Set<String>,
     onTargetBoundsChanged: (AssignTargetKey, Rect) -> Unit,
     onClearAssignment: (DraftAssignment) -> Unit,
 ) {
@@ -974,6 +987,7 @@ private fun TimeSlotAssignmentGroup(
                 teachers = teachers,
                 assignments = assignments,
                 conflictAssignmentIds = conflictAssignmentIds,
+                unavailableAssignmentIds = unavailableAssignmentIds,
                 onTargetBoundsChanged = onTargetBoundsChanged,
                 onClearAssignment = onClearAssignment,
             )
@@ -988,6 +1002,7 @@ private fun SectionAssignmentCard(
     teachers: List<Teacher>,
     assignments: List<DraftAssignment>,
     conflictAssignmentIds: Set<String>,
+    unavailableAssignmentIds: Set<String>,
     onTargetBoundsChanged: (AssignTargetKey, Rect) -> Unit,
     onClearAssignment: (DraftAssignment) -> Unit,
 ) {
@@ -1028,6 +1043,7 @@ private fun SectionAssignmentCard(
                     assignment = assignment,
                     assignedTeacher = assignedTeacher,
                     isConflict = assignment?.id in conflictAssignmentIds,
+                    isAvailabilityWarning = assignment?.id in unavailableAssignmentIds,
                     onTargetBoundsChanged = onTargetBoundsChanged,
                     onClearAssignment = onClearAssignment,
                 )
@@ -1043,6 +1059,7 @@ private fun SubjectDropSlot(
     assignment: DraftAssignment?,
     assignedTeacher: Teacher?,
     isConflict: Boolean,
+    isAvailabilityWarning: Boolean,
     onTargetBoundsChanged: (AssignTargetKey, Rect) -> Unit,
     onClearAssignment: (DraftAssignment) -> Unit,
 ) {
@@ -1055,10 +1072,11 @@ private fun SubjectDropSlot(
         shape = MaterialTheme.shapes.medium,
         color = when {
             isConflict -> MaterialTheme.colorScheme.errorContainer
+            isAvailabilityWarning -> MaterialTheme.colorScheme.errorContainer
             assignment != null -> MaterialTheme.colorScheme.surface
             else -> Color.Transparent
         },
-        contentColor = if (isConflict) {
+        contentColor = if (isConflict || isAvailabilityWarning) {
             MaterialTheme.colorScheme.onErrorContainer
         } else {
             MaterialTheme.colorScheme.onSurface
@@ -1067,6 +1085,7 @@ private fun SubjectDropSlot(
             width = 1.5.dp,
             color = when {
                 isConflict -> MaterialTheme.colorScheme.error
+                isAvailabilityWarning -> MaterialTheme.colorScheme.error
                 assignment != null -> Color.Transparent
                 else -> MaterialTheme.colorScheme.outlineVariant
             },
@@ -1090,11 +1109,13 @@ private fun SubjectDropSlot(
                         "Drop teacher here"
                     } else if (isConflict) {
                         "Conflict: ${assignedTeacher.name}"
+                    } else if (isAvailabilityWarning) {
+                        "Unavailable: ${assignedTeacher.name}"
                     } else {
                         assignedTeacher.name
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isConflict) {
+                    color = if (isConflict || isAvailabilityWarning) {
                         MaterialTheme.colorScheme.onErrorContainer
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -1105,7 +1126,11 @@ private fun SubjectDropSlot(
                 ActionButton(
                     label = "Clear",
                     onClick = { onClearAssignment(assignment) },
-                    style = if (isConflict) ActionStyle.Danger else ActionStyle.Outlined,
+                    style = if (isConflict || isAvailabilityWarning) {
+                        ActionStyle.Danger
+                    } else {
+                        ActionStyle.Outlined
+                    },
                     modifier = Modifier.width(96.dp),
                 )
             }
@@ -1116,23 +1141,247 @@ private fun SubjectDropSlot(
 @Composable
 private fun WizardAvailabilityScreen(
     uiState: TimetableUiState,
+    onStartDraft: () -> Unit,
+    onToggleTeacherUnavailability: (String, String) -> Unit,
     navController: NavHostController,
 ) {
-    PlaceholderScreen(
+    LaunchedEffect(uiState.selectedInstitute?.id) {
+        onStartDraft()
+    }
+
+    val classSlots = uiState.draftTimeSlots.filter { it.type == TIME_SLOT_TYPE_CLASS }
+
+    AppScaffold(
         title = "Availability",
-        description = selectedInstituteLabel(uiState),
         progressStep = 3,
-        primaryActions = listOf(
-            PlaceholderAction("Next: Review") {
+        subtitle = selectedInstituteLabel(uiState),
+    ) {
+        Text(
+            text = "Mark teacher unavailability",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "Optional - leave blank if everyone is free for every class period.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        AvailabilityWarningSummary(
+            warnings = uiState.availabilityWarnings,
+            teachers = uiState.teachers,
+            sections = uiState.sections,
+            slots = classSlots,
+        )
+        when {
+            uiState.teachers.isEmpty() -> EmptyStateCard(
+                title = "No teachers yet",
+                body = "Add teachers in roster settings before marking availability.",
+            )
+            classSlots.isEmpty() -> EmptyStateCard(
+                title = "No class periods yet",
+                body = "Add at least one class time slot before marking availability.",
+            )
+            else -> uiState.teachers.forEach { teacher ->
+                key(teacher.id) {
+                    TeacherAvailabilityCard(
+                        teacher = teacher,
+                        slots = classSlots,
+                        unavailability = uiState.draftTeacherUnavailability,
+                        warnings = uiState.availabilityWarnings,
+                        onToggleSlot = { slotId ->
+                            onToggleTeacherUnavailability(teacher.id, slotId)
+                        },
+                    )
+                }
+            }
+        }
+        ActionButton(
+            label = "Next: Review",
+            onClick = {
                 navController.navigate(TimetableRoute.WizardReviewSave.route)
             },
-        ),
-        secondaryActions = listOf(
-            PlaceholderAction("Back to home") {
+            style = ActionStyle.Primary,
+        )
+        ActionButton(
+            label = "Back to home",
+            onClick = {
                 navController.navigateHome()
             },
+            style = ActionStyle.Outlined,
+        )
+    }
+}
+
+@Composable
+private fun AvailabilityWarningSummary(
+    warnings: List<AvailabilityWarning>,
+    teachers: List<Teacher>,
+    sections: List<Section>,
+    slots: List<DraftTimeSlot>,
+) {
+    if (warnings.isEmpty()) return
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "Unavailable assignment",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            warnings.forEach { warning ->
+                Text(
+                    text = availabilityWarningLabel(warning, teachers, sections, slots),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TeacherAvailabilityCard(
+    teacher: Teacher,
+    slots: List<DraftTimeSlot>,
+    unavailability: List<DraftTeacherUnavailability>,
+    warnings: List<AvailabilityWarning>,
+    onToggleSlot: (String) -> Unit,
+) {
+    val blockedSlotIds = unavailability
+        .filter { mark -> mark.teacherId == teacher.id }
+        .map { mark -> mark.slotId }
+        .toSet()
+    val warningSlotIds = warnings
+        .filter { warning -> warning.teacherId == teacher.id }
+        .map { warning -> warning.slotId }
+        .toSet()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
-    )
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = teacher.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                AvailabilityBadge(
+                    label = if (blockedSlotIds.isEmpty()) {
+                        "All free"
+                    } else {
+                        "${blockedSlotIds.size} blocked"
+                    },
+                    isBlocked = blockedSlotIds.isNotEmpty(),
+                )
+            }
+            slots.forEach { slot ->
+                val isUnavailable = slot.id in blockedSlotIds
+                AvailabilitySlotToggle(
+                    slot = slot,
+                    isUnavailable = isUnavailable,
+                    hasWarning = slot.id in warningSlotIds,
+                    onToggle = { onToggleSlot(slot.id) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AvailabilityBadge(
+    label: String,
+    isBlocked: Boolean,
+) {
+    Surface(
+        shape = CircleShape,
+        color = if (isBlocked) {
+            MaterialTheme.colorScheme.tertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        contentColor = if (isBlocked) {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        },
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+@Composable
+private fun AvailabilitySlotToggle(
+    slot: DraftTimeSlot,
+    isUnavailable: Boolean,
+    hasWarning: Boolean,
+    onToggle: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle),
+        shape = MaterialTheme.shapes.medium,
+        color = when {
+            hasWarning -> MaterialTheme.colorScheme.errorContainer
+            isUnavailable -> MaterialTheme.colorScheme.tertiaryContainer
+            else -> MaterialTheme.colorScheme.surface
+        },
+        contentColor = when {
+            hasWarning -> MaterialTheme.colorScheme.onErrorContainer
+            isUnavailable -> MaterialTheme.colorScheme.onTertiaryContainer
+            else -> MaterialTheme.colorScheme.onSurface
+        },
+        border = BorderStroke(
+            width = 1.5.dp,
+            color = when {
+                hasWarning -> MaterialTheme.colorScheme.error
+                isUnavailable -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = slotLabel(slot),
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Text(
+                text = when {
+                    hasWarning -> "Unavailable - assigned"
+                    isUnavailable -> "Unavailable"
+                    else -> "Available"
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }
 
 @Composable
@@ -1812,6 +2061,22 @@ private fun conflictLabel(
             "$sectionName has more than one subject at $slotLabel."
         }
     }
+}
+
+private fun availabilityWarningLabel(
+    warning: AvailabilityWarning,
+    teachers: List<Teacher>,
+    sections: List<Section>,
+    slots: List<DraftTimeSlot>,
+): String {
+    val teacherName = teachers.firstOrNull { it.id == warning.teacherId }?.name ?: "A teacher"
+    val sectionName = sections.firstOrNull { it.id == warning.sectionId }?.name ?: "a section"
+    val slotText = slots.firstOrNull { it.id == warning.slotId }?.let(::slotLabel) ?: "this slot"
+    return "$teacherName is unavailable for $sectionName ${warning.subjectName} at $slotText."
+}
+
+private fun slotLabel(slot: DraftTimeSlot): String {
+    return "${slot.startTime} - ${slot.endTime}"
 }
 
 private data class PlaceholderAction(

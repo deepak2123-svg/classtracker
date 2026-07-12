@@ -10,9 +10,12 @@ import com.ledgr.timetable.data.Teacher
 import com.ledgr.timetable.data.TimetableDatabaseProvider
 import com.ledgr.timetable.data.TimetableRepository
 import com.ledgr.timetable.domain.AssignmentConflict
+import com.ledgr.timetable.domain.AvailabilityWarning
 import com.ledgr.timetable.domain.DraftAssignment
+import com.ledgr.timetable.domain.DraftTeacherUnavailability
 import com.ledgr.timetable.domain.DraftTimeSlot
 import com.ledgr.timetable.domain.DraftTimeSlotEditor
+import com.ledgr.timetable.domain.findAvailabilityWarnings
 import com.ledgr.timetable.domain.findConflicts
 import com.ledgr.timetable.domain.toAssignment
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,6 +37,7 @@ class TimetableViewModel(
     private val draftTimeSlotInstituteId = MutableStateFlow<String?>(null)
     private val draftTimeSlots = MutableStateFlow<List<DraftTimeSlot>>(emptyList())
     private val draftAssignments = MutableStateFlow<List<DraftAssignment>>(emptyList())
+    private val draftTeacherUnavailability = MutableStateFlow<List<DraftTeacherUnavailability>>(emptyList())
     private val institutes = repository.observeInstitutes()
     private val teachers = selectedInstituteId.flatMapLatest { instituteId ->
         if (instituteId == null) {
@@ -52,10 +56,12 @@ class TimetableViewModel(
     private val draftWizardState = combine(
         draftTimeSlots,
         draftAssignments,
-    ) { timeSlotRows, assignmentRows ->
+        draftTeacherUnavailability,
+    ) { timeSlotRows, assignmentRows, unavailabilityRows ->
         DraftWizardState(
             timeSlots = timeSlotRows,
             assignments = assignmentRows,
+            teacherUnavailability = unavailabilityRows,
         )
     }
 
@@ -75,6 +81,11 @@ class TimetableViewModel(
             draftTimeSlots = draftState.timeSlots,
             draftAssignments = draftState.assignments,
             assignmentConflicts = findConflicts(draftState.assignments.map { it.toAssignment() }),
+            draftTeacherUnavailability = draftState.teacherUnavailability,
+            availabilityWarnings = findAvailabilityWarnings(
+                assignments = draftState.assignments,
+                unavailability = draftState.teacherUnavailability,
+            ),
         )
     }.stateIn(
         scope = viewModelScope,
@@ -87,6 +98,7 @@ class TimetableViewModel(
             draftTimeSlotInstituteId.value = null
             draftTimeSlots.value = emptyList()
             draftAssignments.value = emptyList()
+            draftTeacherUnavailability.value = emptyList()
         }
         selectedInstituteId.value = id
     }
@@ -99,6 +111,7 @@ class TimetableViewModel(
             draftTimeSlotInstituteId.value = null
             draftTimeSlots.value = emptyList()
             draftAssignments.value = emptyList()
+            draftTeacherUnavailability.value = emptyList()
             selectedInstituteId.value = repository.createInstitute(trimmed).id
         }
     }
@@ -123,6 +136,10 @@ class TimetableViewModel(
     }
 
     fun deleteTeacher(teacher: Teacher) {
+        draftAssignments.value = draftAssignments.value.filterNot { it.teacherId == teacher.id }
+        draftTeacherUnavailability.value = draftTeacherUnavailability.value.filterNot {
+            it.teacherId == teacher.id
+        }
         viewModelScope.launch {
             repository.deleteTeacher(teacher.id)
         }
@@ -200,6 +217,9 @@ class TimetableViewModel(
             id = slot.id,
         )
         draftAssignments.value = draftAssignments.value.filterNot { it.slotId == slot.id }
+        draftTeacherUnavailability.value = draftTeacherUnavailability.value.filterNot {
+            it.slotId == slot.id
+        }
     }
 
     fun assignTeacherToSubjectSlot(
@@ -234,6 +254,24 @@ class TimetableViewModel(
         draftAssignments.value = draftAssignments.value.filterNot { it.id == assignment.id }
     }
 
+    fun toggleTeacherUnavailability(teacherId: String, slotId: String) {
+        val existingMark = draftTeacherUnavailability.value.firstOrNull { mark ->
+            mark.teacherId == teacherId && mark.slotId == slotId
+        }
+
+        draftTeacherUnavailability.value = if (existingMark == null) {
+            draftTeacherUnavailability.value.plus(
+                DraftTeacherUnavailability(
+                    id = UUID.randomUUID().toString(),
+                    teacherId = teacherId,
+                    slotId = slotId,
+                ),
+            )
+        } else {
+            draftTeacherUnavailability.value.filterNot { it.id == existingMark.id }
+        }
+    }
+
     companion object {
         fun factory(context: Context): ViewModelProvider.Factory {
             val appContext = context.applicationContext
@@ -258,9 +296,12 @@ data class TimetableUiState(
     val draftTimeSlots: List<DraftTimeSlot> = emptyList(),
     val draftAssignments: List<DraftAssignment> = emptyList(),
     val assignmentConflicts: List<AssignmentConflict> = emptyList(),
+    val draftTeacherUnavailability: List<DraftTeacherUnavailability> = emptyList(),
+    val availabilityWarnings: List<AvailabilityWarning> = emptyList(),
 )
 
 private data class DraftWizardState(
     val timeSlots: List<DraftTimeSlot>,
     val assignments: List<DraftAssignment>,
+    val teacherUnavailability: List<DraftTeacherUnavailability>,
 )
