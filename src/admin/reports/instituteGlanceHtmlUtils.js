@@ -223,24 +223,6 @@ const CENTRE_SUMMARY_CSS = `
   .centre-pill.good { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
   .centre-pill.warn { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
   .centre-pill.empty { background: var(--surface-3); color: var(--ink-3); border: 1px solid var(--rule); }
-  .pending-breakdown {
-    background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 12px;
-    padding: 11px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  }
-  .pb-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-3); margin-right: 6px; white-space: nowrap; }
-  .pb-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
-  .pb-chip.red { background: var(--red-bg); color: var(--red); border: 0.5px solid var(--red-border); }
-  .pb-chip.amber { background: var(--amber-bg); color: var(--amber); border: 0.5px solid var(--amber-border); }
-  .pb-chip.green { background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); }
-  .pb-sep { color: var(--rule-strong); font-size: 14px; }
-  .progress-wrap {
-    background: var(--surface); border: 0.5px solid var(--rule-strong); border-radius: 8px;
-    padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 14px;
-  }
-  .progress-label { font-size: 12px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
-  .progress-bar { flex: 1; height: 6px; background: var(--surface-3); border-radius: 99px; overflow: hidden; }
-  .progress-fill { height: 100%; border-radius: 99px; background: var(--green); }
-  .progress-pct { font-size: 12px; font-weight: 600; color: var(--green); white-space: nowrap; }
   .section-title {
     font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
     color: var(--ink-3); margin-bottom: 8px; margin-top: 24px;
@@ -475,7 +457,7 @@ const CENTRE_SUMMARY_CSS = `
     .teacher-activity-page .activity-syllabus,
     .teacher-activity-page .activity-pending-note { page-break-inside: avoid; break-inside: avoid; }
     .pending-table tr { page-break-inside: avoid; break-inside: avoid; }
-    .scorecard, .pending-breakdown, .progress-wrap, .centre-card, .executive-summary { page-break-inside: avoid; break-inside: avoid; }
+    .scorecard, .centre-card, .executive-summary { page-break-inside: avoid; break-inside: avoid; }
     .section-title { page-break-after: avoid; break-after: avoid; }
     .followup-actions { display: none !important; }
   }
@@ -639,15 +621,6 @@ export function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}
   const pct = total > 0 ? Math.round((filledCount / total) * 100) : 0;
   const showEntryDates = periodMeta.key !== "daily";
 
-  // Pending breakdown counts
-  let nInactive = 0, nMissed = 0, nActive = 0;
-  pending.forEach(t => {
-    const { cls } = _pendingBadge(t);
-    if(cls === "badge-red") nInactive++;
-    else if(cls === "badge-amber") nMissed++;
-    else nActive++;
-  });
-
   // Filled teachers HTML
   let filledHtml = "";
   if(!filled.length){
@@ -804,19 +777,6 @@ export function buildInstituteGlanceHtmlPage(row, generatedOnLabel, options = {}
           <div class="sub">${e(periodMeta.hoursSubLabel)}</div>
         </div>
       </div>
-
-      ${pending.length ? `
-      <div class="pending-breakdown">
-        <span class="pb-label">Pending breakdown</span>
-        ${nInactive > 0 ? `<span class="pb-chip red"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nInactive} inactive / never logged</span><span class="pb-sep">·</span>` : ""}
-        ${nMissed > 0 ? `<span class="pb-chip amber"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nMissed} missed several days</span><span class="pb-sep">·</span>` : ""}
-        ${nActive > 0 ? `<span class="pb-chip green"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>${nActive} active · missed today</span>` : ""}
-      </div>
-      <div class="progress-wrap">
-        <span class="progress-label">${e(periodMeta.submissionLabel)}</span>
-        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-        <span class="progress-pct">${filledCount} / ${total} · ${pct}%</span>
-      </div>` : ""}
 
       <div class="section-title">${e(periodMeta.activeLabel)} (${filled.length})</div>
       ${filledHtml}
