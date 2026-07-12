@@ -5850,6 +5850,7 @@ function AdminPanelInner({user}){
   const [instituteGlanceOptionsOpen, setInstituteGlanceOptionsOpen] = useState(false);
   const [instituteGlanceOptionsMode, setInstituteGlanceOptionsMode] = useState("export");
   const [instituteGlanceOptionsContext, setInstituteGlanceOptionsContext] = useState("report");
+  const [instituteGlancePastEntriesOpen, setInstituteGlancePastEntriesOpen] = useState(false);
   const [instituteGlancePeriod, setInstituteGlancePeriod] = useState("daily");
   const [instituteGlanceMonth, setInstituteGlanceMonth] = useState(() => currentMonthKey());
   const [instituteGlanceRangeStart, setInstituteGlanceRangeStart] = useState(() => addDaysToDateKey(todayKey(), -6));
@@ -7068,6 +7069,19 @@ function AdminPanelInner({user}){
     scheduleInstituteGlanceReport(finalReport);
     return finalReport;
   }, [buildInstituteGlanceSnapshot, ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlanceConfigKey, instituteGlanceTeacherList, institutes.length, isMobile, isTeacherFullDataStale, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
+
+  const refreshInstituteGlanceReport = React.useCallback(() => {
+    const activeConfig = getInstituteGlanceConfig();
+    instituteGlanceJobRef.current += 1;
+    const currentReport = instituteGlanceReportRef.current || {};
+    scheduleInstituteGlanceReport({
+      ...currentReport,
+      configKey:"",
+      loading:false,
+      error:"",
+    });
+    return loadInstituteGlanceReport({ config:activeConfig });
+  }, [getInstituteGlanceConfig, loadInstituteGlanceReport, scheduleInstituteGlanceReport]);
 
   React.useEffect(() => {
     const visible = instituteGlanceOpen || mobileSurface === "centreSummary";
@@ -8335,6 +8349,51 @@ function AdminPanelInner({user}){
     );
   };
 
+  const renderInstituteGlancePastEntryRecords = (compact = false) => (
+    <div style={{marginTop:compact ? 10 : 14}}>
+      <button
+        type="button"
+        className="admin-mobile-touch"
+        aria-expanded={instituteGlancePastEntriesOpen}
+        onClick={()=>setInstituteGlancePastEntriesOpen(open => !open)}
+        style={{
+          width:"100%",
+          minHeight:compact ? 44 : 48,
+          padding:compact ? "10px 12px" : "11px 14px",
+          borderRadius:compact ? 14 : 16,
+          border:`1px solid ${instituteGlancePastEntriesOpen ? "#BFDBFE" : G.border}`,
+          background:instituteGlancePastEntriesOpen ? G.blueL : "#FFFFFF",
+          color:G.text,
+          cursor:"pointer",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"space-between",
+          gap:12,
+          fontFamily:G.sans,
+          boxShadow:compact || reduceEffects ? "none" : "0 10px 24px rgba(15,23,42,0.05)",
+          WebkitTapHighlightColor:"transparent",
+        }}>
+        <span style={{display:"inline-flex",alignItems:"center",gap:10,minWidth:0}}>
+          <span style={{width:compact ? 30 : 34,height:compact ? 30 : 34,borderRadius:12,background:instituteGlancePastEntriesOpen ? "#DBEAFE" : "#F1F5F9",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <AppIcon icon={IconChartBar} size={compact ? 15 : 16} color={instituteGlancePastEntriesOpen ? G.blue : G.textL} />
+          </span>
+          <span style={{fontSize:compact ? 13 : 14,fontWeight:850,color:G.text,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            Past entry records
+          </span>
+        </span>
+        <span style={{fontSize:11.5,fontWeight:850,color:instituteGlancePastEntriesOpen ? G.blue : G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,whiteSpace:"nowrap"}}>
+          {instituteGlancePastEntriesOpen ? "Hide" : "Show"}
+        </span>
+      </button>
+      {instituteGlancePastEntriesOpen&&(
+        <>
+          {renderInstituteGlancePeriodControls(compact)}
+          {renderInstituteGlanceEntryDistribution(compact)}
+        </>
+      )}
+    </div>
+  );
+
   const renderInstituteGlanceActions = (compact = false, flush = false) => {
     const baseButtonStyle = {
       minWidth:compact ? 84 : 92,
@@ -8382,7 +8441,7 @@ function AdminPanelInner({user}){
         <button
           type="button"
           className="admin-mobile-touch"
-          onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)}
+          onClick={()=>refreshInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure)}
           style={baseButtonStyle}>
           Refresh
         </button>
@@ -9367,7 +9426,6 @@ function AdminPanelInner({user}){
               {!isMobile&&renderInstituteGlanceActions(false, true)}
             </div>
 
-            {renderInstituteGlancePeriodControls(false)}
             {renderInstituteGlanceProgressBlock(false)}
 
             {!!instituteGlanceReport.error&&(
@@ -9376,14 +9434,14 @@ function AdminPanelInner({user}){
                 <div style={{fontSize:12.5,color:"#9A3412",lineHeight:1.55,marginTop:6}}>
                   {instituteGlanceReport.error}
                 </div>
-                <button className="admin-mobile-touch" onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)} style={{marginTop:12,padding:"9px 12px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFFFFF",color:"#9A3412",fontSize:12.5,fontWeight:700,fontFamily:G.sans,cursor:"pointer"}}>
+                <button className="admin-mobile-touch" onClick={()=>refreshInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure)} style={{marginTop:12,padding:"9px 12px",borderRadius:10,border:"1px solid #FDBA74",background:"#FFFFFF",color:"#9A3412",fontSize:12.5,fontWeight:700,fontFamily:G.sans,cursor:"pointer"}}>
                   Retry
                 </button>
               </div>
             )}
 
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(false)}
-            {!!instituteGlanceReport.rows.length&&renderInstituteGlanceEntryDistribution(false)}
+            {!!instituteGlanceReport.rows.length&&renderInstituteGlancePastEntryRecords(false)}
 
             {instituteGlanceReport.loading && !instituteGlanceReport.rows.length ? (
               renderInstituteGlanceLoadingDeck(false)
@@ -16186,10 +16244,9 @@ function AdminPanelInner({user}){
               <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5,marginTop:7}}>
                 Submissions, pending teachers, sections, hours, and export actions.
               </div>
-              {renderInstituteGlancePeriodControls(true)}
               {renderInstituteGlanceProgressBlock(true)}
               {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
-              {!!instituteGlanceReport.rows.length&&renderInstituteGlanceEntryDistribution(true)}
+              {!!instituteGlanceReport.rows.length&&renderInstituteGlancePastEntryRecords(true)}
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:10}}>
                 <button type="button" className="admin-mobile-touch" onClick={()=>openInstituteGlanceOptions("export", "report")} disabled={!!instituteGlanceAnyExportBusy || !!ledgrReportScheduleSaving} style={{...compactActionButton("blue"),opacity:instituteGlanceAnyExportBusy || ledgrReportScheduleSaving ? 0.65 : 1}}>
                   <AppIcon icon={IconDownload} size={15} color={G.blue} />
@@ -16199,7 +16256,7 @@ function AdminPanelInner({user}){
                   <AppIcon icon={IconCalendar} size={15} color={G.textS} />
                   Schedule
                 </button>
-                <button type="button" className="admin-mobile-touch" onClick={()=>loadInstituteGlanceReport({ force:true }).catch(handleInstituteGlanceLoadFailure)} style={compactActionButton("light")}>
+                <button type="button" className="admin-mobile-touch" onClick={()=>refreshInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure)} style={compactActionButton("light")}>
                   <AppIcon icon={IconRefresh} size={15} color={G.textS} />
                   Refresh
                 </button>
@@ -17881,10 +17938,9 @@ function AdminPanelInner({user}){
                 Profile
               </button>
             </div>
-            {renderInstituteGlancePeriodControls(true)}
             {renderInstituteGlanceProgressBlock(true)}
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
-            {!!instituteGlanceReport.rows.length&&renderInstituteGlanceEntryDistribution(true)}
+            {!!instituteGlanceReport.rows.length&&renderInstituteGlancePastEntryRecords(true)}
             {renderInstituteGlanceActions(true)}
             {!!instituteGlanceReport.error&&(
               <div style={{marginTop:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:15,padding:"13px 14px"}}>
