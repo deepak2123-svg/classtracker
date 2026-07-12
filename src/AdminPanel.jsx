@@ -5851,6 +5851,10 @@ function AdminPanelInner({user}){
   const [instituteGlanceOptionsMode, setInstituteGlanceOptionsMode] = useState("export");
   const [instituteGlanceOptionsContext, setInstituteGlanceOptionsContext] = useState("report");
   const [instituteGlancePastEntriesOpen, setInstituteGlancePastEntriesOpen] = useState(false);
+  const [instituteGlancePastEntryPeriod, setInstituteGlancePastEntryPeriod] = useState("weekly");
+  const [instituteGlancePastEntryMonth, setInstituteGlancePastEntryMonth] = useState(() => currentMonthKey());
+  const [instituteGlancePastEntryRangeStart, setInstituteGlancePastEntryRangeStart] = useState(() => addDaysToDateKey(todayKey(), -6));
+  const [instituteGlancePastEntryRangeEnd, setInstituteGlancePastEntryRangeEnd] = useState(() => todayKey());
   const [instituteGlancePeriod, setInstituteGlancePeriod] = useState("daily");
   const [instituteGlanceMonth, setInstituteGlanceMonth] = useState(() => currentMonthKey());
   const [instituteGlanceRangeStart, setInstituteGlanceRangeStart] = useState(() => addDaysToDateKey(todayKey(), -6));
@@ -5867,6 +5871,18 @@ function AdminPanelInner({user}){
   const [ledgrTelegramSaving, setLedgrTelegramSaving] = useState(false);
   const [ledgrTelegramSending, setLedgrTelegramSending] = useState(false);
   const [instituteGlanceReport, setInstituteGlanceReport] = useState(() => ({
+    configKey: "",
+    rows: [],
+    summary: EMPTY_INSTITUTE_GLANCE_SUMMARY,
+    loading: false,
+    loaded: 0,
+    total: 0,
+    loadedInstitutes: 0,
+    totalInstitutes: 0,
+    ready: false,
+    error: "",
+  }));
+  const [instituteGlancePastEntryReport, setInstituteGlancePastEntryReport] = useState(() => ({
     configKey: "",
     rows: [],
     summary: EMPTY_INSTITUTE_GLANCE_SUMMARY,
@@ -5957,8 +5973,10 @@ function AdminPanelInner({user}){
   const teachersRef = React.useRef(teachers);
   const warmupJobRef = React.useRef(0);
   const instituteGlanceJobRef = React.useRef(0);
+  const instituteGlancePastEntryJobRef = React.useRef(0);
   const instituteGlanceDataRef = React.useRef({});
   const instituteGlanceReportRef = React.useRef(instituteGlanceReport);
+  const instituteGlancePastEntryReportRef = React.useRef(instituteGlancePastEntryReport);
   const instituteGlanceAutoLoadKeyRef = React.useRef("");
   const instituteGlanceOptionsFrameRef = React.useRef(null);
   const adminTeacherDetailsCacheTimerRef = React.useRef(null);
@@ -6346,6 +6364,7 @@ function AdminPanelInner({user}){
   const closeAdminOverlay = React.useCallback(() => {
     if(exportOpen){ setExportOpen(false); return true; }
     if(instituteGlanceOptionsOpen){ setInstituteGlanceOptionsOpen(false); return true; }
+    if(instituteGlancePastEntriesOpen){ setInstituteGlancePastEntriesOpen(false); return true; }
     if(telegramDashboardOpen){ setTelegramDashboardOpen(false); return true; }
     if(instituteGlanceOpen){ setInstituteGlanceOpen(false); return true; }
     if(profileOpen){ setProfileOpen(false); return true; }
@@ -6356,7 +6375,7 @@ function AdminPanelInner({user}){
     if(copyGroupModal){ setCopyGroupModal(null); return true; }
     if(legacySectionRepair){ setLegacySectionRepair(null); return true; }
     return false;
-  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, instituteGlanceOpen, instituteGlanceOptionsOpen, legacySectionRepair, profileOpen, telegramDashboardOpen]);
+  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, instituteGlanceOpen, instituteGlanceOptionsOpen, instituteGlancePastEntriesOpen, legacySectionRepair, profileOpen, telegramDashboardOpen]);
   useEffect(() => {
     if(!Capacitor.isNativePlatform()) return undefined;
     const listenerPromise = CapacitorApp.addListener("backButton", () => {
@@ -6756,6 +6775,10 @@ function AdminPanelInner({user}){
     instituteGlanceReportRef.current = instituteGlanceReport;
   }, [instituteGlanceReport]);
 
+  React.useEffect(() => {
+    instituteGlancePastEntryReportRef.current = instituteGlancePastEntryReport;
+  }, [instituteGlancePastEntryReport]);
+
   const getInstituteGlanceConfig = React.useCallback((overrides = {}) => ({
     period:overrides.period || instituteGlancePeriod,
     month:overrides.month || instituteGlanceMonth,
@@ -6773,6 +6796,13 @@ function AdminPanelInner({user}){
     });
   }, [getInstituteGlanceConfig]);
 
+  const getInstituteGlancePastEntryConfig = React.useCallback((overrides = {}) => ({
+    period:overrides.period || instituteGlancePastEntryPeriod,
+    month:overrides.month || instituteGlancePastEntryMonth,
+    rangeStart:overrides.rangeStart || instituteGlancePastEntryRangeStart,
+    rangeEnd:overrides.rangeEnd || instituteGlancePastEntryRangeEnd,
+  }), [instituteGlancePastEntryMonth, instituteGlancePastEntryPeriod, instituteGlancePastEntryRangeEnd, instituteGlancePastEntryRangeStart]);
+
   const getInstituteGlancePeriodRange = React.useCallback((config = {}) => {
     const resolved = getInstituteGlanceConfig(config);
     if(resolved.period === "monthly"){
@@ -6788,6 +6818,10 @@ function AdminPanelInner({user}){
     }
     return { rangeStartKey:"", rangeEndKey:"" };
   }, [getInstituteGlanceConfig]);
+
+  const getInstituteGlancePastEntryPeriodRange = React.useCallback((config = {}) => (
+    getInstituteGlancePeriodRange(getInstituteGlancePastEntryConfig(config))
+  ), [getInstituteGlancePastEntryConfig, getInstituteGlancePeriodRange]);
 
   const buildInstituteGlanceSnapshot = React.useCallback((fullDataMap = {}, config = {}) => {
     const resolved = getInstituteGlanceConfig(config);
@@ -6915,6 +6949,15 @@ function AdminPanelInner({user}){
     setInstituteGlanceReport(nextReport);
   }, []);
 
+  const scheduleInstituteGlancePastEntryReport = React.useCallback((nextReport) => {
+    instituteGlancePastEntryReportRef.current = nextReport;
+    if(typeof React.startTransition === "function"){
+      React.startTransition(() => setInstituteGlancePastEntryReport(nextReport));
+      return;
+    }
+    setInstituteGlancePastEntryReport(nextReport);
+  }, []);
+
   React.useEffect(() => {
     const cache = instituteGlanceDataRef.current || {};
     const staleUids = Object.keys(cache).filter(uid => !activeTeacherUidSet.has(uid));
@@ -6928,22 +6971,42 @@ function AdminPanelInner({user}){
     const hasStaleReportRows = (currentReport?.rows || []).some(row =>
       (row.teacherUids || []).some(uid => !activeTeacherUidSet.has(uid))
     );
-    if(!hasStaleReportRows) return;
+    if(hasStaleReportRows){
+      scheduleInstituteGlanceReport({
+        ...currentReport,
+        configKey:"",
+        rows:[],
+        summary:EMPTY_INSTITUTE_GLANCE_SUMMARY,
+        loading:false,
+        loaded:0,
+        total:instituteGlanceTeacherList.length,
+        loadedInstitutes:0,
+        totalInstitutes:institutes.length,
+        ready:false,
+        error:"",
+      });
+    }
 
-    scheduleInstituteGlanceReport({
-      ...currentReport,
-      configKey:"",
-      rows:[],
-      summary:EMPTY_INSTITUTE_GLANCE_SUMMARY,
-      loading:false,
-      loaded:0,
-      total:instituteGlanceTeacherList.length,
-      loadedInstitutes:0,
-      totalInstitutes:institutes.length,
-      ready:false,
-      error:"",
-    });
-  }, [activeTeacherUidSet, instituteGlanceTeacherList.length, institutes.length, scheduleInstituteGlanceReport]);
+    const currentPastReport = instituteGlancePastEntryReportRef.current;
+    const hasStalePastRows = (currentPastReport?.rows || []).some(row =>
+      (row.teacherUids || []).some(uid => !activeTeacherUidSet.has(uid))
+    );
+    if(hasStalePastRows){
+      scheduleInstituteGlancePastEntryReport({
+        ...currentPastReport,
+        configKey:"",
+        rows:[],
+        summary:EMPTY_INSTITUTE_GLANCE_SUMMARY,
+        loading:false,
+        loaded:0,
+        total:instituteGlanceTeacherList.length,
+        loadedInstitutes:0,
+        totalInstitutes:institutes.length,
+        ready:false,
+        error:"",
+      });
+    }
+  }, [activeTeacherUidSet, instituteGlanceTeacherList.length, institutes.length, scheduleInstituteGlancePastEntryReport, scheduleInstituteGlanceReport]);
 
   const handleInstituteGlanceLoadFailure = React.useCallback((error) => {
     console.error("institute glance load failed", error);
@@ -6954,6 +7017,19 @@ function AdminPanelInner({user}){
         error: error?.message || "Could not load the centre summary.",
       };
       instituteGlanceReportRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const handleInstituteGlancePastEntryLoadFailure = React.useCallback((error) => {
+    console.error("institute glance past entry load failed", error);
+    setInstituteGlancePastEntryReport(prev => {
+      const next = {
+        ...prev,
+        loading: false,
+        error: error?.message || "Could not load past entry records.",
+      };
+      instituteGlancePastEntryReportRef.current = next;
       return next;
     });
   }, []);
@@ -7070,6 +7146,118 @@ function AdminPanelInner({user}){
     return finalReport;
   }, [buildInstituteGlanceSnapshot, ensureFullData, fullData, getInstituteGlanceConfig, getInstituteGlanceConfigKey, instituteGlanceTeacherList, institutes.length, isMobile, isTeacherFullDataStale, isWeakDevice, mobileLiteMode, scheduleInstituteGlanceReport]);
 
+  const loadInstituteGlancePastEntryReport = React.useCallback(async ({ force = false, config = {} } = {}) => {
+    const resolvedConfig = getInstituteGlancePastEntryConfig(config);
+    const configKey = getInstituteGlanceConfigKey(resolvedConfig);
+    const currentReport = instituteGlancePastEntryReportRef.current;
+    const currentMatches = currentReport.configKey === configKey;
+    const teacherUids = instituteGlanceTeacherList.map(t => t.uid).filter(Boolean);
+    const total = teacherUids.length;
+    const cachedMap = force ? {} : instituteGlanceDataRef.current;
+    const hydratedFullData = { ...fullData, ...cachedMap };
+    const staleUids = teacherUids.filter(uid => isTeacherFullDataStale(uid, hydratedFullData));
+    if(!force && currentMatches && currentReport.loading) return currentReport;
+    if(!force && currentMatches && currentReport.ready && !currentReport.error && !staleUids.length) return currentReport;
+
+    const jobId = ++instituteGlancePastEntryJobRef.current;
+    const pendingUids = force
+      ? teacherUids
+      : staleUids;
+    let loaded = force ? 0 : Math.max(0, total - staleUids.length);
+
+    if(!pendingUids.length){
+      const snapshot = buildInstituteGlanceSnapshot(hydratedFullData, resolvedConfig);
+      const readyReport = {
+        ...snapshot,
+        configKey,
+        loading:false,
+        loaded:total,
+        total,
+        ready:snapshot.loadedInstitutes >= snapshot.totalInstitutes,
+        error:"",
+      };
+      scheduleInstituteGlancePastEntryReport(readyReport);
+      return readyReport;
+    }
+
+    const preserveReadyReport = currentMatches && currentReport.ready && !currentReport.error;
+    const loadingReport = preserveReadyReport
+      ? {
+          ...currentReport,
+          loading:true,
+          loaded,
+          total,
+          error:"",
+        }
+      : {
+          configKey,
+          rows:[],
+          summary:EMPTY_INSTITUTE_GLANCE_SUMMARY,
+          loading:true,
+          loaded,
+          total,
+          loadedInstitutes:0,
+          totalInstitutes:institutes.length,
+          ready:false,
+          error:"",
+        };
+    scheduleInstituteGlancePastEntryReport(loadingReport);
+
+    let firstError = null;
+    let nextPendingIndex = 0;
+    const maxConcurrentLoads = Math.max(
+      1,
+      Math.min(
+        pendingUids.length,
+        isMobile
+          ? (isWeakDevice || mobileLiteMode ? 3 : 4)
+          : (isWeakDevice ? 5 : 8)
+      )
+    );
+
+    const worker = async () => {
+      while(true){
+        const pendingIndex = nextPendingIndex;
+        nextPendingIndex += 1;
+        if(pendingIndex >= pendingUids.length) return;
+
+        const uid = pendingUids[pendingIndex];
+        try {
+          const data = await ensureFullData(uid, { force });
+          if(jobId !== instituteGlancePastEntryJobRef.current) return;
+          if(data){
+            hydratedFullData[uid] = data;
+            instituteGlanceDataRef.current[uid] = data;
+          }
+        } catch (error) {
+          if(jobId !== instituteGlancePastEntryJobRef.current) return;
+          if(!firstError) firstError = error;
+        }
+
+        loaded += 1;
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length:maxConcurrentLoads }, () => worker())
+    );
+
+    if(jobId !== instituteGlancePastEntryJobRef.current) return null;
+
+    const finalSnapshot = buildInstituteGlanceSnapshot(hydratedFullData, resolvedConfig);
+    const finalReport = {
+      ...finalSnapshot,
+      configKey,
+      loading: false,
+      loaded: total,
+      total,
+      ready: finalSnapshot.loadedInstitutes >= finalSnapshot.totalInstitutes && !firstError,
+      error: firstError?.message || "",
+    };
+    scheduleInstituteGlancePastEntryReport(finalReport);
+    return finalReport;
+  }, [buildInstituteGlanceSnapshot, ensureFullData, fullData, getInstituteGlanceConfigKey, getInstituteGlancePastEntryConfig, instituteGlanceTeacherList, institutes.length, isMobile, isTeacherFullDataStale, isWeakDevice, mobileLiteMode, scheduleInstituteGlancePastEntryReport]);
+
   const refreshInstituteGlanceReport = React.useCallback(() => {
     const activeConfig = getInstituteGlanceConfig();
     instituteGlanceJobRef.current += 1;
@@ -7082,6 +7270,41 @@ function AdminPanelInner({user}){
     });
     return loadInstituteGlanceReport({ config:activeConfig });
   }, [getInstituteGlanceConfig, loadInstituteGlanceReport, scheduleInstituteGlanceReport]);
+
+  const refreshInstituteGlancePastEntryReport = React.useCallback(() => {
+    const activeConfig = getInstituteGlancePastEntryConfig();
+    instituteGlancePastEntryJobRef.current += 1;
+    const currentReport = instituteGlancePastEntryReportRef.current || {};
+    scheduleInstituteGlancePastEntryReport({
+      ...currentReport,
+      configKey:"",
+      loading:false,
+      error:"",
+    });
+    return loadInstituteGlancePastEntryReport({ config:activeConfig });
+  }, [getInstituteGlancePastEntryConfig, loadInstituteGlancePastEntryReport, scheduleInstituteGlancePastEntryReport]);
+
+  React.useEffect(() => {
+    if(!instituteGlancePastEntriesOpen) return;
+    const activeConfig = {
+      period:instituteGlancePastEntryPeriod,
+      month:instituteGlancePastEntryMonth,
+      rangeStart:instituteGlancePastEntryRangeStart,
+      rangeEnd:instituteGlancePastEntryRangeEnd,
+    };
+    loadInstituteGlancePastEntryReport({
+      config:activeConfig,
+    }).catch(handleInstituteGlancePastEntryLoadFailure);
+  }, [handleInstituteGlancePastEntryLoadFailure, instituteGlancePastEntriesOpen, instituteGlancePastEntryMonth, instituteGlancePastEntryPeriod, instituteGlancePastEntryRangeEnd, instituteGlancePastEntryRangeStart, instituteGlanceTeacherList.length, institutes.length, loadInstituteGlancePastEntryReport]);
+
+  React.useEffect(() => {
+    if(!instituteGlancePastEntriesOpen || typeof document === "undefined") return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [instituteGlancePastEntriesOpen]);
 
   React.useEffect(() => {
     const visible = instituteGlanceOpen || mobileSurface === "centreSummary";
@@ -8201,8 +8424,13 @@ function AdminPanelInner({user}){
   const instituteGlanceReadyCount = Math.max(0, instituteGlanceReport.loadedInstitutes || 0);
   const instituteGlanceEffectiveRange = getInstituteGlancePeriodRange();
   const instituteGlancePeriodMeta = getInstituteGlancePeriodMeta(instituteGlancePeriod, instituteGlanceEffectiveRange.rangeStartKey, instituteGlanceEffectiveRange.rangeEndKey);
+  const instituteGlancePastEntryEffectiveRange = getInstituteGlancePastEntryPeriodRange();
+  const instituteGlancePastEntryPeriodMeta = getInstituteGlancePeriodMeta(instituteGlancePastEntryPeriod, instituteGlancePastEntryEffectiveRange.rangeStartKey, instituteGlancePastEntryEffectiveRange.rangeEndKey);
   const instituteGlanceProgressPct = instituteGlanceReport.total
     ? Math.max(0, Math.min(100, Math.round((instituteGlanceReport.loaded / instituteGlanceReport.total) * 100)))
+    : 0;
+  const instituteGlancePastEntryProgressPct = instituteGlancePastEntryReport.total
+    ? Math.max(0, Math.min(100, Math.round((instituteGlancePastEntryReport.loaded / instituteGlancePastEntryReport.total) * 100)))
     : 0;
   const instituteGlanceAnyExportBusy = !!instituteGlanceExportBusy || !!instituteGlanceRowExportBusy || !!instituteGlanceRowImageBusy;
   const instituteGlanceExportDisabled = instituteGlanceAnyExportBusy || !instituteGlanceReport.ready || !!instituteGlanceReport.error;
@@ -8225,15 +8453,15 @@ function AdminPanelInner({user}){
     </div>
   );
 
-  const getInstituteGlanceSelectorPeriod = () => {
-    if(instituteGlancePeriod === "yesterday") return "yesterday";
-    if(instituteGlancePeriod === "weekly") return "week";
-    if(instituteGlancePeriod === "monthly") return "month";
-    if(instituteGlancePeriod === "range") return "range";
+  const getInstituteGlancePastEntrySelectorPeriod = () => {
+    if(instituteGlancePastEntryPeriod === "yesterday") return "yesterday";
+    if(instituteGlancePastEntryPeriod === "weekly") return "week";
+    if(instituteGlancePastEntryPeriod === "monthly") return "month";
+    if(instituteGlancePastEntryPeriod === "range") return "range";
     return "today";
   };
 
-  const handleInstituteGlanceSelectorPeriodChange = React.useCallback((nextPeriodKey) => {
+  const handleInstituteGlancePastEntryPeriodChange = React.useCallback((nextPeriodKey) => {
     const nextPeriod = nextPeriodKey === "yesterday"
       ? "yesterday"
       : nextPeriodKey === "week"
@@ -8243,45 +8471,45 @@ function AdminPanelInner({user}){
           : nextPeriodKey === "range"
             ? "range"
             : "daily";
-    setInstituteGlancePeriod(nextPeriod);
+    setInstituteGlancePastEntryPeriod(nextPeriod);
     if(nextPeriod === "weekly"){
-      setInstituteGlanceRangeStart(addDaysToDateKey(todayKey(), -6));
-      setInstituteGlanceRangeEnd(todayKey());
+      setInstituteGlancePastEntryRangeStart(addDaysToDateKey(todayKey(), -6));
+      setInstituteGlancePastEntryRangeEnd(todayKey());
     }else if(nextPeriod === "monthly"){
-      setInstituteGlanceMonth(currentMonthKey());
+      setInstituteGlancePastEntryMonth(currentMonthKey());
     }else if(nextPeriod === "range"){
-      setInstituteGlanceRangeStart(current => current || addDaysToDateKey(todayKey(), -6));
-      setInstituteGlanceRangeEnd(current => current || todayKey());
+      setInstituteGlancePastEntryRangeStart(current => current || addDaysToDateKey(todayKey(), -6));
+      setInstituteGlancePastEntryRangeEnd(current => current || todayKey());
     }
   }, []);
 
-  const handleInstituteGlanceRangeStartChange = React.useCallback((nextValue) => {
-    setInstituteGlancePeriod("range");
-    setInstituteGlanceRangeStart(nextValue);
+  const handleInstituteGlancePastEntryRangeStartChange = React.useCallback((nextValue) => {
+    setInstituteGlancePastEntryPeriod("range");
+    setInstituteGlancePastEntryRangeStart(nextValue);
   }, []);
 
-  const handleInstituteGlanceRangeEndChange = React.useCallback((nextValue) => {
-    setInstituteGlancePeriod("range");
-    setInstituteGlanceRangeEnd(nextValue);
+  const handleInstituteGlancePastEntryRangeEndChange = React.useCallback((nextValue) => {
+    setInstituteGlancePastEntryPeriod("range");
+    setInstituteGlancePastEntryRangeEnd(nextValue);
   }, []);
 
-  const renderInstituteGlancePeriodControls = (compact = false) => (
+  const renderInstituteGlancePastEntryPeriodControls = (compact = false) => (
     <div style={{marginTop:compact ? 10 : 12,background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:compact ? 14 : 16,padding:compact ? "9px" : "10px"}}>
       <PeriodSelector
-        period={getInstituteGlanceSelectorPeriod()}
-        onChangePeriod={handleInstituteGlanceSelectorPeriodChange}
+        period={getInstituteGlancePastEntrySelectorPeriod()}
+        onChangePeriod={handleInstituteGlancePastEntryPeriodChange}
         compact
         accentColor={G.navy}
-        rangeStart={instituteGlanceRangeStart}
-        rangeEnd={instituteGlanceRangeEnd}
-        onChangeRangeStart={handleInstituteGlanceRangeStartChange}
-        onChangeRangeEnd={handleInstituteGlanceRangeEndChange}
+        rangeStart={instituteGlancePastEntryRangeStart}
+        rangeEnd={instituteGlancePastEntryRangeEnd}
+        onChangeRangeStart={handleInstituteGlancePastEntryRangeStartChange}
+        onChangeRangeEnd={handleInstituteGlancePastEntryRangeEndChange}
       />
     </div>
   );
 
-  const renderInstituteGlanceEntryDistribution = (compact = false) => {
-    const readyRows = (instituteGlanceReport.rows || [])
+  const renderInstituteGlanceEntryDistribution = (compact = false, report = instituteGlanceReport, periodMeta = instituteGlancePeriodMeta) => {
+    const readyRows = (report.rows || [])
       .filter(row => row?.ready)
       .map(row => ({
         institute:row.institute || "Institute",
@@ -8297,7 +8525,7 @@ function AdminPanelInner({user}){
     if(!readyRows.length) return null;
     const totalEntries = readyRows.reduce((sum, row) => sum + (row.entries || 0), 0);
     const maxEntries = Math.max(1, ...readyRows.map(row => row.entries || 0));
-    const periodLabel = instituteGlancePeriodMeta.sectionsSubLabel || instituteGlancePeriodMeta.periodValue || instituteGlancePeriodMeta.label || "selected period";
+    const periodLabel = periodMeta.sectionsSubLabel || periodMeta.periodValue || periodMeta.label || "selected period";
     return (
       <div style={{marginTop:compact ? 10 : 14,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:compact ? 16 : 18,padding:compact ? "13px 13px 14px" : "15px 16px 16px",boxShadow:compact || reduceEffects ? "none" : "0 12px 28px rgba(15,23,42,0.06)"}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
@@ -8349,20 +8577,151 @@ function AdminPanelInner({user}){
     );
   };
 
+  const renderInstituteGlancePastEntryRecordsWindow = () => {
+    if(!instituteGlancePastEntriesOpen) return null;
+    const report = instituteGlancePastEntryReport;
+    const loading = !!report.loading || (!report.ready && !report.error && !report.rows.length);
+    const loadedTeachers = Math.min(report.loaded || 0, report.total || 0);
+    const totalTeachers = Math.max(report.total || 0, loadedTeachers);
+    const readyCentres = Math.max(0, report.loadedInstitutes || 0);
+    const totalCentres = Math.max(report.totalInstitutes || 0, report.summary.totalInstitutes || 0);
+    return (
+      <div
+        className="ledgr-report-modal-overlay"
+        onClick={event=>{ if(event.target === event.currentTarget) setInstituteGlancePastEntriesOpen(false); }}
+        style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.58)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",overflow:"hidden"}}>
+        <style>{`
+          @keyframes ledgrReportPulse{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+          .ledgr-past-entry-window {
+            max-height: calc(100dvh - 32px);
+          }
+          .ledgr-past-entry-window-scroll {
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+          }
+          @media (max-width: 600px) {
+            .ledgr-report-modal-overlay {
+              padding: max(8px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px)) !important;
+            }
+            .ledgr-past-entry-window {
+              max-height: calc(100dvh - 16px) !important;
+              border-radius: 20px !important;
+            }
+            .ledgr-past-entry-window-scroll {
+              padding: 18px 14px 14px !important;
+            }
+          }
+        `}</style>
+        <div
+          className="ledgr-past-entry-window"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Past entry records"
+          style={{background:"#FFFFFF",borderRadius:24,width:"100%",maxWidth:920,boxShadow:"0 28px 80px rgba(15,23,42,0.28)",maxHeight:"calc(100dvh - 32px)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+          <div className="ledgr-past-entry-window-scroll" style={{overflowY:"auto",minHeight:0,flex:1,padding:"22px 22px 18px"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14}}>
+              <div style={{display:"flex",gap:12,minWidth:0,flex:1}}>
+                <div style={{width:44,height:44,borderRadius:15,background:"#DBEAFE",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <AppIcon icon={IconChartBar} size={22} color={G.blue} />
+                </div>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:22,fontWeight:900,color:G.text,fontFamily:G.display,lineHeight:1.08}}>Past entry records</div>
+                  <div style={{fontSize:13,color:G.textM,lineHeight:1.45,marginTop:5}}>
+                    {instituteGlancePastEntryPeriodMeta.sectionsSubLabel || instituteGlancePastEntryPeriodMeta.periodValue || instituteGlancePastEntryPeriodMeta.label}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="admin-mobile-touch"
+                onClick={()=>setInstituteGlancePastEntriesOpen(false)}
+                style={{width:38,height:38,borderRadius:12,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.textL,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <AppIcon icon={IconX} size={18} color={G.textL} />
+              </button>
+            </div>
+
+            {renderInstituteGlancePastEntryPeriodControls(isMobile)}
+
+            <div style={{marginTop:12,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:14,padding:"11px 12px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                <div style={{fontSize:13,fontWeight:850,color:G.text,fontFamily:G.sans}}>
+                  {loading ? "Loading records" : "Records ready"}
+                </div>
+                <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
+                  <span style={{background:G.blueL,color:G.blue,borderRadius:999,padding:"5px 9px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,whiteSpace:"nowrap"}}>
+                    {loading ? "Syncing" : `${readyCentres}/${totalCentres} centres`}
+                  </span>
+                  <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"4px 9px",fontSize:11,color:G.textL,fontFamily:G.mono,fontWeight:800,whiteSpace:"nowrap"}}>
+                    {loadedTeachers}/{totalTeachers} teachers
+                  </span>
+                </div>
+              </div>
+              <div style={{height:6,background:"#E5ECF6",borderRadius:999,overflow:"hidden",marginTop:9}}>
+                <div style={loading
+                  ? {height:"100%",width:"38%",borderRadius:999,background:"linear-gradient(90deg,#93C5FD 0%,#2563EB 100%)",animation:"ledgrReportPulse 1.3s ease-in-out infinite"}
+                  : {height:"100%",width:`${Math.max(instituteGlancePastEntryProgressPct, loadedTeachers > 0 ? 5 : 0)}%`,borderRadius:999,background:"linear-gradient(90deg,#3B82F6 0%,#1D4ED8 100%)",transition:"width 0.2s ease"}} />
+              </div>
+            </div>
+
+            {!!report.error&&(
+              <div style={{marginTop:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:14,padding:"12px 13px"}}>
+                <div style={{fontSize:12.5,fontWeight:850,color:"#9A3412"}}>Could not load past entry records</div>
+                <div style={{fontSize:12,color:"#9A3412",lineHeight:1.5,marginTop:5}}>{report.error}</div>
+              </div>
+            )}
+
+            {report.rows.length
+              ? renderInstituteGlanceEntryDistribution(isMobile, report, instituteGlancePastEntryPeriodMeta)
+              : loading
+                ? (
+                    <div style={{marginTop:12,background:G.bg,border:`1px solid ${G.border}`,borderRadius:16,padding:"15px",fontSize:13,color:G.textM,lineHeight:1.5}}>
+                      Loading institute entry records...
+                    </div>
+                  )
+                : (
+                    <div style={{marginTop:12,background:G.bg,border:`1px solid ${G.border}`,borderRadius:16,padding:"15px",fontSize:13,color:G.textM,lineHeight:1.5}}>
+                      No records found for this period.
+                    </div>
+                  )}
+
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",marginTop:14}}>
+              <button
+                type="button"
+                className="admin-mobile-touch"
+                onClick={()=>refreshInstituteGlancePastEntryReport().catch(handleInstituteGlancePastEntryLoadFailure)}
+                style={{height:38,padding:"0 13px",borderRadius:12,border:`1px solid ${G.border}`,background:"#FFFFFF",color:G.text,fontSize:12,fontWeight:800,fontFamily:G.sans,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                <AppIcon icon={IconRefresh} size={15} color={G.textS} />
+                Refresh
+              </button>
+              <button
+                type="button"
+                className="admin-mobile-touch"
+                onClick={()=>setInstituteGlancePastEntriesOpen(false)}
+                style={{height:38,padding:"0 16px",borderRadius:12,border:"1px solid #BFDBFE",background:G.blueL,color:G.blue,fontSize:12,fontWeight:850,fontFamily:G.sans,cursor:"pointer"}}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderInstituteGlancePastEntryRecords = (compact = false) => (
     <div style={{marginTop:compact ? 10 : 14}}>
       <button
         type="button"
         className="admin-mobile-touch"
+        aria-haspopup="dialog"
         aria-expanded={instituteGlancePastEntriesOpen}
-        onClick={()=>setInstituteGlancePastEntriesOpen(open => !open)}
+        onClick={()=>setInstituteGlancePastEntriesOpen(true)}
         style={{
           width:"100%",
           minHeight:compact ? 44 : 48,
           padding:compact ? "10px 12px" : "11px 14px",
           borderRadius:compact ? 14 : 16,
-          border:`1px solid ${instituteGlancePastEntriesOpen ? "#BFDBFE" : G.border}`,
-          background:instituteGlancePastEntriesOpen ? G.blueL : "#FFFFFF",
+          border:`1px solid ${G.border}`,
+          background:"#FFFFFF",
           color:G.text,
           cursor:"pointer",
           display:"flex",
@@ -8374,23 +8733,18 @@ function AdminPanelInner({user}){
           WebkitTapHighlightColor:"transparent",
         }}>
         <span style={{display:"inline-flex",alignItems:"center",gap:10,minWidth:0}}>
-          <span style={{width:compact ? 30 : 34,height:compact ? 30 : 34,borderRadius:12,background:instituteGlancePastEntriesOpen ? "#DBEAFE" : "#F1F5F9",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <AppIcon icon={IconChartBar} size={compact ? 15 : 16} color={instituteGlancePastEntriesOpen ? G.blue : G.textL} />
+          <span style={{width:compact ? 30 : 34,height:compact ? 30 : 34,borderRadius:12,background:"#F1F5F9",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <AppIcon icon={IconChartBar} size={compact ? 15 : 16} color={G.textL} />
           </span>
           <span style={{fontSize:compact ? 13 : 14,fontWeight:850,color:G.text,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
             Past entry records
           </span>
         </span>
-        <span style={{fontSize:11.5,fontWeight:850,color:instituteGlancePastEntriesOpen ? G.blue : G.textL,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,whiteSpace:"nowrap"}}>
-          {instituteGlancePastEntriesOpen ? "Hide" : "Show"}
+        <span style={{fontSize:11.5,fontWeight:850,color:G.blue,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,whiteSpace:"nowrap"}}>
+          Open
         </span>
       </button>
-      {instituteGlancePastEntriesOpen&&(
-        <>
-          {renderInstituteGlancePeriodControls(compact)}
-          {renderInstituteGlanceEntryDistribution(compact)}
-        </>
-      )}
+      {renderInstituteGlancePastEntryRecordsWindow()}
     </div>
   );
 
