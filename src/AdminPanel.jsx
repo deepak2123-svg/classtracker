@@ -8211,6 +8211,130 @@ function AdminPanelInner({user}){
     </div>
   );
 
+  const getInstituteGlanceSelectorPeriod = () => {
+    if(instituteGlancePeriod === "yesterday") return "yesterday";
+    if(instituteGlancePeriod === "weekly") return "week";
+    if(instituteGlancePeriod === "monthly") return "month";
+    if(instituteGlancePeriod === "range") return "range";
+    return "today";
+  };
+
+  const handleInstituteGlanceSelectorPeriodChange = React.useCallback((nextPeriodKey) => {
+    const nextPeriod = nextPeriodKey === "yesterday"
+      ? "yesterday"
+      : nextPeriodKey === "week"
+        ? "weekly"
+        : nextPeriodKey === "month"
+          ? "monthly"
+          : nextPeriodKey === "range"
+            ? "range"
+            : "daily";
+    setInstituteGlancePeriod(nextPeriod);
+    if(nextPeriod === "weekly"){
+      setInstituteGlanceRangeStart(addDaysToDateKey(todayKey(), -6));
+      setInstituteGlanceRangeEnd(todayKey());
+    }else if(nextPeriod === "monthly"){
+      setInstituteGlanceMonth(currentMonthKey());
+    }else if(nextPeriod === "range"){
+      setInstituteGlanceRangeStart(current => current || addDaysToDateKey(todayKey(), -6));
+      setInstituteGlanceRangeEnd(current => current || todayKey());
+    }
+  }, []);
+
+  const handleInstituteGlanceRangeStartChange = React.useCallback((nextValue) => {
+    setInstituteGlancePeriod("range");
+    setInstituteGlanceRangeStart(nextValue);
+  }, []);
+
+  const handleInstituteGlanceRangeEndChange = React.useCallback((nextValue) => {
+    setInstituteGlancePeriod("range");
+    setInstituteGlanceRangeEnd(nextValue);
+  }, []);
+
+  const renderInstituteGlancePeriodControls = (compact = false) => (
+    <div style={{marginTop:compact ? 10 : 12,background:"#F8FAFC",border:`1px solid ${G.border}`,borderRadius:compact ? 14 : 16,padding:compact ? "9px" : "10px"}}>
+      <PeriodSelector
+        period={getInstituteGlanceSelectorPeriod()}
+        onChangePeriod={handleInstituteGlanceSelectorPeriodChange}
+        compact
+        accentColor={G.navy}
+        rangeStart={instituteGlanceRangeStart}
+        rangeEnd={instituteGlanceRangeEnd}
+        onChangeRangeStart={handleInstituteGlanceRangeStartChange}
+        onChangeRangeEnd={handleInstituteGlanceRangeEndChange}
+      />
+    </div>
+  );
+
+  const renderInstituteGlanceEntryDistribution = (compact = false) => {
+    const readyRows = (instituteGlanceReport.rows || [])
+      .filter(row => row?.ready)
+      .map(row => ({
+        institute:row.institute || "Institute",
+        entries:Number(row.totalTodayEntries || 0),
+        updated:Number(row.filledToday || 0),
+        teachers:Number(row.totalTeachers || 0),
+      }))
+      .sort((a, b) => {
+        if((b.entries || 0) !== (a.entries || 0)) return (b.entries || 0) - (a.entries || 0);
+        if((b.updated || 0) !== (a.updated || 0)) return (b.updated || 0) - (a.updated || 0);
+        return exportTextSorter.compare(a.institute || "", b.institute || "");
+      });
+    if(!readyRows.length) return null;
+    const totalEntries = readyRows.reduce((sum, row) => sum + (row.entries || 0), 0);
+    const maxEntries = Math.max(1, ...readyRows.map(row => row.entries || 0));
+    const periodLabel = instituteGlancePeriodMeta.sectionsSubLabel || instituteGlancePeriodMeta.periodValue || instituteGlancePeriodMeta.label || "selected period";
+    return (
+      <div style={{marginTop:compact ? 10 : 14,background:"#FFFFFF",border:`1px solid ${G.border}`,borderRadius:compact ? 16 : 18,padding:compact ? "13px 13px 14px" : "15px 16px 16px",boxShadow:compact || reduceEffects ? "none" : "0 12px 28px rgba(15,23,42,0.06)"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:10,minWidth:0,flex:1}}>
+            <div style={{width:compact ? 34 : 38,height:compact ? 34 : 38,borderRadius:13,background:"#EEF4FF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <AppIcon icon={IconChartBar} size={compact ? 16 : 18} color={G.blue} />
+            </div>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:11,color:G.textL,fontFamily:G.mono,letterSpacing:0.8,textTransform:"uppercase"}}>Entries by institute</div>
+              <div style={{fontSize:compact ? 17 : 19,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.12,marginTop:5}}>
+                {totalEntries} entr{totalEntries === 1 ? "y" : "ies"} {periodLabel}
+              </div>
+            </div>
+          </div>
+          <span style={{background:G.bg,border:`1px solid ${G.border}`,borderRadius:999,padding:"6px 10px",fontSize:10.5,fontWeight:800,fontFamily:G.mono,color:G.textL,whiteSpace:"nowrap"}}>
+            {readyRows.length} centre{readyRows.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div style={{display:"grid",gap:compact ? 9 : 10,marginTop:compact ? 13 : 15}}>
+          {readyRows.map(row => {
+            const pct = Math.round(((row.entries || 0) / maxEntries) * 100);
+            const submissionText = row.teachers > 0
+              ? `${row.updated}/${row.teachers} teachers`
+              : "No teachers";
+            return (
+              <div key={`entries_${row.institute}`} style={{display:"grid",gridTemplateColumns:compact ? "1fr" : "minmax(160px,0.26fr) minmax(220px,1fr) auto",gap:compact ? 6 : 12,alignItems:"center"}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:compact ? 12.5 : 13,fontWeight:800,color:G.text,lineHeight:1.25,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={row.institute}>
+                    {row.institute}
+                  </div>
+                  {compact&&(
+                    <div style={{fontSize:11,color:G.textM,lineHeight:1.4,marginTop:3}}>{submissionText}</div>
+                  )}
+                </div>
+                <div style={{height:compact ? 10 : 12,background:"#E8EEF7",borderRadius:999,overflow:"hidden",minWidth:0}}>
+                  <div style={{width:`${Math.max(row.entries > 0 ? 5 : 0, pct)}%`,height:"100%",borderRadius:999,background:row.entries > 0 ? "linear-gradient(90deg,#2563EB 0%,#0F766E 100%)" : "#CBD5E1",transition:"width 0.2s ease"}} />
+                </div>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:compact ? "space-between" : "flex-end",gap:8,minWidth:compact ? 0 : 132}}>
+                  {!compact&&<span style={{fontSize:11.5,color:G.textM,whiteSpace:"nowrap"}}>{submissionText}</span>}
+                  <span style={{fontSize:compact ? 15 : 16,fontWeight:900,color:row.entries > 0 ? G.text : G.textL,fontFamily:G.display,lineHeight:1,whiteSpace:"nowrap"}}>
+                    {row.entries}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderInstituteGlanceActions = (compact = false, flush = false) => {
     const baseButtonStyle = {
       minWidth:compact ? 84 : 92,
@@ -9243,6 +9367,7 @@ function AdminPanelInner({user}){
               {!isMobile&&renderInstituteGlanceActions(false, true)}
             </div>
 
+            {renderInstituteGlancePeriodControls(false)}
             {renderInstituteGlanceProgressBlock(false)}
 
             {!!instituteGlanceReport.error&&(
@@ -9258,6 +9383,7 @@ function AdminPanelInner({user}){
             )}
 
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(false)}
+            {!!instituteGlanceReport.rows.length&&renderInstituteGlanceEntryDistribution(false)}
 
             {instituteGlanceReport.loading && !instituteGlanceReport.rows.length ? (
               renderInstituteGlanceLoadingDeck(false)
@@ -16060,8 +16186,10 @@ function AdminPanelInner({user}){
               <div style={{fontSize:12.5,color:G.textM,lineHeight:1.5,marginTop:7}}>
                 Submissions, pending teachers, sections, hours, and export actions.
               </div>
+              {renderInstituteGlancePeriodControls(true)}
               {renderInstituteGlanceProgressBlock(true)}
               {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
+              {!!instituteGlanceReport.rows.length&&renderInstituteGlanceEntryDistribution(true)}
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:10}}>
                 <button type="button" className="admin-mobile-touch" onClick={()=>openInstituteGlanceOptions("export", "report")} disabled={!!instituteGlanceAnyExportBusy || !!ledgrReportScheduleSaving} style={{...compactActionButton("blue"),opacity:instituteGlanceAnyExportBusy || ledgrReportScheduleSaving ? 0.65 : 1}}>
                   <AppIcon icon={IconDownload} size={15} color={G.blue} />
@@ -17753,8 +17881,10 @@ function AdminPanelInner({user}){
                 Profile
               </button>
             </div>
+            {renderInstituteGlancePeriodControls(true)}
             {renderInstituteGlanceProgressBlock(true)}
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
+            {!!instituteGlanceReport.rows.length&&renderInstituteGlanceEntryDistribution(true)}
             {renderInstituteGlanceActions(true)}
             {!!instituteGlanceReport.error&&(
               <div style={{marginTop:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:15,padding:"13px 14px"}}>
