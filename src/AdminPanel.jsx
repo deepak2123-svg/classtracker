@@ -8707,47 +8707,6 @@ function AdminPanelInner({user}){
     );
   };
 
-  const renderInstituteGlancePastEntryRecords = (compact = false) => (
-    <div style={{marginTop:compact ? 10 : 14}}>
-      <button
-        type="button"
-        className="admin-mobile-touch"
-        aria-haspopup="dialog"
-        aria-expanded={instituteGlancePastEntriesOpen}
-        onClick={()=>setInstituteGlancePastEntriesOpen(true)}
-        style={{
-          width:"100%",
-          minHeight:compact ? 44 : 48,
-          padding:compact ? "10px 12px" : "11px 14px",
-          borderRadius:compact ? 14 : 16,
-          border:`1px solid ${G.border}`,
-          background:"#FFFFFF",
-          color:G.text,
-          cursor:"pointer",
-          display:"flex",
-          alignItems:"center",
-          justifyContent:"space-between",
-          gap:12,
-          fontFamily:G.sans,
-          boxShadow:compact || reduceEffects ? "none" : "0 10px 24px rgba(15,23,42,0.05)",
-          WebkitTapHighlightColor:"transparent",
-        }}>
-        <span style={{display:"inline-flex",alignItems:"center",gap:10,minWidth:0}}>
-          <span style={{width:compact ? 30 : 34,height:compact ? 30 : 34,borderRadius:12,background:"#F1F5F9",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <AppIcon icon={IconChartBar} size={compact ? 15 : 16} color={G.textL} />
-          </span>
-          <span style={{fontSize:compact ? 13 : 14,fontWeight:850,color:G.text,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            Past entry records
-          </span>
-        </span>
-        <span style={{fontSize:11.5,fontWeight:850,color:G.blue,fontFamily:G.mono,textTransform:"uppercase",letterSpacing:0.6,whiteSpace:"nowrap"}}>
-          Open
-        </span>
-      </button>
-      {renderInstituteGlancePastEntryRecordsWindow()}
-    </div>
-  );
-
   const renderInstituteGlanceActions = (compact = false, flush = false) => {
     const baseButtonStyle = {
       minWidth:compact ? 84 : 92,
@@ -8769,6 +8728,7 @@ function AdminPanelInner({user}){
     };
     const scheduleButtonBusy = !!ledgrReportScheduleSaving;
     return (
+      <>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:flush ? 0 : compact ? 10 : 11,justifyContent:compact ? "flex-start" : "flex-end"}}>
         <button
           type="button"
@@ -8795,11 +8755,26 @@ function AdminPanelInner({user}){
         <button
           type="button"
           className="admin-mobile-touch"
+          aria-haspopup="dialog"
+          aria-expanded={instituteGlancePastEntriesOpen}
+          onClick={()=>setInstituteGlancePastEntriesOpen(true)}
+          style={{
+            ...baseButtonStyle,
+            minWidth:compact ? 132 : 156,
+          }}>
+          <AppIcon icon={IconChartBar} size={15} color={G.textS} />
+          Past records
+        </button>
+        <button
+          type="button"
+          className="admin-mobile-touch"
           onClick={()=>refreshInstituteGlanceReport().catch(handleInstituteGlanceLoadFailure)}
           style={baseButtonStyle}>
           Refresh
         </button>
       </div>
+      {renderInstituteGlancePastEntryRecordsWindow()}
+      </>
     );
   };
 
@@ -9795,7 +9770,6 @@ function AdminPanelInner({user}){
             )}
 
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(false)}
-            {!!instituteGlanceReport.rows.length&&renderInstituteGlancePastEntryRecords(false)}
 
             {instituteGlanceReport.loading && !instituteGlanceReport.rows.length ? (
               renderInstituteGlanceLoadingDeck(false)
@@ -16600,11 +16574,14 @@ function AdminPanelInner({user}){
               </div>
               {renderInstituteGlanceProgressBlock(true)}
               {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
-              {!!instituteGlanceReport.rows.length&&renderInstituteGlancePastEntryRecords(true)}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginTop:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10}}>
                 <button type="button" className="admin-mobile-touch" onClick={()=>openInstituteGlanceOptions("export", "report")} disabled={!!instituteGlanceAnyExportBusy || !!ledgrReportScheduleSaving} style={{...compactActionButton("blue"),opacity:instituteGlanceAnyExportBusy || ledgrReportScheduleSaving ? 0.65 : 1}}>
                   <AppIcon icon={IconDownload} size={15} color={G.blue} />
                   Export
+                </button>
+                <button type="button" className="admin-mobile-touch" aria-haspopup="dialog" aria-expanded={instituteGlancePastEntriesOpen} onClick={()=>setInstituteGlancePastEntriesOpen(true)} style={compactActionButton("light")}>
+                  <AppIcon icon={IconChartBar} size={15} color={G.textS} />
+                  Past records
                 </button>
                 <button type="button" className="admin-mobile-touch" onClick={()=>openInstituteGlanceOptions("schedule", "report")} disabled={!!ledgrReportScheduleSaving} style={{...compactActionButton("light"),opacity:ledgrReportScheduleSaving ? 0.65 : 1}}>
                   <AppIcon icon={IconCalendar} size={15} color={G.textS} />
@@ -16615,6 +16592,7 @@ function AdminPanelInner({user}){
                   Refresh
                 </button>
               </div>
+              {renderInstituteGlancePastEntryRecordsWindow()}
               {!!instituteGlanceReport.error&&(
                 <div style={{marginTop:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:14,padding:"12px 13px"}}>
                   <div style={{fontSize:12.5,fontWeight:850,color:"#9A3412"}}>Could not load the report</div>
@@ -18294,7 +18272,6 @@ function AdminPanelInner({user}){
             </div>
             {renderInstituteGlanceProgressBlock(true)}
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
-            {!!instituteGlanceReport.rows.length&&renderInstituteGlancePastEntryRecords(true)}
             {renderInstituteGlanceActions(true)}
             {!!instituteGlanceReport.error&&(
               <div style={{marginTop:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:15,padding:"13px 14px"}}>
