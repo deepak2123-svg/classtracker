@@ -4036,13 +4036,15 @@ function SyllabusBuilder({
             </div>
           )}
 
-          <div style={{...softCardStyle,padding:"12px 14px"}}>
-            <div style={labelStyle}>Syllabus</div>
-            <div style={{fontSize:15,fontWeight:850,color:G.text}}>{draft.name || `${subject.name} syllabus`}</div>
-            <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
-              {chapterMetrics.totalChapters} main topic{chapterMetrics.totalChapters===1?"":"s"} · {chapterMetrics.totalTopics} subtopic{chapterMetrics.totalTopics===1?"":"s"}
+          {!isMobile&&(
+            <div style={{...softCardStyle,padding:"12px 14px"}}>
+              <div style={labelStyle}>Syllabus</div>
+              <div style={{fontSize:15,fontWeight:850,color:G.text}}>{draft.name || `${subject.name} syllabus`}</div>
+              <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
+                {chapterMetrics.totalChapters} main topic{chapterMetrics.totalChapters===1?"":"s"} · {chapterMetrics.totalTopics} subtopic{chapterMetrics.totalTopics===1?"":"s"}
+              </div>
             </div>
-          </div>
+          )}
 
           {working.id&&(!isMobile ? (
               <button onClick={removeSyllabus} disabled={busy} style={{...pill(G.redL,G.red,"#F5CACA"),padding:"10px 13px",fontWeight:800,justifyContent:"center"}}>
@@ -4096,7 +4098,7 @@ function SyllabusBuilder({
           </div>
         )}
 
-        {simpleScope&&(
+        {simpleScope&&!isMobile&&(
           <div style={{...softCardStyle,marginTop:16,padding:"12px 14px"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <span style={{fontSize:11,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.7}}>Applies to</span>
