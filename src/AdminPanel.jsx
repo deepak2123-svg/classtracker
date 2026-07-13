@@ -3585,12 +3585,10 @@ function SyllabusBuilder({
   const [selectedChapterId,setSelectedChapterId] = useState(initialTemplate?.draft?.chapters?.[0]?.id || null);
   const [chapterQuery,setChapterQuery] = useState("");
   const [chapterFilter,setChapterFilter] = useState("all");
-  const [activeInspectorTab,setActiveInspectorTab] = useState("topics");
+  const [activeInspectorTab,setActiveInspectorTab] = useState("scope");
   const hydratedExistingTemplateRef = React.useRef(false);
   const inspectorRef = React.useRef(null);
   const chapterTitleInputRef = React.useRef(null);
-  const pendingInspectorOpenRef = React.useRef(null);
-  const [chapterOpenNonce,setChapterOpenNonce] = useState(0);
 
   const draft = working.draft || emptySyllabusDraft(subject).draft;
   const draftScope = normaliseSyllabusScope(draft.scope,draft.instituteName,draft.sectionName);
@@ -3704,7 +3702,7 @@ function SyllabusBuilder({
     setBulkTopicInputs({});
     setChapterQuery("");
     setChapterFilter("all");
-    setActiveInspectorTab("topics");
+    setActiveInspectorTab("scope");
     setSelectedChapterId(next?.draft?.chapters?.[0]?.id || null);
   };
 
@@ -3719,7 +3717,7 @@ function SyllabusBuilder({
     updateDraft({chapters:[...draft.chapters,chapter]});
     setChapterInput("");
     setSelectedChapterId(chapter.id);
-    setActiveInspectorTab("topics");
+    setActiveInspectorTab("scope");
   };
 
   const addBulkChapters = () => {
@@ -3752,7 +3750,7 @@ function SyllabusBuilder({
     setShowBulkChapterInput(false);
     if(firstAddedId){
       setSelectedChapterId(firstAddedId);
-      setActiveInspectorTab("topics");
+      setActiveInspectorTab("scope");
     }
   };
 
@@ -3765,7 +3763,7 @@ function SyllabusBuilder({
   };
 
   const removeChapter = chapterId => {
-    if(!window.confirm("Remove this chapter from the draft?")) return;
+    if(!window.confirm("Remove this main topic from the draft?")) return;
     updateDraft({chapters:draft.chapters.filter(chapter=>chapter.id!==chapterId)});
   };
 
@@ -3818,7 +3816,7 @@ function SyllabusBuilder({
   };
 
   const removeTopic = (chapter,topicId) => {
-    if(!window.confirm("Remove this topic?")) return;
+    if(!window.confirm("Remove this subtopic?")) return;
     updateChapter(chapter.id,{
       topics:(chapter.topics||[]).filter(topic=>topic.id!==topicId),
     });
@@ -3857,7 +3855,7 @@ function SyllabusBuilder({
     setSelectedChapterId(newScopedTemplate?.draft?.chapters?.[0]?.id || null);
     setChapterQuery("");
     setChapterFilter("all");
-    setActiveInspectorTab("topics");
+    setActiveInspectorTab("scope");
   };
 
   const openReviewStep = () => {
@@ -3882,10 +3880,8 @@ function SyllabusBuilder({
   };
 
   const openChapterInspector = chapterId => {
-    pendingInspectorOpenRef.current = chapterId;
     setSelectedChapterId(chapterId);
-    setActiveInspectorTab("topics");
-    setChapterOpenNonce(current=>current + 1);
+    setActiveInspectorTab("scope");
   };
 
   const chapterMetrics = useMemo(()=>{
@@ -3936,31 +3932,10 @@ function SyllabusBuilder({
     setSelectedChapterId(visibleChapters[0].id);
   }, [visibleChapters, selectedChapterId]);
 
-  useEffect(()=>{
-    if(!pendingInspectorOpenRef.current) return;
-    if(!selectedChapterId) return;
-    if(pendingInspectorOpenRef.current!==selectedChapterId) return;
-    inspectorRef.current?.scrollIntoView({behavior:"smooth",block:isMobile?"start":"nearest"});
-    requestAnimationFrame(()=>{
-      if(activeInspectorTab==="topics"){
-        chapterTitleInputRef.current?.focus();
-        chapterTitleInputRef.current?.select?.();
-      }
-    });
-    pendingInspectorOpenRef.current = null;
-  }, [activeInspectorTab, chapterOpenNonce, isMobile, selectedChapterId]);
-
   const selectedChapter = draft.chapters.find(chapter=>chapter.id===selectedChapterId) || null;
   const selectedChapterIndex = selectedChapter ? draft.chapters.findIndex(chapter=>chapter.id===selectedChapter.id) : -1;
   const selectedChapterSummary = selectedChapter ? getChapterSummary(selectedChapter) : null;
   const scopePairs = syllabusScopePairs(draftScope);
-  const selectedChapterTopicTitles = selectedChapter
-    ? (selectedChapter.topics||[])
-        .map(topic=>String(topic?.title || "").trim())
-        .filter(Boolean)
-    : [];
-  const selectedChapterPreviewTopics = selectedChapterTopicTitles.slice(0,6);
-  const hiddenSelectedTopicCount = Math.max(0,selectedChapterTopicTitles.length - selectedChapterPreviewTopics.length);
   const primaryScopeLabel = draftScope.length===1
     ? draftScope[0].instituteName
     : `${draftScope.length} institutes`;
@@ -4023,7 +3998,7 @@ function SyllabusBuilder({
             <div style={{fontSize:isMobile?23:30,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.1}}>Syllabus Builder</div>
             <div style={{fontSize:16,fontWeight:750,color:G.blue,marginTop:5}}>{subject.name}</div>
             <div style={{...mutedCopyStyle,marginTop:8,maxWidth:760}}>
-              Add chapters and topics, then review before publishing.
+              Add main topics and subtopics, then review before publishing.
             </div>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:isMobile?"flex-start":"flex-end"}}>
@@ -4031,7 +4006,7 @@ function SyllabusBuilder({
               {working.currentVersion?`Published v${working.currentVersion}`:"Draft only"}
             </span>
             <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>
-              {draft.chapters.length} chapters · {totalTopics} topics
+              {draft.chapters.length} main topic{draft.chapters.length===1?"":"s"} · {totalTopics} subtopic{totalTopics===1?"":"s"}
             </span>
             <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>
               {scopePairs.length} section{scopePairs.length===1?"":"s"}
@@ -4065,7 +4040,7 @@ function SyllabusBuilder({
             <div style={labelStyle}>Syllabus</div>
             <div style={{fontSize:15,fontWeight:850,color:G.text}}>{draft.name || `${subject.name} syllabus`}</div>
             <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
-              {chapterMetrics.totalChapters} chapter{chapterMetrics.totalChapters===1?"":"s"} · {chapterMetrics.totalTopics} topic{chapterMetrics.totalTopics===1?"":"s"}
+              {chapterMetrics.totalChapters} main topic{chapterMetrics.totalChapters===1?"":"s"} · {chapterMetrics.totalTopics} subtopic{chapterMetrics.totalTopics===1?"":"s"}
             </div>
           </div>
 
@@ -4153,11 +4128,11 @@ function SyllabusBuilder({
                   <div style={labelStyle}>Review</div>
                   <div style={{fontSize:isMobile?24:28,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.1}}>Ready to publish?</div>
                   <div style={{fontSize:13,color:G.textM,lineHeight:1.45,marginTop:6}}>
-                    Check subject, classes, chapters, and topics before publishing.
+                    Check subject, classes, main topics, and subtopics before publishing.
                   </div>
                 </div>
-                <button type="button" onClick={onRequestChapters || (()=>setActiveInspectorTab("topics"))} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:850}}>
-                  Edit chapters
+                <button type="button" onClick={onRequestChapters || (()=>setActiveInspectorTab("scope"))} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:850}}>
+                  Edit main topics
                 </button>
               </div>
             </div>
@@ -4165,8 +4140,8 @@ function SyllabusBuilder({
             <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(5,minmax(0,1fr))",gap:10}}>
               <div style={chapterMetricCardStyle}><div style={labelStyle}>Subject</div><div style={{fontSize:18,fontWeight:850,color:G.text,lineHeight:1.2}}>{subject.name}</div></div>
               <div style={chapterMetricCardStyle}><div style={labelStyle}>Classes</div><div style={{fontSize:26,fontWeight:850,color:G.text,lineHeight:1}}>{simpleScope ? initialTargets.length : affectedSummary.classCount}</div></div>
-              <div style={chapterMetricCardStyle}><div style={labelStyle}>Chapters</div><div style={{fontSize:26,fontWeight:850,color:G.text,lineHeight:1}}>{draft.chapters.length}</div></div>
-              <div style={chapterMetricCardStyle}><div style={labelStyle}>Topics</div><div style={{fontSize:26,fontWeight:850,color:G.text,lineHeight:1}}>{totalTopics}</div></div>
+              <div style={chapterMetricCardStyle}><div style={labelStyle}>Main topics</div><div style={{fontSize:26,fontWeight:850,color:G.text,lineHeight:1}}>{draft.chapters.length}</div></div>
+              <div style={chapterMetricCardStyle}><div style={labelStyle}>Subtopics</div><div style={{fontSize:26,fontWeight:850,color:G.text,lineHeight:1}}>{totalTopics}</div></div>
               <div style={chapterMetricCardStyle}><div style={labelStyle}>Status</div><div style={{fontSize:17,fontWeight:850,color:G.text,lineHeight:1.2}}>{working.currentVersion ? "Published" : "Draft"}</div></div>
             </div>
 
@@ -4182,9 +4157,9 @@ function SyllabusBuilder({
             </div>
 
             <div style={{...softCardStyle,padding:isMobile?"14px":"16px"}}>
-              <div style={{fontSize:14,fontWeight:850,color:G.text}}>Chapters</div>
+              <div style={{fontSize:14,fontWeight:850,color:G.text}}>Main topics</div>
               {!draft.chapters.length ? (
-                <div style={{fontSize:13,color:G.textM,marginTop:8}}>Add the first chapter to start this syllabus.</div>
+                <div style={{fontSize:13,color:G.textM,marginTop:8}}>Add the first main topic to start this syllabus.</div>
               ) : (
                 <div style={{display:"grid",gap:8,marginTop:10}}>
                   {draft.chapters.map((chapter,index)=>{
@@ -4193,11 +4168,11 @@ function SyllabusBuilder({
                       <div key={chapter.id} style={{display:"grid",gridTemplateColumns:"34px minmax(0,1fr) auto",gap:10,alignItems:"center",padding:"10px 11px",border:`1px solid ${G.border}`,borderRadius:12,background:"#FFFFFF"}}>
                         <span style={{width:34,height:34,borderRadius:10,background:"#E6EDF9",color:G.textS,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:850}}>{index+1}</span>
                         <span style={{minWidth:0}}>
-                          <span style={{display:"block",fontSize:13.5,fontWeight:850,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{chapter.title || "Untitled chapter"}</span>
-                          <span style={{display:"block",fontSize:12,color:G.textM,marginTop:3}}>{summary.topicCount} topic{summary.topicCount===1?"":"s"}</span>
+                          <span style={{display:"block",fontSize:13.5,fontWeight:850,color:G.text,whiteSpace:"normal",overflow:"visible",textOverflow:"clip",wordBreak:"break-word"}}>{chapter.title || "Untitled main topic"}</span>
+                          <span style={{display:"block",fontSize:12,color:G.textM,marginTop:3}}>{summary.topicCount} subtopic{summary.topicCount===1?"":"s"}</span>
                         </span>
                         {summary.isEmpty&&(
-                          <span style={{...pill("#FFF4DE","#9A5A00","#EFD3A0"),cursor:"default",fontWeight:800}}>No topics</span>
+                          <span style={{...pill("#FFF4DE","#9A5A00","#EFD3A0"),cursor:"default",fontWeight:800}}>No subtopics</span>
                         )}
                       </div>
                     );
@@ -4222,23 +4197,23 @@ function SyllabusBuilder({
                 <input
                   value={chapterQuery}
                   onChange={event=>setChapterQuery(event.target.value)}
-                  placeholder="Search chapter or topic"
+                  placeholder="Search main topic or subtopic"
                   style={fieldStyle}
                 />
               </div>
 
               <div style={{display:"flex",gap:8,flexWrap:"wrap",padding:"12px 14px",borderBottom:`1px solid ${G.border}`,background:"#FBFDFF"}}>
                 <button onClick={()=>setChapterFilter("all")} style={toolbarButtonStyle(chapterFilter==="all")}>All</button>
-                <button onClick={()=>setChapterFilter("has-topics")} style={toolbarButtonStyle(chapterFilter==="has-topics")}>Has topics</button>
+                <button onClick={()=>setChapterFilter("has-topics")} style={toolbarButtonStyle(chapterFilter==="has-topics")}>Has subtopics</button>
                 <button onClick={()=>setChapterFilter("empty")} style={toolbarButtonStyle(chapterFilter==="empty")}>Empty</button>
               </div>
 
               <div style={{padding:"12px 14px",borderBottom:`1px solid ${G.border}`,background:"#FFFFFF"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
                   <div>
-                    <div style={{fontSize:13.5,fontWeight:850,color:G.text}}>Chapters</div>
+                    <div style={{fontSize:13.5,fontWeight:850,color:G.text}}>Main topics</div>
                     <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>
-                      {visibleChapters.length} visible chapter{visibleChapters.length===1?"":"s"}
+                      {visibleChapters.length} visible main topic{visibleChapters.length===1?"":"s"}
                     </div>
                   </div>
                   <span style={chapterChipStyle("#FFFFFF",G.textS,G.borderM)}>
@@ -4250,7 +4225,7 @@ function SyllabusBuilder({
               <div style={chapterWorkspaceBodyStyle}>
                 {!visibleChapters.length ? (
                   <div style={{padding:"28px 20px",textAlign:"center",color:G.textM}}>
-                    {draft.chapters.length ? "No chapters match the current search or filter." : "Add the first chapter to start this syllabus."}
+                    {draft.chapters.length ? "No main topics match the current search or filter." : "Add the first main topic to start this syllabus."}
                   </div>
                 ) : (
                   visibleChapters.map(chapter=>{
@@ -4272,33 +4247,23 @@ function SyllabusBuilder({
                           cursor:"pointer",
                         }}
                       >
-                        <div style={{display:"grid",gridTemplateColumns:isMobile?"44px minmax(0,1fr)":"44px minmax(0,1fr) auto",gap:12,alignItems:"center"}}>
+                        <div style={{display:"grid",gridTemplateColumns:"44px minmax(0,1fr)",gap:12,alignItems:"center"}}>
                           <div style={{width:44,height:44,borderRadius:14,background:selected?G.navy:"#E6EDF9",color:selected?"#FFFFFF":G.textS,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:850,flexShrink:0}}>
                             {chapterIndex+1}
                           </div>
 
                           <div style={{minWidth:0}}>
-                            <div style={{fontSize:16,fontWeight:900,color:G.text,lineHeight:1.25,whiteSpace:isMobile?"normal":"nowrap",overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-word"}}>
-                              {chapter.title || "Untitled chapter"}
+                            <div style={{fontSize:16,fontWeight:900,color:G.text,lineHeight:1.25,whiteSpace:"normal",overflow:"visible",textOverflow:"clip",wordBreak:"break-word"}}>
+                              {chapter.title || "Untitled main topic"}
                             </div>
                             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:7}}>
-                              <span style={chapterChipStyle("#FFFFFF",G.textS,G.borderM)}>{summary.topicCount} topic{summary.topicCount===1?"":"s"}</span>
-                              {summary.isEmpty ? (
-                                <span style={chapterChipStyle("#FFF4DE","#9A5A00","#EFD3A0")}>Add topic</span>
-                              ) : (
-                                <span style={chapterChipStyle("#E8F7EF","#137A45","#B9E5CA")}>Edit topics</span>
-                              )}
+                              <span style={chapterChipStyle("#FFFFFF",G.textS,G.borderM)}>{summary.topicCount} subtopic{summary.topicCount===1?"":"s"}</span>
+                              {summary.isEmpty&&<span style={chapterChipStyle("#FFF4DE","#9A5A00","#EFD3A0")}>No subtopics</span>}
                             </div>
                             <div style={{fontSize:12.5,color:G.textM,marginTop:6,lineHeight:1.45}}>
-                              {summary.isEmpty ? "No topics yet." : "Tap to edit this chapter."}
+                              {summary.isEmpty ? "No subtopics yet." : "Tap to edit subtopics."}
                             </div>
                           </div>
-
-                          {!isMobile&&(
-                            <span style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800,justifyContent:"center"}}>
-                              {summary.isEmpty ? "Add topic" : "Edit"}
-                            </span>
-                          )}
                         </div>
                       </button>
                     );
@@ -4307,7 +4272,7 @@ function SyllabusBuilder({
               </div>
 
               <div style={{padding:"14px",borderTop:`1px solid ${G.border}`,background:"#EEF4FF"}}>
-                <div style={labelStyle}>Quick create</div>
+                <div style={labelStyle}>Quick create main topics</div>
                 <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:8,alignItems:"center"}}>
                   <input
                     value={chapterInput}
@@ -4318,7 +4283,7 @@ function SyllabusBuilder({
                         addChapter();
                       }
                     }}
-                    placeholder="Add next chapter"
+                    placeholder="Add main topic"
                     style={fieldStyle}
                   />
                   <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"10px 12px",fontWeight:800,justifyContent:"center"}}>
@@ -4328,16 +4293,16 @@ function SyllabusBuilder({
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:8,flexWrap:"wrap"}}>
                   <div style={{fontSize:11.5,color:G.textM}}>Press Enter to add quickly.</div>
                   <button onClick={()=>setShowBulkChapterInput(current=>!current)} style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800}}>
-                    {showBulkChapterInput ? "Hide paste" : "Paste list"}
+                    {showBulkChapterInput ? "Hide paste" : "Paste main topics"}
                   </button>
                 </div>
                 {showBulkChapterInput&&(
                   <div style={{...cardStyle,padding:"12px",marginTop:10}}>
-                    <div style={{fontSize:12,fontWeight:800,color:G.text,marginBottom:6}}>Paste one chapter per line</div>
+                    <div style={{fontSize:12,fontWeight:800,color:G.text,marginBottom:6}}>Paste one main topic per line</div>
                     <textarea
                       value={bulkChapterInput}
                       onChange={event=>setBulkChapterInput(event.target.value)}
-                      placeholder={"Chapter 1\nChapter 2\nChapter 3"}
+                      placeholder={"Main topic 1\nMain topic 2\nMain topic 3"}
                       style={{...fieldStyle,minHeight:110,resize:"vertical",lineHeight:1.5}}
                     />
                     <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:10,flexWrap:"wrap"}}>
@@ -4345,7 +4310,7 @@ function SyllabusBuilder({
                         Cancel
                       </button>
                       <button onClick={addBulkChapters} disabled={!bulkChapterInput.trim()} style={{...pill(bulkChapterInput.trim()?G.navy:G.bg,"#FFFFFF",bulkChapterInput.trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
-                        Add all chapters
+                        Add all main topics
                       </button>
                     </div>
                   </div>
@@ -4356,23 +4321,27 @@ function SyllabusBuilder({
             <div style={{...chapterWorkspacePanelStyle,background:"#F8FAFD"}}>
               {!selectedChapter ? (
                 <div style={{padding:"34px 22px",textAlign:"center",color:G.textM}}>
-                  Select a chapter to edit topics.
+                  Select a main topic to edit subtopics.
                 </div>
               ) : (
                 <>
                   <div style={{...chapterWorkspaceHeaderStyle,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
                     <div style={{minWidth:0,flex:1}}>
-                      <div style={labelStyle}>Overview</div>
-                      <div style={{fontSize:isMobile?26:32,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.08}}>
-                        {selectedChapter.title || "Untitled chapter"}
-                      </div>
+                      <div style={labelStyle}>Main topic</div>
+                      <input
+                        ref={chapterTitleInputRef}
+                        value={selectedChapter.title}
+                        onChange={event=>updateChapter(selectedChapter.id,{title:event.target.value})}
+                        placeholder="Main topic name"
+                        style={{...fieldStyle,border:"none",padding:0,fontSize:isMobile?26:32,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.08,background:"transparent"}}
+                      />
                       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
-                        <span style={chapterChipStyle("#FFFFFF",G.textS,G.borderM)}>Chapter {selectedChapterIndex+1}</span>
-                        <span style={chapterChipStyle("#EEF4FF",G.blue,"#C7D7F5")}>{selectedChapterSummary?.topicCount || 0} topic{selectedChapterSummary?.topicCount===1?"":"s"}</span>
-                        {selectedChapterSummary?.isEmpty&&<span style={chapterChipStyle("#FFF4DE","#9A5A00","#EFD3A0")}>No topics yet</span>}
+                        <span style={chapterChipStyle("#FFFFFF",G.textS,G.borderM)}>Main topic {selectedChapterIndex+1}</span>
+                        <span style={chapterChipStyle("#EEF4FF",G.blue,"#C7D7F5")}>{selectedChapterSummary?.topicCount || 0} subtopic{selectedChapterSummary?.topicCount===1?"":"s"}</span>
+                        {selectedChapterSummary?.isEmpty&&<span style={chapterChipStyle("#FFF4DE","#9A5A00","#EFD3A0")}>No subtopics yet</span>}
                       </div>
                       <div style={{fontSize:13,color:G.textM,lineHeight:1.5,marginTop:10,maxWidth:720}}>
-                        Edit the chapter title and add topics for this syllabus.
+                        Name the main topic and add subtopics below.
                       </div>
                     </div>
                     <div style={{display:isMobile?"none":"flex",gap:8,flexWrap:"wrap"}}>
@@ -4387,18 +4356,18 @@ function SyllabusBuilder({
 
                   <div style={{padding:isMobile?"16px":"18px 20px",display:"grid",gap:16}}>
                     <div style={{...cardStyle,padding:"16px"}}>
-                      <div style={labelStyle}>Topic plan</div>
+                      <div style={labelStyle}>Subtopic plan</div>
                       <div style={{fontSize:22,fontWeight:850,color:G.text,lineHeight:1.1}}>
-                        {selectedChapterSummary?.topicCount || 0} topic{selectedChapterSummary?.topicCount===1?"":"s"}
+                        {selectedChapterSummary?.topicCount || 0} subtopic{selectedChapterSummary?.topicCount===1?"":"s"}
                       </div>
                       <div style={{fontSize:12.5,color:G.textM,marginTop:8,lineHeight:1.5}}>
-                        {selectedChapterSummary?.isEmpty ? "Add the first topic to make this chapter useful for teachers." : "Topics are editable in the chapter inspector."}
+                        {selectedChapterSummary?.isEmpty ? "Add the first subtopic to make this main topic useful for teachers." : "Subtopics are editable below."}
                       </div>
                     </div>
 
                     <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(3,minmax(0,1fr))",gap:12}}>
                       <div style={chapterMetricCardStyle}>
-                        <div style={labelStyle}>Topics</div>
+                        <div style={labelStyle}>Subtopics</div>
                         <div style={{fontSize:28,fontWeight:850,color:G.text,lineHeight:1}}>{selectedChapterSummary?.topicCount || 0}</div>
                       </div>
                       <div style={chapterMetricCardStyle}>
@@ -4414,30 +4383,81 @@ function SyllabusBuilder({
                     <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1.2fr) minmax(280px,0.8fr)",gap:16}}>
                       <div style={{...cardStyle,overflow:"hidden"}}>
                         <div style={{padding:"14px 16px",borderBottom:`1px solid ${G.border}`}}>
-                          <div style={{fontSize:15,fontWeight:850,color:G.text}}>Topic preview</div>
-                          <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>Quick scan before editing.</div>
+                          <div style={{fontSize:15,fontWeight:850,color:G.text}}>Subtopics</div>
+                          <div style={{fontSize:12.5,color:G.textM,marginTop:4}}>Add, edit, and reorder subtopics for this main topic.</div>
                         </div>
-                        <div style={{padding:"12px 14px",display:"grid",gap:8}}>
-                          {selectedChapterPreviewTopics.length===0 ? (
+                        <div style={{padding:"12px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD",display:"grid",gap:8}}>
+                          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:8}}>
+                            <input
+                              value={topicInputs[selectedChapter.id]||""}
+                              onChange={event=>setTopicInputs(current=>({...current,[selectedChapter.id]:event.target.value}))}
+                              onKeyDown={event=>{
+                                if(event.key==="Enter"){
+                                  event.preventDefault();
+                                  addTopic(selectedChapter);
+                                }
+                              }}
+                              placeholder="Add subtopic"
+                              style={fieldStyle}
+                            />
+                            <button onClick={()=>addTopic(selectedChapter)} disabled={!String(topicInputs[selectedChapter.id]||"").trim()} style={{...pill(String(topicInputs[selectedChapter.id]||"").trim()?G.navy:G.bg,"#FFFFFF",String(topicInputs[selectedChapter.id]||"").trim()?G.navy:G.border),padding:"10px 12px",fontWeight:800,justifyContent:"center"}}>
+                              Add subtopic
+                            </button>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                            <div style={{fontSize:11.5,color:G.textM}}>Press Enter to add quickly.</div>
+                            <button onClick={()=>setShowBulkTopicInput(current=>!current)} style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800}}>
+                              {showBulkTopicInput ? "Hide paste" : "Paste subtopics"}
+                            </button>
+                          </div>
+                          {showBulkTopicInput&&(
+                            <div style={{...cardStyle,padding:"12px"}}>
+                              <div style={{fontSize:12,fontWeight:800,color:G.text,marginBottom:6}}>Paste one subtopic per line</div>
+                              <textarea
+                                value={bulkTopicInputs[selectedChapter.id]||""}
+                                onChange={event=>setBulkTopicInputs(current=>({...current,[selectedChapter.id]:event.target.value}))}
+                                placeholder={"Subtopic 1\nSubtopic 2\nSubtopic 3"}
+                                style={{...fieldStyle,minHeight:96,resize:"vertical",lineHeight:1.5}}
+                              />
+                              <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:10,flexWrap:"wrap"}}>
+                                <button onClick={()=>{setBulkTopicInputs(current=>({...current,[selectedChapter.id]:""}));setShowBulkTopicInput(false);}} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:750}}>
+                                  Cancel
+                                </button>
+                                <button onClick={()=>addBulkTopics(selectedChapter)} disabled={!String(bulkTopicInputs[selectedChapter.id]||"").trim()} style={{...pill(String(bulkTopicInputs[selectedChapter.id]||"").trim()?G.navy:G.bg,"#FFFFFF",String(bulkTopicInputs[selectedChapter.id]||"").trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
+                                  Add all subtopics
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div style={{padding:"12px",display:"grid",gap:8}}>
+                          {(selectedChapter.topics||[]).length===0 ? (
                             <div style={{padding:"18px 14px",border:`1px dashed ${G.borderM}`,borderRadius:12,background:"#FFFFFF",fontSize:13,color:G.textM,lineHeight:1.55}}>
-                              No topics yet. Add the first topic below.
+                              No subtopics yet. Add the first subtopic above.
                             </div>
                           ) : (
-                            selectedChapterPreviewTopics.map((topicTitle,index)=>(
-                              <div key={`${selectedChapter.id}_${index}`} style={{display:"grid",gridTemplateColumns:"30px minmax(0,1fr)",gap:10,alignItems:"center",padding:"10px 11px",border:`1px solid ${G.border}`,borderRadius:12,background:"#FFFFFF"}}>
-                                <div style={{width:30,height:30,borderRadius:10,background:"#E6EDF9",color:G.textS,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:850}}>
-                                  {index+1}
+                            selectedChapter.topics.map((topic,topicIndex)=>(
+                              <div key={topic.id} style={{display:"grid",gridTemplateColumns:isMobile?"34px minmax(0,1fr)":"34px minmax(0,1fr) auto auto auto",gap:8,alignItems:"center",padding:"8px",border:`1px solid ${G.border}`,borderRadius:12,background:"#FFFFFF"}}>
+                                <div style={{width:34,height:34,borderRadius:10,border:`1px solid ${G.border}`,background:"#F4F7FB",display:"flex",alignItems:"center",justifyContent:"center",color:G.textM,fontWeight:850}}>
+                                  {topicIndex+1}
                                 </div>
-                                <div style={{fontSize:13.5,fontWeight:700,color:G.text,lineHeight:1.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                                  {topicTitle}
-                                </div>
+                                <input
+                                  value={topic.title}
+                                  onChange={event=>updateTopicTitle(selectedChapter,topic.id,event.target.value)}
+                                  placeholder="Subtopic title"
+                                  style={{...fieldStyle,padding:"9px 10px"}}
+                                />
+                                <button title="Move up" onClick={()=>moveTopic(selectedChapter,topicIndex,-1)} disabled={topicIndex===0} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:topicIndex===0?0.4:1}}>
+                                  <AppIcon icon={IconArrowUp} size={15}/>
+                                </button>
+                                <button title="Move down" onClick={()=>moveTopic(selectedChapter,topicIndex,1)} disabled={topicIndex===selectedChapter.topics.length-1} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:topicIndex===selectedChapter.topics.length-1?0.4:1}}>
+                                  <AppIcon icon={IconArrowDown} size={15}/>
+                                </button>
+                                <button title="Remove subtopic" onClick={()=>removeTopic(selectedChapter,topic.id)} style={{...pill(G.redL,G.red,"#F5CACA"),padding:7}}>
+                                  <AppIcon icon={IconTrash} size={15}/>
+                                </button>
                               </div>
                             ))
-                          )}
-                          {hiddenSelectedTopicCount>0&&(
-                            <div style={{fontSize:12.5,color:G.textM,padding:"4px 2px 0"}}>
-                              +{hiddenSelectedTopicCount} more topic{hiddenSelectedTopicCount===1?"":"s"} in this chapter.
-                            </div>
                           )}
                         </div>
                       </div>
@@ -4496,42 +4516,37 @@ function SyllabusBuilder({
               <div style={{padding:"16px 18px",borderBottom:`1px solid ${G.border}`}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:11.5,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Chapter inspector</div>
+                    <div style={{fontSize:11.5,fontWeight:850,color:G.textM,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6}}>Details</div>
                     {selectedChapter ? (
                       <>
-                        <input
-                          ref={chapterTitleInputRef}
-                          value={selectedChapter.title}
-                          onChange={event=>updateChapter(selectedChapter.id,{title:event.target.value})}
-                          placeholder="Chapter title"
-                          style={{...fieldStyle,border:"none",padding:0,fontSize:isMobile?22:28,fontWeight:850,background:"transparent"}}
-                        />
+                        <div style={{fontSize:isMobile?20:24,fontWeight:850,color:G.text,lineHeight:1.18,wordBreak:"break-word"}}>
+                          {selectedChapter.title || "Untitled main topic"}
+                        </div>
                         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
-                          <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>Chapter {selectedChapterIndex+1}</span>
+                          <span style={{...pill("#FFFFFF",G.textS,G.borderM),cursor:"default",fontWeight:800}}>Main topic {selectedChapterIndex+1}</span>
                           <span style={{...pill("#EEF4FF",G.navy,"#C7D7F5"),cursor:"default",fontWeight:800}}>
-                            {selectedChapterSummary?.topicCount || 0} topic{selectedChapterSummary?.topicCount===1?"":"s"}
+                            {selectedChapterSummary?.topicCount || 0} subtopic{selectedChapterSummary?.topicCount===1?"":"s"}
                           </span>
                           {selectedChapterSummary?.isEmpty&&(
-                            <span style={{...pill("#FFF4DE","#9A5A00","#EFD3A0"),cursor:"default",fontWeight:800}}>No topics yet</span>
+                            <span style={{...pill("#FFF4DE","#9A5A00","#EFD3A0"),cursor:"default",fontWeight:800}}>No subtopics yet</span>
                           )}
                         </div>
                       </>
                     ) : (
-                      <div style={{fontSize:18,fontWeight:850,color:G.text}}>Select a chapter</div>
+                      <div style={{fontSize:18,fontWeight:850,color:G.text}}>Select a main topic</div>
                     )}
                   </div>
                 </div>
 
                 <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
-                  <button onClick={()=>setActiveInspectorTab("topics")} style={toolbarButtonStyle(activeInspectorTab==="topics")}>Topics</button>
-                  <button onClick={()=>setActiveInspectorTab("scope")} style={toolbarButtonStyle(activeInspectorTab==="scope")}>Scope</button>
+                  <button onClick={()=>setActiveInspectorTab("scope")} style={toolbarButtonStyle(activeInspectorTab==="scope")}>Details</button>
                   <button onClick={()=>setActiveInspectorTab("publish")} style={toolbarButtonStyle(activeInspectorTab==="publish")}>Publish</button>
                 </div>
               </div>
 
               {!selectedChapter ? (
                 <div style={{padding:"30px 20px",textAlign:"center",color:G.textM}}>
-                  Select a chapter to edit topics.
+                  Select a main topic to edit details.
                 </div>
               ) : (
                 <>
@@ -4540,19 +4555,19 @@ function SyllabusBuilder({
                       <>
                         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(2,minmax(0,1fr))",gap:10}}>
                           <div style={{...cardStyle,padding:"12px"}}>
-                            <div style={labelStyle}>Topics</div>
+                            <div style={labelStyle}>Subtopics</div>
                             <div style={{fontSize:22,fontWeight:850,color:G.text}}>{selectedChapterSummary?.topicCount || 0}</div>
                           </div>
                           <div style={{...cardStyle,padding:"12px"}}>
-                            <div style={labelStyle}>Chapter</div>
-                            <div style={{fontSize:18,fontWeight:850,color:G.text,lineHeight:1.2}}>{selectedChapter.title || "Untitled chapter"}</div>
+                            <div style={labelStyle}>Main topic</div>
+                            <div style={{fontSize:18,fontWeight:850,color:G.text,lineHeight:1.2}}>{selectedChapter.title || "Untitled main topic"}</div>
                           </div>
                         </div>
 
                         <div style={{...cardStyle,overflow:"hidden"}}>
                           <div style={{padding:"12px 14px",borderBottom:`1px solid ${G.border}`}}>
-                            <div style={{fontSize:14,fontWeight:850,color:G.text}}>Topics</div>
-                            <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Add, edit, and reorder topics for this chapter.</div>
+                            <div style={{fontSize:14,fontWeight:850,color:G.text}}>Subtopics</div>
+                            <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>Add, edit, and reorder subtopics for this main topic.</div>
                           </div>
                           <div style={{padding:"12px",borderBottom:`1px solid ${G.border}`,background:"#F8FAFD",display:"grid",gap:8}}>
                             <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:8}}>
@@ -4565,26 +4580,26 @@ function SyllabusBuilder({
                                     addTopic(selectedChapter);
                                   }
                                 }}
-                                placeholder="Add topic"
+                                placeholder="Add subtopic"
                                 style={fieldStyle}
                               />
                               <button onClick={()=>addTopic(selectedChapter)} disabled={!String(topicInputs[selectedChapter.id]||"").trim()} style={{...pill(String(topicInputs[selectedChapter.id]||"").trim()?G.navy:G.bg,"#FFFFFF",String(topicInputs[selectedChapter.id]||"").trim()?G.navy:G.border),padding:"10px 12px",fontWeight:800,justifyContent:"center"}}>
-                                Add topic
+                                Add subtopic
                               </button>
                             </div>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
                               <div style={{fontSize:11.5,color:G.textM}}>Press Enter to add quickly.</div>
                               <button onClick={()=>setShowBulkTopicInput(current=>!current)} style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800}}>
-                                {showBulkTopicInput ? "Hide paste" : "Paste topics"}
+                                {showBulkTopicInput ? "Hide paste" : "Paste subtopics"}
                               </button>
                             </div>
                             {showBulkTopicInput&&(
                               <div style={{...cardStyle,padding:"12px"}}>
-                                <div style={{fontSize:12,fontWeight:800,color:G.text,marginBottom:6}}>Paste one topic per line</div>
+                                <div style={{fontSize:12,fontWeight:800,color:G.text,marginBottom:6}}>Paste one subtopic per line</div>
                                 <textarea
                                   value={bulkTopicInputs[selectedChapter.id]||""}
                                   onChange={event=>setBulkTopicInputs(current=>({...current,[selectedChapter.id]:event.target.value}))}
-                                  placeholder={"Topic 1\nTopic 2\nTopic 3"}
+                                  placeholder={"Subtopic 1\nSubtopic 2\nSubtopic 3"}
                                   style={{...fieldStyle,minHeight:96,resize:"vertical",lineHeight:1.5}}
                                 />
                                 <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:10,flexWrap:"wrap"}}>
@@ -4592,7 +4607,7 @@ function SyllabusBuilder({
                                     Cancel
                                   </button>
                                   <button onClick={()=>addBulkTopics(selectedChapter)} disabled={!String(bulkTopicInputs[selectedChapter.id]||"").trim()} style={{...pill(String(bulkTopicInputs[selectedChapter.id]||"").trim()?G.navy:G.bg,"#FFFFFF",String(bulkTopicInputs[selectedChapter.id]||"").trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
-                                    Add all topics
+                                    Add all subtopics
                                   </button>
                                 </div>
                               </div>
@@ -4601,7 +4616,7 @@ function SyllabusBuilder({
                           <div style={{padding:"12px",display:"grid",gap:8}}>
                             {(selectedChapter.topics||[]).length===0 ? (
                               <div style={{padding:"14px 12px",border:`1px dashed ${G.borderM}`,borderRadius:12,background:"#FFFFFF",fontSize:13,color:G.textM,lineHeight:1.5}}>
-                                No topics yet. Add the first topic above.
+                                No subtopics yet. Add the first subtopic above.
                               </div>
                             ) : (
                               selectedChapter.topics.map((topic,topicIndex)=>(
@@ -4612,7 +4627,7 @@ function SyllabusBuilder({
                                   <input
                                     value={topic.title}
                                     onChange={event=>updateTopicTitle(selectedChapter,topic.id,event.target.value)}
-                                    placeholder="Topic title"
+                                    placeholder="Subtopic title"
                                     style={{...fieldStyle,padding:"9px 10px"}}
                                   />
                                   <button title="Move up" onClick={()=>moveTopic(selectedChapter,topicIndex,-1)} disabled={topicIndex===0} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:topicIndex===0?0.4:1}}>
@@ -4621,7 +4636,7 @@ function SyllabusBuilder({
                                   <button title="Move down" onClick={()=>moveTopic(selectedChapter,topicIndex,1)} disabled={topicIndex===selectedChapter.topics.length-1} style={{...pill("#FFFFFF",G.textM,G.border),padding:7,opacity:topicIndex===selectedChapter.topics.length-1?0.4:1}}>
                                     <AppIcon icon={IconArrowDown} size={15}/>
                                   </button>
-                                  <button title="Remove topic" onClick={()=>removeTopic(selectedChapter,topic.id)} style={{...pill(G.redL,G.red,"#F5CACA"),padding:7}}>
+                                  <button title="Remove subtopic" onClick={()=>removeTopic(selectedChapter,topic.id)} style={{...pill(G.redL,G.red,"#F5CACA"),padding:7}}>
                                     <AppIcon icon={IconTrash} size={15}/>
                                   </button>
                                 </div>
@@ -4638,11 +4653,11 @@ function SyllabusBuilder({
                                   addTopic(selectedChapter);
                                 }
                               }}
-                              placeholder="Add next topic"
+                              placeholder="Add next subtopic"
                               style={fieldStyle}
                             />
                             <button onClick={()=>addTopic(selectedChapter)} disabled={!String(topicInputs[selectedChapter.id]||"").trim()} style={{...pill(String(topicInputs[selectedChapter.id]||"").trim()?G.navy:G.bg,"#FFFFFF",String(topicInputs[selectedChapter.id]||"").trim()?G.navy:G.border),padding:"10px 12px",fontWeight:800,justifyContent:"center"}}>
-                              Add topic
+                              Add subtopic
                             </button>
                           </div>
                         </div>
@@ -4743,12 +4758,12 @@ function SyllabusBuilder({
                               <div style={{fontSize:13,fontWeight:850,color:G.text}}>Current chapter</div>
                               <div style={{fontSize:12,color:G.textM,marginTop:4,lineHeight:1.45}}>
                                 {selectedChapterSummary?.isEmpty
-                                  ? "No topics yet."
-                                  : `${selectedChapterSummary?.topicCount || 0} topic${selectedChapterSummary?.topicCount===1?"":"s"} in this chapter.`}
+                                  ? "No subtopics yet."
+                                  : `${selectedChapterSummary?.topicCount || 0} subtopic${selectedChapterSummary?.topicCount===1?"":"s"} in this main topic.`}
                               </div>
                             </div>
                             <span style={{...pill(selectedChapterSummary?.isEmpty?"#FFF4DE":"#E8F7EF",selectedChapterSummary?.isEmpty?"#9A5A00":"#137A45",selectedChapterSummary?.isEmpty?"#EFD3A0":"#B9E5CA"),cursor:"default",fontWeight:800}}>
-                              {selectedChapterSummary?.isEmpty ? "No topics" : "Has topics"}
+                              {selectedChapterSummary?.isEmpty ? "No subtopics" : "Has subtopics"}
                             </span>
                           </div>
                         </div>
@@ -4872,7 +4887,7 @@ function SimpleSyllabusFlow({
     <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:24}}>
       <div>
         <div style={{fontSize:isMobile?23:28,fontWeight:850,color:G.text,fontFamily:G.display,lineHeight:1.15}}>Syllabus</div>
-        <div style={{fontSize:14,color:G.textM,lineHeight:1.55,marginTop:5}}>Choose where the syllabus applies, select its subject, then add chapters and topics.</div>
+        <div style={{fontSize:14,color:G.textM,lineHeight:1.55,marginTop:5}}>Choose where the syllabus applies, select its subject, then add main topics and subtopics.</div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":`repeat(${defaultInstitute?2:3},minmax(0,1fr))`,gap:12,alignItems:"start"}}>
         {!defaultInstitute&&<div style={stepCard(true)}>
@@ -16650,7 +16665,7 @@ function AdminPanelInner({user}){
         const toolGridItems = [
           { key:"teachers", title:"Teachers", subtitle:"Profiles, classes, access", icon:IconUsersGroup, count:teacherCount, onClick:()=>openMobileManageArea("teachers") },
           { key:"institutes", title:"Institutes", subtitle:"Centres and structure", icon:IconBuilding, count:institutes.length, onClick:()=>openMobileManageArea("institutes") },
-          { key:"subjects", title:"Syllabus", subtitle:"Chapters and topics", icon:IconBooks, count:syllabusTemplates.length, onClick:()=>openMobileManageArea("subjects") },
+          { key:"subjects", title:"Syllabus", subtitle:"Main topics and subtopics", icon:IconBooks, count:syllabusTemplates.length, onClick:()=>openMobileManageArea("subjects") },
           { key:"sections", title:"Sections", subtitle:"Groups and timetables", icon:IconSchool, count:institutes.length, onClick:()=>openMobileManageArea("sections") },
           { key:"admins", title:"Admins", subtitle:"Roles and permissions", icon:IconSettings, count:adminCount, onClick:()=>openMobileManageArea("admins") },
           { key:"report", title:"Ledgr Report", subtitle:"Export and schedule", icon:IconFileText, count:instituteGlanceReport.ready ? "Ready" : "Open", onClick:openDailyLedgrReport },
@@ -16758,7 +16773,7 @@ function AdminPanelInner({user}){
     const manageTabItems = [
       { key:"teachers", label:"Teachers", icon:IconUsersGroup, count:teacherOnlyList.length, hint:"Accounts & classes" },
       { key:"institutes", label:"Institutes", icon:IconBuilding, count:institutes.length, hint:"Names & structure" },
-      { key:"subjects", label:"Syllabus", icon:IconBooks, count:syllabusTemplates.length, hint:"Chapters & topics" },
+      { key:"subjects", label:"Syllabus", icon:IconBooks, count:syllabusTemplates.length, hint:"Main topics" },
       { key:"sections", label:"Sections", icon:IconSchool, count:institutes.length, hint:"Groups & timetables" },
       { key:"admins", label:"Admins", icon:IconSettings, count:adminOnlyList.length, hint:"Access & roles" },
     ];
@@ -18436,7 +18451,7 @@ function AdminPanelInner({user}){
               <MobileManageTile
                 icon={IconBooks}
                 title="Syllabus"
-                subtitle="Shared chapters and topics"
+                subtitle="Shared main topics and subtopics"
                 count={syllabusTemplates.length}
                 onClick={()=>openMobileManageArea("subjects")}
               />
