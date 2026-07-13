@@ -3706,21 +3706,29 @@ function SyllabusBuilder({
     setSelectedChapterId(next?.draft?.chapters?.[0]?.id || null);
   };
 
-  const addChapter = () => {
+  const addChapter = async () => {
     const title = chapterInput.trim();
-    if(!title) return;
+    if(!title || busy) return;
     const chapter = {
       id:makeSyllabusLocalId("chapter"),
       title,
       topics:[],
     };
-    updateDraft({chapters:[...draft.chapters,chapter]});
+    const nextWorking = {
+      ...working,
+      subjectId:subject.id,
+      subjectName:subject.name,
+      draft:{...draft,chapters:[...draft.chapters,chapter]},
+    };
+    setWorking(nextWorking);
     setChapterInput("");
     setSelectedChapterId(chapter.id);
     setActiveInspectorTab("scope");
+    await save(nextWorking);
   };
 
-  const addBulkChapters = () => {
+  const addBulkChapters = async () => {
+    if(busy) return;
     const titles = bulkChapterInput
       .split(/\r?\n|;/)
       .map(item=>item.trim())
@@ -3745,12 +3753,19 @@ function SyllabusBuilder({
         topics:[],
       });
     });
-    updateDraft({ chapters:nextChapters });
+    const nextWorking = {
+      ...working,
+      subjectId:subject.id,
+      subjectName:subject.name,
+      draft:{...draft,chapters:nextChapters},
+    };
+    setWorking(nextWorking);
     setBulkChapterInput("");
     setShowBulkChapterInput(false);
     if(firstAddedId){
       setSelectedChapterId(firstAddedId);
       setActiveInspectorTab("scope");
+      await save(nextWorking);
     }
   };
 
@@ -3822,8 +3837,8 @@ function SyllabusBuilder({
     });
   };
 
-  const save = async () => {
-    const saved = await onSave(working);
+  const save = async (template = working) => {
+    const saved = await onSave(template);
     if(saved){
       setWorking(saved);
       setSelectedId(saved.id);
@@ -3970,6 +3985,8 @@ function SyllabusBuilder({
     cursor:"default",
     fontWeight:800,
   });
+  const canAddChapter = Boolean(chapterInput.trim()) && !busy;
+  const canPasteChapters = Boolean(bulkChapterInput.trim()) && !busy;
   const renderMobileBuilderActionBar = () => {
     if(!isMobile) return null;
     const mainDisabled = busy || !canPublish;
@@ -4274,7 +4291,7 @@ function SyllabusBuilder({
               </div>
 
               <div style={{padding:"14px",borderTop:`1px solid ${G.border}`,background:"#EEF4FF"}}>
-                <div style={labelStyle}>Quick create main topics</div>
+                <div style={labelStyle}>Add main topic</div>
                 <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:8,alignItems:"center"}}>
                   <input
                     value={chapterInput}
@@ -4288,19 +4305,20 @@ function SyllabusBuilder({
                     placeholder="Add main topic"
                     style={fieldStyle}
                   />
-                  <button onClick={addChapter} disabled={!chapterInput.trim()} style={{...pill(chapterInput.trim()?G.navy:G.bg,"#FFFFFF",chapterInput.trim()?G.navy:G.border),padding:"10px 12px",fontWeight:800,justifyContent:"center"}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconPlus} size={15}/> Add</span>
+                  <button onClick={addChapter} disabled={!canAddChapter} style={{...pill(canAddChapter?G.navy:G.bg,"#FFFFFF",canAddChapter?G.navy:G.border),padding:"10px 12px",fontWeight:800,justifyContent:"center",opacity:canAddChapter?1:0.7}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6}}><AppIcon icon={IconPlus} size={15}/> {busy?"Saving":"Add & save"}</span>
                   </button>
                 </div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:8,flexWrap:"wrap"}}>
-                  <div style={{fontSize:11.5,color:G.textM}}>Press Enter to add quickly.</div>
+                  <div style={{fontSize:11.5,color:G.textM}}>Press Enter to add and save draft.</div>
                   <button onClick={()=>setShowBulkChapterInput(current=>!current)} style={{...pill("#FFFFFF",G.textS,G.borderM),fontWeight:800}}>
-                    {showBulkChapterInput ? "Hide paste" : "Paste main topics"}
+                    {showBulkChapterInput ? "Hide paste" : "Paste list"}
                   </button>
                 </div>
                 {showBulkChapterInput&&(
                   <div style={{...cardStyle,padding:"12px",marginTop:10}}>
                     <div style={{fontSize:12,fontWeight:800,color:G.text,marginBottom:6}}>Paste one main topic per line</div>
+                    <div style={{fontSize:11.5,color:G.textM,marginBottom:8,lineHeight:1.45}}>Use this for bulk syllabus outlines, like pasting 10 chapter names together.</div>
                     <textarea
                       value={bulkChapterInput}
                       onChange={event=>setBulkChapterInput(event.target.value)}
@@ -4311,8 +4329,8 @@ function SyllabusBuilder({
                       <button onClick={()=>{setBulkChapterInput("");setShowBulkChapterInput(false);}} style={{...pill("#FFFFFF",G.textS,G.borderM),padding:"9px 12px",fontWeight:750}}>
                         Cancel
                       </button>
-                      <button onClick={addBulkChapters} disabled={!bulkChapterInput.trim()} style={{...pill(bulkChapterInput.trim()?G.navy:G.bg,"#FFFFFF",bulkChapterInput.trim()?G.navy:G.border),padding:"9px 12px",fontWeight:800}}>
-                        Add all main topics
+                      <button onClick={addBulkChapters} disabled={!canPasteChapters} style={{...pill(canPasteChapters?G.navy:G.bg,"#FFFFFF",canPasteChapters?G.navy:G.border),padding:"9px 12px",fontWeight:800,opacity:canPasteChapters?1:0.7}}>
+                        Add all & save
                       </button>
                     </div>
                   </div>
