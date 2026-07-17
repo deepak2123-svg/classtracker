@@ -11319,7 +11319,10 @@ function AdminPanelInner({user}){
       instituteGlanceDataRef.current = nextCache;
     }
     resetInstituteGlanceAfterAccountChange();
-    setSelTeacher(null);
+    setSelP2(current => current === uid ? null : current);
+    setSelP3(current => current?.teacherUid === uid ? null : current);
+    setFullView(current => current?.teacherUid === uid ? null : current);
+    setAdminV5TeacherUid(current => current === uid ? "" : current);
   };
 
   // Fully remove a teacher from the system
@@ -17901,7 +17904,9 @@ function AdminPanelInner({user}){
                               setManageTab("teachers");
                               setManageScopeInstitute(row.inst);
                               setManageTeacherSearch("");
-                              setSelTeacher(null);
+                              setSelP2(null);
+                              setSelP3(null);
+                              setFullView(null);
                             }}
                             className="admin-mobile-touch"
                             style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>
@@ -17972,7 +17977,9 @@ function AdminPanelInner({user}){
                             setManageTab("teachers");
                             setManageScopeInstitute(row.inst);
                             setManageTeacherSearch("");
-                            setSelTeacher(null);
+                            setSelP2(null);
+                            setSelP3(null);
+                            setFullView(null);
                           }}
                           style={workspaceActionButtonStyle("neutral")}>
                           Teachers
