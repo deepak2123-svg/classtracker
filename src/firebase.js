@@ -107,14 +107,33 @@ export function onAuth(cb) { return onAuthStateChanged(auth, cb); }
 
 // ── Teacher feedback and admin replies ───────────────────────────────────────
 export function subscribeFeedbackThreads(onChange, onError = console.error) {
-  const threadsQuery = query(collection(db, "feedbackThreads"), orderBy("updatedAt", "desc"));
-  return onSnapshot(
-    threadsQuery,
-    snapshot => {
-      onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
-    },
-    onError,
-  );
+  let unsubscribe = null;
+  let cancelled = false;
+  getCurrentRoleDetails()
+    .then(actor => {
+      if (cancelled) return;
+      const source = actor.role === "group_admin" && actor.groupId
+        ? query(collection(db, "feedbackThreads"), where("groupId", "==", actor.groupId))
+        : actor.role === "institute_admin" && actor.instituteId
+          ? query(collection(db, "feedbackThreads"), where("instituteIds", "array-contains", actor.instituteId))
+          : query(collection(db, "feedbackThreads"), orderBy("updatedAt", "desc"));
+      unsubscribe = onSnapshot(
+        source,
+        snapshot => {
+          const items = snapshot.docs
+            .map(item => ({ id: item.id, ...item.data() }))
+            .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+          onChange(items);
+        },
+        onError,
+      );
+      if (cancelled && unsubscribe) unsubscribe();
+    })
+    .catch(onError);
+  return () => {
+    cancelled = true;
+    if (unsubscribe) unsubscribe();
+  };
 }
 
 export function subscribeFeedbackMessages(uid, onChange, onError = console.error) {
@@ -2849,8 +2868,8 @@ export async function getSyllabusTemplates() {
         : collection(db, "syllabusTemplates");
     const publishedSource = actor.role === "group_admin" && actor.groupId
       ? query(collection(db, "publishedSyllabi"), where("groupId", "==", actor.groupId))
-      : actor.role === "institute_admin" && actor.instituteId
-        ? query(collection(db, "publishedSyllabi"), where("instituteIds", "array-contains", actor.instituteId))
+      : actor.role === "institute_admin" && actor.groupId
+        ? query(collection(db, "publishedSyllabi"), where("groupId", "==", actor.groupId))
         : collection(db, "publishedSyllabi");
     const [templateSnap, publishedSnap] = await Promise.all([
       getDocs(templateSource),

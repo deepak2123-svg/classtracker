@@ -342,7 +342,15 @@ service cloud.firestore {
     }
 
     match /feedbackThreads/{uid} {
-      allow read: if canAccessTeacherData(uid);
+      allow read: if canAccessTeacherData(uid)
+        || (
+          isGroupAdmin()
+          && resource.data.groupId == currentRoleData().groupId
+        )
+        || (
+          isInstituteAdmin()
+          && resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        );
       allow create: if isSignedIn() && (
         isAdmin()
         || (
