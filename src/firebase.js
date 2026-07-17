@@ -771,26 +771,334 @@ export async function deleteClassNotes(uid, classId) {
   } catch {}
 }
 
-// ── Role system ───────────────────────────────────────────────────────────────
-// roles/{uid} = { role: "teacher" | "admin", adminMode?: "admin_only" | "admin_teacher", grantedAt, grantedBy }
+// ── Tenant and role system ────────────────────────────────────────────────────
+// Public roles: manager | group_admin | institute_admin | teacher.
+// Legacy "admin" records remain valid during the Genesis migration.
+export const ADMIN_ROLE_NAMES = Object.freeze(["admin", "group_admin", "institute_admin"]);
+export const PORTAL_ROLE_NAMES = Object.freeze(["manager", ...ADMIN_ROLE_NAMES]);
+
+export function isAdminRole(role) {
+  const roleName = String(role || "");
+  return roleName === "manager" || ADMIN_ROLE_NAMES.includes(roleName);
+}
+
+export function isPortalRole(role) {
+  return PORTAL_ROLE_NAMES.includes(String(role || ""));
+}
+
 export function roleDocRef(uid) { return doc(db, "roles", uid); }
 
-export async function getUserRole(uid) {
+export async function getUserRoleDetails(uid) {
   try {
     const snap = await getDoc(roleDocRef(uid));
-    return snap.exists() ? snap.data().role : "teacher";
-  } catch { return "teacher"; }
+    return snap.exists() ? { uid, ...snap.data() } : { uid, role: "teacher" };
+  } catch {
+    return { uid, role: "teacher" };
+  }
+}
+
+export async function getUserRole(uid) {
+  const details = await getUserRoleDetails(uid);
+  return details.role || "teacher";
+}
+
+async function getCurrentRoleDetails() {
+  const uid = auth.currentUser?.uid;
+  return uid ? getUserRoleDetails(uid) : { uid: "", role: "teacher" };
+}
+
+function randomToken(byteLength = 24, maxLength = 40) {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  return Array.from(bytes)
+    .map(byte => byte.toString(36).padStart(2, "0"))
+    .join("")
+    .slice(0, maxLength);
+}
+
+function normaliseGroupKind(kind) {
+  return kind === "single" ? "single" : "group";
+}
+
+function normaliseInstituteCode(code) {
+  return String(code || "").trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
+}
+
+function generateInstituteCode() {
+  return `LDG-${randomToken(6, 8).toUpperCase()}`;
+}
+
+function membershipDocId(uid, instituteId) {
+  return `${String(uid || "").trim()}_${String(instituteId || "").trim()}`;
+}
+
+async function assertManagerAccess() {
+  const actor = await getCurrentRoleDetails();
+  if (!["manager", "admin"].includes(actor.role)) {
+    throw new Error("Manager access is required.");
+  }
+  return actor;
+}
+
+async function assertCanManageGroup(groupId) {
+  const actor = await getCurrentRoleDetails();
+  const allowed = actor.role === "manager"
+    || actor.role === "admin"
+    || (actor.role === "group_admin" && actor.groupId === groupId);
+  if (!allowed) throw new Error("You do not have access to manage this group.");
+  return actor;
+}
+
+async function assertCanManageInstitute(groupId, instituteId) {
+  const actor = await getCurrentRoleDetails();
+  const allowed = actor.role === "manager"
+    || actor.role === "admin"
+    || (actor.role === "group_admin" && actor.groupId === groupId)
+    || (
+      actor.role === "institute_admin"
+      && actor.groupId === groupId
+      && actor.instituteId === instituteId
+    );
+  if (!allowed) throw new Error("You do not have access to manage this institute.");
+  return actor;
+}
+
+async function ensureUniqueInstituteName(name, excludeInstituteId = "") {
+  const nameKey = normaliseInstituteKey(name);
+  if (!nameKey) throw new Error("Enter an institute name.");
+  const snap = await getDocs(query(collection(db, "institutes"), where("nameKey", "==", nameKey)));
+  const duplicate = snap.docs.find(item => item.id !== excludeInstituteId && item.data()?.status !== "deleted");
+  if (duplicate) {
+    throw new Error("That institute name is already in use. Institute names must remain unique during the legacy transition.");
+  }
+}
+
+async function createInstituteRecord({
+  groupId,
+  name,
+  createdBy,
+  legacyName = "",
+  legacyAliases = [],
+  sortOrder = null,
+}) {
+  const label = String(name || "").trim();
+  if (!label) throw new Error("Enter an institute name.");
+  await ensureUniqueInstituteName(label);
+
+  let instituteCode = generateInstituteCode();
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const codeSnap = await getDoc(doc(db, "instituteCodes", instituteCode));
+    if (!codeSnap.exists()) break;
+    instituteCode = generateInstituteCode();
+  }
+
+  const now = Date.now();
+  const instituteRef = doc(collection(db, "institutes"));
+  const payload = {
+    groupId,
+    name: label,
+    nameKey: normaliseInstituteKey(label),
+    instituteCode,
+    status: "active",
+    legacyName: String(legacyName || "").trim(),
+    legacyNameKey: normaliseInstituteKey(legacyName || label),
+    legacyAliases: uniqueTrimmed(legacyAliases),
+    sortOrder: Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : null,
+    createdAt: now,
+    createdBy,
+    updatedAt: now,
+    updatedBy: createdBy,
+    schemaVersion: 1,
+  };
+  const batch = writeBatch(db);
+  batch.set(instituteRef, payload);
+  batch.set(doc(db, "instituteCodes", instituteCode), {
+    groupId,
+    instituteId: instituteRef.id,
+    instituteName: label,
+    status: "active",
+    createdAt: now,
+  });
+  await batch.commit();
+  return { id: instituteRef.id, ...payload };
+}
+
+export async function createGroupStructure({ name, kind = "group", initialInstituteNames = [] }, managerUid = "") {
+  const actor = await assertManagerAccess();
+  const label = String(name || "").trim();
+  if (!label) throw new Error("Enter a group or institute name.");
+
+  const groupKind = normaliseGroupKind(kind);
+  const now = Date.now();
+  const groupRef = doc(collection(db, "groups"));
+  const creatorUid = managerUid || actor.uid;
+  const group = {
+    name: label,
+    nameKey: normaliseInstituteKey(label),
+    kind: groupKind,
+    status: "active",
+    createdAt: now,
+    createdBy: creatorUid,
+    updatedAt: now,
+    updatedBy: creatorUid,
+    schemaVersion: 1,
+  };
+  await setDoc(groupRef, group);
+  await setDoc(doc(db, "config", "tenantArchitecture"), {
+    enabled: true,
+    schemaVersion: 1,
+    updatedAt: now,
+    updatedBy: creatorUid,
+  }, { merge: true });
+
+  const requestedInstitutes = groupKind === "single"
+    ? [label]
+    : uniqueTrimmed(initialInstituteNames);
+  const institutes = [];
+  for (const instituteName of requestedInstitutes) {
+    institutes.push(await createInstituteRecord({
+      groupId: groupRef.id,
+      name: instituteName,
+      createdBy: creatorUid,
+    }));
+  }
+  return { group: { id: groupRef.id, ...group }, institutes };
+}
+
+export async function createTenantInstitute({ groupId, name }, actorUid = "") {
+  const actor = await assertCanManageGroup(groupId);
+  return createInstituteRecord({
+    groupId,
+    name,
+    createdBy: actorUid || actor.uid,
+  });
+}
+
+export async function getTenantGroups() {
+  const snap = await getDocs(collection(db, "groups"));
+  return snap.docs
+    .map(item => ({ id: item.id, ...item.data() }))
+    .filter(item => item.status !== "deleted")
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }));
+}
+
+export async function getTenantInstitutes(groupId = "") {
+  const source = groupId
+    ? query(collection(db, "institutes"), where("groupId", "==", groupId))
+    : collection(db, "institutes");
+  const snap = await getDocs(source);
+  return snap.docs
+    .map(item => ({ id: item.id, ...item.data() }))
+    .filter(item => item.status !== "deleted")
+    .sort((a, b) => {
+      const aOrder = a.sortOrder !== null && a.sortOrder !== undefined && Number.isFinite(Number(a.sortOrder))
+        ? Number(a.sortOrder)
+        : Number.MAX_SAFE_INTEGER;
+      const bOrder = b.sortOrder !== null && b.sortOrder !== undefined && Number.isFinite(Number(b.sortOrder))
+        ? Number(b.sortOrder)
+        : Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" });
+    });
+}
+
+async function getVisibleTenantInstituteRecords(roleDetails = null) {
+  const role = roleDetails || await getCurrentRoleDetails();
+  if (role.role === "manager" || role.role === "admin") {
+    return getTenantInstitutes();
+  }
+  if (role.role === "group_admin" && role.groupId) {
+    return getTenantInstitutes(role.groupId);
+  }
+  if (role.role === "institute_admin" && role.instituteId) {
+    const snap = await getDoc(doc(db, "institutes", role.instituteId));
+    return snap.exists() && snap.data()?.status !== "deleted"
+      ? [{ id: snap.id, ...snap.data() }]
+      : [];
+  }
+  return [];
+}
+
+export async function getTeacherMemberships(uid) {
+  if (!uid) return [];
+  const snap = await getDocs(query(collection(db, "memberships"), where("userId", "==", uid)));
+  return snap.docs
+    .map(item => ({ id: item.id, ...item.data() }))
+    .filter(item => item.status === "approved");
+}
+
+export async function getTeacherAllowedInstituteRecords(uid) {
+  const memberships = await getTeacherMemberships(uid);
+  const records = await Promise.all(
+    memberships.map(async membership => {
+      const snap = await getDoc(doc(db, "institutes", membership.instituteId));
+      return snap.exists() && snap.data()?.status !== "deleted"
+        ? {
+            id: snap.id,
+            membershipId: membership.id,
+            membershipLegacyOrder: membership.legacyOrder,
+            ...snap.data(),
+          }
+        : null;
+    })
+  );
+  return records
+    .filter(Boolean)
+    .sort((a, b) => {
+      const aMembershipOrder = a.membershipLegacyOrder !== null
+        && a.membershipLegacyOrder !== undefined
+        && Number.isFinite(Number(a.membershipLegacyOrder))
+        ? Number(a.membershipLegacyOrder)
+        : Number.MAX_SAFE_INTEGER;
+      const bMembershipOrder = b.membershipLegacyOrder !== null
+        && b.membershipLegacyOrder !== undefined
+        && Number.isFinite(Number(b.membershipLegacyOrder))
+        ? Number(b.membershipLegacyOrder)
+        : Number.MAX_SAFE_INTEGER;
+      if (aMembershipOrder !== bMembershipOrder) return aMembershipOrder - bMembershipOrder;
+      const aOrder = a.sortOrder !== null && a.sortOrder !== undefined && Number.isFinite(Number(a.sortOrder))
+        ? Number(a.sortOrder)
+        : Number.MAX_SAFE_INTEGER;
+      const bOrder = b.sortOrder !== null && b.sortOrder !== undefined && Number.isFinite(Number(b.sortOrder))
+        ? Number(b.sortOrder)
+        : Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" });
+    });
+}
+
+export async function getTeacherAllowedInstitutes(uid) {
+  const records = await getTeacherAllowedInstituteRecords(uid);
+  if (records.length) return uniqueTrimmed(records.map(item => item.name));
+
+  const architectureSnap = await getDoc(doc(db, "config", "tenantArchitecture")).catch(() => null);
+  if (architectureSnap?.exists() && architectureSnap.data()?.enabled === true) return [];
+  return readLegacyGlobalInstitutes();
 }
 
 export async function promoteToAdmin(uid, grantedByUid, adminMode = "admin_only") {
   const mode = adminMode === "admin_teacher" ? "admin_teacher" : "admin_only";
-  await setDoc(roleDocRef(uid), {
-    role: "admin",
+  const actor = await getUserRoleDetails(grantedByUid);
+  let nextRole = "admin";
+  const scope = {};
+  if (actor.role === "group_admin") {
+    nextRole = "group_admin";
+    scope.groupId = actor.groupId || "";
+  } else if (actor.role === "institute_admin") {
+    nextRole = "institute_admin";
+    scope.groupId = actor.groupId || "";
+    scope.instituteId = actor.instituteId || "";
+    scope.instituteIds = actor.instituteId ? [actor.instituteId] : [];
+  }
+  const payload = {
+    role: nextRole,
     adminMode: mode,
     teaches: mode === "admin_teacher",
     grantedAt: Date.now(),
     grantedBy: grantedByUid,
-  });
+    ...scope,
+  };
+  await setDoc(roleDocRef(uid), payload, { merge: true });
+  return { uid, ...payload };
 }
 
 export async function demoteToTeacher(uid, demotedByUid = null) {
@@ -808,8 +1116,9 @@ export async function demoteToTeacher(uid, demotedByUid = null) {
 export async function setAdminTeachingMode(uid, adminMode, updatedByUid = null) {
   const mode = adminMode === "admin_teacher" ? "admin_teacher" : "admin_only";
   const now = Date.now();
+  const existing = await getUserRoleDetails(uid);
   await setDoc(roleDocRef(uid), {
-    role: "admin",
+    role: isAdminRole(existing.role) ? existing.role : "admin",
     adminMode: mode,
     teaches: mode === "admin_teacher",
     updatedAt: now,
@@ -826,9 +1135,12 @@ function removedTeachersConfigRef() {
 export async function syncTeacherIndex(uid, data) {
   if (!data?.profile?.name) return;
   try {
+    const memberships = await getTeacherMemberships(uid).catch(() => []);
     await setDoc(doc(db, "teachers", uid), {
       ...buildTeacherIndexPayload(uid, data),
       name: data.profile.name,
+      groupIds: uniqueTrimmed(memberships.map(item => item.groupId)),
+      instituteIds: uniqueTrimmed(memberships.map(item => item.instituteId)),
       ...buildTeacherIdentityPatch(uid),
     }, { merge: true });
   } catch { /* silent fail — admin feature optional */ }
@@ -837,10 +1149,21 @@ export async function syncTeacherIndex(uid, data) {
 // ── Admin data reads ──────────────────────────────────────────────────────────
 export async function getAllTeachers() {
   try {
+    const actor = await getCurrentRoleDetails();
+    const teacherSource = actor.role === "group_admin" && actor.groupId
+      ? query(collection(db, "teachers"), where("groupIds", "array-contains", actor.groupId))
+      : actor.role === "institute_admin" && actor.instituteId
+        ? query(collection(db, "teachers"), where("instituteIds", "array-contains", actor.instituteId))
+        : collection(db, "teachers");
+    const rolesSource = actor.role === "group_admin" && actor.groupId
+      ? query(collection(db, "roles"), where("groupId", "==", actor.groupId))
+      : actor.role === "institute_admin" && actor.instituteId
+        ? query(collection(db, "roles"), where("instituteIds", "array-contains", actor.instituteId))
+        : collection(db, "roles");
     const [removedConfigSnap, teacherIndexSnap, rolesSnap] = await Promise.all([
       getDoc(removedTeachersConfigRef()),
-      getDocs(collection(db, "teachers")),
-      getDocs(collection(db, "roles")),
+      getDocs(teacherSource),
+      getDocs(rolesSource),
     ]);
 
     const removedMeta = removedTeacherConfigMeta(removedConfigSnap.data() || {});
@@ -859,7 +1182,7 @@ export async function getAllTeachers() {
       }
     });
 
-    try {
+    if (!["group_admin", "institute_admin"].includes(actor.role)) try {
       const appdataSnap = await getDocs(query(collectionGroup(db, "appdata"), where(documentId(), "==", "main")));
       appdataSnap.docs.forEach(snap => {
         const uid = snap.ref.parent.parent?.id;
@@ -908,82 +1231,752 @@ async function getAllTeacherMainDocUids() {
 }
 
 export async function getAllRoles() {
-  try {
-    const snap = await getDocs(collection(db, "roles"));
-    const map = {};
-    snap.docs.forEach(d => { map[d.id] = d.data().role; });
-    return map;
-  } catch { return {}; }
+  const details = await getAllRoleDetails();
+  return Object.fromEntries(
+    Object.entries(details).map(([uid, item]) => [uid, item?.role || "teacher"])
+  );
 }
 
 export async function getAllRoleDetails() {
   try {
-    const snap = await getDocs(collection(db, "roles"));
+    const actor = await getCurrentRoleDetails();
+    const source = actor.role === "group_admin" && actor.groupId
+      ? query(collection(db, "roles"), where("groupId", "==", actor.groupId))
+      : actor.role === "institute_admin" && actor.instituteId
+        ? query(collection(db, "roles"), where("instituteIds", "array-contains", actor.instituteId))
+        : collection(db, "roles");
+    const snap = await getDocs(source);
     const map = {};
     snap.docs.forEach(d => { map[d.id] = { uid:d.id, ...d.data() }; });
     return map;
   } catch { return {}; }
 }
 
-// ── Invite links ──────────────────────────────────────────────────────────────
-// invites/{token} = { createdAt, createdBy, expiresAt, used }
-export async function createInviteLink(adminUid) {
-  const token = Array.from(crypto.getRandomValues(new Uint8Array(24)))
-    .map(b => b.toString(36)).join("").slice(0, 32);
+// ── Scoped invite links ───────────────────────────────────────────────────────
+export async function createScopedInvite({
+  inviteType,
+  groupId = "",
+  instituteId = "",
+  createdBy,
+  maxUses = 1,
+  expiresInDays = 7,
+}) {
+  const actor = await getUserRoleDetails(createdBy);
+  const type = String(inviteType || "").trim();
+  if (!["admin", "group_admin", "institute_admin", "teacher"].includes(type)) {
+    throw new Error("Choose a valid invite role.");
+  }
+
+  if (type === "group_admin") {
+    if (!groupId) throw new Error("Choose a group for this invite.");
+    await assertCanManageGroup(groupId);
+  } else if (type === "institute_admin" || type === "teacher") {
+    if (!groupId || !instituteId) throw new Error("Choose an institute for this invite.");
+    await assertCanManageInstitute(groupId, instituteId);
+  } else if (actor.role !== "admin") {
+    throw new Error("Legacy admin invites can only be created by a legacy admin.");
+  }
+
+  const token = randomToken(24, 32);
+  const now = Date.now();
   await setDoc(doc(db, "invites", token), {
-    createdAt: Date.now(),
-    createdBy: adminUid,
-    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+    inviteType: type,
+    role: type === "teacher" ? "teacher" : type,
+    groupId,
+    instituteId,
+    createdAt: now,
+    createdBy,
+    expiresAt: now + Math.max(1, Number(expiresInDays) || 7) * 24 * 60 * 60 * 1000,
+    maxUses: Math.max(1, Number(maxUses) || 1),
+    useCount: 0,
     used: false,
+    status: "active",
   });
   return token;
+}
+
+async function findVisibleInstituteByName(actor, instituteName) {
+  const visible = await getVisibleTenantInstituteRecords(actor);
+  const institute = visible.find(item => sameInstituteLabel(item.name, instituteName));
+  if (!institute) throw new Error("Choose an institute inside your access scope.");
+  return institute;
+}
+
+export async function createInviteLink(adminUid, options = {}) {
+  const actor = await getUserRoleDetails(adminUid);
+  const requestedType = String(options.inviteType || "").trim();
+  if (requestedType === "admin") {
+    return createScopedInvite({ inviteType: "admin", createdBy: adminUid });
+  }
+  if (actor.role === "group_admin") {
+    if (requestedType === "institute_admin") {
+      const institute = await findVisibleInstituteByName(actor, options.instituteName);
+      return createScopedInvite({
+        inviteType: "institute_admin",
+        groupId: actor.groupId,
+        instituteId: institute.id,
+        createdBy: adminUid,
+      });
+    }
+    return createScopedInvite({
+      inviteType: "group_admin",
+      groupId: actor.groupId,
+      createdBy: adminUid,
+    });
+  }
+  if (actor.role === "institute_admin") {
+    return createScopedInvite({
+      inviteType: "institute_admin",
+      groupId: actor.groupId,
+      instituteId: actor.instituteId,
+      createdBy: adminUid,
+    });
+  }
+  if (requestedType === "group_admin") {
+    const groupId = String(options.groupId || "").trim();
+    if (groupId) {
+      return createScopedInvite({
+        inviteType: "group_admin",
+        groupId,
+        createdBy: adminUid,
+      });
+    }
+    const institute = await findVisibleInstituteByName(actor, options.instituteName);
+    if (!institute.groupId) throw new Error("This institute is missing its group scope.");
+    return createScopedInvite({
+      inviteType: "group_admin",
+      groupId: institute.groupId,
+      createdBy: adminUid,
+    });
+  }
+  if (requestedType === "institute_admin") {
+    const institute = await findVisibleInstituteByName(actor, options.instituteName);
+    return createScopedInvite({
+      inviteType: "institute_admin",
+      groupId: institute.groupId,
+      instituteId: institute.id,
+      createdBy: adminUid,
+    });
+  }
+  return createScopedInvite({ inviteType: "admin", createdBy: adminUid });
+}
+
+export async function createTeacherInviteForInstitute({ instituteName, createdBy, maxUses = 1 }) {
+  const actor = await getUserRoleDetails(createdBy);
+  const institute = await findVisibleInstituteByName(actor, instituteName);
+  return createTeacherInviteLink({
+    groupId: institute.groupId,
+    instituteId: institute.id,
+    createdBy,
+    maxUses,
+  });
+}
+
+export async function createTeacherInviteLink({ groupId, instituteId, createdBy, maxUses = 1 }) {
+  return createScopedInvite({
+    inviteType: "teacher",
+    groupId,
+    instituteId,
+    createdBy,
+    maxUses,
+  });
 }
 
 export async function verifyInviteToken(token) {
   const snap = await getDoc(doc(db, "invites", token));
   if (!snap.exists()) throw new Error("Invalid invite link.");
   const d = snap.data();
-  if (d.used) throw new Error("This invite link has already been used.");
+  if (d.status === "revoked") throw new Error("This invite link has been revoked.");
+  if (d.used || Number(d.useCount || 0) >= Number(d.maxUses || 1)) {
+    throw new Error("This invite link has already been used.");
+  }
   if (Date.now() > d.expiresAt) throw new Error("This invite link has expired.");
-  return true;
+  return { token, ...d };
 }
 
 export async function useInviteToken(token, uid) {
   const inviteRef = doc(db, "invites", token);
   const roleRef = doc(db, "roles", uid);
-  await runTransaction(db, async (tx) => {
+  const result = await runTransaction(db, async (tx) => {
     const inviteSnap = await tx.get(inviteRef);
     if (!inviteSnap.exists()) throw new Error("Invalid invite link.");
+    const existingRoleSnap = await tx.get(roleRef);
 
     const invite = inviteSnap.data() || {};
     if (Date.now() > invite.expiresAt) throw new Error("This invite link has expired.");
-    if (invite.used && invite.usedBy !== uid) {
+    if (invite.status === "revoked") throw new Error("This invite link has been revoked.");
+    const maxUses = Math.max(1, Number(invite.maxUses || 1));
+    const useCount = Math.max(0, Number(invite.useCount || 0));
+    if ((invite.used || useCount >= maxUses) && invite.usedBy !== uid && invite.lastUsedBy !== uid) {
       throw new Error("This invite link has already been used.");
     }
 
     const now = Date.now();
+    const nextUseCount = invite.usedBy === uid || invite.lastUsedBy === uid
+      ? useCount
+      : useCount + 1;
     tx.set(inviteRef, {
-      used: true,
-      usedBy: uid,
-      usedAt: now,
+      used: nextUseCount >= maxUses,
+      usedBy: maxUses === 1 ? uid : (invite.usedBy || ""),
+      usedAt: maxUses === 1 ? now : (invite.usedAt || 0),
+      useCount: nextUseCount,
+      lastUsedBy: uid,
+      lastUsedAt: now,
     }, { merge: true });
+
+    const inviteType = String(invite.inviteType || invite.role || "admin");
+    if (inviteType === "teacher") {
+      if (!invite.groupId || !invite.instituteId) {
+        throw new Error("This teacher invite is missing its institute scope.");
+      }
+      const existingRole = existingRoleSnap.exists() ? (existingRoleSnap.data() || {}) : {};
+      if (existingRole.groupId && existingRole.groupId !== invite.groupId) {
+        throw new Error("A teacher account cannot belong to institutes in different groups.");
+      }
+      const instituteIds = uniqueTrimmed([
+        ...(Array.isArray(existingRole.instituteIds) ? existingRole.instituteIds : []),
+        invite.instituteId,
+      ]);
+      tx.set(doc(db, "memberships", membershipDocId(uid, invite.instituteId)), {
+        userId: uid,
+        groupId: invite.groupId,
+        instituteId: invite.instituteId,
+        role: "teacher",
+        status: "approved",
+        source: "invite",
+        inviteToken: token,
+        approvedAt: now,
+        approvedBy: invite.createdBy || "",
+        createdAt: now,
+      }, { merge: true });
+      if (!isAdminRole(existingRole.role) && existingRole.role !== "manager") {
+        tx.set(roleRef, {
+          role: "teacher",
+          groupId: invite.groupId,
+          instituteIds,
+          teaches: true,
+          inviteToken: token,
+          updatedAt: now,
+        }, { merge: true });
+      }
+      return {
+        role: existingRole.role || "teacher",
+        inviteType,
+        groupId: invite.groupId,
+        instituteId: invite.instituteId,
+      };
+    }
+
+    const role = ["group_admin", "institute_admin"].includes(inviteType) ? inviteType : "admin";
     tx.set(roleRef, {
-      role: "admin",
+      role,
+      groupId: invite.groupId || "",
+      instituteId: invite.instituteId || "",
+      instituteIds: invite.instituteId ? [invite.instituteId] : [],
       adminMode: "admin_only",
       teaches: false,
       grantedAt: now,
-      grantedBy: "invite-link",
+      grantedBy: invite.createdBy || "invite-link",
       inviteToken: token,
     }, { merge: true });
+    return {
+      role,
+      inviteType,
+      groupId: invite.groupId || "",
+      instituteId: invite.instituteId || "",
+    };
   });
+  return result;
 }
 
 export async function getInvites(adminUid) {
   try {
-    const snap = await getDocs(collection(db, "invites"));
+    const actor = await getUserRoleDetails(adminUid);
+    const source = actor.role === "group_admin" && actor.groupId
+      ? query(collection(db, "invites"), where("groupId", "==", actor.groupId))
+      : actor.role === "institute_admin" && actor.instituteId
+        ? query(collection(db, "invites"), where("instituteId", "==", actor.instituteId))
+        : collection(db, "invites");
+    const snap = await getDocs(source);
     return snap.docs.map(d => ({ token: d.id, ...d.data() }))
       .sort((a, b) => b.createdAt - a.createdAt);
   } catch { return []; }
+}
+
+// ── Teacher memberships and join requests ────────────────────────────────────
+export async function requestTeacherJoinByInstituteCode(uid, code) {
+  const instituteCode = normaliseInstituteCode(code);
+  if (!instituteCode) throw new Error("Enter the private Institute ID.");
+
+  const codeSnap = await getDoc(doc(db, "instituteCodes", instituteCode));
+  if (!codeSnap.exists() || codeSnap.data()?.status === "deleted") {
+    throw new Error("That Institute ID is not valid.");
+  }
+  const codeData = codeSnap.data() || {};
+  const institute = {
+    id: String(codeData.instituteId || "").trim(),
+    groupId: String(codeData.groupId || "").trim(),
+    name: String(codeData.instituteName || "").trim(),
+    instituteCode,
+    status: codeData.status || "active",
+  };
+  if (!institute.id || !institute.groupId || !institute.name) {
+    throw new Error("That Institute ID is incomplete. Ask an admin to create a new invite or code.");
+  }
+  const existingMembership = await getDoc(doc(db, "memberships", membershipDocId(uid, institute.id)));
+  if (existingMembership.exists() && existingMembership.data()?.status === "approved") {
+    return { status: "approved", institute };
+  }
+
+  const role = await getUserRoleDetails(uid);
+  if (role.groupId && role.groupId !== institute.groupId) {
+    throw new Error("Your teacher account is already assigned to a different group of institutes.");
+  }
+
+  const now = Date.now();
+  const requestId = membershipDocId(uid, institute.id);
+  const currentUser = auth.currentUser;
+  await setDoc(doc(db, "joinRequests", requestId), {
+    userId: uid,
+    teacherName: currentUser?.displayName || "",
+    teacherEmail: currentUser?.email || "",
+    groupId: institute.groupId,
+    instituteId: institute.id,
+    instituteName: institute.name,
+    instituteCode,
+    requestedRole: "teacher",
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  }, { merge: true });
+  if (!isAdminRole(role.role) && role.role !== "manager") {
+    await setDoc(roleDocRef(uid), {
+      role: "teacher",
+      groupId: role.groupId || institute.groupId,
+      instituteIds: Array.isArray(role.instituteIds) ? role.instituteIds : [],
+      teaches: true,
+      updatedAt: now,
+    }, { merge: true });
+  }
+  return { status: "pending", institute, requestId };
+}
+
+export async function getPendingJoinRequests() {
+  const actor = await getCurrentRoleDetails();
+  let source;
+  if (actor.role === "group_admin" && actor.groupId) {
+    source = query(collection(db, "joinRequests"), where("groupId", "==", actor.groupId));
+  } else if (actor.role === "institute_admin" && actor.instituteId) {
+    source = query(collection(db, "joinRequests"), where("instituteId", "==", actor.instituteId));
+  } else if (["manager", "admin"].includes(actor.role)) {
+    source = collection(db, "joinRequests");
+  } else {
+    return [];
+  }
+  const snap = await getDocs(source);
+  return snap.docs
+    .map(item => ({ id: item.id, ...item.data() }))
+    .filter(item => item.status === "pending")
+    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+}
+
+export async function approveTeacherJoinRequest(requestId, approvedByUid) {
+  const requestRef = doc(db, "joinRequests", requestId);
+  const requestSnap = await getDoc(requestRef);
+  if (!requestSnap.exists()) throw new Error("This join request no longer exists.");
+  const request = requestSnap.data() || {};
+  await assertCanManageInstitute(request.groupId, request.instituteId);
+
+  const roleRef = roleDocRef(request.userId);
+  const membershipRef = doc(db, "memberships", membershipDocId(request.userId, request.instituteId));
+  const now = Date.now();
+  await runTransaction(db, async tx => {
+    const [latestRequestSnap, roleSnap] = await Promise.all([
+      tx.get(requestRef),
+      tx.get(roleRef),
+    ]);
+    if (!latestRequestSnap.exists() || latestRequestSnap.data()?.status !== "pending") {
+      throw new Error("This join request has already been resolved.");
+    }
+    const currentRole = roleSnap.exists() ? (roleSnap.data() || {}) : {};
+    if (currentRole.groupId && currentRole.groupId !== request.groupId) {
+      throw new Error("This teacher now belongs to a different group.");
+    }
+    const instituteIds = uniqueTrimmed([
+      ...(Array.isArray(currentRole.instituteIds) ? currentRole.instituteIds : []),
+      request.instituteId,
+    ]);
+    tx.set(membershipRef, {
+      userId: request.userId,
+      groupId: request.groupId,
+      instituteId: request.instituteId,
+      role: "teacher",
+      status: "approved",
+      source: "join_request",
+      approvedAt: now,
+      approvedBy: approvedByUid,
+      createdAt: Number(request.createdAt || now),
+    }, { merge: true });
+    if (!isAdminRole(currentRole.role) && currentRole.role !== "manager") {
+      tx.set(roleRef, {
+        role: "teacher",
+        groupId: request.groupId,
+        instituteIds,
+        teaches: true,
+        updatedAt: now,
+      }, { merge: true });
+    }
+    tx.set(requestRef, {
+      status: "approved",
+      approvedAt: now,
+      approvedBy: approvedByUid,
+      updatedAt: now,
+    }, { merge: true });
+  });
+  return { id: requestId, ...request, status: "approved" };
+}
+
+export async function rejectTeacherJoinRequest(requestId, rejectedByUid) {
+  const requestRef = doc(db, "joinRequests", requestId);
+  const requestSnap = await getDoc(requestRef);
+  if (!requestSnap.exists()) throw new Error("This join request no longer exists.");
+  const request = requestSnap.data() || {};
+  await assertCanManageInstitute(request.groupId, request.instituteId);
+  await setDoc(requestRef, {
+    status: "rejected",
+    rejectedAt: Date.now(),
+    rejectedBy: rejectedByUid,
+    updatedAt: Date.now(),
+  }, { merge: true });
+}
+
+// ── Manager dashboard ────────────────────────────────────────────────────────
+export async function getManagerDashboard() {
+  await assertManagerAccess();
+  const [groups, institutes, rolesSnap, membershipsSnap] = await Promise.all([
+    getTenantGroups(),
+    getTenantInstitutes(),
+    getDocs(collection(db, "roles")),
+    getDocs(collection(db, "memberships")),
+  ]);
+  const roles = rolesSnap.docs.map(item => ({ uid: item.id, ...item.data() }));
+  const memberships = membershipsSnap.docs
+    .map(item => ({ id: item.id, ...item.data() }))
+    .filter(item => item.status === "approved");
+
+  const groupsWithDetails = groups.map(group => {
+    const childInstitutes = institutes.filter(item => item.groupId === group.id);
+    const groupMemberships = memberships.filter(item => item.groupId === group.id);
+    return {
+      ...group,
+      institutes: childInstitutes,
+      instituteCount: childInstitutes.length,
+      groupAdminCount: roles.filter(item => item.role === "group_admin" && item.groupId === group.id).length,
+      instituteAdminCount: roles.filter(item => item.role === "institute_admin" && item.groupId === group.id).length,
+      teacherCount: new Set(groupMemberships.map(item => item.userId)).size,
+      membershipCount: groupMemberships.length,
+    };
+  });
+
+  return {
+    groups: groupsWithDetails,
+    totals: {
+      topLevelInstitutes: groups.length,
+      groups: groups.length,
+      institutes: institutes.length,
+      admins: roles.filter(item => ["group_admin", "institute_admin"].includes(item.role)).length,
+      teachers: new Set(memberships.map(item => item.userId)).size,
+    },
+  };
+}
+
+// Retained temporarily for migration-source comparison only. Production
+// migration execution lives in scripts/genesis-migration.mjs and is not
+// exported to any browser surface.
+async function previewGenesisMigration() {
+  await assertManagerAccess();
+  const [legacyInstitutes, teachers, rolesSnap, architectureSnap] = await Promise.all([
+    readLegacyGlobalInstitutes(),
+    getAllTeachers(),
+    getDocs(collection(db, "roles")),
+    getDoc(doc(db, "config", "tenantArchitecture")),
+  ]);
+  const legacyAdmins = rolesSnap.docs.filter(item => item.data()?.role === "admin");
+  return {
+    instituteCount: legacyInstitutes.length,
+    teacherCount: teachers.length,
+    legacyAdminCount: legacyAdmins.length,
+    architectureEnabled: architectureSnap.exists() && architectureSnap.data()?.enabled === true,
+  };
+}
+
+async function commitWriteOperations(operations, batchSize = 400) {
+  for (let start = 0; start < operations.length; start += batchSize) {
+    const batch = writeBatch(db);
+    operations.slice(start, start + batchSize).forEach(operation => {
+      if (operation.type === "delete") {
+        batch.delete(operation.ref);
+      } else {
+        batch.set(operation.ref, operation.data, operation.options || {});
+      }
+    });
+    await batch.commit();
+  }
+}
+
+async function runGenesisMigration(managerUid = "") {
+  const actor = await assertManagerAccess();
+  const ownerUid = managerUid || actor.uid;
+  const now = Date.now();
+
+  const existingGenesisSnap = await getDocs(
+    query(collection(db, "groups"), where("legacyKey", "==", "genesis"))
+  );
+  let genesisGroup = existingGenesisSnap.docs[0]
+    ? { id: existingGenesisSnap.docs[0].id, ...existingGenesisSnap.docs[0].data() }
+    : null;
+  if (!genesisGroup) {
+    const groupRef = doc(collection(db, "groups"));
+    const payload = {
+      name: "Genesis Group",
+      nameKey: "genesis group",
+      kind: "group",
+      status: "active",
+      legacyKey: "genesis",
+      createdAt: now,
+      createdBy: ownerUid,
+      updatedAt: now,
+      updatedBy: ownerUid,
+      schemaVersion: 1,
+    };
+    await setDoc(groupRef, payload);
+    genesisGroup = { id: groupRef.id, ...payload };
+  }
+
+  const teacherUids = await getAllTeacherMainDocUids();
+  const teacherRecords = [];
+  const discoveredInstituteNames = new Set(await readLegacyGlobalInstitutes());
+  for (const uid of teacherUids) {
+    const [mainSnap, indexSnap] = await Promise.all([
+      getDoc(userDocRef(uid)),
+      getDoc(doc(db, "teachers", uid)),
+    ]);
+    const main = mainSnap.exists() ? (mainSnap.data() || {}) : {};
+    const index = indexSnap.exists() ? (indexSnap.data() || {}) : {};
+    const names = uniqueTrimmed([
+      ...(Array.isArray(index.institutes) ? index.institutes : []),
+      ...(Array.isArray(main.institutes) ? main.institutes : []),
+      ...(Array.isArray(main.profile?.institutes) ? main.profile.institutes : []),
+      ...(Array.isArray(main.classes) ? main.classes.map(item => item?.institute) : []),
+    ]);
+    names.forEach(name => discoveredInstituteNames.add(name));
+    teacherRecords.push({ uid, main, index, names, hasMain: mainSnap.exists(), hasIndex: indexSnap.exists() });
+  }
+
+  const existingInstitutes = await getTenantInstitutes(genesisGroup.id);
+  const instituteByName = new Map(
+    existingInstitutes.map(item => [normaliseInstituteKey(item.name), item])
+  );
+  let institutesCreated = 0;
+  for (const instituteName of uniqueTrimmed(Array.from(discoveredInstituteNames))) {
+    const key = normaliseInstituteKey(instituteName);
+    if (!key || instituteByName.has(key)) continue;
+    const created = await createInstituteRecord({
+      groupId: genesisGroup.id,
+      name: instituteName,
+      legacyName: instituteName,
+      createdBy: ownerUid,
+    });
+    instituteByName.set(key, created);
+    institutesCreated += 1;
+  }
+
+  const rolesSnap = await getDocs(collection(db, "roles"));
+  const roleMap = new Map(rolesSnap.docs.map(item => [item.id, item.data() || {}]));
+  const operations = [];
+  const [syllabusSnap, publishedSyllabusSnap, telegramConfigSnap] = await Promise.all([
+    getDocs(collection(db, "syllabusTemplates")),
+    getDocs(collection(db, "publishedSyllabi")),
+    getDoc(doc(db, "config", "ledgrTelegramDelivery")),
+  ]);
+  const syllabusInstituteNames = source => uniqueTrimmed([
+    source?.instituteName,
+    source?.draft?.instituteName,
+    source?.published?.instituteName,
+    ...(Array.isArray(source?.scope) ? source.scope.map(item => item?.instituteName) : []),
+    ...(Array.isArray(source?.draft?.scope) ? source.draft.scope.map(item => item?.instituteName) : []),
+    ...(Array.isArray(source?.published?.scope) ? source.published.scope.map(item => item?.instituteName) : []),
+    ...(Array.isArray(source?.targets) ? source.targets.map(item => item?.instituteName) : []),
+    ...(Array.isArray(source?.draft?.targets) ? source.draft.targets.map(item => item?.instituteName) : []),
+    ...(Array.isArray(source?.published?.targets) ? source.published.targets.map(item => item?.instituteName) : []),
+  ]);
+  [...syllabusSnap.docs, ...publishedSyllabusSnap.docs].forEach(item => {
+    const instituteIds = syllabusInstituteNames(item.data() || {})
+      .map(name => instituteByName.get(normaliseInstituteKey(name))?.id)
+      .filter(Boolean);
+    operations.push({
+      ref: item.ref,
+      data: {
+        groupId: genesisGroup.id,
+        instituteIds: uniqueTrimmed(instituteIds),
+        tenantMigratedAt: now,
+      },
+      options: { merge: true },
+    });
+  });
+  if (telegramConfigSnap.exists()) {
+    const telegramConfig = telegramConfigSnap.data() || {};
+    operations.push({
+      ref: telegramConfigSnap.ref,
+      data: {
+        recipients: (Array.isArray(telegramConfig.recipients) ? telegramConfig.recipients : []).map(recipient => {
+          const institute = instituteByName.get(normaliseInstituteKey(recipient?.institute));
+          return {
+            ...recipient,
+            groupId: institute?.groupId || genesisGroup.id,
+            instituteId: institute?.id || "",
+          };
+        }),
+        fullReportRecipients: (Array.isArray(telegramConfig.fullReportRecipients) ? telegramConfig.fullReportRecipients : []).map(recipient => ({
+          ...recipient,
+          groupId: genesisGroup.id,
+        })),
+        tenantMigratedAt: now,
+      },
+      options: { merge: true },
+    });
+  }
+  let membershipCount = 0;
+  let teacherCount = 0;
+  let classCount = 0;
+
+  teacherRecords.forEach(record => {
+    const memberships = record.names
+      .map(name => instituteByName.get(normaliseInstituteKey(name)))
+      .filter(Boolean);
+    const instituteIds = uniqueTrimmed(memberships.map(item => item.id));
+    if (!instituteIds.length) return;
+    teacherCount += 1;
+    memberships.forEach(institute => {
+      membershipCount += 1;
+      operations.push({
+        ref: doc(db, "memberships", membershipDocId(record.uid, institute.id)),
+        data: {
+          userId: record.uid,
+          groupId: genesisGroup.id,
+          instituteId: institute.id,
+          role: "teacher",
+          status: "approved",
+          source: "genesis_migration",
+          approvedAt: now,
+          approvedBy: ownerUid,
+          createdAt: now,
+        },
+        options: { merge: true },
+      });
+    });
+
+    const existingRole = roleMap.get(record.uid) || {};
+    if (existingRole.role !== "manager" && !isAdminRole(existingRole.role)) {
+      operations.push({
+        ref: roleDocRef(record.uid),
+        data: {
+          role: "teacher",
+          groupId: genesisGroup.id,
+          instituteIds,
+          teaches: true,
+          migratedAt: now,
+        },
+        options: { merge: true },
+      });
+    }
+
+    if (record.hasIndex || record.hasMain) {
+      operations.push({
+        ref: doc(db, "teachers", record.uid),
+        data: {
+          ...record.index,
+          uid: record.uid,
+          groupIds: [genesisGroup.id],
+          instituteIds,
+          migratedAt: now,
+        },
+        options: { merge: true },
+      });
+    }
+
+    if (record.hasMain) {
+      const classes = (Array.isArray(record.main.classes) ? record.main.classes : []).map(cls => {
+        const institute = instituteByName.get(normaliseInstituteKey(cls?.institute));
+        if (!institute) return cls;
+        classCount += 1;
+        return {
+          ...cls,
+          groupId: genesisGroup.id,
+          instituteId: institute.id,
+        };
+      });
+      operations.push({
+        ref: userDocRef(record.uid),
+        data: {
+          classes,
+          groupId: genesisGroup.id,
+          groupIds: [genesisGroup.id],
+          instituteIds,
+          tenantMigratedAt: now,
+        },
+        options: { merge: true },
+      });
+    }
+  });
+
+  let adminCount = 0;
+  rolesSnap.docs.forEach(roleSnap => {
+    const role = roleSnap.data() || {};
+    if (role.role === "admin") {
+      adminCount += 1;
+      operations.push({
+        ref: roleSnap.ref,
+        data: {
+          role: "group_admin",
+          groupId: genesisGroup.id,
+          instituteId: "",
+          instituteIds: [],
+          migratedFromRole: "admin",
+          migratedAt: now,
+          migratedBy: ownerUid,
+        },
+        options: { merge: true },
+      });
+    } else if (role.role === "group_admin" && role.groupId === genesisGroup.id) {
+      adminCount += 1;
+    }
+  });
+
+  await commitWriteOperations(operations);
+  const result = {
+    status: "completed",
+    genesisGroupId: genesisGroup.id,
+    instituteCount: instituteByName.size,
+    institutesCreated,
+    teacherCount,
+    membershipCount,
+    classCount,
+    adminCount,
+    completedAt: now,
+    completedBy: ownerUid,
+  };
+  const finalBatch = writeBatch(db);
+  finalBatch.set(doc(db, "config", "tenantArchitecture"), {
+    enabled: true,
+    schemaVersion: 1,
+    genesisGroupId: genesisGroup.id,
+    updatedAt: now,
+    updatedBy: ownerUid,
+  }, { merge: true });
+  finalBatch.set(doc(db, "config", "tenantMigrationGenesis"), result, { merge: true });
+  await finalBatch.commit();
+  return result;
 }
 
 // ── Remove teacher from system ────────────────────────────────────────────────
@@ -1388,7 +2381,7 @@ export async function restoreClassFromTeacherTrash(uid, classId, extraRestoreFie
 // ── Global institutes (admin-controlled) ──────────────────────────────────────
 // config/institutes = { list: ["KIS", "Genesis Karnal", ...] }
 
-export async function getGlobalInstitutes() {
+async function readLegacyGlobalInstitutes() {
   try {
     const snap = await getDoc(doc(db, "config", "institutes"));
     if (snap.exists()) {
@@ -1402,10 +2395,40 @@ export async function getGlobalInstitutes() {
   } catch { return []; }
 }
 
+export async function getGlobalInstitutes() {
+  const role = await getCurrentRoleDetails();
+  if (role.role === "teacher") {
+    return getTeacherAllowedInstitutes(role.uid);
+  }
+
+  if (isPortalRole(role.role)) {
+    const visibleInstitutes = await getVisibleTenantInstituteRecords(role);
+    if (visibleInstitutes.length) {
+      return uniqueTrimmed(visibleInstitutes.map(item => item.name));
+    }
+    const architectureSnap = await getDoc(doc(db, "config", "tenantArchitecture")).catch(() => null);
+    if (architectureSnap?.exists() && architectureSnap.data()?.enabled === true && role.role !== "admin") {
+      return [];
+    }
+  }
+  return readLegacyGlobalInstitutes();
+}
+
 export async function saveGlobalInstitute(name) {
   const label = String(name || "").trim();
   if(!label) return;
   if(normaliseInstituteKey(label) === "__noop__") return;
+  const actor = await getCurrentRoleDetails();
+  if (actor.role === "group_admin" && actor.groupId) {
+    await createTenantInstitute({ groupId: actor.groupId, name: label }, actor.uid);
+    return;
+  }
+  if (actor.role === "institute_admin") {
+    throw new Error("Institute Admins cannot create another institute.");
+  }
+  if (actor.role === "manager") {
+    throw new Error("Choose the parent group in the Manager Portal before creating an institute.");
+  }
   const snap = await getDoc(doc(db, "config", "institutes"));
   const data = snap.exists() ? (snap.data() || {}) : {};
   const existing = Array.isArray(data.list) ? data.list : [];
@@ -1668,6 +2691,12 @@ function normaliseSyllabusTemplate(source = {}) {
   const firstPublishedScope = publishedScope[0] || { instituteName: "", sectionNames: [] };
   return {
     id: String(source.id || ""),
+    groupId: String(source.groupId || draft.groupId || publishedSource.groupId || ""),
+    instituteIds: uniqueTrimmed([
+      ...(Array.isArray(source.instituteIds) ? source.instituteIds : []),
+      ...(Array.isArray(draft.instituteIds) ? draft.instituteIds : []),
+      ...(Array.isArray(publishedSource.instituteIds) ? publishedSource.instituteIds : []),
+    ]),
     subjectId: String(source.subjectId || ""),
     subjectName: String(source.subjectName || ""),
     name: String(source.name || draft.name || publishedSource.name || ""),
@@ -1791,9 +2820,20 @@ function syllabusTemplateId({ subjectId, name, scope, academicYear, curriculum, 
 
 export async function getSyllabusTemplates() {
   try {
+    const actor = await getCurrentRoleDetails();
+    const templateSource = actor.role === "group_admin" && actor.groupId
+      ? query(collection(db, "syllabusTemplates"), where("groupId", "==", actor.groupId))
+      : actor.role === "institute_admin" && actor.instituteId
+        ? query(collection(db, "syllabusTemplates"), where("instituteIds", "array-contains", actor.instituteId))
+        : collection(db, "syllabusTemplates");
+    const publishedSource = actor.role === "group_admin" && actor.groupId
+      ? query(collection(db, "publishedSyllabi"), where("groupId", "==", actor.groupId))
+      : actor.role === "institute_admin" && actor.instituteId
+        ? query(collection(db, "publishedSyllabi"), where("instituteIds", "array-contains", actor.instituteId))
+        : collection(db, "publishedSyllabi");
     const [templateSnap, publishedSnap] = await Promise.all([
-      getDocs(collection(db, "syllabusTemplates")),
-      getDocs(collection(db, "publishedSyllabi")),
+      getDocs(templateSource),
+      getDocs(publishedSource),
     ]);
     const merged = new Map();
 
@@ -1806,8 +2846,27 @@ export async function getSyllabusTemplates() {
       merged.set(item.id, mergeSyllabusTemplateSource(current, { id: item.id, ...item.data() }));
     });
 
-    return [...merged.values()]
-      .map(item => normaliseSyllabusTemplate(item))
+    let templates = [...merged.values()].map(item => normaliseSyllabusTemplate(item));
+    if (["group_admin", "institute_admin"].includes(actor.role)) {
+      const visibleInstitutes = await getVisibleTenantInstituteRecords(actor);
+      const visibleIds = new Set(visibleInstitutes.map(item => item.id));
+      const visibleNames = visibleInstitutes.map(item => item.name);
+      templates = templates.filter(template => {
+        if (template.groupId && template.groupId !== actor.groupId) return false;
+        if (actor.role === "institute_admin" && template.instituteIds.length) {
+          return template.instituteIds.includes(actor.instituteId);
+        }
+        const scopeNames = uniqueTrimmed([
+          template.instituteName,
+          ...(template.scope || []).map(item => item?.instituteName),
+          ...(template.draft?.scope || []).map(item => item?.instituteName),
+          ...(template.published?.scope || []).map(item => item?.instituteName),
+        ]);
+        return template.instituteIds.some(id => visibleIds.has(id))
+          || scopeNames.some(name => visibleNames.some(visibleName => sameInstituteLabel(name, visibleName)));
+      });
+    }
+    return templates
       .sort((a, b) => {
         const subjectOrder = a.subjectName.localeCompare(b.subjectName, undefined, { sensitivity: "base" });
         if (subjectOrder) return subjectOrder;
@@ -1839,6 +2898,24 @@ export async function saveSyllabusDraft(template, adminUid = "") {
   });
   const ref = doc(db, "syllabusTemplates", id);
   const now = Date.now();
+  const actor = await getCurrentRoleDetails();
+  const scopeNames = uniqueTrimmed(clean.draft.scope.map(item => item?.instituteName));
+  const visibleInstitutes = await getVisibleTenantInstituteRecords(actor);
+  const matchedInstitutes = scopeNames.map(name =>
+    visibleInstitutes.find(item => sameInstituteLabel(item.name, name))
+  ).filter(Boolean);
+  if (
+    ["group_admin", "institute_admin"].includes(actor.role)
+    && matchedInstitutes.length !== scopeNames.length
+  ) {
+    throw new Error("The syllabus scope includes an institute outside your access.");
+  }
+  const tenantFields = matchedInstitutes.length
+    ? {
+        groupId: actor.groupId || matchedInstitutes[0].groupId || "",
+        instituteIds: uniqueTrimmed(matchedInstitutes.map(item => item.id)),
+      }
+    : {};
 
   await runTransaction(db, async tx => {
     const snap = await tx.get(ref);
@@ -1859,6 +2936,7 @@ export async function saveSyllabusDraft(template, adminUid = "") {
       createdBy: String(current.createdBy || adminUid || "admin"),
       updatedAt: now,
       updatedBy: adminUid || "admin",
+      ...tenantFields,
       draft: clean.draft,
       published: current.published || null,
     }, { merge: true });
@@ -1871,12 +2949,27 @@ export async function saveSyllabusDraft(template, adminUid = "") {
 export async function publishSyllabusTemplate(templateId, adminUid = "") {
   if (!templateId) throw new Error("Save the syllabus draft before publishing.");
   const ref = doc(db, "syllabusTemplates", templateId);
+  const actor = await getCurrentRoleDetails();
   let publishedResult = null;
 
   await runTransaction(db, async tx => {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error("Syllabus draft was not found.");
     const current = normaliseSyllabusTemplate({ id: snap.id, ...snap.data() });
+    if (
+      ["group_admin", "institute_admin"].includes(actor.role)
+      && current.groupId
+      && current.groupId !== actor.groupId
+    ) {
+      throw new Error("This syllabus is outside your group.");
+    }
+    if (
+      actor.role === "institute_admin"
+      && current.instituteIds.length
+      && !current.instituteIds.includes(actor.instituteId)
+    ) {
+      throw new Error("This syllabus is outside your institute.");
+    }
     if (!current.draft.chapters.length) throw new Error("Add at least one chapter before publishing.");
     const nextVersion = current.currentVersion + 1;
     const now = Date.now();
@@ -1887,12 +2980,16 @@ export async function publishSyllabusTemplate(templateId, adminUid = "") {
       version: nextVersion,
       publishedAt: now,
       publishedBy: adminUid || "admin",
+      groupId: current.groupId || "",
+      instituteIds: current.instituteIds || [],
     };
     tx.set(doc(db, "syllabusTemplates", templateId, "versions", String(nextVersion)), published);
     tx.set(doc(db, "publishedSyllabi", templateId), {
       ...published,
       templateId,
       updatedAt: now,
+      groupId: current.groupId || "",
+      instituteIds: current.instituteIds || [],
     });
     tx.set(ref, {
       status: "published",
@@ -1910,6 +3007,23 @@ export async function publishSyllabusTemplate(templateId, adminUid = "") {
 export async function deleteSyllabusTemplate(templateId) {
   const cleanId = String(templateId || "").trim();
   if (!cleanId) throw new Error("Choose a syllabus to delete.");
+  const [actor, templateSnap] = await Promise.all([
+    getCurrentRoleDetails(),
+    getDoc(doc(db, "syllabusTemplates", cleanId)),
+  ]);
+  if (templateSnap.exists() && ["group_admin", "institute_admin"].includes(actor.role)) {
+    const template = normaliseSyllabusTemplate({ id: cleanId, ...templateSnap.data() });
+    if (template.groupId && template.groupId !== actor.groupId) {
+      throw new Error("This syllabus is outside your group.");
+    }
+    if (
+      actor.role === "institute_admin"
+      && template.instituteIds.length
+      && !template.instituteIds.includes(actor.instituteId)
+    ) {
+      throw new Error("This syllabus is outside your institute.");
+    }
+  }
   const versionsRef = collection(db, "syllabusTemplates", cleanId, "versions");
   const versions = await getDocs(versionsRef);
   const batch = writeBatch(db);
@@ -1989,6 +3103,8 @@ function normaliseLedgrTelegramRecipients(list) {
           .trim()
           .replace(/\s+/g, "_"),
         institute,
+        groupId: String(item?.groupId || "").trim(),
+        instituteId: String(item?.instituteId || "").trim(),
         label,
         username,
         chatId,
@@ -2029,6 +3145,7 @@ function normaliseLedgrTelegramFullReportRecipients(list) {
         id: String(item?.id || `telegram_full_${chatId}_${index + 1}`)
           .trim()
           .replace(/\s+/g, "_"),
+        groupId: String(item?.groupId || "").trim(),
         label,
         username,
         chatId,
@@ -2095,7 +3212,22 @@ export async function saveLedgrReportSchedule(schedule = {}, updatedBy = "") {
 export async function getLedgrTelegramConfig() {
   try {
     const snap = await getDoc(doc(db, "config", "ledgrTelegramDelivery"));
-    return snap.exists() ? snap.data() : null;
+    if (!snap.exists()) return null;
+    const config = snap.data() || {};
+    const actor = await getCurrentRoleDetails();
+    if (!["group_admin", "institute_admin"].includes(actor.role)) return config;
+    const visible = await getVisibleTenantInstituteRecords(actor);
+    const visibleIds = new Set(visible.map(item => item.id));
+    const visibleNames = visible.map(item => item.name);
+    const recipients = (Array.isArray(config.recipients) ? config.recipients : []).filter(item =>
+      (item?.instituteId && visibleIds.has(item.instituteId))
+      || visibleNames.some(name => sameInstituteLabel(name, item?.institute))
+    );
+    const fullReportRecipients = actor.role === "group_admin"
+      ? (Array.isArray(config.fullReportRecipients) ? config.fullReportRecipients : [])
+          .filter(item => item?.groupId === actor.groupId)
+      : [];
+    return { ...config, recipients, fullReportRecipients };
   } catch (error) {
     console.error("getLedgrTelegramConfig", error);
     return null;
@@ -2103,6 +3235,7 @@ export async function getLedgrTelegramConfig() {
 }
 
 export async function saveLedgrTelegramConfig(config = {}, updatedBy = "") {
+  const actor = await getCurrentRoleDetails();
   const botUsernameRaw = String(config.botUsername || "").trim();
   if (botUsernameRaw && !/^@?[A-Za-z0-9_]{5,}$/.test(botUsernameRaw)) {
     throw new Error("Enter a valid Telegram bot username.");
@@ -2114,13 +3247,51 @@ export async function saveLedgrTelegramConfig(config = {}, updatedBy = "") {
   const legacyFullReportRecipients = rawRecipients.filter(item =>
     !String(item?.institute || "").trim() && hasTelegramRecipientData(item)
   );
-  const recipients = normaliseLedgrTelegramRecipients(
+  let recipients = normaliseLedgrTelegramRecipients(
     rawRecipients.filter(item => String(item?.institute || "").trim())
   );
-  const fullReportRecipients = normaliseLedgrTelegramFullReportRecipients([
+  let fullReportRecipients = normaliseLedgrTelegramFullReportRecipients([
     ...(Array.isArray(config.fullReportRecipients) ? config.fullReportRecipients : []),
     ...legacyFullReportRecipients,
   ]);
+  const existingSnap = await getDoc(doc(db, "config", "ledgrTelegramDelivery"));
+  const existing = existingSnap.exists() ? (existingSnap.data() || {}) : {};
+  if (["group_admin", "institute_admin"].includes(actor.role)) {
+    const visible = await getVisibleTenantInstituteRecords(actor);
+    const visibleNames = visible.map(item => item.name);
+    const visibleIds = new Set(visible.map(item => item.id));
+    const matchInstitute = item => visible.find(institute =>
+      (item?.instituteId && item.instituteId === institute.id)
+      || sameInstituteLabel(item?.institute, institute.name)
+    );
+    const outsideRecipients = (Array.isArray(existing.recipients) ? existing.recipients : []).filter(item =>
+      !visibleIds.has(item?.instituteId)
+      && !visibleNames.some(name => sameInstituteLabel(name, item?.institute))
+    );
+    recipients = recipients.map(item => {
+      const institute = matchInstitute(item);
+      if (!institute) throw new Error("A Telegram route is outside your institute access.");
+      return {
+        ...item,
+        groupId: institute.groupId,
+        instituteId: institute.id,
+      };
+    });
+    recipients = [...outsideRecipients, ...recipients];
+
+    if (actor.role === "group_admin") {
+      const outsideFullRecipients = (Array.isArray(existing.fullReportRecipients) ? existing.fullReportRecipients : [])
+        .filter(item => item?.groupId !== actor.groupId);
+      fullReportRecipients = [
+        ...outsideFullRecipients,
+        ...fullReportRecipients.map(item => ({ ...item, groupId: actor.groupId })),
+      ];
+    } else {
+      fullReportRecipients = Array.isArray(existing.fullReportRecipients)
+        ? existing.fullReportRecipients
+        : [];
+    }
+  }
 
   const payload = {
     schemaVersion: 2,
@@ -2140,10 +3311,34 @@ export async function saveLedgrTelegramConfig(config = {}, updatedBy = "") {
   };
 
   await setDoc(doc(db, "config", "ledgrTelegramDelivery"), payload, { merge: true });
-  return payload;
+  return getLedgrTelegramConfig();
 }
 
 export async function deleteGlobalInstitute(name) {
+  const actor = await getCurrentRoleDetails();
+  if (["group_admin", "institute_admin"].includes(actor.role)) {
+    const visible = await getVisibleTenantInstituteRecords(actor);
+    const institute = visible.find(item => sameInstituteLabel(item.name, name));
+    if (!institute) throw new Error("That institute is outside your access scope.");
+    await assertCanManageInstitute(institute.groupId, institute.id);
+    const now = Date.now();
+    const batch = writeBatch(db);
+    batch.set(doc(db, "institutes", institute.id), {
+      status: "deleted",
+      deletedAt: now,
+      deletedBy: actor.uid,
+      updatedAt: now,
+      updatedBy: actor.uid,
+    }, { merge: true });
+    if (institute.instituteCode) {
+      batch.set(doc(db, "instituteCodes", institute.instituteCode), {
+        status: "deleted",
+        deletedAt: now,
+      }, { merge: true });
+    }
+    await batch.commit();
+    return;
+  }
   const snap = await getDoc(doc(db, "config", "institutes"));
   const data = snap.exists() ? (snap.data() || {}) : {};
   const existing = Array.isArray(data.list) ? data.list : [];
@@ -2345,11 +3540,31 @@ export async function renameGlobalInstitute(oldName, newName, extra = {}) {
 export async function getAllInstituteSections() {
   try {
     const snap = await getDoc(doc(db, "config", "sections"));
-    return snap.exists() ? snap.data() : {};
+    if (!snap.exists()) return {};
+    const sections = snap.data() || {};
+    const role = await getCurrentRoleDetails();
+    if (["manager", "admin"].includes(role.role)) return sections;
+    const visibleNames = await getGlobalInstitutes();
+    return Object.fromEntries(
+      Object.entries(sections).filter(([name]) =>
+        visibleNames.some(visibleName => sameInstituteLabel(visibleName, name))
+      )
+    );
   } catch { return {}; }
 }
 
+async function assertCanManageInstituteName(instituteName) {
+  const actor = await getCurrentRoleDetails();
+  if (["manager", "admin"].includes(actor.role)) return actor;
+  const visible = await getVisibleTenantInstituteRecords(actor);
+  const institute = visible.find(item => sameInstituteLabel(item.name, instituteName));
+  if (!institute) throw new Error("That institute is outside your access scope.");
+  await assertCanManageInstitute(institute.groupId, institute.id);
+  return actor;
+}
+
 export async function saveInstituteGradeGroups(instituteName, gradeGroups, extraPatch = {}) {
+  await assertCanManageInstituteName(instituteName);
   const snap = await getDoc(doc(db, "config", "sections"));
   const existing = snap.exists() ? snap.data() : {};
   await setDoc(doc(db, "config", "sections"), {
@@ -2359,6 +3574,7 @@ export async function saveInstituteGradeGroups(instituteName, gradeGroups, extra
 }
 
 export async function saveInstituteType(instituteName, type) {
+  await assertCanManageInstituteName(instituteName);
   const snap = await getDoc(doc(db, "config", "sections"));
   const existing = snap.exists() ? snap.data() : {};
   await setDoc(doc(db, "config", "sections"), {
@@ -2368,6 +3584,7 @@ export async function saveInstituteType(instituteName, type) {
 }
 
 export async function saveInstituteExtraSections(instituteName, extraSections) {
+  await assertCanManageInstituteName(instituteName);
   const snap = await getDoc(doc(db, "config", "sections"));
   const existing = snap.exists() ? snap.data() : {};
   await setDoc(doc(db, "config", "sections"), {
@@ -2380,6 +3597,7 @@ export async function saveInstituteExtraSections(instituteName, extraSections) {
 }
 
 export async function deleteInstituteGradeGroup(instituteName, groupId) {
+  await assertCanManageInstituteName(instituteName);
   const snap = await getDoc(doc(db, "config", "sections"));
   const existing = snap.exists() ? snap.data() : {};
   const current = existing[instituteName]?.gradeGroups || [];

@@ -6,6 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:migration": "node --test tests/genesis-migration.test.mjs",
+    "test:rules": "firebase emulators:exec --only firestore --project classtracker-84920 \"node --test tests/firestore-tenant-rules.test.mjs\"",
     "mobile:build": "npm run build && npx cap sync",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
@@ -33,6 +35,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.3.4",
+    "@firebase/rules-unit-testing": "^3.0.4",
     "@vitejs/plugin-react": "^4.2.1",
     "vite": "^5.2.0"
   }

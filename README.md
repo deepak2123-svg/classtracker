@@ -1,11 +1,12 @@
 # ClassLog
 
-ClassLog is a Vite + React + Firebase app for classroom logging, with a dedicated teacher experience, an admin management surface, and a Capacitor-based Android/iOS shell.
+ClassLog is a Vite + React + Firebase app for classroom logging, with dedicated teacher, admin, and manager surfaces plus a Capacitor-based Android/iOS shell.
 
 ## What this repo contains
 
 - Teacher web app for daily class logging, history, export, offline-safe drafting, and teacher profile tools
 - Admin web app for managing teachers, institutes, sections, and data operations
+- Manager web app for groups, institute structure, scoped admin invitations, and Genesis migration
 - Shared native shell for Android and iOS using Capacitor
 - Standalone native Android teacher app in Kotlin and Jetpack Compose
 - Firebase-backed auth, role checks, persistence, and sync
@@ -14,7 +15,14 @@ ClassLog is a Vite + React + Firebase app for classroom logging, with a dedicate
 
 - Teacher web: default web mode
 - Admin web: enabled by setting `VITE_APP_MODE=admin`
+- Manager web: enabled by setting `VITE_APP_MODE=manager`
 - Native app: one shared shell where admins can toggle between admin and teacher views
+
+## Production domains
+
+- Teacher web: `https://teacher.ledgrclasses.com/`
+- Admin web: `https://admin.ledgrclasses.com/`
+- Manager web: `https://manager.ledgrclasses.com/`
 
 ## Stack
 
@@ -44,8 +52,10 @@ Optional runtime envs:
 
 ```bash
 VITE_APP_MODE=admin
-VITE_TEACHER_APP_URL=https://teacherct.vercel.app/
-VITE_ADMIN_APP_URL=https://ctadmin.vercel.app/
+VITE_TEACHER_APP_URL=https://teacher.ledgrclasses.com/
+VITE_ADMIN_APP_URL=https://admin.ledgrclasses.com/
+VITE_MANAGER_APP_URL=https://manager.ledgrclasses.com/
+ENABLE_SCHEDULED_JOBS=false
 ```
 
 3. Start the app:
@@ -74,6 +84,7 @@ npm run build
 
 - `src/ClassTracker.jsx` teacher experience
 - `src/AdminPanel.jsx` admin experience
+- `src/ManagerPanel.jsx` manager experience
 - `src/firebase.js` Firebase integration and persistence
 - `src/main.jsx` app-mode entrypoint
 - `src/platform.js` teacher/admin/native mode routing helpers
@@ -134,6 +145,39 @@ cd android
 - Web and native share the same React codebase
 - After teacher/admin UI changes, run `npm run mobile:build` before packaging Android or iOS
 - iOS packaging and App Store release still require Xcode on macOS
+- Vercel project `classtrackeradmin` should use `admin.ledgrclasses.com`
+- Vercel project `classtracker123` should use `teacher.ledgrclasses.com`
+- Separate Vercel project `ledgrclasses-manager` should use `manager.ledgrclasses.com`
+- Set `VITE_APP_MODE=admin` on Admin, `VITE_APP_MODE=manager` on Manager, and leave it unset for Teacher
+- Keep `VITE_TEACHER_APP_URL`, `VITE_ADMIN_APP_URL`, and `VITE_MANAGER_APP_URL` aligned on all three Vercel projects
+- Set `ENABLE_SCHEDULED_JOBS=true` only on the Admin Vercel project. Keep it false or unset on Teacher and Manager
+- Add all three custom domains in Firebase Authentication authorized domains before relying on Google sign-in from those hosts
+- The standalone native Android teacher app does not use these web hostnames unless Android App Links are added later
+
+## Tenant bootstrap and Genesis migration
+
+Manager signup is intentionally disabled. Create the first manager account in Firebase Authentication, copy its UID, and create `roles/{uid}` in Firestore with:
+
+```json
+{
+  "role": "manager",
+  "grantedAt": 0,
+  "grantedBy": "manual-bootstrap"
+}
+```
+
+Then sign in at `manager.ledgrclasses.com` and run **Migrate Genesis**. The migration is idempotent: it creates `Genesis Group`, maps current institutes to child institute records, converts legacy admins to `group_admin`, creates teacher memberships, and merges `groupId`/`instituteId` fields into existing teacher/class records without deleting legacy fields.
+
+New tenant collections are:
+
+- `groups`
+- `institutes`
+- `instituteCodes`
+- `memberships`
+- `invites`
+- `joinRequests`
+
+Public role names are `manager`, `group_admin`, `institute_admin`, and `teacher`. Legacy `admin` is accepted only during the migration transition.
 
 ## Current priorities
 

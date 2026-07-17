@@ -30,7 +30,7 @@ function clearInviteToken() {
 }
 
 // ── Name setup screen — shown after first admin login ─────────────────────────
-function NameSetup({ user, onDone }) {
+function NameSetup({ user, onDone, portalLabel = "Admin Portal" }) {
   const [name, setName] = useState(user.displayName || "");
   const [saving, setSaving] = useState(false);
 
@@ -47,9 +47,9 @@ function NameSetup({ user, onDone }) {
       <div style={{width:"100%",maxWidth:400,background:"rgba(255,255,255,0.06)",borderRadius:20,padding:"28px 20px",border:"1px solid rgba(255,255,255,0.1)"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{fontSize:36,marginBottom:12}}>👑</div>
-          <h2 style={{fontSize:22,fontWeight:700,color:"#fff",fontFamily:G.display,margin:0}}>Welcome, Admin!</h2>
+          <h2 style={{fontSize:22,fontWeight:700,color:"#fff",fontFamily:G.display,margin:0}}>Welcome to {portalLabel}</h2>
           <p style={{fontSize:15,color:"rgba(255,255,255,0.55)",marginTop:8,lineHeight:1.5}}>
-            What should we call you? Your name will appear on the admin panel.
+            What should we call you? Your name will appear in the portal.
           </p>
         </div>
         <input
@@ -69,7 +69,12 @@ function NameSetup({ user, onDone }) {
   );
 }
 
-export default function AdminAuth({ onVerified, currentUser = null }) {
+export default function AdminAuth({
+  onVerified,
+  currentUser = null,
+  allowedRoles = ["admin"],
+  portalLabel = "Admin Portal",
+}) {
   const nativeApp = isNativeApp();
   const showGoogleAuth = canUseGooglePopupAuth();
   const teacherAppUrl = getTeacherAppUrl();
@@ -79,6 +84,7 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
   const [error,   setError]   = useState("");
   const [loading, setLoading] = useState(false);
   const [pendingUser, setPendingUser] = useState(null); // waiting for name setup
+  const [pendingRole, setPendingRole] = useState(null);
   const inviteProcessingRef = useRef(false);
   const inviteResolvedKeyRef = useRef("");
 
@@ -86,41 +92,50 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
 
   const hasInvite = !!inviteToken;
 
-  function finishVerified(user) {
+  const allowedRoleSet = new Set(allowedRoles);
+
+  function finishVerified(user, role = pendingRole) {
     clearInviteToken();
-    onVerified(user);
+    onVerified(user, role);
   }
 
   async function afterLogin(user) {
     try {
-      // 1. Already admin?
+      // 1. Already has access to this portal?
       const snap = await getDoc(doc(db, "roles", user.uid));
-      const isAdmin = snap.exists() && snap.data().role === "admin";
+      const existingRole = snap.exists() ? String(snap.data().role || "teacher") : "teacher";
+      const hasPortalAccess = allowedRoleSet.has(existingRole);
 
-      if (isAdmin) {
+      if (hasPortalAccess) {
         window.history.replaceState({}, "", window.location.pathname);
         // Check if they have a saved name — if not, show name setup
         const dataSnap = await getDoc(doc(db, "users", user.uid, "appdata", "main")).catch(() => null);
         const hasName = dataSnap?.exists() && dataSnap.data()?.profile?.name;
         if (!hasName && !user.displayName) {
           setPendingUser(user);
+          setPendingRole(existingRole);
           return;
         }
         // Save displayName if we have it but Firestore doesn't
         if (!hasName && user.displayName) {
           await saveProfileName(user.uid, user.displayName);
         }
-        finishVerified(user);
+        finishVerified(user, existingRole);
         return;
       }
 
       // 2. Try invite token
       if (inviteToken) {
         try {
-          await useInviteToken(inviteToken, user.uid);
+          const inviteResult = await useInviteToken(inviteToken, user.uid);
+          const invitedRole = String(inviteResult?.role || "admin");
+          if (!allowedRoleSet.has(invitedRole)) {
+            throw new Error(`This invite is for the ${invitedRole.replace(/_/g, " ")} role, not this portal.`);
+          }
           window.history.replaceState({}, "", window.location.pathname);
-          // New admin — always ask for name
+          // New portal user — always ask for name
           setPendingUser(user);
+          setPendingRole(invitedRole);
           return;
         } catch (e) {
           setError(e.message || "Invite link is invalid or expired.");
@@ -128,7 +143,7 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
         }
       }
 
-      setError("You don't have admin access. Ask an admin to promote you or share an invite link.");
+      setError(`You don't have access to the ${portalLabel}. Ask the Manager or your administrator for the correct role.`);
     } catch (e) {
       setError("Something went wrong. Please try again.");
     }
@@ -174,7 +189,7 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
 
   // Show name setup screen before handing off to the admin panel
   if (pendingUser) {
-    return <NameSetup user={pendingUser} onDone={() => finishVerified(pendingUser)} />;
+    return <NameSetup user={pendingUser} portalLabel={portalLabel} onDone={() => finishVerified(pendingUser, pendingRole)} />;
   }
 
   const inp = {
@@ -192,9 +207,9 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
       <div style={{marginBottom:32,textAlign:"center"}}>
         <div style={{width:60,height:60,borderRadius:18,background:G.blueV,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(59,130,246,0.4)"}}>🔐</div>
         <div style={{fontSize:12,fontFamily:G.mono,letterSpacing:3,color:"rgba(255,255,255,0.65)",textTransform:"uppercase",marginBottom:5}}>ClassLog</div>
-        <h1 style={{fontSize:24,fontWeight:700,color:"#fff",fontFamily:G.display,letterSpacing:-0.4,margin:0}}>Admin Portal</h1>
+        <h1 style={{fontSize:24,fontWeight:700,color:"#fff",fontFamily:G.display,letterSpacing:-0.4,margin:0}}>{portalLabel}</h1>
         <p style={{fontSize:15,color:"rgba(255,255,255,0.7)",marginTop:6}}>
-          {hasInvite ? "You've been invited — sign in to activate access" : "Sign in to your admin account"}
+          {hasInvite ? "You've been invited — sign in to activate access" : `Sign in to your ${portalLabel.toLowerCase()} account`}
         </p>
       </div>
 
@@ -203,7 +218,7 @@ export default function AdminAuth({ onVerified, currentUser = null }) {
         {hasInvite && (
           <div style={{background:"rgba(59,130,246,0.12)",border:"1px solid rgba(59,130,246,0.25)",borderRadius:10,padding:"9px 14px",marginBottom:18,fontSize:14,color:"rgba(255,255,255,0.7)",display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:17}}>🔗</span>
-            <span>Invite link detected — sign in to become admin</span>
+            <span>Invite link detected — sign in to activate your assigned role</span>
           </div>
         )}
 

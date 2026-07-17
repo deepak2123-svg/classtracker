@@ -34,15 +34,17 @@ import { createRoot } from "react-dom/client";
 import { onAuth, getUserRole, logout } from "./firebase";
 import { Spinner } from "./shared.jsx";
 import Auth from "./Auth";
-import { getAppMode, getTeacherAppUrl, isNativeApp } from "./platform";
+import { getAdminAppUrl, getAppMode, getTeacherAppUrl, isNativeApp } from "./platform";
 
 // Web keeps the existing split build. Native uses one shared shell.
 const APP_MODE = getAppMode();
 const IS_ADMIN_APP = APP_MODE === "admin";
+const IS_MANAGER_APP = APP_MODE === "manager";
 const IS_NATIVE_SHELL = APP_MODE === "native";
 const ADMIN_INVITE_STORAGE_KEY = "ct_admin_invite_token";
 const CHUNK_RELOAD_STORAGE_KEY = "ct_chunk_reload_attempt";
 const CHUNK_RELOAD_QUERY_KEY = "__ct_chunk";
+const ADMIN_APP_ROLES = new Set(["admin", "manager", "group_admin", "institute_admin"]);
 
 function isDynamicImportFailure(error) {
   const message = error?.message || String(error || "");
@@ -93,6 +95,7 @@ const lazyWithChunkRecovery = (loader) => lazy(() => importWithChunkRecovery(loa
 const ClassTracker = lazyWithChunkRecovery(() => import("./ClassTracker"));
 const AdminAuth = lazyWithChunkRecovery(() => import("./AdminAuth"));
 const AdminPanel = lazyWithChunkRecovery(() => import("./AdminPanel"));
+const ManagerPanel = lazyWithChunkRecovery(() => import("./ManagerPanel"));
 
 function hasPendingAdminInvite() {
   if (typeof window === "undefined") return false;
@@ -134,32 +137,76 @@ function App() {
 
   // Called by AdminAuth after login + any promotion via invite.
   // Sets the lock so onAuth can't overwrite the freshly-written role.
-  const handleAdminVerified = async (u) => {
+  const handleAdminVerified = async (u, verifiedRole = "admin") => {
     adminVerifiedRef.current = true;
     setUser(u);
-    setRole("admin");
+    setRole(verifiedRole);
     setRoleLoading(false);
   };
 
-  // ── ADMIN APP (ctadmin.vercel.app) ────────────────────────────────────────
+  // ── MANAGER APP (manager.ledgrclasses.com) ────────────────────────────────
+  if (IS_MANAGER_APP) {
+    if (user === undefined || roleLoading) return <Spinner text="Loading…" />;
+
+    if (!user) {
+      return (
+        <SuspenseScreen>
+          <AdminAuth
+            onVerified={handleAdminVerified}
+            allowedRoles={["manager"]}
+            portalLabel="Manager Portal"
+          />
+        </SuspenseScreen>
+      );
+    }
+
+    if (role === "manager") {
+      return <SuspenseScreen><ManagerPanel user={user} /></SuspenseScreen>;
+    }
+
+    return <AccessDenied requiredRoleLabel="manager" />;
+  }
+
+  // ── ADMIN APP (admin.ledgrclasses.com) ───────────────────────────────────
   if (IS_ADMIN_APP) {
     if (user === undefined || roleLoading) return <Spinner text="Loading…" />;
 
     // Not logged in → admin login screen
-    if (!user) return <SuspenseScreen><AdminAuth onVerified={handleAdminVerified} /></SuspenseScreen>;
+    if (!user) {
+      return (
+        <SuspenseScreen>
+          <AdminAuth
+            onVerified={handleAdminVerified}
+            allowedRoles={Array.from(ADMIN_APP_ROLES)}
+            portalLabel="Admin Portal"
+          />
+        </SuspenseScreen>
+      );
+    }
 
     // Logged in and confirmed admin → panel
-    if (role === "admin") return <SuspenseScreen><AdminPanel user={user} /></SuspenseScreen>;
+    if (ADMIN_APP_ROLES.has(role)) return <SuspenseScreen><AdminPanel user={user} /></SuspenseScreen>;
 
     // Invite-based admin activation can briefly sign the user in before the role handoff
     // completes. Keep the invite-aware auth screen mounted so it can finish promotion.
-    if (hasAdminInvite) return <SuspenseScreen><AdminAuth onVerified={handleAdminVerified} currentUser={user} /></SuspenseScreen>;
+    if (hasAdminInvite) {
+      return (
+        <SuspenseScreen>
+          <AdminAuth
+            onVerified={handleAdminVerified}
+            currentUser={user}
+            allowedRoles={Array.from(ADMIN_APP_ROLES)}
+            portalLabel="Admin Portal"
+          />
+        </SuspenseScreen>
+      );
+    }
 
     // Signed in but role not admin — show denied
     return <AccessDenied />;
   }
 
-  // ── TEACHER APP (teacherct.vercel.app) ───────────────────────────────────
+  // ── TEACHER APP (teacher.ledgrclasses.com) ───────────────────────────────
   if (user === undefined || (user && roleLoading)) return <Spinner text="Loading…" />;
   if (!user) return <Auth />;
   if (IS_NATIVE_SHELL) return <NativeRoleShell user={user} role={role} />;
@@ -214,7 +261,7 @@ function RuntimeErrorBridge({ children }) {
 
 function FatalAppScreen({ error }) {
   const message = error?.message || String(error || "Unknown error");
-  const surfaceLabel = IS_ADMIN_APP ? "admin panel" : (IS_NATIVE_SHELL ? "app" : "teacher panel");
+  const surfaceLabel = IS_MANAGER_APP ? "manager panel" : IS_ADMIN_APP ? "admin panel" : (IS_NATIVE_SHELL ? "app" : "teacher panel");
   const chunkFailure = isDynamicImportFailure(error);
 
   // Pull the raw pre-React captured error (has filename/line/col)
@@ -285,22 +332,23 @@ function FatalAppScreen({ error }) {
   );
 }
 
-function AccessDenied() {
+function AccessDenied({ requiredRoleLabel = "admin" }) {
   const nativeApp = isNativeApp();
   const teacherAppUrl = getTeacherAppUrl();
+  const adminAppUrl = getAdminAppUrl();
   return (
     <div style={{minHeight:"100vh",background:"#152B22",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Plus Jakarta Sans',sans-serif",padding:24}}>
       <div style={{textAlign:"center",maxWidth:360}}>
         <div style={{fontSize:48,marginBottom:16}}>🚫</div>
         <h2 style={{color:"#fff",fontFamily:"'Syne',sans-serif",fontSize:22,marginBottom:8}}>Access Denied</h2>
         <p style={{color:"rgba(255,255,255,0.4)",fontSize:14,marginBottom:24,lineHeight:1.6}}>
-          Your account does not have admin privileges.<br/>Contact the super admin to request access.
+          Your account does not have {requiredRoleLabel} access.<br/>Contact the Manager to request the correct role.
         </p>
         <div style={{display:"flex",gap:10,justifyContent:"center"}}>
           {!nativeApp && (
-            <a href={teacherAppUrl}
+            <a href={requiredRoleLabel === "manager" ? adminAppUrl : teacherAppUrl}
               style={{background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.6)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,padding:"9px 18px",fontSize:13,textDecoration:"none"}}>
-              ← Teacher app
+              ← {requiredRoleLabel === "manager" ? "Admin app" : "Teacher app"}
             </a>
           )}
           <button onClick={logout}
@@ -314,20 +362,21 @@ function AccessDenied() {
 }
 
 function NativeRoleShell({ user, role }) {
-  const [view, setView] = useState(role === "admin" ? "admin" : "teacher");
+  const hasAdminAccess = ADMIN_APP_ROLES.has(role);
+  const [view, setView] = useState(hasAdminAccess ? "admin" : "teacher");
 
   useEffect(() => {
-    if (role !== "admin") setView("teacher");
-  }, [role]);
+    if (!hasAdminAccess) setView("teacher");
+  }, [hasAdminAccess]);
 
-  const isAdminView = role === "admin" && view === "admin";
+  const isAdminView = hasAdminAccess && view === "admin";
 
   return (
     <>
       <SuspenseScreen>
         {isAdminView ? <AdminPanel user={user} /> : <ClassTracker user={user} />}
       </SuspenseScreen>
-      {role === "admin" && (
+      {hasAdminAccess && (
         <button
           type="button"
           onClick={() => setView(current => current === "admin" ? "teacher" : "admin")}

@@ -148,12 +148,14 @@ export function adminDb() {
   return getFirestore(ensureAdminApp());
 }
 
+const ADMIN_ACCESS_ROLES = new Set(["admin", "manager", "group_admin", "institute_admin"]);
+
 async function readAdminRoleFromServerDb(uid) {
   try {
     const roleSnap = await adminDb().doc(`roles/${uid}`).get();
-    return roleSnap.exists ? String(roleSnap.data()?.role || "").trim() : "";
+    return roleSnap.exists ? { uid, ...(roleSnap.data() || {}) } : { uid, role: "" };
   } catch {
-    return "";
+    return { uid, role: "" };
   }
 }
 
@@ -191,16 +193,20 @@ export async function requireAdminUser(req) {
 
   const decoded = await verifyFirebaseIdToken(token);
   const projectId = getFirebaseProjectId();
-  let role = await readAdminRoleFromServerDb(decoded.uid);
-  if (role !== "admin") {
+  let roleDetails = await readAdminRoleFromServerDb(decoded.uid);
+  let role = String(roleDetails?.role || "").trim();
+  if (!ADMIN_ACCESS_ROLES.has(role)) {
     const clientProjectRole = await readAdminRoleFromClientProject({
       token,
       projectId,
       uid: decoded.uid,
     });
-    if (clientProjectRole) role = clientProjectRole;
+    if (clientProjectRole) {
+      role = clientProjectRole;
+      roleDetails = { uid: decoded.uid, role };
+    }
   }
-  if (role !== "admin") {
+  if (!ADMIN_ACCESS_ROLES.has(role)) {
     const error = new Error("Admin access is required.");
     error.statusCode = 403;
     throw error;
@@ -211,5 +217,10 @@ export async function requireAdminUser(req) {
     email: decoded.email || "",
     name: decoded.name || "",
     role,
+    groupId: String(roleDetails?.groupId || "").trim(),
+    instituteId: String(roleDetails?.instituteId || "").trim(),
+    instituteIds: Array.isArray(roleDetails?.instituteIds)
+      ? roleDetails.instituteIds.map(item => String(item || "").trim()).filter(Boolean)
+      : [],
   };
 }

@@ -43,7 +43,20 @@ import {
   IconUser,
   IconX,
 } from "@tabler/icons-react";
-import { db, loadUserDataState, saveUserData, logout, syncTeacherIndex, deleteClassNotes, getGlobalInstitutes, getAllInstituteSections, purgeExpiredTrash } from "./firebase";
+import {
+  db,
+  loadUserDataState,
+  saveUserData,
+  logout,
+  syncTeacherIndex,
+  deleteClassNotes,
+  getTeacherAllowedInstitutes,
+  getAllInstituteSections,
+  purgeExpiredTrash,
+  requestTeacherJoinByInstituteCode,
+  useInviteToken,
+  getUserRoleDetails,
+} from "./firebase";
 import {
   buildEffectiveClassNotes,
   buildJointClassesSnapshot,
@@ -1192,8 +1205,12 @@ function normaliseTeacherPublishedSyllabus(id, source = {}){
 async function loadTeacherPublishedSyllabi(uid){
   const teacherUid = syllabusString(uid);
   if(!teacherUid) return [];
-  const { collection, getDocs } = await import("firebase/firestore");
-  const snap = await getDocs(collection(db, "publishedSyllabi"));
+  const { collection, getDocs, query, where } = await import("firebase/firestore");
+  const role = await getUserRoleDetails(teacherUid);
+  const source = role.groupId
+    ? query(collection(db, "publishedSyllabi"), where("groupId", "==", role.groupId))
+    : collection(db, "publishedSyllabi");
+  const snap = await getDocs(source);
   return snap.docs
     .map(docSnap => normaliseTeacherPublishedSyllabus(docSnap.id, docSnap.data() || {}))
     .filter(syllabus => syllabus?.targets?.some(target => target.teacherUid === teacherUid))
@@ -2517,18 +2534,47 @@ function MultiValueField({ label, values, onChange, suggestions = [], placeholde
 
 
 // ── Profile Setup ─────────────────────────────────────────────────────────────
-function ProfileSetup({user, initialProfile, subjectSuggestions = [], instituteSuggestions = [], onSave}){
+function ProfileSetup({
+  user,
+  initialProfile,
+  subjectSuggestions = [],
+  instituteSuggestions = [],
+  onSave,
+  onRequestInstituteCode,
+  instituteAccessMessage = "",
+}){
   const initial = normaliseProfile(initialProfile, user.displayName || "");
   const [name,setName]=useState(initial.name);
   const [subjects,setSubjects]=useState(initial.subjects);
   const officialInstitutes = useMemo(() => uniqueChoiceValues(instituteSuggestions), [instituteSuggestions]);
   const [institutes,setInstitutes]=useState(() => initial.institutes);
+  const [instituteCode,setInstituteCode]=useState("");
+  const [joinBusy,setJoinBusy]=useState(false);
+  const [joinMessage,setJoinMessage]=useState("");
   useEffect(() => {
     if (!officialInstitutes.length) return;
     const officialKeys = new Set(officialInstitutes.map(normaliseChoiceKey));
     setInstitutes(curr => curr.filter(value => officialKeys.has(normaliseChoiceKey(value))));
   }, [officialInstitutes]);
   const canContinue = !!name.trim() && subjects.length > 0;
+  const requestInstituteAccess = async () => {
+    if(!instituteCode.trim() || !onRequestInstituteCode || joinBusy) return;
+    setJoinBusy(true);
+    setJoinMessage("");
+    try{
+      const result = await onRequestInstituteCode(instituteCode.trim());
+      if(result?.status === "approved"){
+        setJoinMessage(`Access to ${result.institute?.name || "the institute"} is already approved.`);
+      }else{
+        setJoinMessage(`Request sent to ${result?.institute?.name || "the institute"}. An admin must approve it before classes can be added.`);
+      }
+      setInstituteCode("");
+    }catch(error){
+      setJoinMessage(error?.message || "The Institute ID could not be verified.");
+    }finally{
+      setJoinBusy(false);
+    }
+  };
   return(
     <div style={{minHeight:"100vh",background:G.forest,fontFamily:G.sans,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
       <div style={{width:"100%",maxWidth:420}}>
@@ -2550,14 +2596,41 @@ function ProfileSetup({user, initialProfile, subjectSuggestions = [], instituteS
             hint="Add one or more subjects. You can press Enter or comma after each one."
           />
           <MultiValueField
-            label="Institutes where you teach"
+            label="Approved institutes"
             values={institutes}
             onChange={setInstitutes}
             suggestions={officialInstitutes}
             allowCustom={false}
-            lockedHint="Select every institute you teach at from the list below. Only admins can create institutes."
-            hint={officialInstitutes.length > 0 ? "Can't find your institute? Ask your admin to add it — you can update this later." : undefined}
+            lockedHint="Only institutes approved through an invite or join request appear here."
+            hint={officialInstitutes.length > 0 ? "Your account can belong to more than one institute inside the same group." : undefined}
           />
+          <div style={{marginTop:18,padding:"14px",borderRadius:12,border:"1px solid rgba(255,255,255,0.14)",background:"rgba(255,255,255,0.055)"}}>
+            <div style={{fontSize:13,fontWeight:800,color:"#fff",marginBottom:5}}>Join with private Institute ID</div>
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",lineHeight:1.55,marginBottom:10}}>
+              Enter the code shared by your institute. Access stays pending until a Group Admin or Institute Admin approves it.
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <input
+                value={instituteCode}
+                onChange={e=>setInstituteCode(e.target.value.toUpperCase())}
+                onKeyDown={e=>e.key==="Enter"&&requestInstituteAccess()}
+                placeholder="e.g. LDG-4K8M2P"
+                style={{...inp,flex:1,minWidth:0,background:"rgba(255,255,255,0.09)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",margin:0}}
+              />
+              <button
+                type="button"
+                onClick={requestInstituteAccess}
+                disabled={!instituteCode.trim()||joinBusy}
+                style={{border:"none",borderRadius:10,padding:"0 14px",background:instituteCode.trim()?G.greenV:"rgba(255,255,255,0.1)",color:instituteCode.trim()?G.forest:"rgba(255,255,255,0.3)",fontWeight:800,cursor:instituteCode.trim()?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+                {joinBusy?"Checking...":"Request"}
+              </button>
+            </div>
+            {(joinMessage||instituteAccessMessage)&&(
+              <div style={{marginTop:10,fontSize:12,lineHeight:1.55,color:"rgba(255,255,255,0.7)"}}>
+                {joinMessage||instituteAccessMessage}
+              </div>
+            )}
+          </div>
           <button onClick={()=>canContinue&&onSave({ name:name.trim(), subjects, institutes })} disabled={!canContinue} onPointerDown={e=>rpl(e,true)}
             style={{width:"100%",padding:"13px",background:canContinue?G.greenV:"rgba(255,255,255,0.1)",color:canContinue?G.forest:"rgba(255,255,255,0.3)",border:"none",borderRadius:11,fontSize:16,fontFamily:G.sans,fontWeight:700,cursor:canContinue?"pointer":"not-allowed",position:"relative",overflow:"hidden",letterSpacing:0.2,boxShadow:canContinue?`0 4px 16px rgba(59,130,246,0.26)`:"none"}}>
             Get Started →
@@ -4368,6 +4441,9 @@ function ClassTrackerInner({user}){
   const teacherHistoryTokenRef = useRef(1);
 
   const [globalInstitutes,  setGlobalInstitutes]  = useState([]);
+  const [instituteAccessMessage, setInstituteAccessMessage] = useState("");
+  const [joinInstituteCode, setJoinInstituteCode] = useState("");
+  const [joinInstituteBusy, setJoinInstituteBusy] = useState(false);
   const [instituteSections, setInstituteSections] = useState({}); // {instName:{gradeGroups,extraSections}}
   const [teacherSyllabi, setTeacherSyllabi] = useState([]);
   const [teacherSyllabiLoading, setTeacherSyllabiLoading] = useState(false);
@@ -4653,10 +4729,37 @@ function ClassTrackerInner({user}){
   }, [activeEntryDraftKey]);
 
   useEffect(()=>{
-    // Load admin-created institutes list and section definitions
-    getGlobalInstitutes().then(list => setGlobalInstitutes(list)).catch(()=>{});
-    getAllInstituteSections().then(secs => setInstituteSections(secs||{})).catch(()=>{});
-  },[]);
+    let cancelled = false;
+    const loadInstituteAccess = async () => {
+      setInstituteAccessMessage("");
+      try{
+        const params = new URLSearchParams(window.location.search);
+        const inviteToken = params.get("invite");
+        if(inviteToken){
+          const inviteResult = await useInviteToken(inviteToken,user.uid);
+          if(inviteResult?.inviteType === "teacher"){
+            setInstituteAccessMessage("Institute invite accepted. Your approved institute is ready.");
+          }
+          params.delete("invite");
+          const nextQuery = params.toString();
+          window.history.replaceState({}, "", `${window.location.pathname}${nextQuery?`?${nextQuery}`:""}${window.location.hash||""}`);
+        }
+        const [list,sections] = await Promise.all([
+          getTeacherAllowedInstitutes(user.uid),
+          getAllInstituteSections(),
+        ]);
+        if(cancelled) return;
+        setGlobalInstitutes(list||[]);
+        setInstituteSections(sections||{});
+      }catch(error){
+        if(cancelled) return;
+        setInstituteAccessMessage(error?.message || "Institute access could not be refreshed.");
+        setGlobalInstitutes([]);
+      }
+    };
+    loadInstituteAccess();
+    return()=>{cancelled=true;};
+  },[user.uid]);
 
   useEffect(()=>{
     let cancelled = false;
@@ -5046,7 +5149,7 @@ function ClassTrackerInner({user}){
   const refreshCloudState = React.useCallback(async () => {
     try {
       const [latestInstitutes, latestSections] = await Promise.all([
-        getGlobalInstitutes(),
+        getTeacherAllowedInstitutes(user.uid),
         getAllInstituteSections(),
       ]);
       const nextInstitutes = latestInstitutes || [];
@@ -5590,6 +5693,14 @@ function ClassTrackerInner({user}){
         initialProfile={data.profile}
         subjectSuggestions={data.subjects}
         instituteSuggestions={globalInstitutes}
+        instituteAccessMessage={instituteAccessMessage}
+        onRequestInstituteCode={async code=>{
+          const result=await requestTeacherJoinByInstituteCode(user.uid,code);
+          if(result?.status==="approved"){
+            setGlobalInstitutes(await getTeacherAllowedInstitutes(user.uid));
+          }
+          return result;
+        }}
         onSave={profile=>{
           const nextProfile = normaliseProfile(profile);
           setData(d=>({
@@ -7253,7 +7364,45 @@ function ClassTrackerInner({user}){
           <ReadOnlyDropdown value={newClass.institute} onChange={handleInstituteChange} options={globalInstitutes} placeholder="Select your institute" emptyMsg="No institutes yet — contact your admin to get one added."/>
           {globalInstitutes.length === 0 && (
             <div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"#FFF7ED",border:"1px solid #FED7AA",fontSize:13,color:"#9A3412",lineHeight:1.6}}>
-              Your admin hasn't created any institutes yet. Contact them to get your institute added before you can create a class.
+              <div style={{fontWeight:800,marginBottom:4}}>No approved institute access yet.</div>
+              Use a teacher invite link, or enter the private Institute ID shared by your institute.
+              <div style={{display:"flex",gap:8,marginTop:10}}>
+                <input
+                  value={joinInstituteCode}
+                  onChange={event=>setJoinInstituteCode(event.target.value.toUpperCase())}
+                  placeholder="LDG-4K8M2P"
+                  style={{...inp,flex:1,minWidth:0,margin:0,background:"#fff"}}
+                />
+                <button
+                  type="button"
+                  disabled={!joinInstituteCode.trim()||joinInstituteBusy}
+                  onClick={async()=>{
+                    if(!joinInstituteCode.trim()||joinInstituteBusy)return;
+                    setJoinInstituteBusy(true);
+                    try{
+                      const result=await requestTeacherJoinByInstituteCode(user.uid,joinInstituteCode);
+                      setInstituteAccessMessage(
+                        result?.status==="approved"
+                          ? `Access to ${result?.institute?.name||"the institute"} is approved.`
+                          : `Request sent to ${result?.institute?.name||"the institute"} for admin approval.`
+                      );
+                      setJoinInstituteCode("");
+                      if(result?.status==="approved"){
+                        setGlobalInstitutes(await getTeacherAllowedInstitutes(user.uid));
+                      }
+                    }catch(error){
+                      setInstituteAccessMessage(error?.message||"The Institute ID could not be verified.");
+                    }finally{
+                      setJoinInstituteBusy(false);
+                    }
+                  }}
+                  style={{border:"none",borderRadius:9,padding:"0 13px",background:G.blue,color:"#fff",fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",opacity:(!joinInstituteCode.trim()||joinInstituteBusy)?0.55:1}}>
+                  {joinInstituteBusy?"Checking...":"Request"}
+                </button>
+              </div>
+              {instituteAccessMessage&&(
+                <div style={{marginTop:8,fontSize:12,fontWeight:700}}>{instituteAccessMessage}</div>
+              )}
             </div>
           )}
           {preferredInstitute&&newClass.institute===preferredInstitute&&(

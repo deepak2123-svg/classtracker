@@ -41,8 +41,9 @@ npm run cap:ios
 - Android and iOS now use one shared app shell.
 - Teachers sign in and use the same tracker UI.
 - Admins can switch between teacher and admin views inside the native app.
-- Web-only cross-links to `teacherct.vercel.app` are hidden in the native shell.
+- Web-only cross-links to `teacher.ledgrclasses.com` are hidden in the native shell.
 - Native Android Google sign-in is wired through Capacitor and then exchanged for a Firebase session.
+- Domain changes require `npm run mobile:build` before packaging so the native shell includes the latest web bundle.
 
 ## Android Google Sign-In
 
@@ -72,6 +73,8 @@ Important:
 2. Replace browser download and print flows with native share/file flows where needed.
 3. Add app icons, splash screens, package names, signing, and store metadata.
 4. Test Firebase auth and offline behavior on real Android devices.
+
+Domain note: the current native shell does not register Android App Links or iOS Universal Links for `teacher.ledgrclasses.com` or `admin.ledgrclasses.com`. Add platform link association files and manifest/entitlement entries only if web links should open the installed app directly.
 
 ## Notes
 

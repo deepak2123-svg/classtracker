@@ -6,7 +6,10 @@ export function isNativeApp() {
 
 export function getAppMode() {
   if (isNativeApp()) return "native";
-  return import.meta.env.VITE_APP_MODE === "admin" ? "admin" : "teacher";
+  const configuredMode = String(import.meta.env.VITE_APP_MODE || "").trim().toLowerCase();
+  if (configuredMode === "manager") return "manager";
+  if (configuredMode === "admin") return "admin";
+  return "teacher";
 }
 
 export function canUseGooglePopupAuth() {
@@ -22,9 +25,13 @@ export function hasNativeGoogleClientId() {
 }
 
 export function getTeacherAppUrl() {
-  return import.meta.env.VITE_TEACHER_APP_URL || "https://teacherct.vercel.app/";
+  return import.meta.env.VITE_TEACHER_APP_URL || "https://teacher.ledgrclasses.com/";
 }
 
 export function getAdminAppUrl() {
-  return import.meta.env.VITE_ADMIN_APP_URL || "https://ctadmin.vercel.app/";
+  return import.meta.env.VITE_ADMIN_APP_URL || "https://admin.ledgrclasses.com/";
+}
+
+export function getManagerAppUrl() {
+  return import.meta.env.VITE_MANAGER_APP_URL || "https://manager.ledgrclasses.com/";
 }

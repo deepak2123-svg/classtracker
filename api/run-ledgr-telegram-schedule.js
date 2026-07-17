@@ -19,6 +19,10 @@ function isTrustedSchedulerRequest(req) {
   return !!expectedSecret && !!providedSecret && providedSecret === expectedSecret;
 }
 
+function scheduledJobsEnabled() {
+  return /^(1|true|yes)$/i.test(String(process.env.ENABLE_SCHEDULED_JOBS || "").trim());
+}
+
 function createRunError(message, { consumeSlot = false } = {}) {
   const error = new Error(message);
   error.consumeSlot = consumeSlot;
@@ -169,6 +173,15 @@ export default async function handler(req, res) {
     return sendJson(res, 405, { error: "Use GET to inspect or run the Telegram scheduler." });
   }
 
+  const trustedSchedulerRequest = isTrustedSchedulerRequest(req);
+  if (trustedSchedulerRequest && !scheduledJobsEnabled()) {
+    return sendJson(res, 200, {
+      ok: true,
+      state: "disabled_for_deployment",
+      scheduledJobsEnabled: false,
+    });
+  }
+
   const db = adminDb();
   const scheduleRef = db.doc("config/ledgrReportSchedule");
   const telegramRef = db.doc("config/ledgrTelegramDelivery");
@@ -180,8 +193,11 @@ export default async function handler(req, res) {
   const telegramConfig = telegramSnap.exists ? (telegramSnap.data() || {}) : {};
   const slot = getDueScheduledSlot(schedule, new Date());
 
-  if (!isTrustedSchedulerRequest(req)) {
-    return sendJson(res, 200, buildHealthPayload(schedule, telegramConfig, slot));
+  if (!trustedSchedulerRequest) {
+    return sendJson(res, 200, {
+      ...buildHealthPayload(schedule, telegramConfig, slot),
+      scheduledJobsEnabled: scheduledJobsEnabled(),
+    });
   }
 
   if (!slot.enabled) {

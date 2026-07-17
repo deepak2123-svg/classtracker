@@ -32,7 +32,8 @@ import {
 } from "@tabler/icons-react";
 import {
   logout, getAllTeachers, getTeacherFullData,
-  getAllRoleDetails, promoteToAdmin, demoteToTeacher, setAdminTeachingMode, createInviteLink,
+  getAllRoleDetails, promoteToAdmin, demoteToTeacher, setAdminTeachingMode, createInviteLink, isAdminRole,
+  createTeacherInviteForInstitute, getPendingJoinRequests, approveTeacherJoinRequest, rejectTeacherJoinRequest,
   getAllInstituteSections, saveInstituteGradeGroups, deleteInstituteGradeGroup,
   removeTeacherFromSystem, removeInstituteFromIndex,
   deleteEntryFromTeacherData, deleteClassFromTeacherData, deleteClassNotes,
@@ -50,6 +51,7 @@ import {
   sendAdminFeedbackReply, markFeedbackThreadRead, setFeedbackThreadStatus,
   auth,
 } from "./firebase";
+import { getTeacherAppUrl } from "./platform";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
 import {
   buildEffectiveClassNotes,
@@ -5884,6 +5886,13 @@ function AdminPanelInner({user}){
   const [view,        setView]        = useState("main"); // main | manage
   const [inviteLink,  setInviteLink]  = useState(null);
   const [inviteLoading,setInviteLoading]=useState(false);
+  const [adminInviteType,setAdminInviteType]=useState("admin");
+  const [adminInviteInstitute,setAdminInviteInstitute]=useState("");
+  const [teacherInviteInstitute,setTeacherInviteInstitute]=useState("");
+  const [teacherInviteLink,setTeacherInviteLink]=useState("");
+  const [teacherInviteLoading,setTeacherInviteLoading]=useState(false);
+  const [joinRequests,setJoinRequests]=useState([]);
+  const [joinRequestBusy,setJoinRequestBusy]=useState("");
   // navigation state
   const [selInst,     setSelInst]     = useState(null);
   const [tab,         setTab]         = useState("class"); // class | teacher
@@ -6274,7 +6283,7 @@ function AdminPanelInner({user}){
   useEffect(()=>{
     (async()=>{
       // Load index + roles + global institutes list in parallel
-      const [t,roleDocs,gInst,gSubjects,gSyllabi,gDeleted,savedBin,savedLedgrSchedule,savedTelegramConfig]=await Promise.all([
+      const [t,roleDocs,gInst,gSubjects,gSyllabi,gDeleted,savedBin,savedLedgrSchedule,savedTelegramConfig,pendingJoins]=await Promise.all([
         getAllTeachers(),
         getAllRoleDetails(),
         getGlobalInstitutes(),
@@ -6284,6 +6293,7 @@ function AdminPanelInner({user}){
         getAdminBin(),
         getLedgrReportSchedule(),
         getLedgrTelegramConfig(),
+        getPendingJoinRequests(),
       ]);
       const roleMap = Object.fromEntries(Object.entries(roleDocs || {}).map(([uid, detail])=>[uid, detail?.role || "teacher"]));
       setTeachers(t); setRoles(roleMap); setRoleDetails(roleDocs || {});
@@ -6293,6 +6303,7 @@ function AdminPanelInner({user}){
       setLedgrReportScheduleLoading(false);
       setLedgrTelegramConfig(savedTelegramConfig);
       setLedgrTelegramLoading(false);
+      setJoinRequests(pendingJoins || []);
       // Restore persisted deleted-institutes set so page refresh doesn't un-hide them
       if(gDeleted.length>0) setDeletedInstitutes(new Set(gDeleted.map(i=>i.trim())));
       // Restore persisted admin recycle bin
@@ -6317,6 +6328,13 @@ function AdminPanelInner({user}){
       setLoading(false);
     })();
   },[]);
+
+  useEffect(()=>{
+    const ownRole=roleDetails[user.uid]?.role;
+    if(ownRole==="institute_admin")setAdminInviteType("institute_admin");
+    else if(ownRole==="manager"&&!["group_admin","institute_admin"].includes(adminInviteType))setAdminInviteType("group_admin");
+    else if(ownRole==="group_admin"&&!["group_admin","institute_admin"].includes(adminInviteType))setAdminInviteType("group_admin");
+  },[adminInviteType,roleDetails,user.uid]);
 
   // Persist bin to Firestore whenever it changes
   const persistAdminBin = React.useCallback(async (updater) => {
@@ -6559,7 +6577,7 @@ function AdminPanelInner({user}){
   }, [fullData]);
 
   const getAdminTeachingMode = React.useCallback((uid) => {
-    if(roles[uid] !== "admin") return "teacher";
+    if(!isAdminRole(roles[uid])) return "teacher";
     const detail = roleDetails[uid] || {};
     return detail.adminMode === "admin_teacher" || detail.teaches === true
       ? "admin_teacher"
@@ -6567,13 +6585,13 @@ function AdminPanelInner({user}){
   }, [roleDetails, roles]);
 
   const isAdminTeacherAccount = React.useCallback((uid) => (
-    roles[uid] === "admin" && getAdminTeachingMode(uid) === "admin_teacher"
+    isAdminRole(roles[uid]) && getAdminTeachingMode(uid) === "admin_teacher"
   ), [getAdminTeachingMode, roles]);
 
   const isTeachingSurfaceAccount = React.useCallback((teacher) => {
     const uid = teacher?.uid;
     if(!uid) return false;
-    return roles[uid] !== "admin" || isAdminTeacherAccount(uid);
+    return !isAdminRole(roles[uid]) || isAdminTeacherAccount(uid);
   }, [isAdminTeacherAccount, roles]);
 
   React.useEffect(()=>{
@@ -6597,7 +6615,7 @@ function AdminPanelInner({user}){
     };
     const shouldHydrateTeacher = teacher => {
       if(!teacher?.uid) return false;
-      if(roles[teacher.uid] !== "admin") return true;
+      if(!isAdminRole(roles[teacher.uid])) return true;
       return isAdminTeacherAccount(teacher.uid) && (hasTeachingIndex(teacher) || !fullDataRef.current[teacher.uid]);
     };
     const targetUids = teachers
@@ -6672,6 +6690,12 @@ function AdminPanelInner({user}){
     return [...ordered, ...extras];
   },[globalInstList,teachers,fullData,isTeachingSurfaceAccount,isDeletedInstituteName]);
 
+  useEffect(()=>{
+    if(!institutes.length)return;
+    setTeacherInviteInstitute(current=>current&&institutes.includes(current)?current:institutes[0]);
+    setAdminInviteInstitute(current=>current&&institutes.includes(current)?current:institutes[0]);
+  },[institutes]);
+
   React.useEffect(()=>{
     if(view !== "main" || !institutes.length){
       setAdminV5DailySummaries({});
@@ -6744,7 +6768,7 @@ function AdminPanelInner({user}){
 
   const teacherOnlyList = useMemo(
     () => teachers.filter(t => {
-      if(roles[t.uid] !== "admin") return true;
+      if(!isAdminRole(roles[t.uid])) return true;
       if(!isAdminTeacherAccount(t.uid)) return false;
       const data = fullData[t.uid] || {};
       if(Object.prototype.hasOwnProperty.call(fullData, t.uid)){
@@ -6943,7 +6967,7 @@ function AdminPanelInner({user}){
       const uid = teacher?.uid;
       if(!uid) return false;
       if(requestedInstitutes.some(inst => teacherBelongsToInstituteFromMap(teacher, inst, hydratedFullData))) return true;
-      return includeUnloadedAdmins && roles[uid] === "admin" && !hydratedFullData[uid];
+      return includeUnloadedAdmins && isAdminRole(roles[uid]) && !hydratedFullData[uid];
     };
 
     let relevantTeachers = instituteGlanceTeacherList.filter(teacher =>
@@ -11334,22 +11358,86 @@ function AdminPanelInner({user}){
   };
 
   const handleGenerateInvite=async()=>{
+    const ownRole=roleDetails[user.uid]?.role||roles[user.uid]||"admin";
+    const inviteType=ownRole==="institute_admin"?"institute_admin":adminInviteType;
+    const needsInstitute=inviteType==="institute_admin"||(["manager","admin"].includes(ownRole)&&inviteType==="group_admin");
+    if(needsInstitute&&!adminInviteInstitute){
+      showAdminToast("Choose an institute before generating this admin invite.");
+      return;
+    }
     setInviteLoading(true); setInviteLink(null);
     try {
-      const token = await createInviteLink(user.uid);
+      const token = await createInviteLink(user.uid,{
+        inviteType,
+        instituteName:adminInviteInstitute,
+      });
       const link = `${window.location.origin}?invite=${token}`;
       setInviteLink(link);
     } catch(e) { showAdminToast("Failed to generate link: "+e.message); }
     finally { setInviteLoading(false); }
   };
 
+  const handleGenerateTeacherInvite=async()=>{
+    const instituteName=teacherInviteInstitute||institutes[0]||"";
+    if(!instituteName){
+      showAdminToast("Choose an institute before generating a teacher invite.");
+      return;
+    }
+    setTeacherInviteLoading(true);
+    setTeacherInviteLink("");
+    try{
+      const token=await createTeacherInviteForInstitute({
+        instituteName,
+        createdBy:user.uid,
+      });
+      const link=new URL(getTeacherAppUrl());
+      link.searchParams.set("invite",token);
+      setTeacherInviteLink(link.toString());
+    }catch(error){
+      showAdminToast("Failed to generate teacher invite: "+(error?.message||"Unknown error"));
+    }finally{
+      setTeacherInviteLoading(false);
+    }
+  };
+
+  const refreshJoinRequests=React.useCallback(async()=>{
+    const pending=await getPendingJoinRequests();
+    setJoinRequests(pending||[]);
+  },[]);
+
+  const handleJoinRequest=async(request,decision)=>{
+    if(!request?.id||joinRequestBusy)return;
+    setJoinRequestBusy(request.id);
+    try{
+      if(decision==="approve"){
+        await approveTeacherJoinRequest(request.id,user.uid);
+        showAdminToast(`${request.teacherName||request.teacherEmail||"Teacher"} approved for ${request.instituteName||"the institute"}.`);
+      }else{
+        await rejectTeacherJoinRequest(request.id,user.uid);
+        showAdminToast("Join request rejected.");
+      }
+      await refreshJoinRequests();
+      if(decision==="approve"){
+        const [nextTeachers,nextRoles]=await Promise.all([getAllTeachers(),getAllRoleDetails()]);
+        setTeachers(nextTeachers);
+        setRoleDetails(nextRoles);
+        setRoles(Object.fromEntries(Object.entries(nextRoles||{}).map(([targetUid,detail])=>[targetUid,detail?.role||"teacher"])));
+      }
+    }catch(error){
+      showAdminToast(error?.message||"The join request could not be updated.");
+    }finally{
+      setJoinRequestBusy("");
+    }
+  };
+
   const handlePromote=async(uid)=>{
-    adminConfirmDialog("Promote to Admin? They will see all data. New admins start as Admin only until you mark them Admin + teacher.","Promote",async()=>{
-      await promoteToAdmin(uid,user.uid,"admin_only");
-      setRoles(r=>({...r,[uid]:"admin"}));
+    adminConfirmDialog("Promote this account to an admin role inside your current access scope? New admins start as admin-only until you mark them as also teaching.","Promote",async()=>{
+      const promoted=await promoteToAdmin(uid,user.uid,"admin_only");
+      const promotedRole=promoted?.role||"admin";
+      setRoles(r=>({...r,[uid]:promotedRole}));
       setRoleDetails(r=>({
         ...r,
-        [uid]:{ ...(r[uid] || {}), uid, role:"admin", adminMode:"admin_only", teaches:false, grantedBy:user.uid, grantedAt:Date.now() },
+        [uid]:{ ...(r[uid] || {}), ...promoted, uid, role:promotedRole, adminMode:"admin_only", teaches:false, grantedBy:user.uid, grantedAt:Date.now() },
       }));
       resetInstituteGlanceAfterAccountChange();
     });
@@ -11360,10 +11448,11 @@ function AdminPanelInner({user}){
     const targetName = target ? getTeacherDisplayName(target) : "this admin";
     try {
       await setAdminTeachingMode(uid, nextMode, user.uid);
-      setRoles(r=>({...r,[uid]:"admin"}));
+      const currentRole=roleDetails[uid]?.role||roles[uid]||"admin";
+      setRoles(r=>({...r,[uid]:currentRole}));
       setRoleDetails(r=>({
         ...r,
-        [uid]:{ ...(r[uid] || {}), uid, role:"admin", adminMode:nextMode, teaches:nextMode==="admin_teacher", updatedBy:user.uid, updatedAt:Date.now() },
+        [uid]:{ ...(r[uid] || {}), uid, role:currentRole, adminMode:nextMode, teaches:nextMode==="admin_teacher", updatedBy:user.uid, updatedAt:Date.now() },
       }));
       resetInstituteGlanceAfterAccountChange();
       showAdminToast(`${targetName} is now ${nextMode === "admin_teacher" ? "Admin + teacher" : "Admin only"}.`);
@@ -13535,6 +13624,77 @@ function AdminPanelInner({user}){
     );
   };
 
+  const renderJoinRequestsPanel = () => (
+    <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:12}}>
+        <div>
+          <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display}}>Teacher access</div>
+          <div style={{fontSize:12.5,color:G.textM,marginTop:4,lineHeight:1.5}}>
+            Invite a teacher directly, or approve requests created with a private Institute ID.
+          </div>
+        </div>
+        <button type="button" onClick={refreshJoinRequests} style={{...pill("#FFFFFF",G.textM,G.border),padding:"7px 11px",fontSize:12.5,fontWeight:800}}>
+          Refresh requests
+        </button>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(220px,1fr) auto",gap:8,alignItems:"end",marginBottom:teacherInviteLink?8:14}}>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:850,color:G.textL,textTransform:"uppercase",marginBottom:6}}>Invite to institute</label>
+          <select value={teacherInviteInstitute} onChange={event=>setTeacherInviteInstitute(event.target.value)}
+            style={{width:"100%",minHeight:39,border:`1px solid ${G.border}`,borderRadius:9,background:"#fff",color:G.text,padding:"8px 10px",fontSize:13.5}}>
+            {institutes.map(institute=><option key={institute} value={institute}>{institute}</option>)}
+          </select>
+        </div>
+        <button type="button" onClick={handleGenerateTeacherInvite} disabled={!teacherInviteInstitute||teacherInviteLoading}
+          style={{...pill(G.green,"#fff","transparent"),minHeight:39,padding:"8px 13px",fontSize:13,fontWeight:850,opacity:(!teacherInviteInstitute||teacherInviteLoading)?0.55:1}}>
+          {teacherInviteLoading?"Generating...":"Generate teacher invite"}
+        </button>
+      </div>
+
+      {teacherInviteLink&&(
+        <div style={{background:G.greenL,border:"1px solid #BBE3CE",borderRadius:10,padding:"9px 10px",marginBottom:14,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:180,fontSize:12.5,color:G.green,wordBreak:"break-all"}}>{teacherInviteLink}</div>
+          <button type="button" onClick={()=>navigator.clipboard.writeText(teacherInviteLink).then(()=>showAdminToast("Teacher invite copied."))}
+            style={{...pill(G.green,"#fff","transparent"),padding:"6px 10px",fontSize:12,fontWeight:850}}>Copy</button>
+          <button type="button" onClick={()=>setTeacherInviteLink("")}
+            style={{...pill("#fff",G.textM,G.border),padding:"6px 10px",fontSize:12,fontWeight:850}}>Dismiss</button>
+        </div>
+      )}
+
+      {joinRequests.length===0?(
+        <div style={{border:`1px dashed ${G.border}`,borderRadius:10,padding:"14px",fontSize:13,color:G.textM,textAlign:"center"}}>
+          No pending Institute ID requests in your scope.
+        </div>
+      ):(
+        <div style={{display:"grid",gap:8}}>
+          {joinRequests.map(request=>(
+            <div key={request.id} style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(180px,1fr) minmax(160px,.8fr) auto",gap:10,alignItems:"center",border:`1px solid ${G.border}`,borderRadius:10,padding:"10px 11px"}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:13.5,fontWeight:850,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                  {request.teacherName||request.teacherEmail||"Unnamed teacher"}
+                </div>
+                {request.teacherEmail&&request.teacherName&&<div style={{fontSize:11.5,color:G.textM,marginTop:3}}>{request.teacherEmail}</div>}
+              </div>
+              <div>
+                <div style={{fontSize:12.5,fontWeight:800,color:G.text}}>{request.instituteName||"Institute"}</div>
+                <div style={{fontSize:11.5,color:G.textM,marginTop:3}}>ID {request.instituteCode||"private"}</div>
+              </div>
+              <div style={{display:"flex",gap:7,justifyContent:isMobile?"stretch":"flex-end"}}>
+                <button type="button" disabled={joinRequestBusy===request.id} onClick={()=>handleJoinRequest(request,"reject")}
+                  style={{...pill("#fff",G.red,G.border),padding:"7px 10px",fontSize:12,fontWeight:850,flex:isMobile?1:"none"}}>Reject</button>
+                <button type="button" disabled={joinRequestBusy===request.id} onClick={()=>handleJoinRequest(request,"approve")}
+                  style={{...pill(G.green,"#fff","transparent"),padding:"7px 10px",fontSize:12,fontWeight:850,flex:isMobile?1:"none"}}>
+                  {joinRequestBusy===request.id?"Working...":"Approve"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const renderManageTeachersPanel = () => {
     const weekEndKey = todayKey();
     const weekStartKey = addDaysToDateKey(weekEndKey, -6);
@@ -13660,8 +13820,8 @@ function AdminPanelInner({user}){
     };
     const isTeachingAccount = teacher => {
       if(!teacher?.uid) return false;
-      if(roles[teacher.uid] === "admin" && !isAdminTeacherAccount(teacher.uid)) return false;
-      if(roles[teacher.uid] !== "admin") return true;
+      if(isAdminRole(roles[teacher.uid]) && !isAdminTeacherAccount(teacher.uid)) return false;
+      if(!isAdminRole(roles[teacher.uid])) return true;
       const data = fullData[teacher.uid] || {};
       const detailsReady = hasLoadedTeacherData(teacher);
       const classes = loadedTeacherClasses(data);
@@ -16681,7 +16841,7 @@ function AdminPanelInner({user}){
       );
       const renderToolsTab = () => {
         const teacherCount = teachers.filter(isTeachingSurfaceAccount).length;
-        const adminCount = teachers.filter(t=>roles[t.uid]==="admin").length;
+        const adminCount = teachers.filter(t=>isAdminRole(roles[t.uid])).length;
         const toolGridItems = [
           { key:"teachers", title:"Teachers", subtitle:"Profiles, classes, access", icon:IconUsersGroup, count:teacherCount, onClick:()=>openMobileManageArea("teachers") },
           { key:"institutes", title:"Institutes", subtitle:"Centres and structure", icon:IconBuilding, count:institutes.length, onClick:()=>openMobileManageArea("institutes") },
@@ -16788,7 +16948,7 @@ function AdminPanelInner({user}){
       );
     }
 
-    const adminOnlyList = teachers.filter(t=>roles[t.uid]==="admin");
+    const adminOnlyList = teachers.filter(t=>isAdminRole(roles[t.uid]));
     const teacherOnlyList = teachers.filter(isTeachingSurfaceAccount);
     const manageTabItems = [
       { key:"teachers", label:"Teachers", icon:IconUsersGroup, count:teacherOnlyList.length, hint:"Accounts & classes" },
@@ -17832,7 +17992,17 @@ function AdminPanelInner({user}){
         </>}
 
         {manageTab==="admins"&&(()=>{
-          const adminList = teachers.filter(t=>roles[t.uid]==="admin");
+          const adminList = teachers.filter(t=>isAdminRole(roles[t.uid]));
+          const ownAdminRole = roleDetails[user.uid]?.role || roles[user.uid] || "admin";
+          const canChooseAdminInviteType = ["manager","admin","group_admin"].includes(ownAdminRole);
+          const effectiveAdminInviteType = ownAdminRole==="institute_admin" ? "institute_admin" : adminInviteType;
+          const adminInviteNeedsInstitute = effectiveAdminInviteType==="institute_admin"
+            || (["manager","admin"].includes(ownAdminRole)&&effectiveAdminInviteType==="group_admin");
+          const adminInviteAccessLabel = effectiveAdminInviteType==="group_admin"
+            ? "Group Admin"
+            : effectiveAdminInviteType==="institute_admin"
+              ? "Institute Admin"
+              : "Legacy Admin";
           const adminTeacherCount = adminList.filter(t=>isAdminTeacherAccount(t.uid)).length;
           const adminOnlyCount = Math.max(0, adminList.length - adminTeacherCount);
           const adminSearchKey = manageAdminSearch.trim().toLowerCase();
@@ -17841,7 +18011,8 @@ function AdminPanelInner({user}){
             const name = getTeacherDisplayName(teacher).toLowerCase();
             const email = String(teacher?.email || "").toLowerCase();
             const instituteText = getTeacherInstituteList(teacher).join(" ").toLowerCase();
-            const modeText = getAdminTeachingMode(teacher.uid) === "admin_teacher" ? "admin teacher admin + teacher" : "admin only";
+            const roleText = String(roles[teacher.uid]||"admin").replace(/_/g," ");
+            const modeText = getAdminTeachingMode(teacher.uid) === "admin_teacher" ? `${roleText} teacher admin + teacher` : `${roleText} admin only`;
             return name.includes(adminSearchKey) || email.includes(adminSearchKey) || instituteText.includes(adminSearchKey) || modeText.includes(adminSearchKey);
           };
           const adminRows = adminList
@@ -17849,6 +18020,11 @@ function AdminPanelInner({user}){
             .map(t=>{
               const instituteList = getTeacherInstituteList(t);
               const adminMode = getAdminTeachingMode(t.uid);
+              const publicRole = roles[t.uid]==="group_admin"
+                ? "Group Admin"
+                : roles[t.uid]==="institute_admin"
+                  ? "Institute Admin"
+                  : "Legacy Admin";
               return {
                 teacher:t,
                 rawName:getTeacherRawName(t),
@@ -17857,7 +18033,7 @@ function AdminPanelInner({user}){
                 primaryInstitute:instituteList[0] || "No institute assigned",
                 otherInstitutes:instituteList.slice(1),
                 adminMode,
-                typeLabel:adminMode === "admin_teacher" ? "Admin + teacher" : "Admin only",
+                typeLabel:adminMode === "admin_teacher" ? `${publicRole} + teacher` : publicRole,
                 isMe:t.uid===user.uid,
               };
             })
@@ -17875,20 +18051,39 @@ function AdminPanelInner({user}){
                       Admins ({adminList.length})
                     </div>
                   </div>
-                  <button onClick={handleGenerateInvite} disabled={inviteLoading}
-                    title="Single-use admin invite link. Expires in 7 days."
-                    style={{...pill(G.navy,"#fff","transparent"),padding:"8px 13px",fontSize:13.5,flexShrink:0,alignSelf:"flex-start",fontWeight:850}}>
-                    <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
-                      <AppIcon icon={IconLink} size={15}/>
-                      {inviteLoading?"Generating...":"Generate Link"}
-                    </span>
-                  </button>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                    {canChooseAdminInviteType&&(
+                      <select value={adminInviteType} onChange={event=>setAdminInviteType(event.target.value)}
+                        style={{minHeight:36,border:`1px solid ${G.border}`,borderRadius:8,background:"#fff",color:G.text,padding:"7px 9px",fontSize:12.5,fontWeight:750}}>
+                        {ownAdminRole==="admin"&&<option value="admin">Legacy Admin</option>}
+                        <option value="group_admin">Group Admin</option>
+                        <option value="institute_admin">Institute Admin</option>
+                      </select>
+                    )}
+                    {adminInviteNeedsInstitute&&(
+                      <select value={adminInviteInstitute} onChange={event=>setAdminInviteInstitute(event.target.value)}
+                        disabled={ownAdminRole==="institute_admin"}
+                        style={{minHeight:36,maxWidth:210,border:`1px solid ${G.border}`,borderRadius:8,background:"#fff",color:G.text,padding:"7px 9px",fontSize:12.5,fontWeight:750}}>
+                        {institutes.map(institute=><option key={institute} value={institute}>{institute}</option>)}
+                      </select>
+                    )}
+                    <button onClick={handleGenerateInvite} disabled={inviteLoading||(adminInviteNeedsInstitute&&!adminInviteInstitute)}
+                      title="Single-use scoped admin invite link. Expires in 7 days."
+                      style={{...pill(G.navy,"#fff","transparent"),padding:"8px 13px",fontSize:13.5,flexShrink:0,alignSelf:"flex-start",fontWeight:850,opacity:(adminInviteNeedsInstitute&&!adminInviteInstitute)?0.55:1}}>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
+                        <AppIcon icon={IconLink} size={15}/>
+                        {inviteLoading?"Generating...":"Generate Link"}
+                      </span>
+                    </button>
+                  </div>
                 </div>
                 {inviteLink&&(
                   <div style={{background:G.blueL,border:"1px solid #BFDBFE",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
                     <div style={{background:"#fff",border:"1px solid #BFDBFE",borderRadius:9,padding:"9px 11px",fontSize:13,fontFamily:G.mono,color:"#1A2F5A",wordBreak:"break-all",marginBottom:8}}>{inviteLink}</div>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-                      <div style={{fontSize:12.5,color:"#1D4ED8",fontWeight:750}}>Single-use · expires in 7 days · share privately</div>
+                      <div style={{fontSize:12.5,color:"#1D4ED8",fontWeight:750}}>
+                        Single-use · expires in 7 days · {adminInviteAccessLabel} access
+                      </div>
                       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                         <button onClick={()=>navigator.clipboard.writeText(inviteLink).then(()=>showAdminToast("Link copied!"))} style={{...pill("#1D4ED8","#fff","transparent"),fontSize:12.5,padding:"6px 12px",fontWeight:850}}>Copy Link</button>
                         <button onClick={()=>setInviteLink(null)} style={{...pill("#FFFFFF",G.textM,G.border),fontSize:12.5,padding:"6px 12px",fontWeight:850}}>Dismiss</button>
@@ -18127,7 +18322,12 @@ function AdminPanelInner({user}){
         })()}
 
         {/* ── TEACHERS TAB ── */}
-        {manageTab==="teachers"&&renderManageTeachersPanel()}
+        {manageTab==="teachers"&&(
+          <>
+            {renderJoinRequestsPanel()}
+            {renderManageTeachersPanel()}
+          </>
+        )}
       </>)}
       </main>
       </div>
@@ -18493,7 +18693,7 @@ function AdminPanelInner({user}){
                 icon={IconSettings}
                 title="Admins"
                 subtitle="Roles and permissions"
-                count={teachers.filter(t=>roles[t.uid]==="admin").length}
+                count={teachers.filter(t=>isAdminRole(roles[t.uid])).length}
                 onClick={()=>openMobileManageArea("admins")}
               />
               <MobileManageTile

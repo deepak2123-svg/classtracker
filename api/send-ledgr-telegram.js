@@ -49,6 +49,29 @@ function readJobPdfBuffer(job) {
   return buffer.length ? buffer : null;
 }
 
+function normaliseInstituteKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+async function getAllowedInstituteNames(db, adminUser) {
+  if (adminUser.role === "admin" || adminUser.role === "manager") return null;
+  if (adminUser.role === "institute_admin" && adminUser.instituteId) {
+    const snap = await db.doc(`institutes/${adminUser.instituteId}`).get();
+    if (!snap.exists || snap.data()?.status === "deleted") return new Set();
+    return new Set([normaliseInstituteKey(snap.data()?.name)]);
+  }
+  if (adminUser.role === "group_admin" && adminUser.groupId) {
+    const snap = await db.collection("institutes").where("groupId", "==", adminUser.groupId).get();
+    return new Set(
+      snap.docs
+        .filter(item => item.data()?.status !== "deleted")
+        .map(item => normaliseInstituteKey(item.data()?.name))
+        .filter(Boolean)
+    );
+  }
+  return new Set();
+}
+
 export default async function handler(req, res) {
   if (req.method === "GET") {
     try {
@@ -113,6 +136,7 @@ export default async function handler(req, res) {
     }
 
     const configRef = adminDb().doc("config/ledgrTelegramDelivery");
+    const allowedInstituteNames = await getAllowedInstituteNames(adminDb(), adminUser);
     const configSnap = await configRef.get();
     const savedConfig = configSnap.exists ? (configSnap.data() || {}) : {};
     const savedRecipients = Array.isArray(savedConfig.recipients) ? savedConfig.recipients : [];
@@ -149,6 +173,13 @@ export default async function handler(req, res) {
       const recipient = recipientMap.get(recipientId);
       if (!recipient) {
         results.push({ recipientId, ok: false, error: "Telegram route is no longer configured." });
+        continue;
+      }
+      if (
+        allowedInstituteNames
+        && !allowedInstituteNames.has(normaliseInstituteKey(recipient.institute))
+      ) {
+        results.push({ recipientId, ok: false, error: "This Telegram route is outside your institute access scope." });
         continue;
       }
       if (recipient.enabled === false) {

@@ -6,25 +6,319 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role == "admin";
+    function currentRoleData() {
+      return get(/databases/$(database)/documents/roles/$(request.auth.uid)).data;
     }
 
-    match /users/{uid}/appdata/{doc} {
-      allow read:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
-      allow write: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+    function hasCurrentRoleDoc() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/roles/$(request.auth.uid));
+    }
+
+    function currentRole() {
+      return hasCurrentRoleDoc() ? currentRoleData().role : (isSignedIn() ? "teacher" : "");
+    }
+
+    function isManager() {
+      return currentRole() == "manager";
+    }
+
+    function isLegacyAdmin() {
+      return currentRole() == "admin";
+    }
+
+    function isGroupAdmin() {
+      return currentRole() == "group_admin";
+    }
+
+    function isInstituteAdmin() {
+      return currentRole() == "institute_admin";
+    }
+
+    function isAdmin() {
+      return isManager() || isLegacyAdmin() || isGroupAdmin() || isInstituteAdmin();
+    }
+
+    function canManageGroup(groupId) {
+      return isManager()
+        || isLegacyAdmin()
+        || (isGroupAdmin() && currentRoleData().groupId == groupId);
+    }
+
+    function canManageInstitute(groupId, instituteId) {
+      return canManageGroup(groupId)
+        || (
+          isInstituteAdmin()
+          && currentRoleData().groupId == groupId
+          && currentRoleData().instituteId == instituteId
+        );
+    }
+
+    function canAccessTeacherData(uid) {
+      return isSignedIn() && (
+        request.auth.uid == uid
+        || isManager()
+        || isLegacyAdmin()
+        || (
+          isGroupAdmin()
+          && get(/databases/$(database)/documents/roles/$(uid)).data.groupId == currentRoleData().groupId
+        )
+        || (
+          isInstituteAdmin()
+          && get(/databases/$(database)/documents/roles/$(uid)).data.instituteIds
+            .hasAny([currentRoleData().instituteId])
+        )
+      );
+    }
+
+    function hasApprovedInstituteMembership(instituteId) {
+      return isSignedIn()
+        && exists(
+          /databases/$(database)/documents/memberships/$(request.auth.uid + "_" + instituteId)
+        )
+        && get(
+          /databases/$(database)/documents/memberships/$(request.auth.uid + "_" + instituteId)
+        ).data.status == "approved";
+    }
+
+    function userCanJoinGroup(uid, groupId) {
+      return !exists(/databases/$(database)/documents/roles/$(uid))
+        || !("groupId" in get(/databases/$(database)/documents/roles/$(uid)).data)
+        || get(/databases/$(database)/documents/roles/$(uid)).data.groupId == groupId;
+    }
+
+    function validRoleFromInvite(uid) {
+      return isSignedIn()
+        && request.auth.uid == uid
+        && ("inviteToken" in request.resource.data)
+        && request.resource.data.inviteToken is string
+        && getAfter(
+          /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+        ).data.lastUsedBy == uid
+        && (
+          (
+            getAfter(
+              /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+            ).data.inviteType == "group_admin"
+            && request.resource.data.role == "group_admin"
+            && request.resource.data.groupId == getAfter(
+              /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+            ).data.groupId
+          )
+          || (
+            getAfter(
+              /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+            ).data.inviteType == "institute_admin"
+            && request.resource.data.role == "institute_admin"
+            && request.resource.data.groupId == getAfter(
+              /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+            ).data.groupId
+            && request.resource.data.instituteId == getAfter(
+              /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+            ).data.instituteId
+          )
+          || (
+            getAfter(
+              /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+            ).data.inviteType == "teacher"
+            && request.resource.data.role == "teacher"
+            && request.resource.data.groupId == getAfter(
+              /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+            ).data.groupId
+          )
+          || (
+            !("inviteType" in getAfter(
+              /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+            ).data)
+            && request.resource.data.role == "admin"
+          )
+          || (
+            getAfter(
+              /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+            ).data.inviteType == "admin"
+            && request.resource.data.role == "admin"
+          )
+        );
+    }
+
+    function validTeacherMembershipInvite(uid) {
+      return isSignedIn()
+        && request.auth.uid == uid
+        && ("inviteToken" in request.resource.data)
+        && request.resource.data.inviteToken is string
+        && getAfter(
+          /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+        ).data.lastUsedBy == uid
+        && getAfter(
+          /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+        ).data.inviteType == "teacher"
+        && request.resource.data.groupId == getAfter(
+          /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+        ).data.groupId
+        && request.resource.data.instituteId == getAfter(
+          /databases/$(database)/documents/invites/$(request.resource.data.inviteToken)
+        ).data.instituteId;
+    }
+
+    match /groups/{groupId} {
+      allow read: if isManager()
+        || isLegacyAdmin()
+        || ((isGroupAdmin() || isInstituteAdmin()) && currentRoleData().groupId == groupId);
+      allow create, delete: if isManager() || isLegacyAdmin();
+      allow update: if canManageGroup(groupId);
+    }
+
+    match /institutes/{instituteId} {
+      allow get: if canManageInstitute(resource.data.groupId, instituteId)
+        || hasApprovedInstituteMembership(instituteId);
+      allow list: if isManager()
+        || isLegacyAdmin()
+        || (isGroupAdmin() && resource.data.groupId == currentRoleData().groupId)
+        || (isInstituteAdmin() && instituteId == currentRoleData().instituteId);
+      allow create: if canManageGroup(request.resource.data.groupId);
+      allow update, delete: if canManageInstitute(resource.data.groupId, instituteId);
+    }
+
+    match /instituteCodes/{code} {
+      allow get: if isSignedIn();
+      allow list: if isManager()
+        || isLegacyAdmin()
+        || (isGroupAdmin() && resource.data.groupId == currentRoleData().groupId)
+        || (
+          isInstituteAdmin()
+          && resource.data.instituteId == currentRoleData().instituteId
+        );
+      allow create: if canManageGroup(request.resource.data.groupId);
+      allow update, delete: if canManageInstitute(resource.data.groupId, resource.data.instituteId);
+    }
+
+    match /memberships/{membershipId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+        || canManageInstitute(resource.data.groupId, resource.data.instituteId)
+      );
+      allow create: if canManageInstitute(request.resource.data.groupId, request.resource.data.instituteId)
+          && (
+            isManager()
+            || isLegacyAdmin()
+            || userCanJoinGroup(request.resource.data.userId, request.resource.data.groupId)
+          )
+        || validTeacherMembershipInvite(request.resource.data.userId);
+      allow update, delete: if canManageInstitute(resource.data.groupId, resource.data.instituteId);
+    }
+
+    match /joinRequests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+        || canManageInstitute(resource.data.groupId, resource.data.instituteId)
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.requestedRole == "teacher"
+        && request.resource.data.status == "pending"
+        && userCanJoinGroup(request.auth.uid, request.resource.data.groupId);
+      allow update: if canManageInstitute(resource.data.groupId, resource.data.instituteId)
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.status == "pending"
+        );
+      allow delete: if canManageInstitute(resource.data.groupId, resource.data.instituteId);
+    }
+
+    match /users/{uid}/appdata/{docId} {
+      allow read, write: if canAccessTeacherData(uid);
     }
 
     match /roles/{uid} {
-      allow read:   if isSignedIn() && (request.auth.uid == uid || isAdmin());
-      allow create: if isSignedIn() && request.auth.uid == uid;
-      allow update: if isAdmin() || request.auth.uid == uid;
+      allow read: if isSignedIn() && (
+        request.auth.uid == uid
+        || isManager()
+        || isLegacyAdmin()
+        || (isGroupAdmin() && resource.data.groupId == currentRoleData().groupId)
+        || (
+          isInstituteAdmin()
+          && resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        )
+      );
+      allow create: if isManager()
+        || isLegacyAdmin()
+        || (
+          isGroupAdmin()
+          && request.resource.data.groupId == currentRoleData().groupId
+        )
+        || (
+          isInstituteAdmin()
+          && request.resource.data.groupId == currentRoleData().groupId
+          && request.resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        )
+        || (
+          isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.role == "teacher"
+        )
+        || validRoleFromInvite(uid);
+      allow update: if isManager()
+        || isLegacyAdmin()
+        || (
+          isGroupAdmin()
+          && request.resource.data.groupId == currentRoleData().groupId
+          && (
+            !("groupId" in resource.data)
+            || resource.data.groupId == currentRoleData().groupId
+          )
+        )
+        || (
+          isInstituteAdmin()
+          && request.resource.data.groupId == currentRoleData().groupId
+          && request.resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+          && (
+            !("groupId" in resource.data)
+            || resource.data.groupId == currentRoleData().groupId
+          )
+        )
+        || (
+          isSignedIn()
+          && request.auth.uid == uid
+          && resource.data.role == "teacher"
+          && request.resource.data.role == "teacher"
+          && (
+            !("groupId" in resource.data)
+            || request.resource.data.groupId == resource.data.groupId
+          )
+        )
+        || validRoleFromInvite(uid);
+      allow delete: if isManager() || isLegacyAdmin();
     }
 
     match /teachers/{uid} {
-      allow read:  if isSignedIn();
-      allow write: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if isSignedIn() && (
+        request.auth.uid == uid
+        || isManager()
+        || isLegacyAdmin()
+        || (
+          isGroupAdmin()
+          && resource.data.groupIds.hasAny([currentRoleData().groupId])
+        )
+        || (
+          isInstituteAdmin()
+          && resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        )
+      );
+      allow write: if isSignedIn() && (
+        request.auth.uid == uid
+        || isManager()
+        || isLegacyAdmin()
+        || (
+          isGroupAdmin()
+          && request.resource.data.groupIds.hasAny([currentRoleData().groupId])
+        )
+        || (
+          isInstituteAdmin()
+          && request.resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        )
+      );
     }
 
     match /adminDailyInstituteStats/{summaryId} {
@@ -48,78 +342,165 @@ service cloud.firestore {
     }
 
     match /feedbackThreads/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if canAccessTeacherData(uid);
       allow create: if isSignedIn() && (
-        isAdmin() ||
-        (
-          request.auth.uid == uid &&
-          request.resource.data.teacherUid == uid &&
-          request.resource.data.lastSenderRole == "teacher" &&
-          request.resource.data.status == "open"
+        isAdmin()
+        || (
+          request.auth.uid == uid
+          && request.resource.data.teacherUid == uid
+          && request.resource.data.lastSenderRole == "teacher"
+          && request.resource.data.status == "open"
         )
       );
       allow update: if isSignedIn() && (
-        isAdmin() ||
-        (
-          request.auth.uid == uid &&
-          request.resource.data.teacherUid == resource.data.teacherUid &&
-          request.resource.data.teacherUid == uid &&
-          request.resource.data.lastSenderRole == "teacher" &&
-          request.resource.data.status == "open" &&
-          request.resource.data.unreadByTeacher == resource.data.unreadByTeacher
-        ) ||
-        (
-          request.auth.uid == uid &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(["unreadByTeacher"]) &&
-          request.resource.data.unreadByTeacher == 0
+        isAdmin()
+        || (
+          request.auth.uid == uid
+          && request.resource.data.teacherUid == resource.data.teacherUid
+          && request.resource.data.teacherUid == uid
+          && request.resource.data.lastSenderRole == "teacher"
+          && request.resource.data.status == "open"
+          && request.resource.data.unreadByTeacher == resource.data.unreadByTeacher
+        )
+        || (
+          request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["unreadByTeacher"])
+          && request.resource.data.unreadByTeacher == 0
         )
       );
       allow delete: if isAdmin();
 
       match /messages/{messageId} {
-        allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+        allow read: if canAccessTeacherData(uid);
         allow create: if isSignedIn() && (
-          isAdmin() ||
-          (
-            request.auth.uid == uid &&
-            request.resource.data.senderUid == uid &&
-            request.resource.data.senderRole == "teacher" &&
-            request.resource.data.body is string &&
-            request.resource.data.body.size() > 0 &&
-            request.resource.data.body.size() <= 2000
+          isAdmin()
+          || (
+            request.auth.uid == uid
+            && request.resource.data.senderUid == uid
+            && request.resource.data.senderRole == "teacher"
+            && request.resource.data.body is string
+            && request.resource.data.body.size() > 0
+            && request.resource.data.body.size() <= 2000
           )
         );
         allow update, delete: if false;
       }
     }
 
-    match /config/{doc} {
-      allow read:  if isSignedIn();
+    match /config/{docId} {
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     match /syllabusTemplates/{templateId} {
-      allow read:  if isAdmin();
-      allow write: if isAdmin();
+      allow read: if isManager()
+        || isLegacyAdmin()
+        || (isGroupAdmin() && resource.data.groupId == currentRoleData().groupId)
+        || (
+          isInstituteAdmin()
+          && resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        );
+      allow create: if isManager()
+        || isLegacyAdmin()
+        || (
+          isGroupAdmin()
+          && request.resource.data.groupId == currentRoleData().groupId
+        )
+        || (
+          isInstituteAdmin()
+          && request.resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        );
+      allow update, delete: if isManager()
+        || isLegacyAdmin()
+        || (isGroupAdmin() && resource.data.groupId == currentRoleData().groupId)
+        || (
+          isInstituteAdmin()
+          && resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        );
 
       match /versions/{versionId} {
-        allow read:  if isAdmin();
-        allow create: if isAdmin();
+        allow read, create, delete: if isManager()
+          || isLegacyAdmin()
+          || (
+            isGroupAdmin()
+            && get(/databases/$(database)/documents/syllabusTemplates/$(templateId)).data.groupId
+              == currentRoleData().groupId
+          )
+          || (
+            isInstituteAdmin()
+            && get(/databases/$(database)/documents/syllabusTemplates/$(templateId)).data.instituteIds
+              .hasAny([currentRoleData().instituteId])
+          );
         allow update: if false;
-        allow delete: if isAdmin();
       }
     }
 
     match /publishedSyllabi/{templateId} {
-      allow read:  if isSignedIn();
-      allow write: if isAdmin();
+      allow read: if isSignedIn() && (
+        isManager()
+        || isLegacyAdmin()
+        || (
+          hasCurrentRoleDoc()
+          && currentRoleData().groupId == resource.data.groupId
+        )
+        || (
+          !hasCurrentRoleDoc()
+          && !("groupId" in resource.data)
+        )
+      );
+      allow create, update: if isManager()
+        || isLegacyAdmin()
+        || (
+          isGroupAdmin()
+          && request.resource.data.groupId == currentRoleData().groupId
+        )
+        || (
+          isInstituteAdmin()
+          && request.resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        );
+      allow delete: if isManager()
+        || isLegacyAdmin()
+        || (isGroupAdmin() && resource.data.groupId == currentRoleData().groupId)
+        || (
+          isInstituteAdmin()
+          && resource.data.instituteIds.hasAny([currentRoleData().instituteId])
+        );
     }
 
     match /invites/{token} {
-      allow read:   if isSignedIn();
-      allow create: if isAdmin();
-      allow update: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isManager()
+        || isLegacyAdmin()
+        || (isGroupAdmin() && resource.data.groupId == currentRoleData().groupId)
+        || (
+          isInstituteAdmin()
+          && resource.data.instituteId == currentRoleData().instituteId
+        );
+      allow create: if isAdmin() && (
+        isManager()
+        || isLegacyAdmin()
+        || (
+          isGroupAdmin()
+          && request.resource.data.groupId == currentRoleData().groupId
+        )
+        || (
+          isInstituteAdmin()
+          && request.resource.data.groupId == currentRoleData().groupId
+          && request.resource.data.instituteId == currentRoleData().instituteId
+        )
+      );
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "used",
+          "usedBy",
+          "usedAt",
+          "useCount",
+          "lastUsedBy",
+          "lastUsedAt"
+        ])
+        && request.resource.data.lastUsedBy == request.auth.uid;
+      allow delete: if isManager() || isLegacyAdmin();
     }
   }
 }
