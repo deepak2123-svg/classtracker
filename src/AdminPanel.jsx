@@ -6309,15 +6309,17 @@ function AdminPanelInner({user}){
       // Restore persisted admin recycle bin
       if(savedBin.length>0) setAdminBin(savedBin);
 
+      const ownRole = roleDocs?.[user.uid]?.role || "teacher";
+      const canSeedLegacyInstituteDirectory = ownRole === "admin";
       if(gInst.length>0){
         // Config doc exists and has institutes — use it
         setGlobalInstList(gInst);
       } else {
-        // Config doc empty or missing — seed from teacher index (all known institutes)
+        // Legacy-only fallback. Tenant-scoped roles must not repopulate the
+        // global config/institutes document from their scoped teacher index.
         const fromIndex=[...new Set(t.flatMap(teacher=>(teacher.institutes||[]).map(i=>i.trim()).filter(Boolean)))].sort();
         setGlobalInstList(fromIndex);
-        // Save to config so next load is fast and authoritative
-        if(fromIndex.length>0){
+        if(fromIndex.length>0&&canSeedLegacyInstituteDirectory){
           try{
             const{doc:d,setDoc:s}=await import("firebase/firestore");
             const{db:fdb}=await import("./firebase");
@@ -11018,6 +11020,11 @@ function AdminPanelInner({user}){
   // Save a new global institute to Firestore config
   // Save reordered institute list
   const saveInstOrder = async (newList) => {
+    const ownRole = roleDetails[user.uid]?.role || roles[user.uid] || "teacher";
+    if (ownRole !== "admin") {
+      setGlobalInstList(newList);
+      return;
+    }
     try {
       const {doc: d, setDoc: s} = await import("firebase/firestore");
       const {db: fdb} = await import("./firebase");
@@ -11027,6 +11034,13 @@ function AdminPanelInner({user}){
   };
 
   const handleRenameInstitute = async (oldName, newName) => {
+    const ownRole = roleDetails[user.uid]?.role || roles[user.uid] || "teacher";
+    if (ownRole !== "admin") {
+      setRenamingInst(null);
+      setRenameInstVal("");
+      showAdminToast("Institute rename is disabled for scoped tenant admins until the tenant-safe rename flow is ready.");
+      return;
+    }
     const nextName = String(newName || "").trim();
     if (!nextName) { setRenamingInst(null); return; }
     if (sameInstituteName(nextName, oldName) && nextName === String(oldName || "").trim()) {
@@ -11535,6 +11549,11 @@ function AdminPanelInner({user}){
   };
 
   const handleDeleteInstitute = (inst) => {
+    const ownRole = roleDetails[user.uid]?.role || roles[user.uid] || "teacher";
+    if (ownRole !== "admin") {
+      showAdminToast("Institute delete/migrate is disabled for scoped tenant admins until the tenant-safe flow is ready.");
+      return;
+    }
     setInstDeleteModal({ inst, step: "choose", migrateTarget: "", busy: false, error: "" });
   };
 
@@ -17797,6 +17816,8 @@ function AdminPanelInner({user}){
         {/* Institute list */}
         {(()=>{
           const instituteSearchKey = manageInstituteFilter.trim().toLowerCase();
+          const ownRoleForInstituteTools = roleDetails[user.uid]?.role || roles[user.uid] || "teacher";
+          const canUseLegacyInstituteActions = ownRoleForInstituteTools === "admin";
           const visibleInstitutes = (manageScopeInstitute
             ? institutes.filter(inst=>sameInstituteName(inst,manageScopeInstitute))
             : institutes.filter(inst=>!instituteSearchKey || inst.toLowerCase().includes(instituteSearchKey))
@@ -17824,7 +17845,9 @@ function AdminPanelInner({user}){
               <div style={{fontSize:17,fontWeight:700,color:G.text,fontFamily:G.display,marginBottom:4}}>{manageScopeInstitute ? manageScopeInstitute : "Institutes"}</div>
               <div style={{fontSize:14,color:G.textM,marginBottom:14}}>
                 {manageScopeInstitute
-                  ? "Rename this institute, open its sections, or jump straight to the connected teachers."
+                  ? (canUseLegacyInstituteActions
+                    ? "Rename this institute, open its sections, or jump straight to the connected teachers."
+                    : "Open its sections or jump straight to the connected teachers.")
                   : "One line per institute, with teachers, classes, sections, and the next action visible immediately."}
               </div>
               {isMobile&&(
@@ -17913,26 +17936,30 @@ function AdminPanelInner({user}){
                             Teachers
                           </button>
                           <button type="button" onClick={()=>openManageTab("sections",{ detailInstitute: row.inst })} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("blue"),minHeight:40}}>Sections</button>
-                          <button type="button" onClick={()=>{setRenamingInst(row.inst);setRenameInstVal(row.inst);}} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>Rename</button>
-                          <button
-                            type="button"
-                            onClick={()=>setMobileToolActionSheet({
-                              title: row.inst,
-                              subtitle: "Institute actions",
-                              actions: [
-                                {
-                                  key: "delete",
-                                  label: "Delete or migrate institute",
-                                  icon: IconTrash,
-                                  tone: "danger",
-                                  onClick: () => handleDeleteInstitute(row.inst),
-                                },
-                              ],
-                            })}
-                            className="admin-mobile-touch"
-                            style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>
-                            More
-                          </button>
+                          {canUseLegacyInstituteActions&&(
+                            <>
+                              <button type="button" onClick={()=>{setRenamingInst(row.inst);setRenameInstVal(row.inst);}} className="admin-mobile-touch" style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>Rename</button>
+                              <button
+                                type="button"
+                                onClick={()=>setMobileToolActionSheet({
+                                  title: row.inst,
+                                  subtitle: "Institute actions",
+                                  actions: [
+                                    {
+                                      key: "delete",
+                                      label: "Delete or migrate institute",
+                                      icon: IconTrash,
+                                      tone: "danger",
+                                      onClick: () => handleDeleteInstitute(row.inst),
+                                    },
+                                  ],
+                                })}
+                                className="admin-mobile-touch"
+                                style={{...workspaceActionButtonStyle("neutral"),minHeight:40}}>
+                                More
+                              </button>
+                            </>
+                          )}
                         </div>
                       </>
                     )}
@@ -17985,8 +18012,12 @@ function AdminPanelInner({user}){
                           Teachers
                         </button>
                         <button onClick={()=>openManageTab("sections",{ detailInstitute: row.inst })} style={workspaceActionButtonStyle("blue")}>Sections</button>
-                        <button onClick={()=>{setRenamingInst(row.inst);setRenameInstVal(row.inst);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
-                        <button onClick={()=>handleDeleteInstitute(row.inst)} style={workspaceActionButtonStyle("danger")}>Delete</button>
+                        {canUseLegacyInstituteActions&&(
+                          <>
+                            <button onClick={()=>{setRenamingInst(row.inst);setRenameInstVal(row.inst);}} style={workspaceActionButtonStyle("neutral")}>Rename</button>
+                            <button onClick={()=>handleDeleteInstitute(row.inst)} style={workspaceActionButtonStyle("danger")}>Delete</button>
+                          </>
+                        )}
                       </>
                     )}
                   </div>,

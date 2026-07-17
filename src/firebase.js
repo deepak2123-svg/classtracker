@@ -3371,6 +3371,8 @@ export async function deleteGlobalInstitute(name) {
 // ── Deleted institutes list (persisted so UI survives page refresh) ────────────
 export async function getDeletedInstitutesList() {
   try {
+    const role = await getCurrentRoleDetails();
+    if (role.role !== "admin") return [];
     const snap = await getDoc(doc(db, "config", "institutes"));
     if (snap.exists()) return snap.data().deletedList || [];
     return [];
@@ -3379,6 +3381,8 @@ export async function getDeletedInstitutesList() {
 
 export async function addToDeletedInstitutesList(name) {
   try {
+    const role = await getCurrentRoleDetails();
+    if (role.role !== "admin") return;
     const snap = await getDoc(doc(db, "config", "institutes"));
     const existing = snap.exists() ? (snap.data().deletedList || []) : [];
     const norm = name.trim().toLowerCase();
@@ -3389,6 +3393,8 @@ export async function addToDeletedInstitutesList(name) {
 
 export async function removeFromDeletedInstitutesList(name) {
   try {
+    const role = await getCurrentRoleDetails();
+    if (role.role !== "admin") return;
     const snap = await getDoc(doc(db, "config", "institutes"));
     const existing = snap.exists() ? (snap.data().deletedList || []) : [];
     const filtered = existing.filter(i => i.toLowerCase() !== name.trim().toLowerCase());
@@ -3585,9 +3591,8 @@ export async function saveInstituteGradeGroups(instituteName, gradeGroups, extra
   const snap = await getDoc(doc(db, "config", "sections"));
   const existing = snap.exists() ? snap.data() : {};
   await setDoc(doc(db, "config", "sections"), {
-    ...existing,
     [instituteName]: { ...(existing[instituteName]||{}), ...extraPatch, gradeGroups }
-  });
+  }, { merge: true });
 }
 
 export async function saveInstituteType(instituteName, type) {
@@ -3595,9 +3600,8 @@ export async function saveInstituteType(instituteName, type) {
   const snap = await getDoc(doc(db, "config", "sections"));
   const existing = snap.exists() ? snap.data() : {};
   await setDoc(doc(db, "config", "sections"), {
-    ...existing,
     [instituteName]: { ...(existing[instituteName]||{}), type }
-  });
+  }, { merge: true });
 }
 
 export async function saveInstituteExtraSections(instituteName, extraSections) {
@@ -3605,12 +3609,11 @@ export async function saveInstituteExtraSections(instituteName, extraSections) {
   const snap = await getDoc(doc(db, "config", "sections"));
   const existing = snap.exists() ? snap.data() : {};
   await setDoc(doc(db, "config", "sections"), {
-    ...existing,
     [instituteName]: {
       ...(existing[instituteName] || {}),
       extraSections: uniqueTrimmed(extraSections),
     }
-  });
+  }, { merge: true });
 }
 
 export async function deleteInstituteGradeGroup(instituteName, groupId) {
@@ -3620,9 +3623,8 @@ export async function deleteInstituteGradeGroup(instituteName, groupId) {
   const current = existing[instituteName]?.gradeGroups || [];
   const updated = current.filter(g => g.id !== groupId);
   await setDoc(doc(db, "config", "sections"), {
-    ...existing,
     [instituteName]: { ...(existing[instituteName] || {}), gradeGroups: updated }
-  });
+  }, { merge: true });
 }
 
 // ── Delete institute completely — wipes all classes/notes from every teacher ──
