@@ -6281,20 +6281,30 @@ function AdminPanelInner({user}){
   },[]);
 
   useEffect(()=>{
+    let cancelled = false;
+    const readStartupValue = async (label, task, fallback) => {
+      try {
+        return await task;
+      } catch (error) {
+        console.error(label, error);
+        return fallback;
+      }
+    };
     (async()=>{
       // Load index + roles + global institutes list in parallel
       const [t,roleDocs,gInst,gSubjects,gSyllabi,gDeleted,savedBin,savedLedgrSchedule,savedTelegramConfig,pendingJoins]=await Promise.all([
-        getAllTeachers(),
-        getAllRoleDetails(),
-        getGlobalInstitutes(),
-        getGlobalSubjects(),
-        getSyllabusTemplates(),
-        getDeletedInstitutesList(),
-        getAdminBin(),
-        getLedgrReportSchedule(),
-        getLedgrTelegramConfig(),
-        getPendingJoinRequests(),
+        readStartupValue("getAllTeachers", getAllTeachers(), []),
+        readStartupValue("getAllRoleDetails", getAllRoleDetails(), {}),
+        readStartupValue("getGlobalInstitutes", getGlobalInstitutes(), []),
+        readStartupValue("getGlobalSubjects", getGlobalSubjects(), []),
+        readStartupValue("getSyllabusTemplates", getSyllabusTemplates(), []),
+        readStartupValue("getDeletedInstitutesList", getDeletedInstitutesList(), []),
+        readStartupValue("getAdminBin", getAdminBin(), []),
+        readStartupValue("getLedgrReportSchedule", getLedgrReportSchedule(), null),
+        readStartupValue("getLedgrTelegramConfig", getLedgrTelegramConfig(), null),
+        readStartupValue("getPendingJoinRequests", getPendingJoinRequests(), []),
       ]);
+      if(cancelled) return;
       const roleMap = Object.fromEntries(Object.entries(roleDocs || {}).map(([uid, detail])=>[uid, detail?.role || "teacher"]));
       setTeachers(t); setRoles(roleMap); setRoleDetails(roleDocs || {});
       setGlobalSubjects(gSubjects);
@@ -6328,7 +6338,11 @@ function AdminPanelInner({user}){
         }
       }
       setLoading(false);
-    })();
+    })().catch(error=>{
+      console.error("admin startup", error);
+      if(!cancelled) setLoading(false);
+    });
+    return ()=>{ cancelled = true; };
   },[]);
 
   useEffect(()=>{
