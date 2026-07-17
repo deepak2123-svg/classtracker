@@ -1583,8 +1583,12 @@ export async function getPendingJoinRequests() {
   let source;
   if (actor.role === "group_admin" && actor.groupId) {
     source = query(collection(db, "joinRequests"), where("groupId", "==", actor.groupId));
-  } else if (actor.role === "institute_admin" && actor.instituteId) {
-    source = query(collection(db, "joinRequests"), where("instituteId", "==", actor.instituteId));
+  } else if (actor.role === "institute_admin" && actor.groupId && actor.instituteId) {
+    source = query(
+      collection(db, "joinRequests"),
+      where("groupId", "==", actor.groupId),
+      where("instituteId", "==", actor.instituteId),
+    );
   } else if (["manager", "admin"].includes(actor.role)) {
     source = collection(db, "joinRequests");
   } else {
