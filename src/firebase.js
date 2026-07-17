@@ -862,11 +862,25 @@ async function assertCanManageInstitute(groupId, instituteId) {
   return actor;
 }
 
-async function ensureUniqueInstituteName(name, excludeInstituteId = "") {
+async function ensureUniqueInstituteName(name, excludeInstituteId = "", options = {}) {
   const nameKey = normaliseInstituteKey(name);
   if (!nameKey) throw new Error("Enter an institute name.");
-  const snap = await getDocs(query(collection(db, "institutes"), where("nameKey", "==", nameKey)));
-  const duplicate = snap.docs.find(item => item.id !== excludeInstituteId && item.data()?.status !== "deleted");
+  const actor = options.actor || await getCurrentRoleDetails();
+  const canQueryAllInstitutes = actor.role === "manager" || actor.role === "admin";
+  const scopeGroupId = String(options.groupId || actor.groupId || "").trim();
+  if (!canQueryAllInstitutes && !scopeGroupId) {
+    throw new Error("Choose a group before creating an institute.");
+  }
+  const source = canQueryAllInstitutes
+    ? query(collection(db, "institutes"), where("nameKey", "==", nameKey))
+    : query(collection(db, "institutes"), where("groupId", "==", scopeGroupId));
+  const snap = await getDocs(source);
+  const duplicate = snap.docs.find(item => {
+    const data = item.data() || {};
+    return item.id !== excludeInstituteId
+      && data.status !== "deleted"
+      && normaliseInstituteKey(data.name || data.legacyName || "") === nameKey;
+  });
   if (duplicate) {
     throw new Error("That institute name is already in use. Institute names must remain unique during the legacy transition.");
   }
@@ -879,10 +893,11 @@ async function createInstituteRecord({
   legacyName = "",
   legacyAliases = [],
   sortOrder = null,
+  actor = null,
 }) {
   const label = String(name || "").trim();
   if (!label) throw new Error("Enter an institute name.");
-  await ensureUniqueInstituteName(label);
+  await ensureUniqueInstituteName(label, "", { groupId, actor });
 
   let instituteCode = generateInstituteCode();
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -959,6 +974,7 @@ export async function createGroupStructure({ name, kind = "group", initialInstit
       groupId: groupRef.id,
       name: instituteName,
       createdBy: creatorUid,
+      actor,
     }));
   }
   return { group: { id: groupRef.id, ...group }, institutes };
@@ -970,6 +986,7 @@ export async function createTenantInstitute({ groupId, name }, actorUid = "") {
     groupId,
     name,
     createdBy: actorUid || actor.uid,
+    actor,
   });
 }
 
