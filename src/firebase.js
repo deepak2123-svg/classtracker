@@ -9,6 +9,7 @@ import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signInWithCredential, signOut, onAuthStateChanged, updateProfile,
 } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 import { GoogleSignIn } from "@capawesome/capacitor-google-sign-in";
 import { canUseGooglePopupAuth, getGoogleWebClientId, isNativeApp } from "./platform";
 
@@ -34,6 +35,7 @@ export const db   = (() => {
   }
 })();
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 const gProvider   = new GoogleAuthProvider();
 const MAIN_SCHEMA_VERSION = 3;
 const BACKUP_HISTORY_LIMIT = 12;

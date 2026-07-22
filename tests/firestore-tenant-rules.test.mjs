@@ -7,14 +7,22 @@ import {
 } from "@firebase/rules-unit-testing";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
   query,
   runTransaction,
+  serverTimestamp,
   setDoc,
   where,
 } from "firebase/firestore";
+import {
+  deleteObject,
+  getBytes,
+  ref as storageRef,
+  uploadBytes,
+} from "firebase/storage";
 
 const projectId = "classtracker-84920";
 let testEnv;
@@ -25,6 +33,9 @@ before(async () => {
     firestore: {
       rules: fs.readFileSync(new URL("../firestore.rules", import.meta.url), "utf8"),
     },
+    storage: {
+      rules: fs.readFileSync(new URL("../storage.rules", import.meta.url), "utf8"),
+    },
   });
 });
 
@@ -34,6 +45,7 @@ after(async () => {
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  await testEnv.clearStorage();
   await testEnv.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
     const writes = [
@@ -62,6 +74,63 @@ test("manager can access every group", async () => {
   const db = testEnv.authenticatedContext("manager-1").firestore();
   await assertSucceeds(getDoc(doc(db, "groups", "group-1")));
   await assertSucceeds(getDoc(doc(db, "groups", "group-2")));
+});
+
+test("sample PDF storage is public-read and admin-write only", async () => {
+  const objectPath = "sampleReports/storage-sample.pdf";
+  const samplePdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+  const managerStorage = testEnv.authenticatedContext("manager-1").storage();
+  const teacherStorage = testEnv.authenticatedContext("teacher-1").storage();
+  const publicStorage = testEnv.unauthenticatedContext().storage();
+
+  await assertFails(uploadBytes(storageRef(teacherStorage, objectPath), samplePdf, { contentType:"application/pdf" }));
+  await assertSucceeds(uploadBytes(storageRef(managerStorage, objectPath), samplePdf, { contentType:"application/pdf" }));
+  await assertSucceeds(getBytes(storageRef(publicStorage, objectPath)));
+  await assertFails(uploadBytes(storageRef(managerStorage, "sampleReports/not-a-pdf.txt"), samplePdf, { contentType:"text/plain" }));
+  await assertFails(deleteObject(storageRef(teacherStorage, objectPath)));
+  await assertSucceeds(deleteObject(storageRef(managerStorage, objectPath)));
+});
+
+test("sample reports are publicly readable and writable only by admins", async () => {
+  const reportId = "daily-sample";
+  const reportPath = `sampleReports/${reportId}`;
+  const reportData = {
+    title: "Ledgr Sample - Daily Report",
+    storagePath: `sampleReports/${reportId}.pdf`,
+    downloadUrl: "https://firebasestorage.googleapis.com/sample.pdf",
+    createdAt: serverTimestamp(),
+    createdBy: "manager-1",
+  };
+  const publicDb = testEnv.unauthenticatedContext().firestore();
+  const managerDb = testEnv.authenticatedContext("manager-1").firestore();
+  const teacherDb = testEnv.authenticatedContext("teacher-1").firestore();
+
+  await assertSucceeds(getDocs(collection(publicDb, "sampleReports")));
+  await assertFails(setDoc(doc(teacherDb, reportPath), { ...reportData, createdBy:"teacher-1" }));
+  await assertSucceeds(setDoc(doc(managerDb, reportPath), reportData));
+  await assertSucceeds(getDoc(doc(publicDb, reportPath)));
+  await assertFails(setDoc(doc(managerDb, reportPath), { title:"Changed" }, { merge:true }));
+  await assertFails(deleteDoc(doc(teacherDb, reportPath)));
+  await assertSucceeds(deleteDoc(doc(managerDb, reportPath)));
+});
+
+test("sample report metadata rejects unsafe paths and unknown fields", async () => {
+  const managerDb = testEnv.authenticatedContext("manager-1").firestore();
+  const base = {
+    title: "Ledgr Sample - Weekly Report",
+    storagePath: "sampleReports/weekly-sample.pdf",
+    downloadUrl: "https://firebasestorage.googleapis.com/weekly.pdf",
+    createdAt: serverTimestamp(),
+    createdBy: "manager-1",
+  };
+  await assertFails(setDoc(doc(managerDb, "sampleReports", "weekly-sample"), {
+    ...base,
+    storagePath:"sampleReports/another-file.pdf",
+  }));
+  await assertFails(setDoc(doc(managerDb, "sampleReports", "weekly-sample"), {
+    ...base,
+    internalNote:"must not be public",
+  }));
 });
 
 test("group admin is limited to its own group", async () => {

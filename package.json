@@ -7,7 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:migration": "node --test tests/genesis-migration.test.mjs",
-    "test:rules": "firebase emulators:exec --only firestore --project classtracker-84920 \"node --test tests/firestore-tenant-rules.test.mjs\"",
+    "test:rules": "firebase emulators:exec --only firestore,storage --project classtracker-84920 \"node --test tests/firestore-tenant-rules.test.mjs\"",
     "mobile:build": "npm run build && npx cap sync",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",

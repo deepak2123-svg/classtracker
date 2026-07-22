@@ -109,6 +109,7 @@ import {
   summariseInstituteGlanceRows,
 } from "./admin/reports/instituteGlanceRows.js";
 import { LedgrReportOptionsModal } from "./admin/reports/LedgrReportOptionsModal.jsx";
+import { SampleReportManager } from "./admin/reports/SampleReportManager.jsx";
 import { downloadTeacherStatusShareImage } from "./admin/reports/teacherStatusShareImage.js";
 import { buildTeacherEntryStatusItem, sortTeacherStatusForShare } from "./admin/reports/teacherStatusUtils.js";
 import {
@@ -9884,6 +9885,8 @@ function AdminPanelInner({user}){
 
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(false)}
 
+            {embedded&&<SampleReportManager />}
+
             {instituteGlanceReport.loading && !instituteGlanceReport.rows.length ? (
               renderInstituteGlanceLoadingDeck(false)
             ) : (
@@ -16843,6 +16846,7 @@ function AdminPanelInner({user}){
               </div>
               {renderInstituteGlanceProgressBlock(true)}
               {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
+              <SampleReportManager compact />
               <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginTop:10}}>
                 <button type="button" className="admin-mobile-touch" onClick={()=>openInstituteGlanceOptions("export", "report")} disabled={!!instituteGlanceAnyExportBusy || !!ledgrReportScheduleSaving} style={{...compactActionButton("blue"),opacity:instituteGlanceAnyExportBusy || ledgrReportScheduleSaving ? 0.65 : 1}}>
                   <AppIcon icon={IconDownload} size={15} color={G.blue} />
@@ -18598,6 +18602,7 @@ function AdminPanelInner({user}){
             {renderInstituteGlanceProgressBlock(true)}
             {!!instituteGlanceReport.rows.length&&renderInstituteGlanceStatGrid(true)}
             {renderInstituteGlanceActions(true)}
+            <SampleReportManager compact />
             {!!instituteGlanceReport.error&&(
               <div style={{marginTop:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:15,padding:"13px 14px"}}>
                 <div style={{fontSize:12.5,fontWeight:700,color:"#9A3412",fontFamily:G.sans}}>Some data could not be loaded</div>
