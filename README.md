@@ -1,12 +1,13 @@
 # ClassLog
 
-ClassLog is a Vite + React + Firebase app for classroom logging, with dedicated teacher, admin, and manager surfaces plus a Capacitor-based Android/iOS shell.
+ClassLog is a Vite + React + Firebase app for classroom logging, with dedicated teacher, admin, manager, and parent surfaces plus a Capacitor-based Android/iOS shell.
 
 ## What this repo contains
 
 - Teacher web app for daily class logging, history, export, offline-safe drafting, and teacher profile tools
 - Admin web app for managing teachers, institutes, sections, and data operations
 - Manager web app for groups, institute structure, scoped admin invitations, and Genesis migration
+- Parent web app for invitation-based, read-only section teaching timelines
 - Shared native shell for Android and iOS using Capacitor
 - Standalone native Android teacher app in Kotlin and Jetpack Compose
 - Firebase-backed auth, role checks, persistence, and sync
@@ -16,6 +17,7 @@ ClassLog is a Vite + React + Firebase app for classroom logging, with dedicated 
 - Teacher web: default web mode
 - Admin web: enabled by setting `VITE_APP_MODE=admin`
 - Manager web: enabled by setting `VITE_APP_MODE=manager`
+- Parent web: enabled by setting `VITE_APP_MODE=parent`
 - Native app: one shared shell where admins can toggle between admin and teacher views
 
 ## Production domains
@@ -23,6 +25,7 @@ ClassLog is a Vite + React + Firebase app for classroom logging, with dedicated 
 - Teacher web: `https://teacher.ledgrclasses.com/`
 - Admin web: `https://admin.ledgrclasses.com/`
 - Manager web: `https://manager.ledgrclasses.com/`
+- Parent web: `https://parent.ledgrclasses.com/`
 
 ## Stack
 
@@ -55,6 +58,7 @@ VITE_APP_MODE=admin
 VITE_TEACHER_APP_URL=https://teacher.ledgrclasses.com/
 VITE_ADMIN_APP_URL=https://admin.ledgrclasses.com/
 VITE_MANAGER_APP_URL=https://manager.ledgrclasses.com/
+VITE_PARENT_APP_URL=https://parent.ledgrclasses.com/
 ENABLE_SCHEDULED_JOBS=false
 ```
 
@@ -79,12 +83,15 @@ npm run build
 - `npm run cap:sync` syncs Capacitor projects without rebuilding Vite
 - `npm run cap:android` opens the Android project
 - `npm run cap:ios` opens the iOS project
+- `npm run test:parent` runs parent-feed projection tests
+- `npm run test:rules` runs Firestore and Storage security tests in the Firebase emulators
 
 ## Project layout
 
 - `src/ClassTracker.jsx` teacher experience
 - `src/AdminPanel.jsx` admin experience
 - `src/ManagerPanel.jsx` manager experience
+- `src/parent/` parent authentication and mobile-first family timeline
 - `src/firebase.js` Firebase integration and persistence
 - `src/main.jsx` app-mode entrypoint
 - `src/platform.js` teacher/admin/native mode routing helpers
@@ -148,11 +155,33 @@ cd android
 - Vercel project `classtrackeradmin` should use `admin.ledgrclasses.com`
 - Vercel project `classtracker123` should use `teacher.ledgrclasses.com`
 - Separate Vercel project `ledgrclasses-manager` should use `manager.ledgrclasses.com`
-- Set `VITE_APP_MODE=admin` on Admin, `VITE_APP_MODE=manager` on Manager, and leave it unset for Teacher
-- Keep `VITE_TEACHER_APP_URL`, `VITE_ADMIN_APP_URL`, and `VITE_MANAGER_APP_URL` aligned on all three Vercel projects
+- Create a separate Vercel project for `parent.ledgrclasses.com`
+- Set `VITE_APP_MODE=admin` on Admin, `VITE_APP_MODE=manager` on Manager, `VITE_APP_MODE=parent` on Parent, and leave it unset for Teacher
+- Keep `VITE_TEACHER_APP_URL`, `VITE_ADMIN_APP_URL`, `VITE_MANAGER_APP_URL`, and `VITE_PARENT_APP_URL` aligned on all four Vercel projects
 - Set `ENABLE_SCHEDULED_JOBS=true` only on the Admin Vercel project. Keep it false or unset on Teacher and Manager
-- Add all three custom domains in Firebase Authentication authorized domains before relying on Google sign-in from those hosts
+- Keep `ENABLE_SCHEDULED_JOBS=false` or unset on Parent
+- Add all four custom domains in Firebase Authentication authorized domains before relying on Google sign-in from those hosts
 - The standalone native Android teacher app does not use these web hostnames unless Android App Links are added later
+
+### Parent Gateway release order
+
+The Firebase project must be on the Blaze plan before deploying the Cloud Functions runtime.
+
+1. Deploy Firestore rules and functions so invitations and feed projection exist before the parent web app is exposed.
+2. Create the Parent Vercel project from this repository with `VITE_APP_MODE=parent`.
+3. Add `parent.ledgrclasses.com` to that project and to Firebase Authentication authorized domains.
+4. In Admin V5, open one pilot class, choose **Parent access**, enable it, and share the generated link privately.
+5. Confirm one parent can redeem the link, sees only joined-day-or-later entries, and loses access immediately when revoked.
+6. At academic-year close, use **End section access**; enabling the label later creates a fresh cohort and requires a new redemption.
+
+Parent Gateway collections are server-owned:
+
+- `parentPortalSections` stores stable institute/section metadata and enrollment state
+- `parentSectionInvites` stores reusable, rotatable opaque invitation tokens
+- `parentSectionAccess` stores the parent-to-section relationship and self-declared child names
+- `parentSectionFeeds` stores the private shared section projection
+- `parentAccessFeeds` stores the joined-date-safe feed mirrored to each active family access
+- `parentProfiles` stores the parent display identity
 
 ## Tenant bootstrap and Genesis migration
 

@@ -4,7 +4,16 @@ const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { FieldValue } = require("firebase-admin/firestore");
+const crypto = require("node:crypto");
+const {
+  normaliseText: normaliseParentText,
+  parentAccessDocId,
+  parentKey,
+  planParentFeedMutations,
+  projectParentFeedEntries,
+} = require("./parentGateway");
 
 admin.initializeApp();
 
@@ -112,6 +121,10 @@ function comparableEntry(entry) {
     timeEnd: normaliseText(entry.timeEnd),
     created: Number(entry.created || 0) || 0,
     teacherName: normaliseText(entry.teacherName),
+    jointClass: Boolean(entry.jointClass),
+    jointSessionId: normaliseText(entry.jointSessionId || entry.jointClassSessionId),
+    jointPrimaryClassId: normaliseText(entry.jointPrimaryClassId || entry.primaryClassId),
+    jointClassIds: Array.isArray(entry.jointClassIds) ? entry.jointClassIds.map(normaliseText) : [],
     minutes: entryDurationMinutes(entry),
   };
 }
@@ -672,5 +685,886 @@ exports.refreshDailyInstituteStatsDaily = onSchedule(
     const dateKey = dateKeyForTimeZone();
     const results = await rebuildAllInstitutesForDate(dateKey);
     logger.info("daily institute stats rebuilt", { dateKey, count: results.length });
+  }
+);
+
+// ── Parent gateway ───────────────────────────────────────────────────────────
+const PARENT_CALLABLE_OPTIONS = { timeoutSeconds: 120, memory: "512MiB" };
+
+function requireParentCallableUser(request) {
+  const uid = normaliseParentText(request.auth?.uid);
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in to continue.");
+  return {
+    uid,
+    email:normaliseParentText(request.auth?.token?.email),
+    displayName:normaliseParentText(request.auth?.token?.name),
+  };
+}
+
+async function parentActorRole(uid) {
+  const snap = await db.doc(`roles/${uid}`).get();
+  return snap.exists ? snap.data() || {} : { role:"teacher" };
+}
+
+function parentActorCanManageInstitute(role, institute) {
+  if (!role || !institute) return false;
+  if (role.role === "manager" || role.role === "admin") return true;
+  if (role.role === "group_admin") return role.groupId && role.groupId === institute.groupId;
+  return role.role === "institute_admin"
+    && role.groupId === institute.groupId
+    && role.instituteId === institute.id;
+}
+
+async function requireParentInstituteAdmin(uid, institute) {
+  const role = await parentActorRole(uid);
+  if (!parentActorCanManageInstitute(role, institute)) {
+    throw new HttpsError("permission-denied", "You cannot manage Parent View for this institute.");
+  }
+  return role;
+}
+
+async function findParentInstituteByName(instituteName) {
+  const name = normaliseParentText(instituteName);
+  if (!name) throw new HttpsError("invalid-argument", "Choose an institute.");
+  let snap = await db.collection("institutes").where("nameKey", "==", parentKey(name)).limit(10).get();
+  if (snap.empty) {
+    snap = await db.collection("institutes").get();
+  }
+  const candidates = snap.docs
+    .map(item => ({ id:item.id, ...item.data() }))
+    .filter(item => sameInstituteName(item.name, name));
+  if (!candidates.length) {
+    throw new HttpsError("failed-precondition", "This institute is not mapped to the tenant architecture yet.");
+  }
+  return candidates;
+}
+
+async function resolveManagedParentInstitute(uid, instituteName) {
+  const candidates = await findParentInstituteByName(instituteName);
+  const role = await parentActorRole(uid);
+  const institute = candidates.find(item => parentActorCanManageInstitute(role, item));
+  if (!institute) {
+    throw new HttpsError("permission-denied", "You cannot manage Parent View for this institute.");
+  }
+  return { institute, role };
+}
+
+async function getParentPortalSection(sectionId) {
+  const id = normaliseParentText(sectionId);
+  if (!id) throw new HttpsError("invalid-argument", "Choose a section.");
+  const snap = await db.doc(`parentPortalSections/${id}`).get();
+  if (!snap.exists) throw new HttpsError("not-found", "This Parent View section no longer exists.");
+  return { id:snap.id, ...snap.data() };
+}
+
+async function findParentPortalSection(instituteId, sectionName) {
+  const key = parentKey(sectionName);
+  if (!instituteId || !key) return null;
+  const snap = await db.collection("parentPortalSections")
+    .where("instituteId", "==", instituteId)
+    .get();
+  const match = snap.docs.find(item => {
+    const data = item.data() || {};
+    return data.status !== "archived"
+      && (parentKey(data.sectionName) === key || data.sectionKey === key);
+  });
+  return match ? { id:match.id, ...match.data() } : null;
+}
+
+async function ensureParentPortalSection(institute, sectionName, actorUid) {
+  const label = normaliseParentText(sectionName);
+  if (!label) throw new HttpsError("invalid-argument", "Choose a section.");
+  const existing = await findParentPortalSection(institute.id, label);
+  if (existing) {
+    await db.doc(`parentPortalSections/${existing.id}`).set({
+      sectionName:label,
+      sectionKey:parentKey(label),
+      instituteName:institute.name,
+      groupId:institute.groupId,
+      updatedAt:FieldValue.serverTimestamp(),
+    }, { merge:true });
+    return { ...existing, sectionName:label, sectionKey:parentKey(label), instituteName:institute.name };
+  }
+  const ref = db.collection("parentPortalSections").doc();
+  const payload = {
+    groupId:institute.groupId,
+    instituteId:institute.id,
+    instituteName:institute.name,
+    sectionName:label,
+    sectionKey:parentKey(label),
+    status:"active",
+    enrollmentStatus:"closed",
+    activeInviteToken:"",
+    inviteGeneration:0,
+    createdBy:actorUid,
+    createdAt:FieldValue.serverTimestamp(),
+    updatedAt:FieldValue.serverTimestamp(),
+  };
+  await ref.set(payload);
+  const created = await ref.get();
+  return { id:created.id, ...created.data() };
+}
+
+function cleanParentName(value, label) {
+  const clean = normaliseParentText(value);
+  if (clean.length < 2 || clean.length > 80) {
+    throw new HttpsError("invalid-argument", `${label} must be between 2 and 80 characters.`);
+  }
+  return clean;
+}
+
+function cleanParentChildren(children) {
+  if (!Array.isArray(children) || !children.length || children.length > 12) {
+    throw new HttpsError("invalid-argument", "Keep at least one student name on this access.");
+  }
+  const seen = new Set();
+  return children.map((item, index) => {
+    const name = cleanParentName(item?.name, "Student name");
+    const key = parentKey(name);
+    if (seen.has(key)) throw new HttpsError("invalid-argument", "Student names must be unique in a section.");
+    seen.add(key);
+    return {
+      id:normaliseParentText(item?.id) || crypto.randomBytes(8).toString("hex"),
+      name,
+      joinedAt:Number(item?.joinedAt || 0) || Date.now(),
+    };
+  });
+}
+
+async function parentSectionInvitePayload(section, actorUid) {
+  const token = crypto.randomBytes(24).toString("base64url");
+  const generation = Math.max(0, Number(section.inviteGeneration || 0)) + 1;
+  const invite = {
+    sectionId:section.id,
+    groupId:section.groupId,
+    instituteId:section.instituteId,
+    instituteName:section.instituteName,
+    sectionName:section.sectionName,
+    status:"active",
+    generation,
+    createdBy:actorUid,
+    createdAt:FieldValue.serverTimestamp(),
+    redemptionCount:0,
+  };
+  const batch = db.batch();
+  if (section.activeInviteToken) {
+    batch.set(db.doc(`parentSectionInvites/${section.activeInviteToken}`), {
+      status:"revoked",
+      revokedBy:actorUid,
+      revokedAt:FieldValue.serverTimestamp(),
+    }, { merge:true });
+  }
+  batch.set(db.doc(`parentSectionInvites/${token}`), invite);
+  batch.set(db.doc(`parentPortalSections/${section.id}`), {
+    status:"active",
+    enrollmentStatus:"open",
+    activeInviteToken:token,
+    inviteGeneration:generation,
+    updatedAt:FieldValue.serverTimestamp(),
+  }, { merge:true });
+  await batch.commit();
+  return { token, generation };
+}
+
+function parentTeacherName(teacher, main, entry = null) {
+  return normaliseParentText(
+    teacher?.name ||
+    main?.profile?.name ||
+    entry?.teacherName ||
+    teacher?.email
+  ) || "Teacher";
+}
+
+function parentClassSubject(teacher, main, cls) {
+  const explicit = normaliseParentText(cls?.subject);
+  const names = uniqueLabels([
+    ...(Array.isArray(teacher?.assignedSubjects) ? teacher.assignedSubjects.map(item => item?.name) : []),
+    ...(Array.isArray(teacher?.subjects) ? teacher.subjects : []),
+    ...(Array.isArray(main?.profile?.subjects) ? main.profile.subjects : []),
+  ]);
+  if (explicit) {
+    return names.find(name => parentKey(name) === parentKey(explicit)) || explicit;
+  }
+  return names.length === 1 ? names[0] : "Class update";
+}
+
+function parentSafeFeedPayload(data = {}) {
+  return {
+    dateKey:normaliseParentText(data.dateKey),
+    title:normaliseParentText(data.title),
+    body:normaliseParentText(data.body),
+    subject:normaliseParentText(data.subject) || "Class update",
+    teacherDisplayName:normaliseParentText(data.teacherDisplayName) || "Teacher",
+    sortAt:Number(data.sortAt || 0) || 0,
+    updatedAt:FieldValue.serverTimestamp(),
+  };
+}
+
+async function commitParentFeedOperations(operations) {
+  for (const operationChunk of chunk(operations, 400)) {
+    const batch = db.batch();
+    operationChunk.forEach(operation => {
+      if (operation.kind === "delete") batch.delete(operation.ref);
+      else batch.set(operation.ref, operation.data, { merge:true });
+    });
+    await batch.commit();
+  }
+}
+
+async function fanoutParentFeedEntries(section, entryIds) {
+  const ids = [...new Set(entryIds || [])].filter(Boolean);
+  if (!ids.length) return;
+  const sharedRefs = ids.map(id => db.doc(`parentSectionFeeds/${section.id}/entries/${id}`));
+  const [sharedSnaps, accessSnap] = await Promise.all([
+    db.getAll(...sharedRefs),
+    db.collection("parentSectionAccess").where("sectionId", "==", section.id).get(),
+  ]);
+  const activeAccesses = accessSnap.docs
+    .map(item => ({ id:item.id, ...item.data() }))
+    .filter(item => item.status === "active");
+  if (!activeAccesses.length) return;
+
+  const operations = [];
+  sharedSnaps.forEach((sharedSnap, index) => {
+    const entryId = ids[index];
+    const shared = sharedSnap.exists ? sharedSnap.data() || {} : null;
+    activeAccesses.forEach(access => {
+      const targetRef = db.doc(`parentAccessFeeds/${access.id}/entries/${entryId}`);
+      if (!shared || normaliseParentText(shared.dateKey) < normaliseParentText(access.joinedDateKey)) {
+        operations.push({ kind:"delete", ref:targetRef });
+      } else {
+        operations.push({ kind:"set", ref:targetRef, data:parentSafeFeedPayload(shared) });
+      }
+    });
+  });
+  await commitParentFeedOperations(operations);
+}
+
+async function copyParentAccessFeedFromDate({ accessId, sectionId, joinedDateKey }) {
+  const sharedSnap = await db.collection(`parentSectionFeeds/${sectionId}/entries`)
+    .where("dateKey", ">=", joinedDateKey)
+    .get();
+  const operations = sharedSnap.docs.map(item => ({
+    kind:"set",
+    ref:db.doc(`parentAccessFeeds/${accessId}/entries/${item.id}`),
+    data:parentSafeFeedPayload(item.data() || {}),
+  }));
+  await commitParentFeedOperations(operations);
+}
+
+async function syncParentFeedSource({ section, uid, cls, teacher, main, dateKey, beforeEntries = [], afterEntries = [] }) {
+  const base = {
+    sectionId:section.id,
+    teacherUid:uid,
+    classId:classIdOf(cls),
+    dateKey,
+    subject:parentClassSubject(teacher, main, cls),
+    teacherDisplayName:parentTeacherName(teacher, main, afterEntries[0] || beforeEntries[0]),
+  };
+  const beforeMap = projectParentFeedEntries({ ...base, entries:beforeEntries });
+  const afterMap = projectParentFeedEntries({ ...base, entries:afterEntries });
+  const mutationPlan = planParentFeedMutations(beforeMap, afterMap);
+  const entriesRef = db.collection(`parentSectionFeeds/${section.id}/entries`);
+
+  for (const id of mutationPlan.remove) {
+    const previous = beforeMap.get(id);
+    const ref = entriesRef.doc(id);
+    await db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return;
+      const sourceHashes = Array.isArray(snap.data()?.sourceHashes) ? snap.data().sourceHashes : [];
+      const remaining = sourceHashes.filter(value => value !== previous.sourceHash);
+      if (!remaining.length) tx.delete(ref);
+      else tx.update(ref, { sourceHashes:remaining, updatedAt:FieldValue.serverTimestamp() });
+    });
+  }
+
+  for (const id of mutationPlan.upsert) {
+    const projected = afterMap.get(id);
+    const ref = entriesRef.doc(id);
+    await db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      const existingSources = Array.isArray(snap.data()?.sourceHashes) ? snap.data().sourceHashes : [];
+      tx.set(ref, {
+        dateKey:projected.dateKey,
+        title:projected.title,
+        body:projected.body,
+        subject:projected.subject,
+        teacherDisplayName:projected.teacherDisplayName,
+        sortAt:projected.sortAt,
+        sourceHash:projected.sourceHash,
+        sourceHashes:uniqueLabels([...existingSources, projected.sourceHash]),
+        jointSessionKey:projected.jointSessionKey,
+        updatedAt:FieldValue.serverTimestamp(),
+      }, { merge:true });
+    });
+  }
+  await fanoutParentFeedEntries(section, [...beforeMap.keys(), ...afterMap.keys()]);
+}
+
+async function parentInstituteForTeacherClass(uid, cls) {
+  const explicitId = normaliseParentText(cls?.instituteId);
+  if (explicitId) {
+    const snap = await db.doc(`institutes/${explicitId}`).get();
+    if (snap.exists) return { id:snap.id, ...snap.data() };
+  }
+  const name = normaliseParentText(cls?.institute);
+  if (!name) return null;
+  const candidates = await findParentInstituteByName(name).catch(() => []);
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0];
+  const role = await parentActorRole(uid);
+  const instituteIds = new Set(Array.isArray(role.instituteIds) ? role.instituteIds : []);
+  return candidates.find(item => instituteIds.has(item.id))
+    || candidates.find(item => role.groupId && role.groupId === item.groupId)
+    || null;
+}
+
+async function activeParentSectionForClass(uid, cls) {
+  const institute = await parentInstituteForTeacherClass(uid, cls);
+  if (!institute) return null;
+  const section = await findParentPortalSection(institute.id, classDisplayName(cls));
+  return section?.status === "active" ? section : null;
+}
+
+async function backfillParentSectionToday(section) {
+  const dateKey = dateKeyForTimeZone();
+  const teachersSnap = await db.collection("teachers").get();
+  let sourceCount = 0;
+  for (const teacherSnap of teachersSnap.docs) {
+    const uid = teacherSnap.id;
+    const teacher = { uid, ...teacherSnap.data() };
+    const belongs = (Array.isArray(teacher.instituteIds) && teacher.instituteIds.includes(section.instituteId))
+      || (Array.isArray(teacher.institutes) && teacher.institutes.some(name => sameInstituteName(name, section.instituteName)));
+    if (!belongs) continue;
+    const mainSnap = await db.doc(`users/${uid}/appdata/main`).get();
+    if (!mainSnap.exists) continue;
+    const main = mainSnap.data() || {};
+    const classes = activeClassesFromMain(main).filter(cls =>
+      sameInstituteName(cls.institute, section.instituteName)
+      && parentKey(classDisplayName(cls)) === section.sectionKey
+    );
+    for (const cls of classes) {
+      const classId = classIdOf(cls);
+      if (!classId) continue;
+      const notesSnap = await db.doc(`users/${uid}/appdata/notes_${classId}`).get();
+      const entries = entriesForDate(notesSnap.data() || {}, dateKey);
+      await syncParentFeedSource({ section, uid, cls, teacher, main, dateKey, afterEntries:entries });
+      sourceCount += 1;
+    }
+  }
+  logger.info("parent section current-day backfill complete", {
+    sectionId:section.id,
+    dateKey,
+    sourceCount,
+  });
+  return sourceCount;
+}
+
+async function serialiseParentSectionAdminState(section) {
+  if (!section) return { enabled:false, section:null, inviteToken:"", accesses:[] };
+  const accessSnap = await db.collection("parentSectionAccess").where("sectionId", "==", section.id).get();
+  let inviteToken = "";
+  if (section.activeInviteToken) {
+    const inviteSnap = await db.doc(`parentSectionInvites/${section.activeInviteToken}`).get();
+    if (inviteSnap.exists && inviteSnap.data()?.status === "active") inviteToken = inviteSnap.id;
+  }
+  const accesses = accessSnap.docs
+    .map(item => ({ id:item.id, ...item.data() }))
+    .sort((a, b) => normaliseParentText(a.parentName).localeCompare(normaliseParentText(b.parentName)));
+  return {
+    enabled:true,
+    section,
+    inviteToken,
+    enrollmentStatus:inviteToken && section.enrollmentStatus === "open" ? "open" : "closed",
+    accesses,
+  };
+}
+
+exports.enableParentSectionPortal = onCall(PARENT_CALLABLE_OPTIONS, async request => {
+  const actor = requireParentCallableUser(request);
+  const instituteName = normaliseParentText(request.data?.instituteName);
+  const sectionName = normaliseParentText(request.data?.sectionName);
+  const { institute } = await resolveManagedParentInstitute(actor.uid, instituteName);
+  let section = await ensureParentPortalSection(institute, sectionName, actor.uid);
+  let token = "";
+  if (section.activeInviteToken && section.enrollmentStatus === "open") {
+    const inviteSnap = await db.doc(`parentSectionInvites/${section.activeInviteToken}`).get();
+    if (inviteSnap.exists && inviteSnap.data()?.status === "active") token = inviteSnap.id;
+  }
+  if (!token) {
+    const created = await parentSectionInvitePayload(section, actor.uid);
+    token = created.token;
+    section = { ...section, activeInviteToken:token, enrollmentStatus:"open", inviteGeneration:created.generation };
+  }
+  await backfillParentSectionToday(section);
+  return { ...(await serialiseParentSectionAdminState(section)), inviteToken:token };
+});
+
+exports.getParentSectionAdminState = onCall(PARENT_CALLABLE_OPTIONS, async request => {
+  const actor = requireParentCallableUser(request);
+  let section = null;
+  if (normaliseParentText(request.data?.sectionId)) {
+    section = await getParentPortalSection(request.data.sectionId);
+    const instituteSnap = await db.doc(`institutes/${section.instituteId}`).get();
+    if (!instituteSnap.exists) throw new HttpsError("failed-precondition", "The section institute no longer exists.");
+    await requireParentInstituteAdmin(actor.uid, { id:instituteSnap.id, ...instituteSnap.data() });
+  } else {
+    const { institute } = await resolveManagedParentInstitute(actor.uid, request.data?.instituteName);
+    await requireParentInstituteAdmin(actor.uid, institute);
+    section = await findParentPortalSection(institute.id, request.data?.sectionName);
+  }
+  return serialiseParentSectionAdminState(section);
+});
+
+exports.rotateParentSectionInvite = onCall(PARENT_CALLABLE_OPTIONS, async request => {
+  const actor = requireParentCallableUser(request);
+  const section = await getParentPortalSection(request.data?.sectionId);
+  const instituteSnap = await db.doc(`institutes/${section.instituteId}`).get();
+  if (!instituteSnap.exists) throw new HttpsError("failed-precondition", "The section institute no longer exists.");
+  await requireParentInstituteAdmin(actor.uid, { id:instituteSnap.id, ...instituteSnap.data() });
+  const created = await parentSectionInvitePayload(section, actor.uid);
+  return { ...(await serialiseParentSectionAdminState({
+    ...section,
+    activeInviteToken:created.token,
+    enrollmentStatus:"open",
+    inviteGeneration:created.generation,
+  })), inviteToken:created.token };
+});
+
+exports.closeParentSectionEnrollment = onCall(PARENT_CALLABLE_OPTIONS, async request => {
+  const actor = requireParentCallableUser(request);
+  const section = await getParentPortalSection(request.data?.sectionId);
+  const instituteSnap = await db.doc(`institutes/${section.instituteId}`).get();
+  if (!instituteSnap.exists) throw new HttpsError("failed-precondition", "The section institute no longer exists.");
+  await requireParentInstituteAdmin(actor.uid, { id:instituteSnap.id, ...instituteSnap.data() });
+  const batch = db.batch();
+  if (section.activeInviteToken) {
+    batch.set(db.doc(`parentSectionInvites/${section.activeInviteToken}`), {
+      status:"revoked",
+      revokedBy:actor.uid,
+      revokedAt:FieldValue.serverTimestamp(),
+    }, { merge:true });
+  }
+  batch.set(db.doc(`parentPortalSections/${section.id}`), {
+    enrollmentStatus:"closed",
+    activeInviteToken:"",
+    updatedAt:FieldValue.serverTimestamp(),
+  }, { merge:true });
+  await batch.commit();
+  return serialiseParentSectionAdminState({ ...section, enrollmentStatus:"closed", activeInviteToken:"" });
+});
+
+exports.archiveParentSectionPortal = onCall(PARENT_CALLABLE_OPTIONS, async request => {
+  const actor = requireParentCallableUser(request);
+  const section = await getParentPortalSection(request.data?.sectionId);
+  const instituteSnap = await db.doc(`institutes/${section.instituteId}`).get();
+  if (!instituteSnap.exists) throw new HttpsError("failed-precondition", "The section institute no longer exists.");
+  await requireParentInstituteAdmin(actor.uid, { id:instituteSnap.id, ...instituteSnap.data() });
+  const accessSnap = await db.collection("parentSectionAccess").where("sectionId", "==", section.id).get();
+  const operations = [
+    {
+      kind:"set",
+      ref:db.doc(`parentPortalSections/${section.id}`),
+      data:{
+        status:"archived",
+        enrollmentStatus:"closed",
+        activeInviteToken:"",
+        archivedBy:actor.uid,
+        archivedAt:FieldValue.serverTimestamp(),
+        updatedAt:FieldValue.serverTimestamp(),
+      },
+    },
+    ...accessSnap.docs.map(item => ({
+      kind:"set",
+      ref:item.ref,
+      data:{
+        status:"revoked",
+        revokedReason:"academic_year_closed",
+        revokedBy:actor.uid,
+        revokedAt:FieldValue.serverTimestamp(),
+        updatedAt:FieldValue.serverTimestamp(),
+      },
+    })),
+  ];
+  if (section.activeInviteToken) {
+    operations.push({
+      kind:"set",
+      ref:db.doc(`parentSectionInvites/${section.activeInviteToken}`),
+      data:{
+        status:"revoked",
+        revokedBy:actor.uid,
+        revokedAt:FieldValue.serverTimestamp(),
+      },
+    });
+  }
+  await commitParentFeedOperations(operations);
+  return { enabled:false, section:null, inviteToken:"", enrollmentStatus:"closed", accesses:[], archived:true };
+});
+
+exports.redeemParentSectionInvite = onCall(PARENT_CALLABLE_OPTIONS, async request => {
+  const parent = requireParentCallableUser(request);
+  const token = normaliseParentText(request.data?.token);
+  if (!token) throw new HttpsError("invalid-argument", "This invitation link is incomplete.");
+  const parentName = cleanParentName(request.data?.parentName || parent.displayName, "Parent name");
+  const studentName = cleanParentName(request.data?.studentName, "Student name");
+  const inviteRef = db.doc(`parentSectionInvites/${token}`);
+  const inviteSnap = await inviteRef.get();
+  if (!inviteSnap.exists || inviteSnap.data()?.status !== "active") {
+    throw new HttpsError("failed-precondition", "This invitation has been closed or replaced.");
+  }
+  const invite = inviteSnap.data() || {};
+  const section = await getParentPortalSection(invite.sectionId);
+  if (section.status !== "active" || section.enrollmentStatus !== "open" || section.activeInviteToken !== token) {
+    throw new HttpsError("failed-precondition", "This invitation has been closed or replaced.");
+  }
+  const sectionRef = db.doc(`parentPortalSections/${section.id}`);
+  const accessId = parentAccessDocId(section.id, parent.uid);
+  const accessRef = db.doc(`parentSectionAccess/${accessId}`);
+  const profileRef = db.doc(`parentProfiles/${parent.uid}`);
+  const now = Date.now();
+  const joinedDateKey = dateKeyForTimeZone();
+  let resultChildren = [];
+  let resultJoinedDateKey = joinedDateKey;
+  let redeemedSection = section;
+  await db.runTransaction(async tx => {
+    const currentInviteSnap = await tx.get(inviteRef);
+    const currentSectionSnap = await tx.get(sectionRef);
+    const accessSnap = await tx.get(accessRef);
+    const profileSnap = await tx.get(profileRef);
+    const currentInvite = currentInviteSnap.exists ? currentInviteSnap.data() || {} : {};
+    const currentSection = currentSectionSnap.exists ? currentSectionSnap.data() || {} : {};
+    if (
+      !currentInviteSnap.exists
+      || currentInvite.status !== "active"
+      || !currentSectionSnap.exists
+      || currentSection.status !== "active"
+      || currentSection.enrollmentStatus !== "open"
+      || currentSection.activeInviteToken !== token
+      || currentInvite.sectionId !== section.id
+    ) {
+      throw new HttpsError("failed-precondition", "This invitation has been closed or replaced.");
+    }
+    redeemedSection = { id:section.id, ...currentSection };
+    const existing = accessSnap.exists ? accessSnap.data() || {} : {};
+    resultJoinedDateKey = existing.joinedDateKey || joinedDateKey;
+    if (accessSnap.exists && existing.status === "revoked") {
+      throw new HttpsError("permission-denied", "This account’s class access was revoked. Contact the institute administrator.");
+    }
+    const children = Array.isArray(existing.children) ? existing.children : [];
+    const alreadyExists = children.some(item => parentKey(item?.name) === parentKey(studentName));
+    resultChildren = alreadyExists ? children : [...children, {
+      id:crypto.randomBytes(8).toString("hex"),
+      name:studentName,
+      joinedAt:now,
+    }];
+    tx.set(accessRef, {
+      parentUid:parent.uid,
+      parentEmail:parent.email,
+      parentName,
+      children:resultChildren,
+      groupId:redeemedSection.groupId,
+      instituteId:redeemedSection.instituteId,
+      instituteName:redeemedSection.instituteName,
+      sectionId:redeemedSection.id,
+      sectionName:redeemedSection.sectionName,
+      status:"active",
+      joinedDateKey:resultJoinedDateKey,
+      joinedAt:existing.joinedAt || now,
+      updatedAt:FieldValue.serverTimestamp(),
+      sourceInviteGeneration:invite.generation || 1,
+    }, { merge:true });
+    const profilePayload = {
+      parentUid:parent.uid,
+      parentEmail:parent.email,
+      parentName,
+      updatedAt:FieldValue.serverTimestamp(),
+    };
+    if (!profileSnap.exists) profilePayload.createdAt = FieldValue.serverTimestamp();
+    tx.set(profileRef, profilePayload, { merge:true });
+    if (!accessSnap.exists) {
+      tx.set(inviteRef, {
+        redemptionCount:FieldValue.increment(1),
+        lastRedeemedAt:FieldValue.serverTimestamp(),
+      }, { merge:true });
+    }
+  });
+  await copyParentAccessFeedFromDate({
+    accessId,
+    sectionId:redeemedSection.id,
+    joinedDateKey:resultJoinedDateKey,
+  });
+  return {
+    accessId,
+    sectionId:redeemedSection.id,
+    sectionName:redeemedSection.sectionName,
+    instituteName:redeemedSection.instituteName,
+    studentName,
+    children:resultChildren,
+  };
+});
+
+exports.updateOwnParentSectionMember = onCall(PARENT_CALLABLE_OPTIONS, async request => {
+  const parent = requireParentCallableUser(request);
+  const accessId = normaliseParentText(request.data?.accessId);
+  const accessRef = db.doc(`parentSectionAccess/${accessId}`);
+  const accessSnap = await accessRef.get();
+  if (!accessSnap.exists || accessSnap.data()?.parentUid !== parent.uid) {
+    throw new HttpsError("permission-denied", "You can edit only your own family names.");
+  }
+  if (accessSnap.data()?.status !== "active") {
+    throw new HttpsError("permission-denied", "This class access has been revoked.");
+  }
+  const parentName = cleanParentName(request.data?.parentName, "Parent name");
+  const children = cleanParentChildren(request.data?.children);
+  const accessSnapForParent = await db.collection("parentSectionAccess").where("parentUid", "==", parent.uid).get();
+  const batch = db.batch();
+  accessSnapForParent.docs.forEach(item => batch.set(item.ref, {
+    parentName,
+    updatedAt:FieldValue.serverTimestamp(),
+  }, { merge:true }));
+  batch.set(accessRef, { children, updatedAt:FieldValue.serverTimestamp() }, { merge:true });
+  batch.set(db.doc(`parentProfiles/${parent.uid}`), {
+    parentName,
+    parentEmail:parent.email,
+    updatedAt:FieldValue.serverTimestamp(),
+  }, { merge:true });
+  await batch.commit();
+  return { parentName, children };
+});
+
+exports.updateParentSectionMember = onCall(PARENT_CALLABLE_OPTIONS, async request => {
+  const actor = requireParentCallableUser(request);
+  const accessId = normaliseParentText(request.data?.accessId);
+  const accessRef = db.doc(`parentSectionAccess/${accessId}`);
+  const accessSnap = await accessRef.get();
+  if (!accessSnap.exists) throw new HttpsError("not-found", "This parent access no longer exists.");
+  const access = { id:accessSnap.id, ...accessSnap.data() };
+  const instituteSnap = await db.doc(`institutes/${access.instituteId}`).get();
+  if (!instituteSnap.exists) throw new HttpsError("failed-precondition", "The access institute no longer exists.");
+  await requireParentInstituteAdmin(actor.uid, { id:instituteSnap.id, ...instituteSnap.data() });
+
+  const action = normaliseParentText(request.data?.action || "edit");
+  if (action === "revoke") {
+    await accessRef.set({
+      status:"revoked",
+      revokedBy:actor.uid,
+      revokedAt:FieldValue.serverTimestamp(),
+      updatedAt:FieldValue.serverTimestamp(),
+    }, { merge:true });
+    return { ...access, status:"revoked" };
+  }
+
+  const parentName = cleanParentName(request.data?.parentName || access.parentName, "Parent name");
+  const children = cleanParentChildren(request.data?.children || access.children);
+  if (action === "move") {
+    const targetSectionName = cleanParentName(request.data?.targetSectionName, "Target section");
+    const institute = { id:instituteSnap.id, ...instituteSnap.data() };
+    const targetSection = await ensureParentPortalSection(institute, targetSectionName, actor.uid);
+    if (targetSection.id === access.sectionId) {
+      throw new HttpsError("invalid-argument", "Choose a different section.");
+    }
+    const targetId = parentAccessDocId(targetSection.id, access.parentUid);
+    const targetRef = db.doc(`parentSectionAccess/${targetId}`);
+    const { id:discardedAccessId, ...accessData } = access;
+    await db.runTransaction(async tx => {
+      const targetSnap = await tx.get(targetRef);
+      const target = targetSnap.exists ? targetSnap.data() || {} : {};
+      const combinedChildren = cleanParentChildren([...(target.children || []), ...children].filter((item, index, all) =>
+        all.findIndex(candidate => parentKey(candidate?.name) === parentKey(item?.name)) === index
+      ));
+      tx.set(targetRef, {
+        ...accessData,
+        parentName,
+        children:combinedChildren,
+        sectionId:targetSection.id,
+        sectionName:targetSection.sectionName,
+        status:"active",
+        joinedDateKey:target.joinedDateKey || dateKeyForTimeZone(),
+        joinedAt:target.joinedAt || Date.now(),
+        movedBy:actor.uid,
+        movedAt:FieldValue.serverTimestamp(),
+        updatedAt:FieldValue.serverTimestamp(),
+      }, { merge:true });
+      tx.set(accessRef, {
+        status:"revoked",
+        movedToSectionId:targetSection.id,
+        movedBy:actor.uid,
+        movedAt:FieldValue.serverTimestamp(),
+        updatedAt:FieldValue.serverTimestamp(),
+      }, { merge:true });
+    });
+    await backfillParentSectionToday(targetSection);
+    return { moved:true, targetSectionId:targetSection.id, targetSectionName:targetSection.sectionName };
+  }
+
+  await accessRef.set({ parentName, children, updatedAt:FieldValue.serverTimestamp() }, { merge:true });
+  await db.doc(`parentProfiles/${access.parentUid}`).set({ parentName, updatedAt:FieldValue.serverTimestamp() }, { merge:true });
+  return { ...access, parentName, children };
+});
+
+exports.syncParentSectionFeedOnNotesWrite = onDocumentWritten(
+  "users/{uid}/appdata/{notesDocId}",
+  async event => {
+    const uid = normaliseParentText(event.params.uid);
+    const classId = classIdFromNotesDocId(event.params.notesDocId);
+    if (!uid || !classId) return;
+    const before = event.data?.before?.exists ? event.data.before.data() || {} : {};
+    const after = event.data?.after?.exists ? event.data.after.data() || {} : {};
+    const dates = changedDateKeys(before, after);
+    if (!dates.length) return;
+    const [mainSnap, teacherSnap] = await Promise.all([
+      db.doc(`users/${uid}/appdata/main`).get(),
+      db.doc(`teachers/${uid}`).get(),
+    ]);
+    if (!mainSnap.exists) return;
+    const main = mainSnap.data() || {};
+    const cls = classFromMain(main, classId);
+    if (!cls || !isActiveClassRecord(cls)) return;
+    const section = await activeParentSectionForClass(uid, cls);
+    if (!section) return;
+    const teacher = teacherSnap.exists ? { uid, ...teacherSnap.data() } : { uid };
+    for (const dateKey of dates) {
+      await syncParentFeedSource({
+        section,
+        uid,
+        cls,
+        teacher,
+        main,
+        dateKey,
+        beforeEntries:entriesForDate(before, dateKey),
+        afterEntries:entriesForDate(after, dateKey),
+      });
+    }
+  }
+);
+
+async function updateParentSectionMetadata(section, patch) {
+  const accessSnap = await db.collection("parentSectionAccess").where("sectionId", "==", section.id).get();
+  const operations = [
+    {
+      kind:"set",
+      ref:db.doc(`parentPortalSections/${section.id}`),
+      data:{ ...patch, updatedAt:FieldValue.serverTimestamp() },
+    },
+    ...accessSnap.docs.map(item => ({
+      kind:"set",
+      ref:item.ref,
+      data:{ ...patch, updatedAt:FieldValue.serverTimestamp() },
+    })),
+  ];
+  if (section.activeInviteToken) {
+    operations.push({
+      kind:"set",
+      ref:db.doc(`parentSectionInvites/${section.activeInviteToken}`),
+      data:{ ...patch, updatedAt:FieldValue.serverTimestamp() },
+    });
+  }
+  await commitParentFeedOperations(operations);
+}
+
+exports.syncParentPortalSectionRenames = onDocumentWritten(
+  "config/sections",
+  async event => {
+    const before = event.data?.before?.exists ? event.data.before.data() || {} : {};
+    const after = event.data?.after?.exists ? event.data.after.data() || {} : {};
+    for (const [instituteName, config] of Object.entries(after)) {
+      const previousConfigEntry = Object.entries(before)
+        .find(([name]) => sameInstituteName(name, instituteName));
+      const previousEvents = Array.isArray(previousConfigEntry?.[1]?.sectionChangeEvents)
+        ? previousConfigEntry[1].sectionChangeEvents
+        : [];
+      const previousIds = new Set(previousEvents.map(item => normaliseParentText(item?.id)).filter(Boolean));
+      const newEvents = (Array.isArray(config?.sectionChangeEvents) ? config.sectionChangeEvents : [])
+        .filter(item => !previousIds.has(normaliseParentText(item?.id)));
+      if (!newEvents.length) continue;
+      const instituteCandidates = await findParentInstituteByName(instituteName).catch(() => []);
+      for (const institute of instituteCandidates) {
+        for (const renameEvent of newEvents) {
+          for (const change of Array.isArray(renameEvent?.changes) ? renameEvent.changes : []) {
+            const oldSection = normaliseParentText(change?.oldSection);
+            const newSection = normaliseParentText(change?.newSection);
+            if (!oldSection || !newSection || parentKey(oldSection) === parentKey(newSection)) continue;
+            const section = await findParentPortalSection(institute.id, oldSection);
+            if (!section) continue;
+            const conflict = await findParentPortalSection(institute.id, newSection);
+            if (conflict && conflict.id !== section.id) {
+              logger.warn("parent section rename skipped because target already exists", {
+                instituteId:institute.id,
+                oldSection,
+                newSection,
+                sourceSectionId:section.id,
+                targetSectionId:conflict.id,
+              });
+              continue;
+            }
+            await updateParentSectionMetadata(section, {
+              sectionName:newSection,
+              sectionKey:parentKey(newSection),
+            });
+          }
+        }
+      }
+    }
+  }
+);
+
+exports.syncParentPortalInstituteMetadata = onDocumentWritten(
+  "institutes/{instituteId}",
+  async event => {
+    const instituteId = normaliseParentText(event.params.instituteId);
+    if (!instituteId) return;
+    const afterExists = event.data?.after?.exists;
+    const after = afterExists ? event.data.after.data() || {} : {};
+    const before = event.data?.before?.exists ? event.data.before.data() || {} : {};
+    if (
+      afterExists
+      && normaliseParentText(after.name) === normaliseParentText(before.name)
+      && normaliseParentText(after.groupId) === normaliseParentText(before.groupId)
+      && normaliseParentText(after.status) === normaliseParentText(before.status)
+    ) return;
+    const sectionsSnap = await db.collection("parentPortalSections").where("instituteId", "==", instituteId).get();
+    for (const item of sectionsSnap.docs) {
+      const section = { id:item.id, ...item.data() };
+      if (!afterExists || after.status === "deleted") {
+        const accessSnap = await db.collection("parentSectionAccess").where("sectionId", "==", section.id).get();
+        const operations = [
+          {
+            kind:"set",
+            ref:item.ref,
+            data:{
+              status:"archived",
+              enrollmentStatus:"closed",
+              activeInviteToken:"",
+              updatedAt:FieldValue.serverTimestamp(),
+            },
+          },
+          ...accessSnap.docs.map(accessDoc => ({
+            kind:"set",
+            ref:accessDoc.ref,
+            data:{
+              status:"revoked",
+              revokedReason:"institute_removed",
+              revokedAt:FieldValue.serverTimestamp(),
+              updatedAt:FieldValue.serverTimestamp(),
+            },
+          })),
+        ];
+        if (section.activeInviteToken) {
+          operations.push({
+            kind:"set",
+            ref:db.doc(`parentSectionInvites/${section.activeInviteToken}`),
+            data:{ status:"revoked", revokedAt:FieldValue.serverTimestamp() },
+          });
+        }
+        await commitParentFeedOperations(operations);
+      } else {
+        await updateParentSectionMetadata(section, {
+          instituteName:normaliseParentText(after.name),
+          groupId:normaliseParentText(after.groupId || section.groupId),
+          instituteId,
+        });
+      }
+    }
   }
 );

@@ -40,6 +40,7 @@ import { getAdminAppUrl, getAppMode, getTeacherAppUrl, isNativeApp } from "./pla
 const APP_MODE = getAppMode();
 const IS_ADMIN_APP = APP_MODE === "admin";
 const IS_MANAGER_APP = APP_MODE === "manager";
+const IS_PARENT_APP = APP_MODE === "parent";
 const IS_NATIVE_SHELL = APP_MODE === "native";
 const ADMIN_INVITE_STORAGE_KEY = "ct_admin_invite_token";
 const CHUNK_RELOAD_STORAGE_KEY = "ct_chunk_reload_attempt";
@@ -96,6 +97,8 @@ const ClassTracker = lazyWithChunkRecovery(() => import("./ClassTracker"));
 const AdminAuth = lazyWithChunkRecovery(() => import("./AdminAuth"));
 const AdminPanel = lazyWithChunkRecovery(() => import("./AdminPanel"));
 const ManagerPanel = lazyWithChunkRecovery(() => import("./ManagerPanel"));
+const ParentAuth = lazyWithChunkRecovery(() => import("./parent/ParentAuth"));
+const ParentPortal = lazyWithChunkRecovery(() => import("./parent/ParentPortal"));
 
 function hasPendingAdminInvite() {
   if (typeof window === "undefined") return false;
@@ -120,6 +123,10 @@ function App() {
   useEffect(() => onAuth(async (u) => {
     setUser(u);
     if (u) {
+      if (IS_PARENT_APP) {
+        setRoleLoading(false);
+        return;
+      }
       // handleAdminVerified already owns the role — don't race against it
       if (adminVerifiedRef.current) return;
       setRoleLoading(true);
@@ -143,6 +150,13 @@ function App() {
     setRole(verifiedRole);
     setRoleLoading(false);
   };
+
+  // ── PARENT APP (parent.ledgrclasses.com) ────────────────────────────────
+  if (IS_PARENT_APP) {
+    if (user === undefined) return <Spinner text="Opening Parent View…" />;
+    if (!user) return <SuspenseScreen><ParentAuth /></SuspenseScreen>;
+    return <SuspenseScreen><ParentPortal user={user} /></SuspenseScreen>;
+  }
 
   // ── MANAGER APP (manager.ledgrclasses.com) ────────────────────────────────
   if (IS_MANAGER_APP) {
@@ -261,7 +275,7 @@ function RuntimeErrorBridge({ children }) {
 
 function FatalAppScreen({ error }) {
   const message = error?.message || String(error || "Unknown error");
-  const surfaceLabel = IS_MANAGER_APP ? "manager panel" : IS_ADMIN_APP ? "admin panel" : (IS_NATIVE_SHELL ? "app" : "teacher panel");
+  const surfaceLabel = IS_MANAGER_APP ? "manager panel" : IS_ADMIN_APP ? "admin panel" : IS_PARENT_APP ? "parent portal" : (IS_NATIVE_SHELL ? "app" : "teacher panel");
   const chunkFailure = isDynamicImportFailure(error);
 
   // Pull the raw pre-React captured error (has filename/line/col)

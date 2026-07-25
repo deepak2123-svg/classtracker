@@ -11,6 +11,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -278,4 +279,111 @@ test("teacher invite creates one approved institute membership", async () => {
   await assertSucceeds(getDoc(doc(teacherDb, "institutes", "inst-1")));
   await assertFails(getDoc(doc(teacherDb, "institutes", "inst-2")));
   await assertFails(getDocs(collection(teacherDb, "invites")));
+});
+
+test("parent reads only an active joined-date-or-later section feed", async () => {
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await Promise.all([
+      setDoc(doc(db, "parentPortalSections", "section-1"), {
+        groupId:"group-1", instituteId:"inst-1", instituteName:"Genesis Main",
+        sectionName:"8th A", sectionKey:"8th a", status:"active",
+      }),
+      setDoc(doc(db, "parentPortalSections", "section-2"), {
+        groupId:"group-2", instituteId:"inst-2", instituteName:"Other Main",
+        sectionName:"8th B", sectionKey:"8th b", status:"active",
+      }),
+      setDoc(doc(db, "parentSectionAccess", "section-1__parent-1"), {
+        parentUid:"parent-1", groupId:"group-1", instituteId:"inst-1",
+        sectionId:"section-1", sectionName:"8th A", status:"active",
+        joinedDateKey:"2026-07-25",
+      }),
+      setDoc(doc(db, "parentSectionFeeds", "section-1", "entries", "before"), {
+        dateKey:"2026-07-24", title:"Before joining", subject:"Mathematics",
+      }),
+      setDoc(doc(db, "parentSectionFeeds", "section-1", "entries", "joined"), {
+        dateKey:"2026-07-25", title:"Joined day", subject:"Mathematics",
+      }),
+      setDoc(doc(db, "parentSectionFeeds", "section-2", "entries", "other"), {
+        dateKey:"2026-07-25", title:"Other section", subject:"Science",
+      }),
+      setDoc(doc(db, "parentAccessFeeds", "section-1__parent-1", "entries", "joined"), {
+        dateKey:"2026-07-25", title:"Joined day", subject:"Mathematics",
+      }),
+      setDoc(doc(db, "parentAccessFeeds", "section-2__parent-2", "entries", "other"), {
+        dateKey:"2026-07-25", title:"Other section", subject:"Science",
+      }),
+    ]);
+  });
+
+  const parentDb = testEnv.authenticatedContext("parent-1").firestore();
+  await assertSucceeds(getDocs(query(
+    collection(parentDb, "parentSectionAccess"),
+    where("parentUid", "==", "parent-1")
+  )));
+  await assertSucceeds(getDoc(doc(parentDb, "parentPortalSections", "section-1")));
+  await assertFails(getDoc(doc(parentDb, "parentPortalSections", "section-2")));
+  await assertFails(getDoc(doc(parentDb, "parentSectionFeeds", "section-1", "entries", "before")));
+  await assertFails(getDoc(doc(parentDb, "parentSectionFeeds", "section-1", "entries", "joined")));
+  await assertFails(getDoc(doc(parentDb, "parentSectionFeeds", "section-2", "entries", "other")));
+  await assertSucceeds(getDoc(doc(parentDb, "parentAccessFeeds", "section-1__parent-1", "entries", "joined")));
+  await assertFails(getDoc(doc(parentDb, "parentAccessFeeds", "section-2__parent-2", "entries", "other")));
+  await assertSucceeds(getDocs(query(
+    collection(parentDb, "parentAccessFeeds", "section-1__parent-1", "entries"),
+    orderBy("dateKey", "desc")
+  )));
+});
+
+test("revoked parents and unauthenticated users cannot read parent feeds", async () => {
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await Promise.all([
+      setDoc(doc(db, "parentPortalSections", "section-1"), {
+        groupId:"group-1", instituteId:"inst-1", sectionName:"8th A", status:"active",
+      }),
+      setDoc(doc(db, "parentSectionAccess", "section-1__parent-1"), {
+        parentUid:"parent-1", groupId:"group-1", instituteId:"inst-1",
+        sectionId:"section-1", status:"revoked", joinedDateKey:"2026-07-25",
+      }),
+      setDoc(doc(db, "parentAccessFeeds", "section-1__parent-1", "entries", "entry-1"), {
+        dateKey:"2026-07-25", title:"Lesson",
+      }),
+    ]);
+  });
+  const parentDb = testEnv.authenticatedContext("parent-1").firestore();
+  const publicDb = testEnv.unauthenticatedContext().firestore();
+  await assertFails(getDoc(doc(parentDb, "parentAccessFeeds", "section-1__parent-1", "entries", "entry-1")));
+  await assertFails(getDoc(doc(publicDb, "parentAccessFeeds", "section-1__parent-1", "entries", "entry-1")));
+});
+
+test("clients cannot write parent projection, invites, profiles, or access records", async () => {
+  const parentDb = testEnv.authenticatedContext("parent-1").firestore();
+  const adminDb = testEnv.authenticatedContext("institute-admin-1").firestore();
+  await assertFails(setDoc(doc(parentDb, "parentProfiles", "parent-1"), { parentName:"Parent" }));
+  await assertFails(setDoc(doc(parentDb, "parentSectionAccess", "section-1__parent-1"), { parentUid:"parent-1" }));
+  await assertFails(setDoc(doc(parentDb, "parentSectionInvites", "token"), { status:"active" }));
+  await assertFails(setDoc(doc(parentDb, "parentSectionFeeds", "section-1", "entries", "entry"), { dateKey:"2026-07-25" }));
+  await assertFails(setDoc(doc(parentDb, "parentAccessFeeds", "section-1__parent-1", "entries", "entry"), { dateKey:"2026-07-25" }));
+  await assertFails(setDoc(doc(adminDb, "parentPortalSections", "section-1"), {
+    groupId:"group-1", instituteId:"inst-1", sectionName:"8th A",
+  }));
+});
+
+test("scoped institute admin can read only its parent access list", async () => {
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await Promise.all([
+      setDoc(doc(db, "parentSectionAccess", "section-1__parent-1"), {
+        parentUid:"parent-1", groupId:"group-1", instituteId:"inst-1",
+        sectionId:"section-1", status:"active", joinedDateKey:"2026-07-25",
+      }),
+      setDoc(doc(db, "parentSectionAccess", "section-2__parent-2"), {
+        parentUid:"parent-2", groupId:"group-2", instituteId:"inst-2",
+        sectionId:"section-2", status:"active", joinedDateKey:"2026-07-25",
+      }),
+    ]);
+  });
+  const adminDb = testEnv.authenticatedContext("institute-admin-1").firestore();
+  await assertSucceeds(getDoc(doc(adminDb, "parentSectionAccess", "section-1__parent-1")));
+  await assertFails(getDoc(doc(adminDb, "parentSectionAccess", "section-2__parent-2")));
 });

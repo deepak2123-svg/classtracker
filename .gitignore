@@ -14,6 +14,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+firestore-debug.log
 
 .DS_Store
 
@@ -22,3 +23,4 @@ native-android/.idea/
 native-android/local.properties
 native-android/firebase.local.properties
 native-android/**/build/
+.vercel
