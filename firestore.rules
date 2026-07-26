@@ -54,34 +54,6 @@ service cloud.firestore {
         );
     }
 
-    function parentAccessPath(sectionId) {
-      return /databases/$(database)/documents/parentSectionAccess/$(sectionId + "__" + request.auth.uid);
-    }
-
-    function hasActiveParentSectionAccess(sectionId) {
-      return isSignedIn()
-        && exists(parentAccessPath(sectionId))
-        && get(parentAccessPath(sectionId)).data.parentUid == request.auth.uid
-        && get(parentAccessPath(sectionId)).data.sectionId == sectionId
-        && get(parentAccessPath(sectionId)).data.status == "active";
-    }
-
-    function hasActiveParentAccessDoc(accessId) {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/parentSectionAccess/$(accessId))
-        && get(/databases/$(database)/documents/parentSectionAccess/$(accessId)).data.parentUid == request.auth.uid
-        && get(/databases/$(database)/documents/parentSectionAccess/$(accessId)).data.status == "active";
-    }
-
-    function adminCanReadParentSection(sectionId) {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/parentPortalSections/$(sectionId))
-        && canManageInstitute(
-          get(/databases/$(database)/documents/parentPortalSections/$(sectionId)).data.groupId,
-          get(/databases/$(database)/documents/parentPortalSections/$(sectionId)).data.instituteId
-        );
-    }
-
     function canAccessTeacherData(uid) {
       return isSignedIn() && (
         request.auth.uid == uid
@@ -556,53 +528,6 @@ service cloud.firestore {
         ])
         && request.resource.data.lastUsedBy == request.auth.uid;
       allow delete: if isManager() || isLegacyAdmin();
-    }
-
-    // Parent View is a read-only projection. All invitations, memberships,
-    // profile edits, and feed writes are performed by authenticated functions.
-    match /parentPortalSections/{sectionId} {
-      allow get: if hasActiveParentSectionAccess(sectionId)
-        || canManageInstitute(resource.data.groupId, resource.data.instituteId);
-      allow list: if isAdmin()
-        && canManageInstitute(resource.data.groupId, resource.data.instituteId);
-      allow create, update, delete: if false;
-    }
-
-    match /parentSectionInvites/{token} {
-      allow read, write: if false;
-    }
-
-    match /parentProfiles/{uid} {
-      allow get: if isSignedIn() && request.auth.uid == uid;
-      allow list, create, update, delete: if false;
-    }
-
-    match /parentSectionAccess/{accessId} {
-      allow get, list: if isSignedIn() && (
-        resource.data.parentUid == request.auth.uid
-        || canManageInstitute(resource.data.groupId, resource.data.instituteId)
-      );
-      allow create, update, delete: if false;
-    }
-
-    match /parentSectionFeeds/{sectionId} {
-      allow read, write: if false;
-
-      match /entries/{entryId} {
-        allow get, list: if adminCanReadParentSection(sectionId);
-        allow create, update, delete: if false;
-      }
-    }
-
-    // Per-access feeds contain only entries on/after that access's joined date.
-    // The server owns the projection; parents can query only their own mirror.
-    match /parentAccessFeeds/{accessId} {
-      allow read, write: if false;
-
-      match /entries/{entryId} {
-        allow get, list: if hasActiveParentAccessDoc(accessId);
-        allow create, update, delete: if false;
-      }
     }
   }
 }

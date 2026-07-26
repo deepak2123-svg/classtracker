@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, collection,
   getDocs, query, where, deleteDoc, runTransaction, onSnapshot, orderBy, writeBatch, increment,
-  collectionGroup, documentId, limit,
+  collectionGroup, documentId,
 } from "firebase/firestore";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup,
@@ -10,7 +10,6 @@ import {
   signInWithCredential, signOut, onAuthStateChanged, updateProfile,
 } from "firebase/auth";
 import { getStorage } from "firebase/storage";
-import { getFunctions, httpsCallable } from "firebase/functions";
 import { GoogleSignIn } from "@capawesome/capacitor-google-sign-in";
 import { canUseGooglePopupAuth, getGoogleWebClientId, isNativeApp } from "./platform";
 
@@ -37,16 +36,10 @@ export const db   = (() => {
 })();
 export const auth = getAuth(app);
 export const storage = getStorage(app);
-export const functions = getFunctions(app);
 const gProvider   = new GoogleAuthProvider();
 const MAIN_SCHEMA_VERSION = 3;
 const BACKUP_HISTORY_LIMIT = 12;
 let nativeGoogleInitPromise = null;
-
-async function callFunction(name, payload = {}) {
-  const result = await httpsCallable(functions, name)(payload);
-  return result.data;
-}
 
 class RevisionConflictError extends Error {
   constructor(details = {}) {
@@ -3910,73 +3903,4 @@ export async function deleteInstituteAndMigrate(fromInstituteName, toInstituteNa
   }
 
   return { affectedTeacherCount, notifiedTeacherCount };
-}
-
-// ── Parent gateway ───────────────────────────────────────────────────────────
-// Parent access is supplemental to the public role document. A teacher/admin
-// can therefore redeem a parent invite without losing their existing role.
-export function enableParentSectionPortal({ instituteName, sectionName }) {
-  return callFunction("enableParentSectionPortal", { instituteName, sectionName });
-}
-
-export function getParentSectionAdminState({ instituteName, sectionName, sectionId = "" }) {
-  return callFunction("getParentSectionAdminState", { instituteName, sectionName, sectionId });
-}
-
-export function rotateParentSectionInvite(sectionId) {
-  return callFunction("rotateParentSectionInvite", { sectionId });
-}
-
-export function closeParentSectionEnrollment(sectionId) {
-  return callFunction("closeParentSectionEnrollment", { sectionId });
-}
-
-export function archiveParentSectionPortal(sectionId) {
-  return callFunction("archiveParentSectionPortal", { sectionId });
-}
-
-export function updateParentSectionMember(payload) {
-  return callFunction("updateParentSectionMember", payload);
-}
-
-export function redeemParentSectionInvite({ token, parentName, studentName }) {
-  return callFunction("redeemParentSectionInvite", { token, parentName, studentName });
-}
-
-export function updateOwnParentSectionMember({ accessId, parentName, children }) {
-  return callFunction("updateOwnParentSectionMember", { accessId, parentName, children });
-}
-
-export function subscribeParentSectionAccess(uid, callback, onError = console.error) {
-  const source = query(
-    collection(db, "parentSectionAccess"),
-    where("parentUid", "==", uid)
-  );
-  return onSnapshot(source, snapshot => {
-    callback(snapshot.docs.map(item => ({ id:item.id, ...item.data() })));
-  }, onError);
-}
-
-export function subscribeParentPortalSection(sectionId, callback, onError = console.error) {
-  return onSnapshot(doc(db, "parentPortalSections", sectionId), snapshot => {
-    callback(snapshot.exists() ? { id:snapshot.id, ...snapshot.data() } : null);
-  }, onError);
-}
-
-export function subscribeParentSectionFeed(accessId, callback, onError = console.error) {
-  const source = query(
-    collection(db, "parentAccessFeeds", accessId, "entries"),
-    orderBy("dateKey", "desc"),
-    limit(500)
-  );
-  return onSnapshot(source, snapshot => {
-    const entries = snapshot.docs
-      .map(item => ({ id:item.id, ...item.data() }))
-      .sort((a, b) =>
-        String(b.dateKey || "").localeCompare(String(a.dateKey || ""))
-        || Number(b.sortAt || 0) - Number(a.sortAt || 0)
-        || String(a.subject || "").localeCompare(String(b.subject || ""))
-      );
-    callback(entries);
-  }, onError);
 }

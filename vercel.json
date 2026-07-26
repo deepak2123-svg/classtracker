@@ -1,8 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
   "crons": [
     { "path": "/api/run-ledgr-telegram-schedule", "schedule": "30 14 * * *" }
   ],

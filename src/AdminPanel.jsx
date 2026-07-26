@@ -64,7 +64,6 @@ import { readAdminTeacherDetailsCache, writeAdminTeacherDetailsCache } from "./a
 import { ALL_CLASSES_KEY, ALL_TEACHERS_KEY, DELETE_SECTION_ACTION, KEEP_SECTION_ACTION } from "./admin/constants/adminKeys.js";
 import { AdminConfirmModal, ConfirmDeleteModal } from "./admin/components/common/AdminConfirmModals.jsx";
 import { AdminToastBanner } from "./admin/components/common/AdminToastBanner.jsx";
-import ParentAccessModal from "./admin/parents/ParentAccessModal.jsx";
 import { AlsoAtInstitutes } from "./admin/components/common/AlsoAtInstitutes.jsx";
 import { AppIcon } from "./admin/components/common/AppIcon.jsx";
 import { PeriodSelector } from "./admin/components/common/PeriodSelector.jsx";
@@ -6041,7 +6040,6 @@ function AdminPanelInner({user}){
   const [instDetailView, setInstDetailView] = useState(null); // null | instituteName
   const [grpModal, setGrpModal]             = useState(null); // null | {mode,inst,group?}
   const [copyGroupModal, setCopyGroupModal] = useState(null); // null | {sourceInst, group}
-  const [parentAccessModal, setParentAccessModal] = useState(null); // null | {instituteName,sectionName,sectionOptions}
   const [legacySectionRepair, setLegacySectionRepair] = useState(null); // null | {scopeLabel,items,selections,busy,error}
   const [instSearch, setInstSearch]         = useState("");
   const [p2Search, setP2Search]             = useState("");
@@ -6479,14 +6477,13 @@ function AdminPanelInner({user}){
     if(instituteGlanceOpen){ setInstituteGlanceOpen(false); return true; }
     if(profileOpen){ setProfileOpen(false); return true; }
     if(adminConfirm){ setAdminConfirm(null); return true; }
-    if(parentAccessModal){ setParentAccessModal(null); return true; }
     if(deleteModal){ setDeleteModal(null); return true; }
     if(instDeleteModal){ setInstDeleteModal(null); return true; }
     if(grpModal){ setGrpModal(null); return true; }
     if(copyGroupModal){ setCopyGroupModal(null); return true; }
     if(legacySectionRepair){ setLegacySectionRepair(null); return true; }
     return false;
-  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, instituteGlanceOpen, instituteGlanceOptionsOpen, instituteGlancePastEntriesOpen, legacySectionRepair, parentAccessModal, profileOpen, telegramDashboardOpen]);
+  }, [adminConfirm, copyGroupModal, deleteModal, exportOpen, grpModal, instDeleteModal, instituteGlanceOpen, instituteGlanceOptionsOpen, instituteGlancePastEntriesOpen, legacySectionRepair, profileOpen, telegramDashboardOpen]);
   useEffect(() => {
     if(!Capacitor.isNativePlatform()) return undefined;
     const listenerPromise = CapacitorApp.addListener("backButton", () => {
@@ -15574,14 +15571,6 @@ function AdminPanelInner({user}){
         {instDeleteModal&&<InstDeleteModal/>}
         {deleteModal&&<ConfirmDeleteModal title={deleteModal.title} lines={deleteModal.lines} confirmLabel={deleteModal.confirmLabel} onConfirm={deleteModal.onConfirm} onClose={()=>!deleteBusy&&setDeleteModal(null)} busy={deleteBusy} options={deleteModal.options}/>}
         {adminConfirm&&<AdminConfirmModal message={adminConfirm.msg} confirmLabel={adminConfirm.confirmLabel} onConfirm={()=>{adminConfirm.onConfirm();setAdminConfirm(null);}} onClose={()=>setAdminConfirm(null)}/>}
-        {parentAccessModal&&(
-          <ParentAccessModal
-            instituteName={parentAccessModal.instituteName}
-            sectionName={parentAccessModal.sectionName}
-            sectionOptions={parentAccessModal.sectionOptions}
-            onClose={()=>setParentAccessModal(null)}
-          />
-        )}
         {exportOpen&&<AdminExportModal exportActions={exportActions} onClose={()=>setExportOpen(false)}/>}
         {instituteGlanceOptionsOpen&&(
           <LedgrReportOptionsModal
@@ -16419,23 +16408,8 @@ function AdminPanelInner({user}){
       return (
         <main style={{background:shellBg,minWidth:0,height:adminV5StackedLayout?"auto":"100%",display:"flex",flexDirection:"column",overflow:adminV5StackedLayout?"visible":"hidden"}}>
         <div style={{padding:adminV5StackedLayout ? "16px 16px 13px" : "20px 24px 16px",background:"#F8FAFC",borderBottom:panelBorder}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <div style={{fontSize:adminV5StackedLayout ? 28 : 34,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.02,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0}}>
-              {timelineTitle}
-            </div>
-            {activeTimelineScope==="class"&&selectedClass&&(
-              <button
-                type="button"
-                onClick={()=>setParentAccessModal({
-                  instituteName:selectedInstituteName,
-                  sectionName:selectedClass.display,
-                  sectionOptions:(selectedInstitute?.classes||[]).map(item=>item.display).filter(Boolean),
-                })}
-                style={{...actionButton("blue"),height:38,flexShrink:0}}>
-                <AppIcon icon={IconUsersGroup} size={15} color={G.blue}/>
-                {adminV5StackedLayout ? "Parents" : "Parent access"}
-              </button>
-            )}
+          <div style={{fontSize:adminV5StackedLayout ? 28 : 34,fontFamily:G.display,fontWeight:950,color:G.text,lineHeight:1.02,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {timelineTitle}
           </div>
           <div style={{background:"#F8FAFC",border:panelBorder,borderRadius:12,padding:adminV5StackedLayout ? "9px" : "10px",marginTop:13}}>
             <PeriodSelector

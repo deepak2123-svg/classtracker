@@ -9,7 +9,6 @@ export function getAppMode() {
   const configuredMode = String(import.meta.env.VITE_APP_MODE || "").trim().toLowerCase();
   if (configuredMode === "manager") return "manager";
   if (configuredMode === "admin") return "admin";
-  if (configuredMode === "parent") return "parent";
   return "teacher";
 }
 
@@ -35,8 +34,4 @@ export function getAdminAppUrl() {
 
 export function getManagerAppUrl() {
   return import.meta.env.VITE_MANAGER_APP_URL || "https://manager.ledgrclasses.com/";
-}
-
-export function getParentAppUrl() {
-  return import.meta.env.VITE_PARENT_APP_URL || "https://parent.ledgrclasses.com/";
 }
