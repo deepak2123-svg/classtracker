@@ -279,3 +279,39 @@ test("teacher invite creates one approved institute membership", async () => {
   await assertFails(getDoc(doc(teacherDb, "institutes", "inst-2")));
   await assertFails(getDocs(collection(teacherDb, "invites")));
 });
+
+test("Parent WhatsApp records are server-only for every client role", async () => {
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await Promise.all([
+      setDoc(doc(db, "config", "parentWhatsAppDelivery"), { enabled: true, timeKey: "20:00" }),
+      setDoc(doc(db, "parentWhatsAppSections", "section-1"), { instituteId: "inst-1", groupId: "group-1" }),
+      setDoc(doc(db, "parentWhatsAppContacts", "parent-1"), { instituteId: "inst-1", phoneE164: "+919999999999" }),
+      setDoc(doc(db, "parentWhatsAppSubscriptions", "child-1"), { instituteId: "inst-1", contactId: "parent-1" }),
+      setDoc(doc(db, "parentWhatsAppInvites", "JOIN1234"), { instituteId: "inst-1", active: true }),
+      setDoc(doc(db, "parentWhatsAppJoinRequests", "join-1"), { instituteId: "inst-1", status: "pending" }),
+      setDoc(doc(db, "parentWhatsAppDeliveries", "delivery-1"), { instituteId: "inst-1", status: "accepted" }),
+    ]);
+  });
+
+  const clientDbs = [
+    testEnv.unauthenticatedContext().firestore(),
+    testEnv.authenticatedContext("manager-1").firestore(),
+    testEnv.authenticatedContext("group-admin-1").firestore(),
+    testEnv.authenticatedContext("institute-admin-1").firestore(),
+    testEnv.authenticatedContext("teacher-1").firestore(),
+  ];
+  for (const db of clientDbs) {
+    await assertFails(getDoc(doc(db, "config", "parentWhatsAppDelivery")));
+    await assertFails(getDoc(doc(db, "parentWhatsAppSections", "section-1")));
+    await assertFails(getDoc(doc(db, "parentWhatsAppContacts", "parent-1")));
+    await assertFails(getDoc(doc(db, "parentWhatsAppSubscriptions", "child-1")));
+    await assertFails(getDoc(doc(db, "parentWhatsAppInvites", "JOIN1234")));
+    await assertFails(getDoc(doc(db, "parentWhatsAppJoinRequests", "join-1")));
+    await assertFails(getDoc(doc(db, "parentWhatsAppDeliveries", "delivery-1")));
+    await assertFails(setDoc(doc(db, "parentWhatsAppContacts", "attempt"), {
+      instituteId: "inst-1",
+      phoneE164: "+919000000000",
+    }));
+  }
+});

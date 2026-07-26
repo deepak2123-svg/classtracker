@@ -71,6 +71,7 @@ import { DailyCentreSummary } from "./admin/dashboard/DailyCentreSummary.jsx";
 import { SubjectSplitDonut } from "./admin/dashboard/SubjectSplitDonut.jsx";
 import { adminV5InstituteSummaryKey, normaliseAdminV5DailySummary } from "./admin/dashboard/adminV5Summary.js";
 import { FeedbackInboxModal } from "./admin/feedback/FeedbackInboxModal.jsx";
+import { ParentWhatsAppWorkspace } from "./admin/messenger/ParentWhatsAppWorkspace.jsx";
 import { TeacherProfilePanel } from "./admin/teachers/TeacherProfilePanel.jsx";
 import { buildTeacherProfileModel } from "./admin/teachers/teacherProfileModel.js";
 import { AdminExportModal } from "./admin/reports/AdminExportModal.jsx";
@@ -697,7 +698,7 @@ class ErrorBoundary extends Component {
   }
 }
 
-function LedgrTelegramDashboardModal({
+function TelegramReportsWorkspace({
   institutes,
   schedule,
   config,
@@ -2118,6 +2119,81 @@ function LedgrTelegramDashboardModal({
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LedgrTelegramDashboardModal(props) {
+  const { embedded = false, onClose } = props;
+  const [workspace, setWorkspace] = React.useState("parent_whatsapp");
+
+  React.useEffect(() => {
+    if(embedded) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [embedded]);
+
+  const tabButton = active => ({
+    minHeight:42,
+    borderRadius:11,
+    border:active ? "1px solid #0F766E" : "1px solid #D8E3DD",
+    background:active ? "#0F2C24" : "#FFFFFF",
+    color:active ? "#FFFFFF" : "#40584D",
+    padding:"0 14px",
+    display:"inline-flex",
+    alignItems:"center",
+    justifyContent:"center",
+    gap:8,
+    fontSize:13,
+    fontWeight:850,
+    cursor:"pointer",
+    fontFamily:"Inter, sans-serif",
+  });
+
+  return (
+    <div style={embedded
+      ? {width:"100%"}
+      : {position:"fixed",inset:0,zIndex:10020,background:"rgba(15,23,42,0.62)",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",display:"flex"}}>
+      <div style={embedded
+        ? {width:"100%",minWidth:0}
+        : {width:"100vw",height:"100dvh",background:"#F5F8F6",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{
+          padding:embedded ? "0 0 14px" : "14px 20px",
+          background:embedded ? "transparent" : "#FFFFFF",
+          borderBottom:embedded ? "none" : "1px solid #DDE7E1",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"space-between",
+          gap:12,
+          flexWrap:"wrap",
+          flexShrink:0,
+        }}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <button type="button" onClick={()=>setWorkspace("parent_whatsapp")} style={tabButton(workspace==="parent_whatsapp")}>
+              <AppIcon icon={IconMessageCircle} size={16} color={workspace==="parent_whatsapp" ? "#FFFFFF" : "#0F766E"} />
+              Parent WhatsApp
+            </button>
+            <button type="button" onClick={()=>setWorkspace("telegram")} style={tabButton(workspace==="telegram")}>
+              <AppIcon icon={IconSend} size={16} color={workspace==="telegram" ? "#FFFFFF" : "#2563EB"} />
+              Telegram Reports
+            </button>
+          </div>
+          {!embedded&&(
+            <button type="button" onClick={onClose} style={tabButton(false)}>
+              <AppIcon icon={IconX} size={16} color="#40584D" />
+              Close
+            </button>
+          )}
+        </div>
+        <div style={embedded ? {minWidth:0} : {flex:1,minHeight:0,overflowY:"auto",padding:"18px 20px 24px"}}>
+          {workspace==="parent_whatsapp"
+            ? <ParentWhatsAppWorkspace />
+            : <TelegramReportsWorkspace {...props} embedded />}
         </div>
       </div>
     </div>

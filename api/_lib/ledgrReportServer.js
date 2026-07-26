@@ -1,4 +1,16 @@
 import { FieldPath } from "firebase-admin/firestore";
+import { collectEffectiveTeachingEntryRecords } from "../../src/jointEntries.js";
+import {
+  buildParentReportHash,
+  buildParentSectionPdfHtml,
+  buildParentTextSummary,
+  cleanParentMultilineText,
+  cleanParentText,
+  getParentDateContext,
+  normaliseParentSectionKey,
+  parentReportFilename,
+  sortParentReportEntries,
+} from "./parentWhatsAppCore.js";
 
 const exportTextSorter = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
@@ -352,6 +364,7 @@ function getSyllabusProgressChapterTitle(entry) {
 
 function isSyllabusProgressEntry(entry) {
   if (!entry || typeof entry !== "object") return false;
+  const tag = String(entry?.tag || "").trim().toLowerCase();
   const title = String(entry?.title || "").trim();
   const notes = String(entry?.body || entry?.notes || "").trim();
   const hasSyllabusMarker = Boolean(
@@ -365,6 +378,7 @@ function isSyllabusProgressEntry(entry) {
     || (Array.isArray(entry?.coveredSyllabusChapterIds) && entry.coveredSyllabusChapterIds.length)
     || (Array.isArray(entry?.completedSyllabusTopicIds) && entry.completedSyllabusTopicIds.length)
   );
+  if (tag === "syllabus") return true;
   if (!hasSyllabusMarker) return false;
   return (
     entry?.syllabusChapterCompleted === true
@@ -1891,4 +1905,108 @@ function instituteGlancePdfFilename(instituteName, period = "daily", rangeStartK
 
 function allInstitutesGlancePdfFilename(period = "daily", rangeStartKey = "", rangeEndKey = "", dateContext = buildDateContext()) {
   return `all_institutes_${getInstituteGlancePeriodMeta(period, rangeStartKey, rangeEndKey, dateContext).filePart}_ledgr_report_${dateContext.todayKey}.pdf`;
+}
+
+export async function buildParentSectionReport({
+  db,
+  instituteId = "",
+  instituteName = "",
+  sectionPlanId = "",
+  sectionKey = "",
+  sectionLabel = "",
+  now = new Date(),
+} = {}) {
+  if (!db) throw new Error("Firestore is required to build a parent report.");
+  const cleanInstituteName = cleanParentText(instituteName, 180);
+  const cleanSectionLabel = cleanParentText(sectionLabel || sectionKey, 180);
+  if (!cleanInstituteName || !cleanSectionLabel || !sectionPlanId) {
+    throw new Error("Institute, section, and section plan are required.");
+  }
+
+  const dateContext = getParentDateContext(now);
+  const [allTeachers, instituteSections] = await Promise.all([
+    readAllTeacherSummaries(db),
+    readInstituteSections(db),
+  ]);
+  const relevantTeachers = allTeachers.filter(teacher =>
+    (teacher?.institutes || []).some(value => sameInstituteName(value, cleanInstituteName)),
+  );
+  const fullDataMap = await loadTeacherFullDataMap(
+    db,
+    relevantTeachers.map(teacher => teacher?.uid).filter(Boolean),
+  );
+  const canonicalSectionLabel = cleanParentText(
+    resolveAdminSectionName(cleanSectionLabel, cleanInstituteName, instituteSections) || cleanSectionLabel,
+    180,
+  );
+  const targetSectionKey = normaliseParentSectionKey(canonicalSectionLabel || sectionKey || cleanSectionLabel);
+  const entries = [];
+  const seen = new Set();
+
+  relevantTeachers.forEach(teacher => {
+    const teacherData = fullDataMap?.[teacher?.uid];
+    if (!teacherData) return;
+    const teacherName = getTeacherDisplayNameFromMap(teacher, fullDataMap);
+    const allClasses = Array.isArray(teacherData?.classes) ? teacherData.classes : [];
+    const classes = allClasses.filter(cls => sameInstituteName(cls?.institute, cleanInstituteName));
+    const classById = new Map(allClasses.map(cls => [String(cls?.id || ""), cls]));
+    classes.forEach(cls => {
+      const resolvedSection = resolveAdminSectionName(
+        cls?.section,
+        cls?.institute || cleanInstituteName,
+        instituteSections,
+      );
+      if (normaliseParentSectionKey(resolvedSection || cls?.section) !== targetSectionKey) return;
+      const records = collectEffectiveTeachingEntryRecords(
+        teacherData?.notes || {},
+        String(cls?.id || ""),
+        entry => !isSyllabusProgressEntry(entry),
+        { startKey: dateContext.dateKey, endKey: dateContext.dateKey },
+      );
+      records.forEach((record, index) => {
+        const entry = record?.entry || {};
+        const sourceClass = classById.get(String(record?.sourceClassId || "")) || cls;
+        const stableEntryId = String(
+          entry?.id
+          || entry?.entryId
+          || entry?.created
+          || entry?.createdAt
+          || `${entry?.timeStart || ""}:${entry?.title || ""}:${index}`,
+        );
+        const sessionId = String(record?.jointSessionId || entry?.jointSessionId || "").trim();
+        const dedupeKey = sessionId
+          ? `${teacher.uid}::joint::${sessionId}`
+          : `${teacher.uid}::${record?.sourceClassId || cls?.id}::${stableEntryId}`;
+        if (seen.has(dedupeKey)) return;
+        seen.add(dedupeKey);
+        entries.push({
+          sourceId: dedupeKey,
+          teacherUid: String(teacher?.uid || ""),
+          teacherName: cleanParentText(teacherName || "Teacher", 160) || "Teacher",
+          classId: String(cls?.id || ""),
+          subject: cleanParentText(sourceClass?.subject || cls?.subject || "Class update", 160) || "Class update",
+          title: cleanParentText(entry?.title || "Class update", 300) || "Class update",
+          notes: cleanParentMultilineText(entry?.body || entry?.notes || "", 3000),
+          sortTime: String(entry?.timeStart || ""),
+        });
+      });
+    });
+  });
+
+  const report = {
+    instituteId: String(instituteId || ""),
+    instituteName: cleanInstituteName,
+    sectionPlanId: String(sectionPlanId),
+    sectionKey: targetSectionKey,
+    sectionLabel: canonicalSectionLabel,
+    dateKey: dateContext.dateKey,
+    dateLabel: dateContext.dateLabel,
+    timeZone: dateContext.timeZone,
+    entries: sortParentReportEntries(entries),
+  };
+  report.summary = buildParentTextSummary(report.entries);
+  report.contentHash = buildParentReportHash(report);
+  report.filename = parentReportFilename(report);
+  report.html = buildParentSectionPdfHtml(report);
+  return report;
 }

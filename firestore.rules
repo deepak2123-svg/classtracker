@@ -397,8 +397,47 @@ service cloud.firestore {
     }
 
     match /config/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read: if docId != "parentWhatsAppDelivery" && isSignedIn();
+      allow write: if docId != "parentWhatsAppDelivery" && isAdmin();
+    }
+
+    // Parent WhatsApp contains phone numbers, consent, enrollment, and
+    // server-maintained delivery state. Every client operation is denied;
+    // authorized admins use authenticated Vercel APIs backed by Admin SDK.
+    match /parentWhatsAppSections/{docId} {
+      allow read, write: if false;
+    }
+
+    match /parentWhatsAppContacts/{docId} {
+      allow read, write: if false;
+    }
+
+    match /parentWhatsAppSubscriptions/{docId} {
+      allow read, write: if false;
+    }
+
+    match /parentWhatsAppInvites/{docId} {
+      allow read, write: if false;
+    }
+
+    match /parentWhatsAppJoinRequests/{docId} {
+      allow read, write: if false;
+    }
+
+    match /parentWhatsAppConversations/{docId} {
+      allow read, write: if false;
+    }
+
+    match /parentWhatsAppDeliveries/{docId} {
+      allow read, write: if false;
+    }
+
+    match /parentWhatsAppReports/{docId} {
+      allow read, write: if false;
+    }
+
+    match /parentWhatsAppWebhookEvents/{docId} {
+      allow read, write: if false;
     }
 
     match /sampleReports/{reportId} {
