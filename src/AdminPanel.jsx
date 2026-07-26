@@ -11128,7 +11128,7 @@ function AdminPanelInner({user}){
 
   const handleRenameInstitute = async (oldName, newName) => {
     const ownRole = roleDetails[user.uid]?.role || roles[user.uid] || "teacher";
-    if (ownRole !== "admin") {
+    if (!["admin", "manager"].includes(ownRole)) {
       setRenamingInst(null);
       setRenameInstVal("");
       showAdminToast("Institute rename is disabled for scoped tenant admins until the tenant-safe rename flow is ready.");
@@ -11643,7 +11643,7 @@ function AdminPanelInner({user}){
 
   const handleDeleteInstitute = (inst) => {
     const ownRole = roleDetails[user.uid]?.role || roles[user.uid] || "teacher";
-    if (ownRole !== "admin") {
+    if (!["admin", "manager"].includes(ownRole)) {
       showAdminToast("Institute delete/migrate is disabled for scoped tenant admins until the tenant-safe flow is ready.");
       return;
     }
@@ -17911,7 +17911,7 @@ function AdminPanelInner({user}){
         {(()=>{
           const instituteSearchKey = manageInstituteFilter.trim().toLowerCase();
           const ownRoleForInstituteTools = roleDetails[user.uid]?.role || roles[user.uid] || "teacher";
-          const canUseLegacyInstituteActions = ownRoleForInstituteTools === "admin";
+          const canUseLegacyInstituteActions = ["admin", "manager"].includes(ownRoleForInstituteTools);
           const visibleInstitutes = (manageScopeInstitute
             ? institutes.filter(inst=>sameInstituteName(inst,manageScopeInstitute))
             : institutes.filter(inst=>!instituteSearchKey || inst.toLowerCase().includes(instituteSearchKey))
