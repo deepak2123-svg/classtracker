@@ -43,7 +43,7 @@ import {
   getSyllabusTemplates, saveSyllabusDraft, publishSyllabusTemplate, deleteSyllabusTemplate,
   getDeletedInstitutesList, addToDeletedInstitutesList, removeFromDeletedInstitutesList,
   repairTeacherIndex, saveProfileName, saveUserData,
-  deleteInstituteCompletely, deleteInstituteAndMigrate,
+  deleteInstituteAndMigrate,
   getAdminBin, saveAdminBin,
   getLedgrReportSchedule, saveLedgrReportSchedule,
   getLedgrTelegramConfig, saveLedgrTelegramConfig,
@@ -51,6 +51,7 @@ import {
   sendAdminFeedbackReply, markFeedbackThreadRead, setFeedbackThreadStatus,
   auth,
 } from "./firebase";
+import { permanentlyDeleteInstitute } from "./admin/institutes/permanentlyDeleteInstitute";
 import { getTeacherAppUrl } from "./platform";
 import { Avatar, todayKey, formatPeriod, TAG_STYLES, STATUS_STYLES, getSectionTone } from "./shared.jsx";
 import {
@@ -15211,10 +15212,7 @@ function AdminPanelInner({user}){
       const handleDeleteConfirm = async () => {
         update({ busy: true, error: "" });
         try {
-          const result = await deleteInstituteCompletely(inst, {
-            adminName: user.displayName || user.email || "Admin",
-            eventAt: Date.now(),
-          });
+          const result = await permanentlyDeleteInstitute(inst);
           setGlobalInstList(prev => prev.filter(i => !sameInstituteName(i, inst)));
           setDeletedInstitutes(s => { const n = new Set(s); n.add(inst.trim()); return n; });
           setTeachers(prev => prev.map(t => ({
@@ -15251,7 +15249,6 @@ function AdminPanelInner({user}){
             return next;
           });
           if (selInst === inst) { setSelInst(null); resetNav(); }
-          persistAdminBin(b => [...b, { type:"institute", name:inst, deletedAt:Date.now(), deletedBy:user.uid, action:"deleted_completely" }]);
           setInstDeleteModal(null);
           showAdminToast(
             result.affectedTeacherCount
@@ -15279,6 +15276,11 @@ function AdminPanelInner({user}){
               </div>
             </div>
             {error && <div style={{fontSize:13,color:G.red,marginBottom:14,fontWeight:600}}>{error}</div>}
+            {busy && (
+              <div style={{fontSize:12,color:G.textM,marginBottom:14,lineHeight:1.5}}>
+                Removing institute data across teacher accounts. This can take a few minutes; keep this page open.
+              </div>
+            )}
             <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
               <button onClick={() => !busy && update({ step:"choose", error:"" })} style={btn(G.surface,G.textM,G.border)} disabled={busy}>
                 ← Back

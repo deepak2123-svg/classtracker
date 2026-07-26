@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/permanently-delete-institute.js": {
+      "maxDuration": 300
+    }
+  },
   "crons": [
     { "path": "/api/run-ledgr-telegram-schedule", "schedule": "30 14 * * *" }
   ],
