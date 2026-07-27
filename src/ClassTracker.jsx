@@ -8608,7 +8608,7 @@ function ClassTrackerInner({user}){
                         <AppIcon icon={IconCalendar} size={15} color={G.green} />
                         <span style={{fontSize:16,fontWeight:600,color:G.text,fontFamily:G.display}}>{selDateObj.monthFull} {selDateObj.year}</span>
                       </div>
-                      <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={{}}/>
+                      <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} noteDates={entryClassMetrics.noteDates}/>
                     </>
                 }
               </div>
