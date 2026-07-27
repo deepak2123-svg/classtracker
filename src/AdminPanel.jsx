@@ -75,6 +75,11 @@ import { FeedbackInboxModal } from "./admin/feedback/FeedbackInboxModal.jsx";
 import { ParentWhatsAppWorkspace } from "./admin/messenger/ParentWhatsAppWorkspace.jsx";
 import { TeacherProfilePanel } from "./admin/teachers/TeacherProfilePanel.jsx";
 import { buildTeacherProfileModel } from "./admin/teachers/teacherProfileModel.js";
+import {
+  MAX_TEACHER_INVITE_BATCH,
+  createTeacherInviteBatch,
+  normaliseTeacherInviteCount,
+} from "./admin/teachers/teacherInviteBatch.js";
 import { AdminExportModal } from "./admin/reports/AdminExportModal.jsx";
 import {
   drawCanvasPill,
@@ -5967,7 +5972,8 @@ function AdminPanelInner({user}){
   const [adminInviteType,setAdminInviteType]=useState("admin");
   const [adminInviteInstitute,setAdminInviteInstitute]=useState("");
   const [teacherInviteInstitute,setTeacherInviteInstitute]=useState("");
-  const [teacherInviteLink,setTeacherInviteLink]=useState("");
+  const [teacherInviteLinks,setTeacherInviteLinks]=useState([]);
+  const [teacherInviteCount,setTeacherInviteCount]=useState(1);
   const [teacherInviteLoading,setTeacherInviteLoading]=useState(false);
   const [joinRequests,setJoinRequests]=useState([]);
   const [joinRequestBusy,setJoinRequestBusy]=useState("");
@@ -11495,19 +11501,34 @@ function AdminPanelInner({user}){
       return;
     }
     setTeacherInviteLoading(true);
-    setTeacherInviteLink("");
+    setTeacherInviteLinks([]);
     try{
-      const token=await createTeacherInviteForInstitute({
-        instituteName,
-        createdBy:user.uid,
+      const tokens=await createTeacherInviteBatch({
+        count:teacherInviteCount,
+        createInvite:()=>createTeacherInviteForInstitute({
+          instituteName,
+          createdBy:user.uid,
+        }),
       });
-      const link=new URL(getTeacherAppUrl());
-      link.searchParams.set("invite",token);
-      setTeacherInviteLink(link.toString());
+      const links=tokens.map(token=>{
+        const link=new URL(getTeacherAppUrl());
+        link.searchParams.set("invite",token);
+        return link.toString();
+      });
+      setTeacherInviteLinks(links);
     }catch(error){
-      showAdminToast("Failed to generate teacher invite: "+(error?.message||"Unknown error"));
+      showAdminToast("Failed to generate teacher invites: "+(error?.message||"Unknown error"));
     }finally{
       setTeacherInviteLoading(false);
+    }
+  };
+
+  const copyTeacherInviteLinks=async()=>{
+    try{
+      await navigator.clipboard.writeText(teacherInviteLinks.join("\n"));
+      showAdminToast(`${teacherInviteLinks.length} teacher invite${teacherInviteLinks.length===1?"":"s"} copied.`);
+    }catch(error){
+      showAdminToast("Could not copy teacher invites: "+(error?.message||"Clipboard unavailable"));
     }
   };
 
@@ -13740,76 +13761,93 @@ function AdminPanelInner({user}){
     );
   };
 
-  const renderJoinRequestsPanel = () => (
-    <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:"16px 18px",marginBottom:12}}>
-      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:12}}>
-        <div>
-          <div style={{fontSize:17,fontWeight:800,color:G.text,fontFamily:G.display}}>Teacher access</div>
-          <div style={{fontSize:12.5,color:G.textM,marginTop:4,lineHeight:1.5}}>
-            Invite a teacher directly, or approve requests created with a private Institute ID.
+  const renderJoinRequestsPanel = () => {
+    const selectedInviteInstitute=teacherInviteInstitute||institutes[0]||"";
+    return (
+      <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:13,padding:isMobile?"12px":"14px 16px",marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:10}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,color:G.text,fontFamily:G.display}}>Teacher invites</div>
+            <div style={{fontSize:12,color:G.textM,marginTop:2}}>Create single-use links for one institute.</div>
           </div>
+          <button type="button" onClick={refreshJoinRequests} title="Refresh requests"
+            style={{...pill("#FFFFFF",G.textM,G.border),padding:"7px 10px",fontSize:12,fontWeight:800,display:"inline-flex",alignItems:"center",gap:6}}>
+            <IconRefresh size={14} /> Refresh
+          </button>
         </div>
-        <button type="button" onClick={refreshJoinRequests} style={{...pill("#FFFFFF",G.textM,G.border),padding:"7px 11px",fontSize:12.5,fontWeight:800}}>
-          Refresh requests
-        </button>
-      </div>
 
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(220px,1fr) auto",gap:8,alignItems:"end",marginBottom:teacherInviteLink?8:14}}>
-        <div>
-          <label style={{display:"block",fontSize:11,fontWeight:850,color:G.textL,textTransform:"uppercase",marginBottom:6}}>Invite to institute</label>
-          <select value={teacherInviteInstitute} onChange={event=>setTeacherInviteInstitute(event.target.value)}
-            style={{width:"100%",minHeight:39,border:`1px solid ${G.border}`,borderRadius:9,background:"#fff",color:G.text,padding:"8px 10px",fontSize:13.5}}>
-            {institutes.map(institute=><option key={institute} value={institute}>{institute}</option>)}
-          </select>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr) 84px":"minmax(220px,1fr) 88px auto",gap:8,alignItems:"end",marginBottom:teacherInviteLinks.length?8:10}}>
+          <div>
+            <label style={{display:"block",fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",marginBottom:5}}>Institute</label>
+            <select value={selectedInviteInstitute} onChange={event=>setTeacherInviteInstitute(event.target.value)}
+              style={{width:"100%",minHeight:39,border:`1px solid ${G.border}`,borderRadius:9,background:"#fff",color:G.text,padding:"8px 10px",fontSize:13.5}}>
+              {institutes.map(institute=><option key={institute} value={institute}>{institute}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{display:"block",fontSize:10.5,fontWeight:850,color:G.textL,textTransform:"uppercase",marginBottom:5}}>Links</label>
+            <input type="number" min="1" max={MAX_TEACHER_INVITE_BATCH} inputMode="numeric" value={teacherInviteCount}
+              onChange={event=>setTeacherInviteCount(normaliseTeacherInviteCount(event.target.value))}
+              style={{width:"100%",minHeight:39,border:`1px solid ${G.border}`,borderRadius:9,background:"#fff",color:G.text,padding:"8px 10px",fontSize:13.5,fontWeight:800}} />
+          </div>
+          <button type="button" onClick={handleGenerateTeacherInvite} disabled={!selectedInviteInstitute||teacherInviteLoading}
+            style={{...pill(G.green,"#fff","transparent"),gridColumn:isMobile?"1 / -1":"auto",minHeight:39,padding:"8px 13px",fontSize:13,fontWeight:850,opacity:(!selectedInviteInstitute||teacherInviteLoading)?0.55:1}}>
+            {teacherInviteLoading?`Generating ${normaliseTeacherInviteCount(teacherInviteCount)}...`:"Generate links"}
+          </button>
         </div>
-        <button type="button" onClick={handleGenerateTeacherInvite} disabled={!teacherInviteInstitute||teacherInviteLoading}
-          style={{...pill(G.green,"#fff","transparent"),minHeight:39,padding:"8px 13px",fontSize:13,fontWeight:850,opacity:(!teacherInviteInstitute||teacherInviteLoading)?0.55:1}}>
-          {teacherInviteLoading?"Generating...":"Generate teacher invite"}
-        </button>
-      </div>
 
-      {teacherInviteLink&&(
-        <div style={{background:G.greenL,border:"1px solid #BBE3CE",borderRadius:10,padding:"9px 10px",marginBottom:14,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <div style={{flex:1,minWidth:180,fontSize:12.5,color:G.green,wordBreak:"break-all"}}>{teacherInviteLink}</div>
-          <button type="button" onClick={()=>navigator.clipboard.writeText(teacherInviteLink).then(()=>showAdminToast("Teacher invite copied."))}
-            style={{...pill(G.green,"#fff","transparent"),padding:"6px 10px",fontSize:12,fontWeight:850}}>Copy</button>
-          <button type="button" onClick={()=>setTeacherInviteLink("")}
-            style={{...pill("#fff",G.textM,G.border),padding:"6px 10px",fontSize:12,fontWeight:850}}>Dismiss</button>
-        </div>
-      )}
-
-      {joinRequests.length===0?(
-        <div style={{border:`1px dashed ${G.border}`,borderRadius:10,padding:"14px",fontSize:13,color:G.textM,textAlign:"center"}}>
-          No pending Institute ID requests in your scope.
-        </div>
-      ):(
-        <div style={{display:"grid",gap:8}}>
-          {joinRequests.map(request=>(
-            <div key={request.id} style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(180px,1fr) minmax(160px,.8fr) auto",gap:10,alignItems:"center",border:`1px solid ${G.border}`,borderRadius:10,padding:"10px 11px"}}>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:13.5,fontWeight:850,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                  {request.teacherName||request.teacherEmail||"Unnamed teacher"}
-                </div>
-                {request.teacherEmail&&request.teacherName&&<div style={{fontSize:11.5,color:G.textM,marginTop:3}}>{request.teacherEmail}</div>}
+        {!!teacherInviteLinks.length&&(
+          <div style={{background:G.greenL,border:"1px solid #BBE3CE",borderRadius:10,padding:"8px 9px",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",marginBottom:7}}>
+              <div style={{fontSize:12.5,fontWeight:850,color:G.green}}>
+                {teacherInviteLinks.length} link{teacherInviteLinks.length===1?"":"s"} ready
               </div>
-              <div>
-                <div style={{fontSize:12.5,fontWeight:800,color:G.text}}>{request.instituteName||"Institute"}</div>
-                <div style={{fontSize:11.5,color:G.textM,marginTop:3}}>ID {request.instituteCode||"private"}</div>
-              </div>
-              <div style={{display:"flex",gap:7,justifyContent:isMobile?"stretch":"flex-end"}}>
-                <button type="button" disabled={joinRequestBusy===request.id} onClick={()=>handleJoinRequest(request,"reject")}
-                  style={{...pill("#fff",G.red,G.border),padding:"7px 10px",fontSize:12,fontWeight:850,flex:isMobile?1:"none"}}>Reject</button>
-                <button type="button" disabled={joinRequestBusy===request.id} onClick={()=>handleJoinRequest(request,"approve")}
-                  style={{...pill(G.green,"#fff","transparent"),padding:"7px 10px",fontSize:12,fontWeight:850,flex:isMobile?1:"none"}}>
-                  {joinRequestBusy===request.id?"Working...":"Approve"}
-                </button>
+              <div style={{display:"flex",gap:6}}>
+                <button type="button" onClick={copyTeacherInviteLinks}
+                  style={{...pill(G.green,"#fff","transparent"),padding:"6px 9px",fontSize:11.5,fontWeight:850}}>Copy all</button>
+                <button type="button" onClick={()=>setTeacherInviteLinks([])}
+                  style={{...pill("#fff",G.textM,G.border),padding:"6px 9px",fontSize:11.5,fontWeight:850}}>Dismiss</button>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+            <textarea readOnly value={teacherInviteLinks.join("\n")} rows={Math.min(4,teacherInviteLinks.length)}
+              aria-label="Generated teacher invite links"
+              style={{display:"block",width:"100%",resize:"vertical",minHeight:teacherInviteLinks.length===1?38:72,maxHeight:128,border:`1px solid ${G.border}`,borderRadius:8,background:"#fff",color:G.textM,padding:"7px 8px",fontSize:11.5,lineHeight:1.45,fontFamily:"ui-monospace, SFMono-Regular, Consolas, monospace"}} />
+          </div>
+        )}
+
+        {joinRequests.length===0?(
+          <div style={{borderTop:`1px solid ${G.border}`,paddingTop:9,fontSize:12,color:G.textM}}>
+            No pending requests.
+          </div>
+        ):(
+          <div style={{display:"grid",gap:8}}>
+            {joinRequests.map(request=>(
+              <div key={request.id} style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(180px,1fr) minmax(160px,.8fr) auto",gap:10,alignItems:"center",border:`1px solid ${G.border}`,borderRadius:10,padding:"10px 11px"}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:13.5,fontWeight:850,color:G.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                    {request.teacherName||request.teacherEmail||"Unnamed teacher"}
+                  </div>
+                  {request.teacherEmail&&request.teacherName&&<div style={{fontSize:11.5,color:G.textM,marginTop:3}}>{request.teacherEmail}</div>}
+                </div>
+                <div>
+                  <div style={{fontSize:12.5,fontWeight:800,color:G.text}}>{request.instituteName||"Institute"}</div>
+                  <div style={{fontSize:11.5,color:G.textM,marginTop:3}}>ID {request.instituteCode||"private"}</div>
+                </div>
+                <div style={{display:"flex",gap:7,justifyContent:isMobile?"stretch":"flex-end"}}>
+                  <button type="button" disabled={joinRequestBusy===request.id} onClick={()=>handleJoinRequest(request,"reject")}
+                    style={{...pill("#fff",G.red,G.border),padding:"7px 10px",fontSize:12,fontWeight:850,flex:isMobile?1:"none"}}>Reject</button>
+                  <button type="button" disabled={joinRequestBusy===request.id} onClick={()=>handleJoinRequest(request,"approve")}
+                    style={{...pill(G.green,"#fff","transparent"),padding:"7px 10px",fontSize:12,fontWeight:850,flex:isMobile?1:"none"}}>
+                    {joinRequestBusy===request.id?"Working...":"Approve"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderManageTeachersPanel = () => {
     const weekEndKey = todayKey();
