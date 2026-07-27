@@ -4490,9 +4490,14 @@ function ClassTrackerInner({user}){
     () => getTeacherLocalNoticeSignature(dataWarning),
     [dataWarning]
   );
+  const cloudDismissedTeacherLocalNoticeSignature = String(data?._meta?.dismissedTeacherLocalNoticeSignature || "");
   const localTeacherNotice = useMemo(() => {
     if(dataWarning?.kind !== "orphaned" && dataWarning?.kind !== "staleDraft") return null;
-    if(!currentTeacherLocalNoticeSignature || currentTeacherLocalNoticeSignature === dismissedTeacherLocalNoticeSignature) return null;
+    if(
+      !currentTeacherLocalNoticeSignature ||
+      currentTeacherLocalNoticeSignature === dismissedTeacherLocalNoticeSignature ||
+      currentTeacherLocalNoticeSignature === cloudDismissedTeacherLocalNoticeSignature
+    ) return null;
     if(dataWarning?.kind === "staleDraft"){
       return {
         id:`local_notice_${currentTeacherLocalNoticeSignature}`,
@@ -4516,7 +4521,7 @@ function ClassTrackerInner({user}){
       adminName:"System",
       status:"info",
     };
-  }, [currentTeacherLocalNoticeSignature, dataWarning, dismissedTeacherLocalNoticeSignature]);
+  }, [cloudDismissedTeacherLocalNoticeSignature, currentTeacherLocalNoticeSignature, dataWarning, dismissedTeacherLocalNoticeSignature]);
   const notificationCount = pendingAdminClassNotices.length + (localTeacherNotice ? 1 : 0);
   const teacherHomeModel = useMemo(() => {
     const activeClasses = [...(data.classes || []).filter(c => !c.left)].sort((a,b)=>(b.created||0)-(a.created||0));
@@ -5371,6 +5376,14 @@ function ClassTrackerInner({user}){
     try{
       localStorage.setItem(localTeacherNoticeDismissKey, nextSignature);
     }catch(e){}
+    setData(d=>({
+      ...d,
+      _meta: {
+        ...(d?._meta || {}),
+        dismissedTeacherLocalNoticeSignature: nextSignature,
+        dismissedTeacherLocalNoticeAt: Date.now(),
+      },
+    }));
   }
 
   function dismissAdminNotices(ids){
