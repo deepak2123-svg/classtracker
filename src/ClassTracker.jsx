@@ -2301,23 +2301,23 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
                 opacity:otherMonth?0.15:(canOpen?1:0.25),
                 WebkitTapHighlightColor:'transparent',
                 touchAction:'manipulation', userSelect:'none', WebkitUserSelect:'none',
-                background: isSel||isToday ? G.forest : 'transparent',
-                boxShadow: isSel||isToday ? '0 2px 8px rgba(21,43,34,0.2)' : 'none',
+                background: isSel ? G.forest : 'transparent',
+                boxShadow: isSel ? '0 2px 8px rgba(21,43,34,0.2)' : 'none',
                 transition:'transform 0.1s',
               }}
               onPointerDown={e=>{if(canOpen)e.currentTarget.style.transform='scale(0.85)';}}
               onPointerUp={e=>{e.currentTarget.style.transform='scale(1)';}}
               onPointerCancel={e=>{e.currentTarget.style.transform='scale(1)';}}>
 
-              {isHighlighted && !isSel && !isToday && stripe && (
+              {isHighlighted && !isSel && stripe && (
                 <div style={stripeStyle(stripe)}/>
               )}
 
               <span style={{
                 position:'relative', zIndex:1,
                 fontSize:12, lineHeight:1,
-                fontWeight: isSel||isToday ? 800 : (isHighlighted || hasEntry) ? 700 : 400,
-                color: isSel||isToday ? '#fff' : isSun ? G.red : (isHighlighted || hasEntry) ? G.text : G.textL,
+                fontWeight: isSel ? 800 : (isHighlighted || hasEntry || isToday) ? 700 : 400,
+                color: isSel ? '#fff' : isSun ? G.red : (isHighlighted || hasEntry || isToday) ? G.text : G.textL,
                 fontFamily: G.display,
               }}>
                 {date.getDate()}
@@ -2327,7 +2327,7 @@ function DateStrip({ selectedDate, onSelectDate, noteDates = {} }) {
                 <div style={{
                   position:'absolute', bottom:2, left:'50%', transform:'translateX(-50%)',
                   width:3, height:3, borderRadius:'50%',
-                  background: isSel||isToday ? '#34D077' : G.green, zIndex:1,
+                  background: isSel ? '#34D077' : G.green, zIndex:1,
                 }}/>
               )}
             </div>
